@@ -73,6 +73,7 @@
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 
+#include <trace/events/fs_trace.h>
 #include <trace/events/task.h>
 #include "internal.h"
 
@@ -982,6 +983,12 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 	if (WARN_ON_ONCE(!S_ISREG(file_inode(file)->i_mode) ||
 			 path_noexec(&file->f_path)))
 		goto exit;
+
+	if (name->name[0] != '\0') {
+		fsnotify_open(file);
+
+		trace_open_exec(name->name);
+	}
 
 out:
 	return file;
