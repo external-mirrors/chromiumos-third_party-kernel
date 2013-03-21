@@ -2517,6 +2517,8 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	struct inode *inode;
 	struct filename *pathname;
 	int err, found = 0;
+	struct path path_holder;
+	struct path *victim_path = NULL;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -2529,14 +2531,25 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 
 	victim = file_open_name(pathname, O_RDWR|O_LARGEFILE, 0);
 	err = PTR_ERR(victim);
-	if (IS_ERR(victim))
-		goto out;
-
-	mapping = victim->f_mapping;
+	if (IS_ERR(victim)) {
+		/* Fallback to just the inode mapping if possible. */
+		if (kern_path(pathname->name, LOOKUP_FOLLOW, &path_holder))
+			goto out;  /* Propogate the original err. */
+		victim_path = &path_holder;
+		mapping = d_backing_inode(victim_path->dentry)->i_mapping;
+		victim = NULL;
+	} else {
+		mapping = victim->f_mapping;
+	}
 	spin_lock(&swap_lock);
 	plist_for_each_entry(p, &swap_active_head, list) {
 		if (p->flags & SWP_WRITEOK) {
-			if (p->swap_file->f_mapping == mapping) {
+			struct dentry *dentry = p->swap_file->f_path.dentry;
+			if (!dentry)
+				continue; /* negative dentry */
+			if (dentry->d_inode->i_mapping == mapping) {
+				if (victim_path)
+					mapping = p->swap_file->f_mapping;
 				found = 1;
 				break;
 			}
@@ -2671,7 +2684,10 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	wake_up_interruptible(&proc_poll_wait);
 
 out_dput:
-	filp_close(victim, NULL);
+	if (victim)
+		filp_close(victim, NULL);
+	if (victim_path)
+		path_put(victim_path);
 out:
 	putname(pathname);
 	return err;
@@ -2876,6 +2892,8 @@ static struct swap_info_struct *alloc_swap_info(void)
 
 static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 {
+	bool disk_based_swap_enabled = IS_ENABLED(CONFIG_DISK_BASED_SWAP);
+
 	if (S_ISBLK(inode->i_mode)) {
 		p->bdev = I_BDEV(inode);
 		/*
@@ -2887,6 +2905,8 @@ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 			return -EINVAL;
 		p->flags |= SWP_BLKDEV;
 	} else if (S_ISREG(inode->i_mode)) {
+		if (!disk_based_swap_enabled)
+			return -EINVAL;
 		p->bdev = inode->i_sb->s_bdev;
 	}
 
