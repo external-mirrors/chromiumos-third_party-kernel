@@ -53,6 +53,7 @@
 #include <linux/khugepaged.h>
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
+#include <linux/low-mem-notify.h>
 #include <asm/div64.h>
 #include "internal.h"
 #include "shuffle.h"
@@ -3950,9 +3951,10 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
 	else
 		(*no_progress_loops)++;
 
-	if (*no_progress_loops > MAX_RECLAIM_RETRIES)
+	if (*no_progress_loops > MAX_RECLAIM_RETRIES) {
+                low_mem_notify();
 		goto out;
-
+        }
 
 	/*
 	 * Keep reclaiming pages while there is a chance this will lead
@@ -4556,6 +4558,8 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
 	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
 			&alloc_gfp, &alloc_flags))
 		return NULL;
+
+	low_mem_check();
 
 	/*
 	 * Forbid the first pass from falling back to types that fragment
