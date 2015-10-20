@@ -225,7 +225,7 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 		udelay(1000);
 
 	ret = xhci_handshake_check_state(xhci, &xhci->op_regs->command,
-				CMD_RESET, 0, timeout_us, XHCI_STATE_REMOVING);
+				CMD_RESET, 0, 20 * 1000 * 1000, XHCI_STATE_REMOVING);
 	if (ret)
 		return ret;
 
