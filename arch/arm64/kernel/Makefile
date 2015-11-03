@@ -79,6 +79,8 @@ obj-$(CONFIG_COMPAT_VDSO)		+= vdso32-wrap.o
 $(obj)/vdso-wrap.o: $(obj)/vdso/vdso.so
 $(obj)/vdso32-wrap.o: $(obj)/vdso32/vdso.so
 
+obj-$(CONFIG_ALT_SYSCALL)		+= alt-syscall.o
+
 obj-y					+= probes/
 head-y					:= head.o
 extra-y					+= $(head-y) vmlinux.lds
