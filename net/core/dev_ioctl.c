@@ -9,6 +9,7 @@
 #include <linux/wireless.h>
 #include <linux/if_bridge.h>
 #include <net/dsa_stubs.h>
+#include <net/sock.h>
 #include <net/wext.h>
 
 #include "dev.h"
@@ -776,7 +777,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
 	case SIOCBRADDIF:
 	case SIOCBRDELIF:
 	case SIOCSHWTSTAMP:
-		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		if (!android_ns_capable(net, CAP_NET_ADMIN))
 			return -EPERM;
 		fallthrough;
 	case SIOCBONDSLAVEINFOQUERY:
