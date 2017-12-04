@@ -691,11 +691,35 @@ static ssize_t capture_show(struct device *pwm_dev,
 	return sysfs_emit(buf, "%u %u\n", result.period, result.duty_cycle);
 }
 
+static ssize_t output_type_show(struct device *child,
+                            struct device_attribute *attr,
+                            char *buf)
+{
+       const struct pwm_device *pwm = pwm_from_device(child);
+       const char *output_type = "unknown";
+       struct pwm_state state;
+
+       pwm_get_state(pwm, &state);
+       switch (state.output_type) {
+       case PWM_OUTPUT_FIXED:
+               output_type = "fixed";
+               break;
+       case PWM_OUTPUT_MODULATED:
+               output_type = "modulated";
+               break;
+       default:
+               break;
+       }
+
+       return snprintf(buf, PAGE_SIZE, "%s\n", output_type);
+}
+
 static DEVICE_ATTR_RW(period);
 static DEVICE_ATTR_RW(duty_cycle);
 static DEVICE_ATTR_RW(enable);
 static DEVICE_ATTR_RW(polarity);
 static DEVICE_ATTR_RO(capture);
+static DEVICE_ATTR_RO(output_type);
 
 static struct attribute *pwm_attrs[] = {
 	&dev_attr_period.attr,
@@ -703,6 +727,7 @@ static struct attribute *pwm_attrs[] = {
 	&dev_attr_enable.attr,
 	&dev_attr_polarity.attr,
 	&dev_attr_capture.attr,
+        &dev_attr_output_type.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(pwm);
@@ -1034,6 +1059,7 @@ struct pwm_chip *pwmchip_alloc(struct device *parent, unsigned int npwm, size_t 
 		struct pwm_device *pwm = &chip->pwms[i];
 		pwm->chip = chip;
 		pwm->hwpwm = i;
+		pwm->state.output_type = PWM_OUTPUT_FIXED;
 	}
 
 	return chip;
