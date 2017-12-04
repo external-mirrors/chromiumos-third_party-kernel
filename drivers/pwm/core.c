@@ -293,6 +293,7 @@ int pwmchip_add(struct pwm_chip *chip)
 		pwm->chip = chip;
 		pwm->pwm = chip->base + i;
 		pwm->hwpwm = i;
+		pwm->state.output_type = PWM_OUTPUT_FIXED;
 	}
 
 	list_add(&chip->list, &pwm_chips);
