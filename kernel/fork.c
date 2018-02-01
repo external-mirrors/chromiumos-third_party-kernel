@@ -99,6 +99,7 @@
 #include <linux/stackprotector.h>
 #include <linux/user_events.h>
 #include <linux/iommu.h>
+#include <linux/cpufreq_times.h>
 
 #include <asm/pgalloc.h>
 #include <linux/uaccess.h>
@@ -602,6 +603,7 @@ void free_task(struct task_struct *tsk)
 #ifdef CONFIG_SECCOMP
 	WARN_ON_ONCE(tsk->seccomp.filter);
 #endif
+	cpufreq_task_times_exit(tsk);
 	release_user_cpus_ptr(tsk);
 	scs_release(tsk);
 
@@ -2346,6 +2348,8 @@ __latent_entropy struct task_struct *copy_process(
 	if (args->io_thread)
 		p->flags |= PF_IO_WORKER;
 
+	cpufreq_task_times_init(p);
+
 	if (args->name)
 		strscpy_pad(p->comm, args->name, sizeof(p->comm));
 
@@ -2909,6 +2913,8 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 
 	if (IS_ERR(p))
 		return PTR_ERR(p);
+
+	cpufreq_task_times_alloc(p);
 
 	/*
 	 * Do this prior waking up the new thread - the thread pointer
