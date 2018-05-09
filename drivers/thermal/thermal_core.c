@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/kdev_t.h>
 #include <linux/idr.h>
+#include <linux/notifier.h>
 #include <linux/list_sort.h>
 #include <linux/thermal.h>
 #include <linux/reboot.h>
@@ -368,6 +369,36 @@ static void monitor_thermal_zone(struct thermal_zone_device *tz)
 		thermal_zone_device_set_polling(tz, tz->polling_delay_jiffies);
 }
 
+BLOCKING_NOTIFIER_HEAD(thermal_notifier_list);
+
+/**
+ * register_thermal_notifier - Register function to be called for
+ *                             critical thermal events.
+ *
+ * @nb: Info about notifier function to be called
+ *
+ * Currently always returns zero, as blocking_notifier_chain_register()
+ * always returns zero.
+ */
+int register_thermal_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&thermal_notifier_list, nb);
+}
+EXPORT_SYMBOL(register_thermal_notifier);
+
+/**
+ * unregister_thermal_notifier - Unregister thermal notifier
+ *
+ * @nb: Hook to be unregistered
+ *
+ * Returns zero on success, or %-ENOENT on failure.
+ */
+int unregister_thermal_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&thermal_notifier_list, nb);
+}
+EXPORT_SYMBOL(unregister_thermal_notifier);
+
 static struct thermal_governor *thermal_get_tz_governor(struct thermal_zone_device *tz)
 {
 	if (tz->governor)
@@ -417,6 +448,9 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 				  const struct thermal_trip *trip)
 {
 	trace_thermal_zone_trip(tz, thermal_zone_trip_id(tz, trip), trip->type);
+
+	blocking_notifier_call_chain(&thermal_notifier_list,
+				     trip->type, NULL);
 
 	if (trip->type == THERMAL_TRIP_CRITICAL)
 		tz->ops.critical(tz);
