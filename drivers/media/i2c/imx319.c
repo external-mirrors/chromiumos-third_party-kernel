@@ -2370,7 +2370,8 @@ static struct imx319_hwcfg *imx319_get_hwcfg(struct device *dev)
 				       ARRAY_SIZE(link_freq_menu_items),
 				       &cfg->link_freq_bitmap);
 	if (ret)
-		goto out_err;
+		dev_warn(dev, "no link frequency supported defaulting to %lld\n",
+			 IMX319_LINK_FREQ_DEFAULT);
 
 	v4l2_fwnode_endpoint_free(&bus_cfg);
 	fwnode_handle_put(ep);
