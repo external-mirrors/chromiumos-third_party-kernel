@@ -427,6 +427,20 @@ static int udl_connector_helper_get_modes(struct drm_connector *connector)
 	return count;
 }
 
+static enum drm_mode_status udl_connector_helper_mode_valid(struct drm_connector *connector,
+			  struct drm_display_mode *mode)
+{
+	int con_type = connector->connector_type;
+
+	if ((con_type == DRM_MODE_CONNECTOR_DVII ||
+	     con_type == DRM_MODE_CONNECTOR_DVID ||
+	     con_type == DRM_MODE_CONNECTOR_DVIA) &&
+	    mode->clock > 165000)
+		return MODE_CLOCK_HIGH;
+
+	return 0;
+}
+
 static int udl_connector_helper_detect_ctx(struct drm_connector *connector,
 					   struct drm_modeset_acquire_ctx *ctx,
 					   bool force)
@@ -442,6 +456,7 @@ static int udl_connector_helper_detect_ctx(struct drm_connector *connector,
 static const struct drm_connector_helper_funcs udl_connector_helper_funcs = {
 	.get_modes = udl_connector_helper_get_modes,
 	.detect_ctx = udl_connector_helper_detect_ctx,
+	.mode_valid = udl_connector_helper_mode_valid,
 };
 
 static const struct drm_connector_funcs udl_connector_funcs = {
@@ -537,4 +552,4 @@ int udl_modeset_init(struct drm_device *dev)
 	drm_mode_config_reset(dev);
 
 	return 0;
-}
+} 
