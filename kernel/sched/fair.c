@@ -7986,7 +7986,7 @@ compute_energy(struct energy_env *eenv, struct perf_domain *pd,
  * other use-cases too. So, until someone finds a better way to solve this,
  * let's keep things simple by re-using the existing slow path.
  */
-static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
+static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sync)
 {
 	struct cpumask *cpus = this_cpu_cpumask_var_ptr(select_rq_mask);
 	unsigned long prev_delta = ULONG_MAX, best_delta = ULONG_MAX;
@@ -8005,6 +8005,13 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 	pd = rcu_dereference(rd->pd);
 	if (!pd)
 		goto unlock;
+
+	cpu = smp_processor_id();
+	if (sync && cpu_rq(cpu)->nr_running == 1 &&
+	    cpumask_test_cpu(cpu, p->cpus_ptr)) {
+		rcu_read_unlock();
+		return cpu;
+	}
 
 	/*
 	 * Energy-aware wake-up happens on the lowest sched_domain starting
@@ -8206,7 +8213,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 			return cpu;
 
 		if (!is_rd_overutilized(this_rq()->rd)) {
-			new_cpu = find_energy_efficient_cpu(p, prev_cpu);
+			new_cpu = find_energy_efficient_cpu(p, prev_cpu, sync);
 			if (new_cpu >= 0)
 				return new_cpu;
 			new_cpu = prev_cpu;
