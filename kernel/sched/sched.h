@@ -3285,6 +3285,25 @@ static inline void cpufreq_update_util(struct rq *rq, unsigned int flags)
 static inline void cpufreq_update_util(struct rq *rq, unsigned int flags) { }
 #endif /* !CONFIG_CPU_FREQ */
 
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+static inline bool uclamp_latency_sensitive(struct task_struct *p)
+{
+	struct cgroup_subsys_state *css = task_css(p, cpu_cgrp_id);
+	struct task_group *tg;
+
+	if (!css)
+		return false;
+	tg = container_of(css, struct task_group, css);
+
+	return tg->latency_sensitive;
+}
+#else
+static inline bool uclamp_latency_sensitive(struct task_struct *p)
+{
+	return false;
+}
+#endif /* CONFIG_UCLAMP_TASK_GROUP */
+
 #ifdef arch_scale_freq_capacity
 # ifndef arch_scale_freq_invariant
 #  define arch_scale_freq_invariant()	true
@@ -3420,6 +3439,11 @@ uclamp_se_set(struct uclamp_se *uc_se, unsigned int value, bool user_defined)
 	uc_se->user_defined = user_defined;
 }
 
+static inline bool uclamp_boosted(struct task_struct *p)
+{
+	return uclamp_eff_value(p, UCLAMP_MIN) > 0;
+}
+
 #else /* !CONFIG_UCLAMP_TASK: */
 
 static inline unsigned long
@@ -3453,6 +3477,11 @@ uclamp_rq_set(struct rq *rq, enum uclamp_id clamp_id, unsigned int value)
 }
 
 static inline bool uclamp_rq_is_idle(struct rq *rq)
+{
+	return false;
+}
+
+static inline bool uclamp_boosted(struct task_struct *p)
 {
 	return false;
 }
