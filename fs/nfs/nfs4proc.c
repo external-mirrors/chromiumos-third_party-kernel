@@ -7721,7 +7721,8 @@ static int nfs4_xattr_set_nfs4_acl(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_acl(const struct xattr_handler *handler,
 				   struct dentry *unused, struct inode *inode,
-				   const char *key, void *buf, size_t buflen)
+				   const char *key, void *buf, size_t buflen,
+				   int flags)
 {
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_ACL);
 }
@@ -7745,7 +7746,8 @@ static int nfs4_xattr_set_nfs4_dacl(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_dacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
-				    const char *key, void *buf, size_t buflen)
+				    const char *key, void *buf, size_t buflen,
+				    int flags)
 {
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_DACL);
 }
@@ -7768,7 +7770,8 @@ static int nfs4_xattr_set_nfs4_sacl(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_sacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
-				    const char *key, void *buf, size_t buflen)
+				    const char *key, void *buf, size_t buflen,
+				    int flags)
 {
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_SACL);
 }
@@ -7796,7 +7799,8 @@ static int nfs4_xattr_set_nfs4_label(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_label(const struct xattr_handler *handler,
 				     struct dentry *unused, struct inode *inode,
-				     const char *key, void *buf, size_t buflen)
+				     const char *key, void *buf, size_t buflen,
+				     int flags)
 {
 	if (security_ismaclabel(key))
 		return nfs4_get_security_label(inode, buf, buflen);
@@ -7874,7 +7878,8 @@ static int nfs4_xattr_set_nfs4_user(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_user(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
-				    const char *key, void *buf, size_t buflen)
+				    const char *key, void *buf, size_t buflen,
+				    int flags)
 {
 	u32 mask;
 	ssize_t ret;
