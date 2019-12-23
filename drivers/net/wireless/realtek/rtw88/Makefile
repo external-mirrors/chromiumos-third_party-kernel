@@ -16,6 +16,7 @@ rtw88_core-y += main.o \
 	   sec.o \
 	   bf.o \
 	   sar.o \
+	   vndcmd.o \
 	   regd.o
 
 rtw88_core-$(CONFIG_PM) += wow.o
