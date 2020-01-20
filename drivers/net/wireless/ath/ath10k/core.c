@@ -213,6 +213,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
 		.dynamic_sar_support = true,
 		.hw_restart_disconnect = false,
 		.use_fw_tx_credits = true,
+		.start_retry = ATH10K_START_RETRY,
 	},
 	{
 		.id = QCA6174_HW_2_1_VERSION,
