@@ -420,7 +420,7 @@ static void sched_energy_set(bool has_eas)
  *    1. an Energy Model (EM) is available;
  *    2. the SD_ASYM_CPUCAPACITY flag is set in the sched_domain hierarchy.
  *    3. no SMT is detected.
- *    4. schedutil is driving the frequency of all CPUs of the rd;
+ *    4. the EM complexity is low enough to keep scheduling overheads low;
  *    5. frequency invariance support is present;
  */
 static bool build_perf_domains(const struct cpumask *cpu_map)
