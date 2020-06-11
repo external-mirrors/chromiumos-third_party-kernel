@@ -178,6 +178,7 @@ static inline int folio_precise_page_mapcount(struct folio *folio,
  * array.c
  */
 extern const struct file_operations proc_tid_children_operations;
+extern const struct file_operations proc_tid_latsense_operations;
 
 extern void proc_task_name(struct seq_file *m, struct task_struct *p,
 			   bool escape);
