@@ -71,6 +71,10 @@
 
 #define i2c_hid_dbg(ihid, ...) dev_dbg(&(ihid)->client->dev, __VA_ARGS__)
 
+#define EVE_TP_I2C_ADDR        0x49
+#define EVE_TP_RETRIES 10
+#define EVE_TP_DELAY_MS 1
+
 struct i2c_hid_desc {
 	__le16 wHIDDescLength;
 	__le16 bcdVersion;
@@ -1183,7 +1187,7 @@ static void i2c_hid_core_final_power_down(struct i2c_hid *ihid)
 int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 		       u16 hid_descriptor_address, u32 quirks)
 {
-	int ret;
+	int ret, retries = 0;
 	struct i2c_hid *ihid;
 	struct hid_device *hid;
 
@@ -1223,8 +1227,23 @@ int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 	if (ret < 0)
 		return ret;
 	device_enable_async_suspend(&client->dev);
+       /*
+        * Eve touchpad does not consistently ACK the slave address.
+        * Retry the SMBUS sequence as a mitigation until proper fix
+        * is prepared.
+        * This is a temporary workaround for b/156232671.
+       */
+       if (client->addr == EVE_TP_I2C_ADDR)
+               retries = EVE_TP_RETRIES;
+
+
 
 	ret = i2c_hid_init_irq(client);
+       while ((ret < 0) && (retries--)) {
+               dev_err(&client->dev, "no response, retry left %d", retries);
+               msleep(EVE_TP_DELAY_MS);
+               ret = i2c_smbus_read_byte(client);
+       }
 	if (ret < 0)
 		goto err_buffers_allocated;
 
