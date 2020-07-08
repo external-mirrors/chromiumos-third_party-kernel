@@ -406,6 +406,14 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 {
 	u32 val;
 	int i, ret;
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	struct usb_hcd  *hcd = platform_get_drvdata(dwc->xhci);
+	struct generic_pm_domain *genpd;
+
+	genpd = pd_to_genpd(qcom->dev->pm_domain);
+
+	if (genpd && usb_wakeup_enabled_descendants(hcd->self.root_hub))
+		genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
 
 	if (qcom->is_suspended)
 		return 0;
@@ -439,6 +447,11 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 {
 	int ret;
 	int i;
+	struct generic_pm_domain *genpd;
+
+	genpd = pd_to_genpd(qcom->dev->pm_domain);
+	if (genpd)
+		genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
 
 	if (!qcom->is_suspended)
 		return 0;
