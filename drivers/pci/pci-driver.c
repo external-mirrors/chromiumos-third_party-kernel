@@ -1514,7 +1514,7 @@ static int pci_bus_match(struct device *dev, const struct device_driver *drv)
 
 	pci_drv = (struct pci_driver *)to_pci_driver(drv);
 	found_id = pci_match_device(pci_drv, pci_dev);
-	if (found_id)
+	if (found_id && pci_allowed_to_attach(pci_drv, pci_dev))
 		return 1;
 
 	return 0;
