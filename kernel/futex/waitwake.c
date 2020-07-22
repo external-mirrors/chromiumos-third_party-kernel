@@ -138,15 +138,16 @@ void futex_wake_mark(struct wake_q_head *wake_q, struct futex_q *q)
 }
 
 /*
- * Wake up waiters matching bitset queued on this futex (uaddr).
+ * Prepare wake queue matching bitset queued on this futex (uaddr).
  */
-int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
+static int
+prepare_wake_q(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset,
+	       struct wake_q_head *wake_q)
 {
 	struct futex_hash_bucket *hb;
 	struct futex_q *this, *next;
 	union futex_key key = FUTEX_KEY_INIT;
 	int ret;
-	DEFINE_WAKE_Q(wake_q);
 
 	if (!bitset)
 		return -EINVAL;
@@ -174,14 +175,28 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 			if (!(this->bitset & bitset))
 				continue;
 
-			futex_wake_mark(&wake_q, this);
+			futex_wake_mark(wake_q, this);
 			if (++ret >= nr_wake)
 				break;
 		}
 	}
 
 	spin_unlock(&hb->lock);
+	return ret;
+}
+
+/*
+ * Wake up waiters matching bitset queued on this futex (uaddr).
+ */
+int
+futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
+{
+	int ret;
+	DEFINE_WAKE_Q(wake_q);
+
+	ret = prepare_wake_q(uaddr, flags, nr_wake, bitset, &wake_q);
 	wake_up_q(&wake_q);
+
 	return ret;
 }
 
@@ -324,9 +339,12 @@ static long futex_wait_restart(struct restart_block *restart);
  * @hb:		the futex hash bucket, must be locked by the caller
  * @q:		the futex_q to queue up on
  * @timeout:	the prepared hrtimer_sleeper, or null for no timeout
+ * @next:	if present, wake next and hint to the scheduler that we'd
+ *			prefer to execute it locally.
  */
 void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
-			    struct hrtimer_sleeper *timeout)
+		struct hrtimer_sleeper *timeout,
+		struct task_struct *next)
 {
 	/*
 	 * The task state is guaranteed to be set before another task can
@@ -351,10 +369,26 @@ void futex_wait_queue(struct futex_hash_bucket *hb, struct futex_q *q,
 		 * flagged for rescheduling. Only call schedule if there
 		 * is no timeout, or if it has yet to expire.
 		 */
-		if (!timeout || timeout->task)
+		if (!timeout || timeout->task) {
+			if (next) {
+				/*
+				 * wake_up_process() below will be replaced
+				 * in the next patch with
+				 * wake_up_process_prefer_current_cpu().
+				 */
+				wake_up_process(next);
+				put_task_struct(next);
+				next = NULL;
+			}
 			freezable_schedule();
+		}
 	}
 	__set_current_state(TASK_RUNNING);
+
+	if (next) {
+		wake_up_process(next);
+		put_task_struct(next);
+	}
 }
 
 /**
@@ -629,7 +663,7 @@ retry_private:
 	return ret;
 }
 
-int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val, ktime_t *abs_time, u32 bitset)
+int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val, ktime_t *abs_time, u32 bitset, struct task_struct *next)
 {
 	struct hrtimer_sleeper timeout, *to;
 	struct restart_block *restart;
@@ -653,7 +687,8 @@ retry:
 		goto out;
 
 	/* futex_queue and wait for wakeup, timeout, or a signal. */
-	futex_wait_queue(hb, &q, to);
+	futex_wait_queue(hb, &q, to, next);
+	next = NULL;
 
 	/* If we were woken (and unqueued), we succeeded, whatever. */
 	ret = 0;
@@ -684,6 +719,10 @@ retry:
 	ret = set_restart_fn(restart, futex_wait_restart);
 
 out:
+	if (next) {
+		wake_up_process(next);
+		put_task_struct(next);
+	}
 	if (to) {
 		hrtimer_cancel(&to->timer);
 		destroy_hrtimer_on_stack(&to->timer);
@@ -703,6 +742,26 @@ static long futex_wait_restart(struct restart_block *restart)
 	restart->fn = do_no_restart_syscall;
 
 	return (long)futex_wait(uaddr, restart->futex.flags,
-				restart->futex.val, tp, restart->futex.bitset);
+				restart->futex.val, tp, restart->futex.bitset, NULL);
+}
+
+int futex_swap(u32 __user *uaddr, unsigned int flags, u32 val,
+		      ktime_t *abs_time, u32 __user *uaddr2)
+{
+	u32 bitset = FUTEX_BITSET_MATCH_ANY;
+	struct task_struct *next = NULL;
+	DEFINE_WAKE_Q(wake_q);
+	int ret;
+
+	ret = prepare_wake_q(uaddr2, flags, 1, bitset, &wake_q);
+	if (ret < 0)
+		return ret;
+	if (!wake_q_empty(&wake_q)) {
+		/* At most one wakee can be present. Pull it out. */
+		next = container_of(wake_q.first, struct task_struct, wake_q);
+		next->wake_q.next = NULL;
+	}
+
+	return futex_wait(uaddr, flags, val, abs_time, bitset, next);
 }
 
