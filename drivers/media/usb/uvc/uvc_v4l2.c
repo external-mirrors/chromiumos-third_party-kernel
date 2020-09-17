@@ -250,6 +250,12 @@ static int uvc_v4l2_try_format(struct uvc_streaming *stream,
 	 * the Windows driver).
 	 */
 	mutex_lock(&stream->mutex);
+	if (!video_is_registered(&stream->vdev)) {
+		mutex_unlock(&stream->mutex);
+		ret = -ENODEV;
+		return ret;
+	}
+
 	if (stream->dev->quirks & UVC_QUIRK_PROBE_EXTRAFIELDS)
 		probe->dwMaxVideoFrameSize =
 			stream->ctrl.dwMaxVideoFrameSize;
@@ -319,6 +325,12 @@ static int uvc_v4l2_get_format(struct uvc_streaming *stream,
 		return -EINVAL;
 
 	mutex_lock(&stream->mutex);
+
+	if (!video_is_registered(&stream->vdev)) {
+		ret = -ENODEV;
+		goto done;
+	}
+
 	format = stream->cur_format;
 	frame = stream->cur_frame;
 
@@ -358,6 +370,11 @@ static int uvc_v4l2_set_format(struct uvc_streaming *stream,
 		return ret;
 
 	mutex_lock(&stream->mutex);
+
+	if (!video_is_registered(&stream->vdev)) {
+		ret = -ENODEV;
+		goto done;
+	}
 
 	if (uvc_queue_allocated(&stream->queue)) {
 		ret = -EBUSY;
@@ -433,6 +450,11 @@ static int uvc_v4l2_set_streamparm(struct uvc_streaming *stream,
 		timeperframe.numerator, timeperframe.denominator, interval);
 
 	mutex_lock(&stream->mutex);
+
+	if (!video_is_registered(&stream->vdev)) {
+		mutex_unlock(&stream->mutex);
+		return -ENODEV;
+	}
 
 	if (uvc_queue_streaming(&stream->queue)) {
 		mutex_unlock(&stream->mutex);
@@ -762,6 +784,10 @@ static int uvc_ioctl_reqbufs(struct file *file, void *fh,
 		return ret;
 
 	mutex_lock(&stream->mutex);
+	if (!video_is_registered(&stream->vdev)) {
+		mutex_unlock(&stream->mutex);
+		return -ENODEV;
+	}
 	ret = uvc_request_buffers(&stream->queue, rb);
 	mutex_unlock(&stream->mutex);
 	if (ret < 0)
@@ -846,7 +872,12 @@ static int uvc_ioctl_streamon(struct file *file, void *fh,
 		return -EBUSY;
 
 	mutex_lock(&stream->mutex);
+	if (!video_is_registered(&stream->vdev)) {
+		ret = -ENODEV;
+		goto unlock;
+	}
 	ret = uvc_queue_streamon(&stream->queue, type);
+unlock:
 	mutex_unlock(&stream->mutex);
 
 	return ret;
@@ -857,15 +888,21 @@ static int uvc_ioctl_streamoff(struct file *file, void *fh,
 {
 	struct uvc_fh *handle = fh;
 	struct uvc_streaming *stream = handle->stream;
+	int ret = 0;
 
 	if (!uvc_has_privileges(handle))
 		return -EBUSY;
 
 	mutex_lock(&stream->mutex);
+	if (!video_is_registered(&stream->vdev)) {
+		ret = -ENODEV;
+		goto unlock;
+	}
 	uvc_queue_streamoff(&stream->queue, type);
+unlock:
 	mutex_unlock(&stream->mutex);
 
-	return 0;
+	return ret;
 }
 
 static int uvc_ioctl_enum_input(struct file *file, void *fh,
