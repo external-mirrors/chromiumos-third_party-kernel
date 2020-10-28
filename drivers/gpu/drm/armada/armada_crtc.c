@@ -427,7 +427,7 @@ static int armada_drm_crtc_atomic_check(struct drm_crtc *crtc,
 }
 
 static void armada_drm_crtc_atomic_begin(struct drm_crtc *crtc,
-					 struct drm_crtc_state *old_crtc_state)
+					 struct drm_atomic_state *state)
 {
 	struct armada_crtc *dcrtc = drm_to_armada_crtc(crtc);
 
@@ -441,7 +441,7 @@ static void armada_drm_crtc_atomic_begin(struct drm_crtc *crtc,
 }
 
 static void armada_drm_crtc_atomic_flush(struct drm_crtc *crtc,
-					 struct drm_crtc_state *old_crtc_state)
+					 struct drm_atomic_state *state)
 {
 	struct armada_crtc *dcrtc = drm_to_armada_crtc(crtc);
 
