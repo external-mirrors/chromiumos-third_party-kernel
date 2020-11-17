@@ -203,4 +203,5 @@ static inline bool cpu_mitigations_auto_nosmt(void)
 }
 #endif
 
+extern bool coresched_cmd_secure(void);
 #endif /* _LINUX_CPU_H_ */
