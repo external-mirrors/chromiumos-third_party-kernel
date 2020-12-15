@@ -846,27 +846,51 @@ static bool adv_use_rpa(struct hci_dev *hdev, uint32_t flags)
 	return true;
 }
 
+static int hci_pause_advertising_sync(struct hci_dev *hdev);
 static int hci_set_random_addr_sync(struct hci_dev *hdev, bdaddr_t *rpa)
 {
-	/* If we're advertising or initiating an LE connection we can't
-	 * go ahead and change the random address at this time. This is
-	 * because the eventual initiator address used for the
-	 * subsequently created connection will be undefined (some
-	 * controllers use the new address and others the one we had
-	 * when the operation started).
+	bool adv_enabled = hci_dev_test_flag(hdev, HCI_LE_ADV);
+	int err;
+
+	/* If we're initiating an LE connection or actively scanning, we can't
+	 * go ahead and change the random address at this time. This is because
+	 * the eventual initiator address used for the subsequently created
+	 * connection will be undefined (some controllers use the new address
+	 * and others the one we had when the operation started).
 	 *
-	 * In this kind of scenario skip the update and let the random
-	 * address be updated at the next cycle.
+	 * In this kind of scenario skip the update and let the random address
+	 * be updated at the next cycle.
 	 */
-	if (hci_dev_test_flag(hdev, HCI_LE_ADV) ||
-	    hci_lookup_le_connect(hdev)) {
+
+	if (hci_lookup_le_connect(hdev) ||
+	    (hci_dev_test_flag(hdev, HCI_LE_SCAN) &&
+			hdev->le_scan_type == LE_SCAN_ACTIVE)) {
 		bt_dev_dbg(hdev, "Deferring random address update");
 		hci_dev_set_flag(hdev, HCI_RPA_EXPIRED);
 		return 0;
 	}
 
-	return __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_RANDOM_ADDR,
-				     6, rpa, HCI_CMD_TIMEOUT);
+	/* Because any random address update will fail while advertising is in
+	 * progress, we pause any active instances to update the random address.
+	 */
+	if (adv_enabled) {
+		err = hci_pause_advertising_sync(hdev);
+		if (err)
+			goto done;
+	}
+
+	err = __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_RANDOM_ADDR,
+				    6, rpa, HCI_CMD_TIMEOUT);
+
+	if (err)
+		goto done;
+
+	/* Re-enable previously-active advertisements */
+	if (adv_enabled)
+		err = hci_resume_advertising_sync(hdev);
+
+done:
+	return err;
 }
 
 int hci_update_random_address_sync(struct hci_dev *hdev, bool require_privacy,
@@ -2357,7 +2381,7 @@ static int hci_pause_advertising_sync(struct hci_dev *hdev)
 }
 
 /* This function enables all user advertising instances */
-static int hci_resume_advertising_sync(struct hci_dev *hdev)
+int hci_resume_advertising_sync(struct hci_dev *hdev)
 {
 	struct adv_info *adv, *tmp;
 	int err;

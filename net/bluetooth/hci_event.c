@@ -5882,10 +5882,12 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 
 	hci_dev_lock(hdev);
 
-	/* All controllers implicitly stop advertising in the event of a
-	 * connection, so ensure that the state bit is cleared.
+	/* When entering a connection in the slave role, the controller will
+	 * disable advertising. To avoid a lapse in service, we restart any
+	 * previously active advertising instances.
 	 */
-	hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	if (role == HCI_ROLE_SLAVE)
+		hci_resume_advertising_sync(hdev);
 
 	conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, bdaddr);
 	if (!conn) {
