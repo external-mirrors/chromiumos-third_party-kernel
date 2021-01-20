@@ -9,8 +9,6 @@
 struct qcom_smmu {
 	struct arm_smmu_device smmu;
 	const struct qcom_smmu_config *cfg;
-	bool bypass_quirk;
-	u8 bypass_cbndx;
 	u32 stall_enabled;
 };
 
