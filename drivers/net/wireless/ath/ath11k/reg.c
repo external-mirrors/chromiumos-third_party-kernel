@@ -256,10 +256,13 @@ int ath11k_regd_update(struct ath11k *ar)
 		complete(&ar->finish_11d_scan);
 
 	rtnl_lock();
+	wiphy_lock(ar->hw->wiphy);
+
 	if (ar->pending_11d)
 		reinit_completion(&ar->finish_11d_ch_list);
 
-	ret = regulatory_set_wiphy_regd_sync_rtnl(ar->hw->wiphy, regd_copy);
+	ret = regulatory_set_wiphy_regd_sync(ar->hw->wiphy, regd_copy);
+	wiphy_unlock(ar->hw->wiphy);
 	rtnl_unlock();
 
 	kfree(regd_copy);
