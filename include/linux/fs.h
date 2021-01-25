@@ -3483,6 +3483,11 @@ static inline int kiocb_set_rw_flags(struct kiocb *ki, rwf_t flags,
 	return 0;
 }
 
+static inline rwf_t old_iocb_to_rw_flags(int ifl, int iocb_mask)
+{
+	return ifl & iocb_mask;
+}
+
 /* Transaction based IO helpers */
 
 /*
