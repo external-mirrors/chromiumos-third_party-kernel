@@ -3043,6 +3043,8 @@ enum nl80211_attrs {
 	NL80211_ATTR_RECONNECT_REQUESTED,
 	NL80211_ATTR_SAE_PWE,
 
+	NL80211_ATTR_DISABLE_HE,
+
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
