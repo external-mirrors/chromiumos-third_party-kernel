@@ -1108,7 +1108,6 @@ int kvm_unmap_hva_range(struct kvm *kvm,
 	if (!kvm->arch.mmu.pgt)
 		return 0;
 
-	trace_kvm_unmap_hva_range(start, end);
 	handle_hva_to_gpa(kvm, start, end, &kvm_unmap_hva_handler, &flags);
 	return 0;
 }
@@ -1137,8 +1136,6 @@ int kvm_set_spte_hva(struct kvm *kvm, unsigned long hva, pte_t pte)
 
 	if (!kvm->arch.mmu.pgt)
 		return 0;
-
-	trace_kvm_set_spte_hva(hva);
 
 	/*
 	 * We've moved a page around, probably through CoW, so let's treat it
@@ -1170,7 +1167,7 @@ int kvm_age_hva(struct kvm *kvm, unsigned long start, unsigned long end)
 {
 	if (!kvm->arch.mmu.pgt)
 		return 0;
-	trace_kvm_age_hva(start, end);
+
 	return handle_hva_to_gpa(kvm, start, end, kvm_age_hva_handler, NULL);
 }
 
@@ -1178,7 +1175,7 @@ int kvm_test_age_hva(struct kvm *kvm, unsigned long hva)
 {
 	if (!kvm->arch.mmu.pgt)
 		return 0;
-	trace_kvm_test_age_hva(hva);
+
 	return handle_hva_to_gpa(kvm, hva, hva + PAGE_SIZE,
 				 kvm_test_age_hva_handler, NULL);
 }
