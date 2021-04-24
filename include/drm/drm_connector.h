@@ -1806,6 +1806,8 @@ int drm_connector_set_panel_orientation_with_quirk(
 int drm_connector_set_orientation_from_panel(
 	struct drm_connector *connector,
 	struct drm_panel *panel);
+int drm_connector_init_panel_orientation_property(
+	struct drm_connector *connector);
 int drm_connector_attach_max_bpc_property(struct drm_connector *connector,
 					  int min, int max);
 void drm_connector_create_privacy_screen_properties(struct drm_connector *conn);
