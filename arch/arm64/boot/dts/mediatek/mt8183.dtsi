@@ -1916,6 +1916,7 @@
 			reg-names = "misc", "ld", "top", "cm", "ad", "av", "pp",
 				    "hwd", "hwq", "hwb", "hwg";
 			interrupts = <GIC_SPI 250 IRQ_TYPE_LEVEL_LOW>;
+			mediatek,larb = <&larb1>;
 			iommus = <&iommu M4U_PORT_HW_VDEC_MC_EXT>,
 				 <&iommu M4U_PORT_HW_VDEC_PP_EXT>,
 				 <&iommu M4U_PORT_HW_VDEC_VLD_EXT>,
@@ -1964,6 +1965,25 @@
 			power-domains = <&spm MT8183_POWER_DOMAIN_VENC>;
 			clocks = <&vencsys CLK_VENC_JPGENC>;
 			clock-names = "jpgenc";
+		};
+
+		vcodec_enc: vcodec@17020000 {
+			compatible = "mediatek,mt8183-vcodec-enc";
+			reg = <0 0x17020000 0 0x1000>,
+				 <0 0x17000000 0 0x1000>; /* Dummy */
+			interrupts = <GIC_SPI 247 IRQ_TYPE_LEVEL_LOW>;
+			mediatek,larb = <&larb4>;
+			iommus = <&iommu M4U_PORT_VENC_REC>,
+				 <&iommu M4U_PORT_VENC_BSDMA>,
+				 <&iommu M4U_PORT_VENC_RD_COMV>,
+				 <&iommu M4U_PORT_VENC_CUR_LUMA>,
+				 <&iommu M4U_PORT_VENC_CUR_CHROMA>,
+				 <&iommu M4U_PORT_VENC_REF_LUMA>,
+				 <&iommu M4U_PORT_VENC_REF_CHROMA>;
+			mediatek,scp = <&scp>;
+			power-domains = <&spm MT8183_POWER_DOMAIN_VENC>;
+			clocks = <&vencsys CLK_VENC_VENC>;
+			clock-names = "MT_CG_VENC";
 		};
 
 		ipu_conn: syscon@19000000 {
