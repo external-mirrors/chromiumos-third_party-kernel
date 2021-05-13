@@ -123,6 +123,7 @@ Code  Seq#    Include File                                           Comments
 'B'   00-0F  xen/xenbus_dev.h                                        conflict!
 'C'   all    linux/soundcard.h                                       conflict!
 'C'   01-2F  linux/capi.h                                            conflict!
+'C'   01-5F  uapi/misc/intel/gna.h                                   conflict!
 'C'   F0-FF  drivers/net/wan/cosa.h                                  conflict!
 'D'   all    arch/s390/include/asm/dasd.h
 'D'   40-5F  drivers/scsi/dpt/dtpi_ioctl.h                           Dead since 2022

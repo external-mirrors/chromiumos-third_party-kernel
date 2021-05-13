@@ -18,6 +18,7 @@ fit into other categories.
    dw-xdata-pcie
    ibmvmc
    ics932s401
+   intel/gna
    isl29003
    lis3lv02d
    max6875
