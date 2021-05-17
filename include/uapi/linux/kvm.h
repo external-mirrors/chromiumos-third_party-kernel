@@ -1158,6 +1158,8 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_SYSTEM_EVENT_DATA 215
 #define KVM_CAP_ARM_SYSTEM_SUSPEND 216
 
+#define KVM_CAP_IOAPIC_NUM_PINS 8191
+
 #ifdef KVM_CAP_IRQ_ROUTING
 
 struct kvm_irq_routing_irqchip {

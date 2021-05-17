@@ -4420,6 +4420,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_DISABLE_QUIRKS2:
 		r = KVM_X86_VALID_QUIRKS;
 		break;
+	case KVM_CAP_IOAPIC_NUM_PINS:
+		r = KVM_IOAPIC_NUM_PINS;
+		break;
 	default:
 		break;
 	}
