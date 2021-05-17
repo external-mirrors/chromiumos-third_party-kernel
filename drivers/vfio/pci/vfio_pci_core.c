@@ -40,6 +40,11 @@ static bool disable_idle_d3;
 static DEFINE_MUTEX(vfio_pci_sriov_pfs_mutex);
 static LIST_HEAD(vfio_pci_sriov_pfs);
 
+static bool disable_function_reset;
+module_param(disable_function_reset, bool, 0644);
+MODULE_PARM_DESC(disable_function_reset,
+		 "Disable function reset request during device enablement.");
+
 static inline bool vfio_vga_disabled(void)
 {
 #ifdef CONFIG_VFIO_PCI_VGA
@@ -290,12 +295,22 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (ret)
 		goto out_power;
 
-	/* If reset fails because of the device lock, fail this path entirely */
-	ret = pci_try_reset_function(pdev);
-	if (ret == -EAGAIN)
-		goto out_disable_device;
+	if (disable_function_reset) {
+		/* Do not issue function reset to the device.
+		 * Use with care.
+		 */
+		vdev->reset_works = 0;
+	} else {
+		/* If reset fails because of the device lock,
+		 * fail this path entirely
+		 */
+		ret = pci_try_reset_function(pdev);
+		if (ret == -EAGAIN)
+			goto out_disable_device;
 
-	vdev->reset_works = !ret;
+		vdev->reset_works = !ret;
+	}
+
 	pci_save_state(pdev);
 	vdev->pci_saved_state = pci_store_saved_state(pdev);
 	if (!vdev->pci_saved_state)
