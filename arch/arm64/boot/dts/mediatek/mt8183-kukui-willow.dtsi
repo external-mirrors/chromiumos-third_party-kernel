@@ -23,6 +23,8 @@
 };
 
 &i2c2 {
+	mediatek,default-timing-adjust;
+
 	trackpad@2c {
 		compatible = "hid-over-i2c";
 		reg = <0x2c>;
