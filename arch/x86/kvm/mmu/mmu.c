@@ -4200,7 +4200,7 @@ static int kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 	}
 
 	async = false;
-	fault->pfn = __gfn_to_pfn_page_memslot(slot, fault->gfn, false, &async,
+	fault->pfn = __gfn_to_pfn_page_memslot(slot, fault->gfn, false, false, &async,
 					       fault->write, &fault->map_writable,
 					       &fault->hva, &fault->page);
 	if (!async)
@@ -4222,8 +4222,9 @@ static int kvm_faultin_pfn(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 	 * to wait for IO.  Note, gup always bails if it is unable to quickly
 	 * get a page and a fatal signal, i.e. SIGKILL, is pending.
 	 */
-	fault->pfn = __gfn_to_pfn_page_memslot(slot, fault->gfn, false, NULL,
-					       fault->write, &fault->map_writable,
+	fault->pfn = __gfn_to_pfn_page_memslot(slot, fault->gfn, false,
+					       false, NULL, fault->write,
+					       &fault->map_writable,
 					       &fault->hva, &fault->page);
 	return RET_PF_CONTINUE;
 }
