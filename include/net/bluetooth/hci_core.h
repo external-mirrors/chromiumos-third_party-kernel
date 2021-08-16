@@ -477,6 +477,7 @@ struct hci_dev {
 	unsigned int	sco_pkts;
 	unsigned int	le_pkts;
 	unsigned int	iso_pkts;
+	unsigned int	wbs_pkt_len;
 
 	unsigned long	acl_last_tx;
 	unsigned long	sco_last_tx;
