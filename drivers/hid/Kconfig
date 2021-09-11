@@ -722,6 +722,7 @@ config HID_MULTITOUCH
 	  To compile this driver as a module, choose M here: the
 	  module will be called hid-multitouch.
 
+<<<<<<< HEAD
 config MULTITOUCH_HAPTIC
 	bool "Simple haptic multitouch support"
 	depends on HID_MULTITOUCH
@@ -733,6 +734,8 @@ config MULTITOUCH_HAPTIC
 	It can be used for Elan 2703 haptic touchpad.
 	To enable, say Y.
 
+=======
+>>>>>>> 2af16c1f846bd (HID: nintendo: add nintendo switch controller driver)
 config HID_NINTENDO
 	tristate "Nintendo Joy-Con and Pro Controller support"
 	depends on HID
