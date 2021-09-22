@@ -3323,6 +3323,10 @@ static int mmu_alloc_shadow_roots(struct kvm_vcpu *vcpu)
 	if (r)
 		return r;
 
+	r = kvm_page_track_enable_mmu_write_tracking(vcpu->kvm);
+	if (r)
+		return r;
+
 	/*
 	 * Do we shadow a long mode page table? If so we need to
 	 * write-protect the guests page table root.
@@ -5561,6 +5565,9 @@ void kvm_mmu_init_vm(struct kvm *kvm)
 		 * accessing this struct kvm yet.
 		 */
 		kvm->arch.memslots_have_rmaps = true;
+
+	if (!tdp_enabled)
+		kvm->arch.memslots_mmu_write_tracking = true;
 
 	node->track_write = kvm_mmu_pte_write;
 	node->track_flush_slot = kvm_mmu_invalidate_zap_pages_in_memslot;
