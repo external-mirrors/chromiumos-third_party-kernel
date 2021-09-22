@@ -123,4 +123,7 @@ config KVM_VIRT_SUSPEND_TIMING
 
 	 If unsure, say N.
 
+config KVM_EXTERNAL_WRITE_TRACKING
+	bool
+
 endif # VIRTUALIZATION
