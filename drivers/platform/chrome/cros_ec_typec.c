@@ -340,37 +340,6 @@ unregister_ports:
 	return ret;
 }
 
-static int cros_typec_ec_command(struct cros_typec_data *typec,
-				 unsigned int version,
-				 unsigned int command,
-				 void *outdata,
-				 unsigned int outsize,
-				 void *indata,
-				 unsigned int insize)
-{
-	struct cros_ec_command *msg;
-	int ret;
-
-	msg = kzalloc(sizeof(*msg) + max(outsize, insize), GFP_KERNEL);
-	if (!msg)
-		return -ENOMEM;
-
-	msg->version = version;
-	msg->command = command;
-	msg->outsize = outsize;
-	msg->insize = insize;
-
-	if (outsize)
-		memcpy(msg->data, outdata, outsize);
-
-	ret = cros_ec_cmd_xfer_status(typec->ec, msg);
-	if (ret >= 0 && insize)
-		memcpy(indata, msg->data, insize);
-
-	kfree(msg);
-	return ret;
-}
-
 static int cros_typec_usb_safe_state(struct cros_typec_port *port)
 {
 	port->state.mode = TYPEC_STATE_SAFE;
@@ -549,8 +518,8 @@ static int cros_typec_configure_mux(struct cros_typec_data *typec, int port_num,
 	/* Sending Acknowledgment to EC */
 	mux_ack.port = port_num;
 
-	if (cros_typec_ec_command(typec, 0, EC_CMD_USB_PD_MUX_ACK, &mux_ack,
-				  sizeof(mux_ack), NULL, 0) < 0)
+	if (cros_ec_command(typec->ec, 0, EC_CMD_USB_PD_MUX_ACK, &mux_ack,
+			    sizeof(mux_ack), NULL, 0) < 0)
 		dev_warn(typec->dev,
 			 "Failed to send Mux ACK to EC for port: %d\n",
 			 port_num);
@@ -622,8 +591,8 @@ static int cros_typec_get_mux_info(struct cros_typec_data *typec, int port_num,
 		.port = port_num,
 	};
 
-	return cros_typec_ec_command(typec, 0, EC_CMD_USB_PD_MUX_INFO, &req,
-				     sizeof(req), resp, sizeof(*resp));
+	return cros_ec_command(typec->ec, 0, EC_CMD_USB_PD_MUX_INFO, &req,
+			       sizeof(req), resp, sizeof(*resp));
 }
 
 static int cros_typec_register_altmodes(struct cros_typec_data *typec, int port_num)
@@ -689,8 +658,8 @@ static int cros_typec_handle_sop_disc(struct cros_typec_data *typec, int port_nu
 	}
 
 	memset(sop_disc, 0, EC_PROTO2_MAX_RESPONSE_SIZE);
-	ret = cros_typec_ec_command(typec, 0, EC_CMD_TYPEC_DISCOVERY, &req, sizeof(req),
-				    sop_disc, EC_PROTO2_MAX_RESPONSE_SIZE);
+	ret = cros_ec_command(typec->ec, 0, EC_CMD_TYPEC_DISCOVERY, &req, sizeof(req),
+			      sop_disc, EC_PROTO2_MAX_RESPONSE_SIZE);
 	if (ret < 0) {
 		dev_err(typec->dev, "Failed to get SOP discovery data for port: %d\n", port_num);
 		goto disc_exit;
@@ -732,8 +701,8 @@ static void cros_typec_handle_status(struct cros_typec_data *typec, int port_num
 	};
 	int ret;
 
-	ret = cros_typec_ec_command(typec, 0, EC_CMD_TYPEC_STATUS, &req, sizeof(req),
-				    &resp, sizeof(resp));
+	ret = cros_ec_command(typec->ec, 0, EC_CMD_TYPEC_STATUS, &req, sizeof(req),
+			      &resp, sizeof(resp));
 	if (ret < 0) {
 		dev_warn(typec->dev, "EC_CMD_TYPEC_STATUS failed for port: %d\n", port_num);
 		return;
@@ -772,9 +741,9 @@ static int cros_typec_port_update(struct cros_typec_data *typec, int port_num)
 	req.mux = USB_PD_CTRL_MUX_NO_CHANGE;
 	req.swap = USB_PD_CTRL_SWAP_NONE;
 
-	ret = cros_typec_ec_command(typec, typec->pd_ctrl_ver,
-				    EC_CMD_USB_PD_CONTROL, &req, sizeof(req),
-				    &resp, sizeof(resp));
+	ret = cros_ec_command(typec->ec, typec->pd_ctrl_ver,
+			      EC_CMD_USB_PD_CONTROL, &req, sizeof(req),
+			      &resp, sizeof(resp));
 	if (ret < 0)
 		return ret;
 
@@ -822,8 +791,8 @@ static int cros_typec_get_cmd_version(struct cros_typec_data *typec)
 
 	/* We're interested in the PD control command version. */
 	req_v1.cmd = EC_CMD_USB_PD_CONTROL;
-	ret = cros_typec_ec_command(typec, 1, EC_CMD_GET_CMD_VERSIONS,
-				    &req_v1, sizeof(req_v1), &resp,
+	ret = cros_ec_command(typec->ec, 1, EC_CMD_GET_CMD_VERSIONS,
+			      &req_v1, sizeof(req_v1), &resp,
 				    sizeof(resp));
 	if (ret < 0)
 		return ret;
@@ -847,8 +816,8 @@ static int cros_typec_feature_supported(struct cros_typec_data *typec, enum ec_f
 	struct ec_response_get_features resp = {};
 	int ret;
 
-	ret = cros_typec_ec_command(typec, 0, EC_CMD_GET_FEATURES, NULL, 0,
-				    &resp, sizeof(resp));
+	ret = cros_ec_command(typec->ec, 0, EC_CMD_GET_FEATURES, NULL, 0,
+			      &resp, sizeof(resp));
 	if (ret < 0) {
 		dev_warn(typec->dev,
 			 "Failed to get features, assuming typec feature=%d unsupported.\n",
@@ -923,8 +892,8 @@ static int cros_typec_probe(struct platform_device *pdev)
 	typec->needs_mux_ack = !!cros_typec_feature_supported(typec,
 					EC_FEATURE_TYPEC_MUX_REQUIRE_AP_ACK);
 
-	ret = cros_typec_ec_command(typec, 0, EC_CMD_USB_PD_PORTS, NULL, 0,
-				    &resp, sizeof(resp));
+	ret = cros_ec_command(typec->ec, 0, EC_CMD_USB_PD_PORTS, NULL, 0,
+			      &resp, sizeof(resp));
 	if (ret < 0)
 		return ret;
 
