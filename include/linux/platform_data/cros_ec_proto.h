@@ -243,6 +243,9 @@ int cros_ec_get_sensor_count(struct cros_ec_dev *ec);
 
 bool cros_ec_handle_event(struct cros_ec_device *ec_dev);
 
+int cros_ec_command(struct cros_ec_device *ec_dev, int command, uint8_t *outdata, int outsize,
+		    uint8_t *indata, int insize);
+
 /**
  * cros_ec_get_time_ns() - Return time in ns.
  *
