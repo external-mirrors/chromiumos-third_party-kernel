@@ -4158,6 +4158,10 @@ static void set_quality_report(struct hci_dev *hdev, bool enable)
 {
 	int err;
 
+	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) ||
+	    !hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
+		return;
+
 	if (hdev->set_quality_report)
 		err = hdev->set_quality_report(hdev, enable);
 	else
@@ -4324,8 +4328,7 @@ static int hci_dev_init_sync(struct hci_dev *hdev)
 		msft_do_open(hdev);
 		aosp_do_open(hdev);
 
-		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
-			set_quality_report(hdev, true);
+		set_quality_report(hdev, true);
 	}
 
 	clear_bit(HCI_INIT, &hdev->flags);
@@ -4470,8 +4473,7 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 	 * is called. Otherwise, some chips may panic.
 	 */
 	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
-		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
-			set_quality_report(hdev, false);
+		set_quality_report(hdev, false);
 
 		aosp_do_close(hdev);
 	}
@@ -5354,6 +5356,9 @@ int hci_suspend_sync(struct hci_dev *hdev)
 	/* Prevent disconnects from causing scanning to be re-enabled */
 	hci_pause_scan_sync(hdev);
 
+	/* Stop quality reporting activities */
+	set_quality_report(hdev, false);
+
 	if (hci_conn_count(hdev)) {
 		/* Soft disconnect everything (power off) */
 		err = hci_disconnect_all_sync(hdev, HCI_ERROR_REMOTE_POWER_OFF);
@@ -5461,6 +5466,9 @@ int hci_resume_sync(struct hci_dev *hdev)
 
 	/* Restore event mask */
 	hci_set_event_mask_sync(hdev);
+
+	/* Resume quality reporting activities */
+	set_quality_report(hdev, true);
 
 	/* Clear any event filters and restore scan state */
 	hci_clear_event_filter_sync(hdev);
