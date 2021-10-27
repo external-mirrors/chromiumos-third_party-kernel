@@ -1356,6 +1356,10 @@ static void set_quality_report(struct hci_dev *hdev, bool enable)
 {
 	int err;
 
+	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) ||
+	    !hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
+		return;
+
 	if (hdev->set_quality_report)
 		err = hdev->set_quality_report(hdev, enable);
 	else
@@ -1494,8 +1498,7 @@ static int hci_dev_do_open(struct hci_dev *hdev)
 		msft_do_open(hdev);
 		aosp_do_open(hdev);
 
-		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
-			set_quality_report(hdev, true);
+		set_quality_report(hdev, true);
 	}
 
 	clear_bit(HCI_INIT, &hdev->flags);
@@ -1642,8 +1645,7 @@ int hci_dev_do_close(struct hci_dev *hdev)
 	 * is called. Otherwise, some chips may panic.
 	 */
 	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
-		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
-			set_quality_report(hdev, false);
+		set_quality_report(hdev, false);
 
 		aosp_do_close(hdev);
 	}
@@ -3535,6 +3537,9 @@ static int hci_suspend_notifier(struct notifier_block *nb, unsigned long action,
 		goto done;
 
 	if (action == PM_SUSPEND_PREPARE) {
+		/* Stop quality reporting activities */
+		set_quality_report(hdev, false);
+
 		/* Suspend consists of two actions:
 		 *  - First, disconnect everything and make the controller not
 		 *    connectable (disabling scanning)
@@ -3562,6 +3567,9 @@ static int hci_suspend_notifier(struct notifier_block *nb, unsigned long action,
 
 		mgmt_resuming(hdev, hdev->wake_reason, &hdev->wake_addr,
 			      hdev->wake_addr_type);
+
+		/* Resume quality reporting activities */
+		set_quality_report(hdev, true);
 	}
 
 done:
