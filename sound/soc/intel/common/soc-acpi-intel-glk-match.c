@@ -44,6 +44,15 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_glk_machines[] = {
 		.asoc_plat_name = "0000:00:0e.0",
 	},
 	{
+		.id = "RTL5682",
+		.drv_name = "glk_rt5682_max98357a",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &glk_codecs,
+		.sof_fw_filename = "intel/sof-glk.ri",
+		.sof_tplg_filename = "intel/sof-glk-rt5682.tplg",
+		.asoc_plat_name = "0000:00:0e.0",
+	},
+	{
 		.id = "10134242",
 		.drv_name = "glk_cs4242_max98357a",
 		.fw_filename = "intel/dsp_fw_glk.bin",
