@@ -3366,6 +3366,8 @@ static int vega20_print_clock_levels(struct pp_hwmgr *hwmgr,
 	int ret = 0;
 	uint32_t gen_speed, lane_width, current_gen_speed, current_lane_width;
 
+	phm_get_sysfs_buf(&buf, &size);
+
 	switch (type) {
 	case PP_SCLK:
 		ret = vega20_get_current_clk_freq(hwmgr, PPCLK_GFXCLK, &now);
@@ -3481,8 +3483,8 @@ static int vega20_print_clock_levels(struct pp_hwmgr *hwmgr,
 	case OD_SCLK:
 		if (od8_settings[OD8_SETTING_GFXCLK_FMIN].feature_id &&
 		    od8_settings[OD8_SETTING_GFXCLK_FMAX].feature_id) {
-			size += sprintf(buf + size, "%s:\n", "OD_SCLK");
-			size += sprintf(buf + size, "0: %10uMhz\n",
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_SCLK");
+			size += sysfs_emit_at(buf, size, "0: %10uMhz\n",
 				od_table->GfxclkFmin);
 			size += sprintf(buf + size, "1: %10uMhz\n",
 				od_table->GfxclkFmax);
@@ -3491,8 +3493,8 @@ static int vega20_print_clock_levels(struct pp_hwmgr *hwmgr,
 
 	case OD_MCLK:
 		if (od8_settings[OD8_SETTING_UCLK_FMAX].feature_id) {
-			size += sprintf(buf + size, "%s:\n", "OD_MCLK");
-			size += sprintf(buf + size, "1: %10uMhz\n",
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_MCLK");
+			size += sysfs_emit_at(buf, size, "1: %10uMhz\n",
 				od_table->UclkFmax);
 		}
 
@@ -3505,8 +3507,8 @@ static int vega20_print_clock_levels(struct pp_hwmgr *hwmgr,
 		    od8_settings[OD8_SETTING_GFXCLK_VOLTAGE1].feature_id &&
 		    od8_settings[OD8_SETTING_GFXCLK_VOLTAGE2].feature_id &&
 		    od8_settings[OD8_SETTING_GFXCLK_VOLTAGE3].feature_id) {
-			size += sprintf(buf + size, "%s:\n", "OD_VDDC_CURVE");
-			size += sprintf(buf + size, "0: %10uMhz %10dmV\n",
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_VDDC_CURVE");
+			size += sysfs_emit_at(buf, size, "0: %10uMhz %10dmV\n",
 				od_table->GfxclkFreq1,
 				od_table->GfxclkVolt1 / VOLTAGE_SCALE);
 			size += sprintf(buf + size, "1: %10uMhz %10dmV\n",
@@ -3520,7 +3522,7 @@ static int vega20_print_clock_levels(struct pp_hwmgr *hwmgr,
 		break;
 
 	case OD_RANGE:
-		size += sprintf(buf + size, "%s:\n", "OD_RANGE");
+		size += sysfs_emit_at(buf, size, "%s:\n", "OD_RANGE");
 
 		if (od8_settings[OD8_SETTING_GFXCLK_FMIN].feature_id &&
 		    od8_settings[OD8_SETTING_GFXCLK_FMAX].feature_id) {

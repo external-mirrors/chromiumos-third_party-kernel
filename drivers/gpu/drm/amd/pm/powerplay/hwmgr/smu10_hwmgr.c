@@ -1024,6 +1024,8 @@ static int smu10_print_clock_levels(struct pp_hwmgr *hwmgr,
 	uint32_t min_freq, max_freq = 0;
 	uint32_t ret = 0;
 
+	phm_get_sysfs_buf(&buf, &size);
+
 	switch (type) {
 	case PP_SCLK:
 		smum_send_msg_to_smc(hwmgr, PPSMC_MSG_GetGfxclkFrequency, &now);
@@ -1065,8 +1067,8 @@ static int smu10_print_clock_levels(struct pp_hwmgr *hwmgr,
 			if (ret)
 				return ret;
 
-			size += sprintf(buf + size, "%s:\n", "OD_SCLK");
-			size += sprintf(buf + size, "0: %10uMhz\n",
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_SCLK");
+			size += sysfs_emit_at(buf, size, "0: %10uMhz\n",
 			(data->gfx_actual_soft_min_freq > 0) ? data->gfx_actual_soft_min_freq : min_freq);
 			size += sprintf(buf + size, "1: %10uMhz\n",
 			(data->gfx_actual_soft_max_freq > 0) ? data->gfx_actual_soft_max_freq : max_freq);
@@ -1081,8 +1083,8 @@ static int smu10_print_clock_levels(struct pp_hwmgr *hwmgr,
 			if (ret)
 				return ret;
 
-			size += sprintf(buf + size, "%s:\n", "OD_RANGE");
-			size += sprintf(buf + size, "SCLK: %7uMHz %10uMHz\n",
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_RANGE");
+			size += sysfs_emit_at(buf, size, "SCLK: %7uMHz %10uMHz\n",
 				min_freq, max_freq);
 		}
 		break;

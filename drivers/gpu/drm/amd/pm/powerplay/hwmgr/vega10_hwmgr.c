@@ -4639,6 +4639,8 @@ static int vega10_print_clock_levels(struct pp_hwmgr *hwmgr,
 
 	int i, now, size = 0, count = 0;
 
+	phm_get_sysfs_buf(&buf, &size);
+
 	switch (type) {
 	case PP_SCLK:
 		if (data->registry_data.sclk_dpm_key_disabled)
@@ -4719,7 +4721,7 @@ static int vega10_print_clock_levels(struct pp_hwmgr *hwmgr,
 
 	case OD_SCLK:
 		if (hwmgr->od_enabled) {
-			size += sprintf(buf + size, "%s:\n", "OD_SCLK");
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_SCLK");
 			podn_vdd_dep = &data->odn_dpm_table.vdd_dep_on_sclk;
 			for (i = 0; i < podn_vdd_dep->count; i++)
 				size += sprintf(buf + size, "%d: %10uMhz %10umV\n",
@@ -4729,7 +4731,7 @@ static int vega10_print_clock_levels(struct pp_hwmgr *hwmgr,
 		break;
 	case OD_MCLK:
 		if (hwmgr->od_enabled) {
-			size += sprintf(buf + size, "%s:\n", "OD_MCLK");
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_MCLK");
 			podn_vdd_dep = &data->odn_dpm_table.vdd_dep_on_mclk;
 			for (i = 0; i < podn_vdd_dep->count; i++)
 				size += sprintf(buf + size, "%d: %10uMhz %10umV\n",
@@ -4739,8 +4741,8 @@ static int vega10_print_clock_levels(struct pp_hwmgr *hwmgr,
 		break;
 	case OD_RANGE:
 		if (hwmgr->od_enabled) {
-			size += sprintf(buf + size, "%s:\n", "OD_RANGE");
-			size += sprintf(buf + size, "SCLK: %7uMHz %10uMHz\n",
+			size += sysfs_emit_at(buf, size, "%s:\n", "OD_RANGE");
+			size += sysfs_emit_at(buf, size, "SCLK: %7uMHz %10uMHz\n",
 				data->golden_dpm_table.gfx_table.dpm_levels[0].value/100,
 				hwmgr->platform_descriptor.overdriveLimit.engineClock/100);
 			size += sprintf(buf + size, "MCLK: %7uMHz %10uMHz\n",
