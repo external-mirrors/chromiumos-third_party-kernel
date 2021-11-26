@@ -5,6 +5,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/etherdevice.h>
 #include <linux/ip.h>
 #include <linux/netdevice.h>
 #include <linux/wwan.h>
@@ -19,7 +20,7 @@
 #define SBD_PACKET_TYPE_MASK	GENMASK(7, 4)
 
 static void ccmni_make_etherframe(struct net_device *dev, void *skb_eth_hdr,
-				  u8 *mac_addr, unsigned int packet_type)
+				  const u8 *mac_addr, unsigned int packet_type)
 {
 	struct ethhdr *eth_hdr;
 
@@ -292,7 +293,7 @@ static void ccmni_wwan_setup(struct net_device *dev)
 	dev->type = ARPHRD_PPP;
 
 	dev->netdev_ops = &ccmni_netdev_ops;
-	random_ether_addr((u8 *)dev->dev_addr);
+	eth_random_addr((u8 *)dev->dev_addr);
 }
 
 static int ccmni_wwan_newlink(void *ctxt, struct net_device *dev, u32 if_id,
