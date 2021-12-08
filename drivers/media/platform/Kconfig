@@ -31,6 +31,18 @@ source "drivers/media/platform/davinci/Kconfig"
 
 source "drivers/media/platform/omap/Kconfig"
 
+config VIDEO_CHAMELEONV3
+	tristate "Chameleon v3 video driver"
+	depends on VIDEO_DEV && VIDEO_V4L2
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  Support for the Chameleon v3 framebuffer driver. The Chameleon v3
+	  acts like a monitor which can be connected to an external device
+	  via HDMI or DisplayPort.
+
+	  Frames are stored in contiguous memory, so in order to support
+	  1080p frames, you will have to enable CONFIG_DMA_CMA.
+
 config VIDEO_ASPEED
 	tristate "Aspeed AST2400 and AST2500 Video Engine driver"
 	depends on VIDEO_V4L2
