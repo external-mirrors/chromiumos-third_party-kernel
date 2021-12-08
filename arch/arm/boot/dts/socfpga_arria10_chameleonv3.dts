@@ -12,6 +12,14 @@
 		serial0 = &uart0;
 		i2c0 = &i2c0;
 	};
+
+	soc {
+		video@c0050000 {
+			compatible = "google,fb-chameleonv3";
+			reg = <0xc0050000 0x1010>;
+			interrupts = <0 19 IRQ_TYPE_LEVEL_HIGH>;
+		};
+	};
 };
 
 &uart0 {
