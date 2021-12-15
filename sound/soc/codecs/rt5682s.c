@@ -2656,7 +2656,7 @@ static int rt5682s_bclk_set_rate(struct clk_hw *hw, unsigned long rate,
 
 	factor = rt5682s_bclk_get_factor(rate, parent_rate);
 
-	for_each_component_dais(component, dai)
+	list_for_each_entry(dai, &component->dai_list, list)
 		if (dai->id == RT5682S_AIF1)
 			break;
 	if (!dai) {
