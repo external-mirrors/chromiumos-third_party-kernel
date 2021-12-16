@@ -3422,7 +3422,7 @@ static bool cea_db_is_hdmi_vsdb(const u8 *db)
 	if (cea_db_tag(db) != VENDOR_BLOCK)
 		return false;
 
-	if (cea_db_payload_len(db) < 5)
+	if (cea_db_payload_len(db) < 3)
 		return false;
 
 	hdmi_id = db[1] | (db[2] << 8) | (db[3] << 16);
