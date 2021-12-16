@@ -1175,6 +1175,57 @@ static int mdp_sub_comps_create(struct mdp_dev *mdp, struct device_node *node)
 	return 0;
 }
 
+static int mdp_mm_init(struct mdp_dev *mdp, struct mdp_comp *comp,
+		       const char *ref_name)
+{
+	struct device_node *node;
+	struct device *dev = &mdp->pdev->dev;
+	phys_addr_t base;
+	struct resource res;
+	struct platform_device *comp_pdev;
+	struct cmdq_client_reg  cmdq_reg;
+	int ret = 0;
+
+	node = of_parse_phandle(dev->of_node, ref_name, 0);
+	if (!node) {
+		dev_err(dev, "Failed to parse dt %s\n", ref_name);
+		return -EINVAL;
+	}
+
+	if (of_address_to_resource(node, 0, &res) < 0)
+		base = 0L;
+	else
+		base = res.start;
+
+	comp->mdp_dev = mdp;
+	comp->regs = of_iomap(node, 0);
+	comp->reg_base = base;
+
+	comp_pdev = of_find_device_by_node(node);
+	if (!comp_pdev) {
+		dev_err(dev, "get comp_pdev fail! comp id=%d type=%d\n",
+			comp->id, comp->type);
+		return -ENODEV;
+	}
+
+	ret = cmdq_dev_get_client_reg(&comp_pdev->dev, &cmdq_reg, 0);
+	if (ret != 0) {
+		dev_err(&comp_pdev->dev, "cmdq_dev_get_subsys fail!\n");
+		return -EINVAL;
+	}
+	comp->subsys_id = cmdq_reg.subsys;
+	dev_dbg(&comp_pdev->dev, "subsys id=%d\n", cmdq_reg.subsys);
+
+	of_node_put(node);
+	if (!comp->reg_base) {
+		dev_err(dev, "Failed to init %s base\n", ref_name);
+		of_node_put(node);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static void mdp_comp_deinit(struct mdp_comp *comp)
 {
 	if (!comp)
@@ -1188,6 +1239,7 @@ void mdp_component_deinit(struct mdp_dev *mdp)
 {
 	int i;
 
+	mdp_comp_deinit(&mdp->mmsys);
 	for (i = 0; i < mdp->mdp_data->pipe_info_len; i++)
 		mtk_mutex_put(mdp->mdp_mutex[mdp->mdp_data->pipe_info[i].pipe_id]);
 
@@ -1207,6 +1259,10 @@ int mdp_component_init(struct mdp_dev *mdp)
 	struct platform_device *pdev;
 	u32 alias_id;
 	int ret;
+
+	ret = mdp_mm_init(mdp, &mdp->mmsys, "mediatek,mmsys");
+	if (ret)
+		goto err_init_mm;
 
 	memcpy(&comp_list, mdp->mdp_data->comp_list, sizeof(struct mdp_comp_list));
 	parent = dev->of_node->parent;
@@ -1269,6 +1325,7 @@ int mdp_component_init(struct mdp_dev *mdp)
 
 err_init_comps:
 	mdp_component_deinit(mdp);
+err_init_mm:
 	return ret;
 }
 
