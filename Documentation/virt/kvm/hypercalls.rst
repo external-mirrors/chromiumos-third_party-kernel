@@ -169,3 +169,10 @@ a0: destination APIC ID
 
 :Usage example: When sending a call-function IPI-many to vCPUs, yield if
 	        any of the IPI target vCPUs was preempted.
+
+8. KVM_HC_SYSTEM_S2IDLE
+------------------------
+
+:Architecture: x86
+:Status: active
+:Purpose: Notify the hypervisor that the guest is entering s2idle state.
