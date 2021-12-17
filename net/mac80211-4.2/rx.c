@@ -1483,6 +1483,7 @@ static bool ieee80211_rx_filter_packet(struct ieee80211_rx_data *rx)
         u32 snap_offset = 0;
         u16 sc;
         unsigned int frag;
+        u8 *llc_header;
 
         sc = le16_to_cpu(hdr->seq_ctrl);
         frag = sc & IEEE80211_SCTL_FRAG;
@@ -1503,8 +1504,20 @@ static bool ieee80211_rx_filter_packet(struct ieee80211_rx_data *rx)
                 snap_offset += ieee80211_get_mesh_hdrlen(mesh_hdr);
         }
 
-        if (likely(memcmp(skb->data + snap_offset, rfc1042_header, 3) == 0))
-                return false;
+        if (skb->len < snap_offset + 3)
+                return true;
+
+        llc_header = skb->data + snap_offset;
+
+        if (llc_header[0] == 0xaa) {
+                if ((llc_header[0] == llc_header[1]) && (llc_header[2] == 0x3))
+                         return false;
+                else
+                         return true;
+        } else if ((llc_header[0] == llc_header[1]) &&
+                   ((llc_header[2] == 3) || (llc_header[2] == 1))) {
+               return false;
+        }
 
         return true;
 }
