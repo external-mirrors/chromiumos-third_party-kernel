@@ -33,7 +33,6 @@ struct device *create_function_device(char *name)
 	else
 		return ERR_PTR(-EINVAL);
 }
-EXPORT_SYMBOL_GPL(create_function_device);
 #else
 #ifdef CONFIG_USB_CONFIGFS_F_ACC
 static inline void acc_disconnect(void) {}
