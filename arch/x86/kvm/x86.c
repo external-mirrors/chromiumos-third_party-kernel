@@ -8296,6 +8296,7 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
 		ret = 0;
 		break;
 	case KVM_HC_SYSTEM_S2IDLE:
+		kvm_make_request(KVM_REQ_HV_S2IDLE, vcpu);
 		ret = 0;
 		break;
 	default:
@@ -9114,6 +9115,13 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		if (kvm_check_request(KVM_REQ_HV_EXIT, vcpu)) {
 			vcpu->run->exit_reason = KVM_EXIT_HYPERV;
 			vcpu->run->hyperv = vcpu->arch.hyperv.exit;
+			r = 0;
+			goto out;
+		}
+		if (kvm_check_request(KVM_REQ_HV_S2IDLE, vcpu)) {
+			vcpu->run->exit_reason = KVM_EXIT_SYSTEM_EVENT;
+			vcpu->run->system_event.type =
+				KVM_SYSTEM_EVENT_S2IDLE;
 			r = 0;
 			goto out;
 		}
