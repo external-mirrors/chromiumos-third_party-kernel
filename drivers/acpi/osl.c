@@ -1148,6 +1148,63 @@ void acpi_os_wait_events_complete(void)
 }
 EXPORT_SYMBOL(acpi_os_wait_events_complete);
 
+struct acpi_gpe_event_work {
+	struct work_struct work;
+	u32 gpe_number;
+};
+
+static void acpi_gpe_event_work_fn(struct work_struct *work)
+{
+	struct acpi_gpe_event_work *gew = container_of(work, typeof(*gew), work);
+	acpi_status status;
+	acpi_handle gpe_device;
+
+	status = acpi_get_gpe_device(gew->gpe_number, &gpe_device);
+	if (ACPI_FAILURE(status))
+		gpe_device = NULL;
+
+	acpi_handle_debug(gpe_device, "Generating %d event\n", gew->gpe_number);
+
+	acpi_bus_generate_netlink_event("gpe", "GPE", 0x0, gew->gpe_number);
+	kfree(gew);
+}
+
+/*
+ * Use a workqueue to schedule the delivery of a GPE netlink event,
+ * which may cause the thread to sleep.
+ *
+ * This function can be called in interrupt context.
+ */
+acpi_status acpi_os_gpe_event_schedule(u32 gpe_number)
+{
+	struct acpi_gpe_event_work *gew;
+
+	ACPI_DEBUG_PRINT((ACPI_DB_EXEC,
+			  "Scheduling GPE%u event for deferred execution.\n",
+			  gpe_number));
+
+	gew = kmalloc(sizeof(*gew), GFP_ATOMIC);
+	if (!gew)
+		return AE_NO_MEMORY;
+
+	INIT_WORK(&gew->work, acpi_gpe_event_work_fn);
+	gew->gpe_number = gpe_number;
+
+	/*
+	 * Always queue on CPU 0 to guarantee in-order event delivery.
+	 *
+	 * The design of GPEs can never guarantee they will be processed
+	 * in hardware order, but we still don't want the GPE events to
+	 * be too scrambled, especially when they cross interrupt
+	 * boundaries.
+	 */
+	if (!queue_work_on(0, kacpid_wq, &gew->work)) {
+		kfree(gew);
+		return AE_ERROR;
+	}
+	return AE_OK;
+}
+
 struct acpi_hp_work {
 	struct work_struct work;
 	struct acpi_device *adev;
