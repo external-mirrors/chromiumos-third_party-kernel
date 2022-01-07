@@ -598,6 +598,7 @@ acpi_status acpi_ev_finish_gpe(struct acpi_gpe_event_info *gpe_event_info)
 	 */
 	(void)acpi_hw_low_set_gpe(gpe_event_info, ACPI_GPE_CONDITIONAL_ENABLE);
 	gpe_event_info->disable_for_dispatch = FALSE;
+	acpi_os_gpe_event_schedule(gpe_event_info->gpe_number);
 	return (AE_OK);
 }
 
@@ -716,6 +717,7 @@ acpi_ev_detect_gpe(struct acpi_namespace_node *gpe_device,
 		int_status |=
 		    gpe_handler_info->address(gpe_device, gpe_number,
 					      gpe_handler_info->context);
+		acpi_os_gpe_event_schedule(gpe_number);
 		flags = acpi_os_acquire_lock(acpi_gbl_gpe_lock);
 	} else {
 		/* Dispatch the event to a standard handler or method. */
