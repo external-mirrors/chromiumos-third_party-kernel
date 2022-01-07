@@ -326,6 +326,8 @@ acpi_status acpi_os_signal(u32 function, void *info);
 acpi_status acpi_os_enter_sleep(u8 sleep_state, u32 rega_value, u32 regb_value);
 #endif
 
+acpi_status acpi_os_gpe_event_schedule(u32 gpe_number);
+
 /*
  * Debug print routines
  */
