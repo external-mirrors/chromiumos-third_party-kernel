@@ -166,8 +166,12 @@ static const u16 mgmt_events[] = {
 	MGMT_EV_EXT_INFO_CHANGED,
 	MGMT_EV_EXP_FEATURE_CHANGED,
 	MGMT_EV_DEVICE_FLAGS_CHANGED,
+	MGMT_EV_ADV_MONITOR_ADDED,
+	MGMT_EV_ADV_MONITOR_REMOVED,
 	MGMT_EV_CONTROLLER_SUSPEND,
 	MGMT_EV_CONTROLLER_RESUME,
+	MGMT_EV_ADV_MONITOR_DEVICE_FOUND,
+	MGMT_EV_ADV_MONITOR_DEVICE_LOST,
 };
 
 static const u16 mgmt_untrusted_commands[] = {
@@ -195,8 +199,6 @@ static const u16 mgmt_untrusted_events[] = {
 	MGMT_EV_EXT_INDEX_REMOVED,
 	MGMT_EV_EXT_INFO_CHANGED,
 	MGMT_EV_EXP_FEATURE_CHANGED,
-	MGMT_EV_ADV_MONITOR_ADDED,
-	MGMT_EV_ADV_MONITOR_REMOVED,
 };
 
 #define CACHE_TIMEOUT	msecs_to_jiffies(2 * 1000)
@@ -3357,13 +3359,11 @@ static const u8 debug_uuid[16] = {
 };
 #endif
 
-#ifdef CONFIG_BT_FEATURE_QUALITY_REPORT
 /* 330859bc-7506-492d-9370-9a6f0614037f */
 static const u8 quality_report_uuid[16] = {
 	0x7f, 0x03, 0x14, 0x06, 0x6f, 0x9a, 0x70, 0x93,
 	0x2d, 0x49, 0x06, 0x75, 0xbc, 0x59, 0x08, 0x33,
 };
-#endif
 
 /* 671b10b5-42c0-4696-9227-eb28d1b049d6 */
 static const u8 simult_central_periph_uuid[16] = {
@@ -3407,25 +3407,16 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 		idx++;
 	}
 
-#ifdef CONFIG_BT_FEATURE_QUALITY_REPORT
-	if (hdev) {
-		if (hdev->set_quality_report) {
-			/* BIT(0): indicating if set_quality_report is
-			 * supported by controller.
-			 */
+	if (hdev && hdev->set_quality_report) {
+		if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
 			flags = BIT(0);
-
-			/* BIT(1): indicating if the feature is enabled. */
-			if (hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
-				flags |= BIT(1);
-		} else {
+		else
 			flags = 0;
-		}
+
 		memcpy(rp->features[idx].uuid, quality_report_uuid, 16);
 		rp->features[idx].flags = cpu_to_le32(flags);
 		idx++;
 	}
-#endif
 
 	rp->feature_count = cpu_to_le16(idx);
 
@@ -3454,7 +3445,6 @@ static int exp_debug_feature_changed(bool enabled, struct sock *skip)
 }
 #endif
 
-#ifdef CONFIG_BT_FEATURE_QUALITY_REPORT
 static int exp_quality_report_feature_changed(bool enabled, struct sock *skip)
 {
 	struct mgmt_ev_exp_feature_changed ev;
@@ -3469,151 +3459,185 @@ static int exp_quality_report_feature_changed(bool enabled, struct sock *skip)
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
 }
+
+#define EXP_FEAT(_uuid, _set_func)	\
+{					\
+	.uuid = _uuid,			\
+	.set_func = _set_func,		\
+}
+
+/* The zero key uuid is special. Multiple exp features are set through it. */
+static int set_zero_key_func(struct sock *sk, struct hci_dev *hdev,
+			     struct mgmt_cp_set_exp_feature *cp, u16 data_len)
+{
+	struct mgmt_rp_set_exp_feature rp;
+
+	memset(rp.uuid, 0, 16);
+	rp.flags = cpu_to_le32(0);
+
+#ifdef CONFIG_BT_FEATURE_DEBUG
+	if (!hdev) {
+		bool changed = bt_dbg_get();
+
+		bt_dbg_set(false);
+
+		if (changed)
+			exp_debug_feature_changed(false, sk);
+	}
 #endif
+
+	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
+
+	return mgmt_cmd_complete(sk, hdev ? hdev->id : MGMT_INDEX_NONE,
+				 MGMT_OP_SET_EXP_FEATURE, 0,
+				 &rp, sizeof(rp));
+}
+
+#ifdef CONFIG_BT_FEATURE_DEBUG
+static int set_debug_func(struct sock *sk, struct hci_dev *hdev,
+			  struct mgmt_cp_set_exp_feature *cp, u16 data_len)
+{
+	struct mgmt_rp_set_exp_feature rp;
+
+	bool val, changed;
+	int err;
+
+	/* Command requires to use the non-controller index */
+	if (hdev)
+		return mgmt_cmd_status(sk, hdev->id,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_INVALID_INDEX);
+
+	/* Parameters are limited to a single octet */
+	if (data_len != MGMT_SET_EXP_FEATURE_SIZE + 1)
+		return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	/* Only boolean on/off is supported */
+	if (cp->param[0] != 0x00 && cp->param[0] != 0x01)
+		return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	val = !!cp->param[0];
+	changed = val ? !bt_dbg_get() : bt_dbg_get();
+	bt_dbg_set(val);
+
+	memcpy(rp.uuid, debug_uuid, 16);
+	rp.flags = cpu_to_le32(val ? BIT(0) : 0);
+
+	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
+
+	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
+				MGMT_OP_SET_EXP_FEATURE, 0,
+				&rp, sizeof(rp));
+
+	if (changed)
+		exp_debug_feature_changed(val, sk);
+
+	return err;
+}
+#endif
+
+static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
+				   struct mgmt_cp_set_exp_feature *cp,
+				   u16 data_len)
+{
+	struct mgmt_rp_set_exp_feature rp;
+	bool val, changed;
+	int err;
+
+	/* Command requires to use a valid controller index */
+	if (!hdev)
+		return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_INVALID_INDEX);
+
+	/* Parameters are limited to a single octet */
+	if (data_len != MGMT_SET_EXP_FEATURE_SIZE + 1)
+		return mgmt_cmd_status(sk, hdev->id,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	/* Only boolean on/off is supported */
+	if (cp->param[0] != 0x00 && cp->param[0] != 0x01)
+		return mgmt_cmd_status(sk, hdev->id,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	hci_req_sync_lock(hdev);
+
+	val = !!cp->param[0];
+	changed = (val != hci_dev_test_flag(hdev, HCI_QUALITY_REPORT));
+
+	if (!hdev->set_quality_report) {
+		BT_INFO("quality report not supported");
+		err = mgmt_cmd_status(sk, hdev->id,
+				      MGMT_OP_SET_EXP_FEATURE,
+				      MGMT_STATUS_NOT_SUPPORTED);
+		goto unlock_quality_report;
+	}
+
+	if (changed) {
+		err = hdev->set_quality_report(hdev, val);
+		if (err) {
+			BT_ERR("set_quality_report value %d err %d", val, err);
+			err = mgmt_cmd_status(sk, hdev->id,
+					      MGMT_OP_SET_EXP_FEATURE,
+					      MGMT_STATUS_FAILED);
+			goto unlock_quality_report;
+		}
+		if (val)
+			hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
+		else
+			hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
+	}
+
+	BT_INFO("quality report enable %d changed %d", val, changed);
+
+	memcpy(rp.uuid, quality_report_uuid, 16);
+	rp.flags = cpu_to_le32(val ? BIT(0) : 0);
+	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
+	err = mgmt_cmd_complete(sk, hdev->id,
+				MGMT_OP_SET_EXP_FEATURE, 0,
+				&rp, sizeof(rp));
+
+	if (changed)
+		exp_quality_report_feature_changed(val, sk);
+
+unlock_quality_report:
+	hci_req_sync_unlock(hdev);
+	return err;
+}
+
+static const struct mgmt_exp_feature {
+	const u8 *uuid;
+	int (*set_func)(struct sock *sk, struct hci_dev *hdev,
+			struct mgmt_cp_set_exp_feature *cp, u16 data_len);
+} exp_features[] = {
+	EXP_FEAT(ZERO_KEY, set_zero_key_func),
+#ifdef CONFIG_BT_FEATURE_DEBUG
+	EXP_FEAT(debug_uuid, set_debug_func),
+#endif
+	EXP_FEAT(quality_report_uuid, set_quality_report_func),
+
+	/* end with a null feature */
+	EXP_FEAT(NULL, NULL)
+};
 
 static int set_exp_feature(struct sock *sk, struct hci_dev *hdev,
 			   void *data, u16 data_len)
 {
 	struct mgmt_cp_set_exp_feature *cp = data;
-	struct mgmt_rp_set_exp_feature rp;
+	size_t i = 0;
 
 	bt_dev_dbg(hdev, "sock %p", sk);
 
-	if (!memcmp(cp->uuid, ZERO_KEY, 16)) {
-		memset(rp.uuid, 0, 16);
-		rp.flags = cpu_to_le32(0);
-
-#ifdef CONFIG_BT_FEATURE_DEBUG
-		if (!hdev) {
-			bool changed = bt_dbg_get();
-
-			bt_dbg_set(false);
-
-			if (changed)
-				exp_debug_feature_changed(false, sk);
-		}
-#endif
-
-		hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
-
-		return mgmt_cmd_complete(sk, hdev ? hdev->id : MGMT_INDEX_NONE,
-					 MGMT_OP_SET_EXP_FEATURE, 0,
-					 &rp, sizeof(rp));
+	for (i = 0; exp_features[i].uuid; i++) {
+		if (!memcmp(cp->uuid, exp_features[i].uuid, 16))
+			return exp_features[i].set_func(sk, hdev, cp, data_len);
 	}
-
-#ifdef CONFIG_BT_FEATURE_DEBUG
-	if (!memcmp(cp->uuid, debug_uuid, 16)) {
-		bool val, changed;
-		int err;
-
-		/* Command requires to use the non-controller index */
-		if (hdev)
-			return mgmt_cmd_status(sk, hdev->id,
-					       MGMT_OP_SET_EXP_FEATURE,
-					       MGMT_STATUS_INVALID_INDEX);
-
-		/* Parameters are limited to a single octet */
-		if (data_len != MGMT_SET_EXP_FEATURE_SIZE + 1)
-			return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
-					       MGMT_OP_SET_EXP_FEATURE,
-					       MGMT_STATUS_INVALID_PARAMS);
-
-		/* Only boolean on/off is supported */
-		if (cp->param[0] != 0x00 && cp->param[0] != 0x01)
-			return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
-					       MGMT_OP_SET_EXP_FEATURE,
-					       MGMT_STATUS_INVALID_PARAMS);
-
-		val = !!cp->param[0];
-		changed = val ? !bt_dbg_get() : bt_dbg_get();
-		bt_dbg_set(val);
-
-		memcpy(rp.uuid, debug_uuid, 16);
-		rp.flags = cpu_to_le32(val ? BIT(0) : 0);
-
-		hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
-
-		err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-					MGMT_OP_SET_EXP_FEATURE, 0,
-					&rp, sizeof(rp));
-
-		if (changed)
-			exp_debug_feature_changed(val, sk);
-
-		return err;
-	}
-#endif
-
-#ifdef CONFIG_BT_FEATURE_QUALITY_REPORT
-	if (!memcmp(cp->uuid, quality_report_uuid, 16)) {
-		bool val, changed;
-		int err;
-
-		/* Command requires to use a valid controller index */
-		if (!hdev)
-			return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
-					       MGMT_OP_SET_EXP_FEATURE,
-					       MGMT_STATUS_INVALID_INDEX);
-
-		/* Parameters are limited to a single octet */
-		if (data_len != MGMT_SET_EXP_FEATURE_SIZE + 1)
-			return mgmt_cmd_status(sk, hdev->id,
-					       MGMT_OP_SET_EXP_FEATURE,
-					       MGMT_STATUS_INVALID_PARAMS);
-
-		/* Only boolean on/off is supported */
-		if (cp->param[0] != 0x00 && cp->param[0] != 0x01)
-			return mgmt_cmd_status(sk, hdev->id,
-					       MGMT_OP_SET_EXP_FEATURE,
-					       MGMT_STATUS_INVALID_PARAMS);
-
-		hci_req_sync_lock(hdev);
-
-		val = !!cp->param[0];
-		changed = (val != hci_dev_test_flag(hdev, HCI_QUALITY_REPORT));
-
-		if (!hdev->set_quality_report) {
-			BT_INFO("quality report not supported");
-			err = mgmt_cmd_status(sk, hdev->id,
-					      MGMT_OP_SET_EXP_FEATURE,
-					      MGMT_STATUS_NOT_SUPPORTED);
-			goto unlock_quality_report;
-		}
-
-		if (changed) {
-			err = hdev->set_quality_report(hdev, val);
-			if (err) {
-				BT_ERR("set_quality_report value %d err %d",
-				       val, err);
-				err = mgmt_cmd_status(sk, hdev->id,
-						      MGMT_OP_SET_EXP_FEATURE,
-						      MGMT_STATUS_FAILED);
-				goto unlock_quality_report;
-			}
-			if (val)
-				hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
-			else
-				hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
-		}
-
-		BT_INFO("quality report enable %d changed %d",
-			val, changed);
-
-		memcpy(rp.uuid, quality_report_uuid, 16);
-		rp.flags = cpu_to_le32(val ? BIT(0) : 0);
-		hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
-		err = mgmt_cmd_complete(sk, hdev->id,
-					MGMT_OP_SET_EXP_FEATURE, 0,
-					&rp, sizeof(rp));
-
-		if (changed)
-			exp_quality_report_feature_changed(val, sk);
-
-unlock_quality_report:
-		hci_req_sync_unlock(hdev);
-		return err;
-	}
-#endif
 
 	return mgmt_cmd_status(sk, hdev ? hdev->id : MGMT_INDEX_NONE,
 			       MGMT_OP_SET_EXP_FEATURE,
@@ -8802,6 +8826,100 @@ static bool is_filter_match(struct hci_dev *hdev, s8 rssi, u8 *eir,
 	return true;
 }
 
+void mgmt_adv_monitor_device_lost(struct hci_dev *hdev, u16 handle,
+				  bdaddr_t *bdaddr, u8 addr_type)
+{
+	struct mgmt_ev_adv_monitor_device_lost ev;
+
+	ev.monitor_handle = cpu_to_le16(handle);
+	bacpy(&ev.addr.bdaddr, bdaddr);
+	ev.addr.type = addr_type;
+
+	mgmt_event(MGMT_EV_ADV_MONITOR_DEVICE_LOST, hdev, &ev, sizeof(ev),
+		   NULL);
+}
+
+static void mgmt_adv_monitor_device_found(struct hci_dev *hdev,
+					  struct mgmt_ev_device_found *ev,
+					  size_t ev_size, bool discovering)
+{
+	char buf[518];
+	struct mgmt_ev_adv_monitor_device_found *advmon_ev = (void *)buf;
+	size_t advmon_ev_size;
+	struct monitored_device *dev, *tmp;
+	bool matched = false;
+	bool notified = false;
+
+	/* We have received the Advertisement Report because:
+	 * 1. the kernel has initiated active discovery
+	 * 2. if not, we have pend_le_reports > 0 in which case we are doing
+	 *    passive scanning
+	 * 3. if none of the above is true, we have one or more active
+	 *    Advertisement Monitor
+	 *
+	 * For case 1 and 2, report all advertisements via MGMT_EV_DEVICE_FOUND
+	 * and report ONLY one advertisement per device for the matched Monitor
+	 * via MGMT_EV_ADV_MONITOR_DEVICE_FOUND event.
+	 *
+	 * For case 3, since we are not active scanning and all advertisements
+	 * received are due to a matched Advertisement Monitor, report all
+	 * advertisements ONLY via MGMT_EV_ADV_MONITOR_DEVICE_FOUND event.
+	 */
+	if (discovering) {
+		mgmt_event(MGMT_EV_DEVICE_FOUND, hdev, ev, ev_size, NULL);
+
+		if (!hdev->advmon_pend_notify)
+			return;
+	}
+
+	/* Make sure that the buffer is big enough */
+	advmon_ev_size = ev_size + (sizeof(*advmon_ev) - sizeof(*ev));
+	if (advmon_ev_size > sizeof(buf))
+		return;
+
+	/* ADV_MONITOR_DEVICE_FOUND is similar to DEVICE_FOUND event except
+	 * that it also has 'monitor_handle'. Make a copy of DEVICE_FOUND and
+	 * store monitor_handle of the matched monitor.
+	 */
+	memcpy(&advmon_ev->addr, ev, ev_size);
+
+	hdev->advmon_pend_notify = false;
+
+	list_for_each_entry_safe(dev, tmp, &hdev->monitored_devices, list) {
+		if (!bacmp(&dev->bdaddr, &advmon_ev->addr.bdaddr)) {
+			matched = true;
+
+			if (!dev->notified) {
+				advmon_ev->monitor_handle =
+						cpu_to_le16(dev->handle);
+
+				mgmt_event(MGMT_EV_ADV_MONITOR_DEVICE_FOUND,
+					   hdev, advmon_ev, advmon_ev_size,
+					   NULL);
+
+				notified = true;
+				dev->notified = true;
+			}
+		}
+
+		if (!dev->notified)
+			hdev->advmon_pend_notify = true;
+	}
+
+	if (!discovering &&
+	    ((matched && !notified) || !msft_monitor_supported(hdev))) {
+		/* Handle 0 indicates that we are not active scanning and this
+		 * is a subsequent advertisement report for an already matched
+		 * Advertisement Monitor or the controller offloading support
+		 * is not available.
+		 */
+		advmon_ev->monitor_handle = 0;
+
+		mgmt_event(MGMT_EV_ADV_MONITOR_DEVICE_FOUND, hdev, advmon_ev,
+			   advmon_ev_size, NULL);
+	}
+}
+
 void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 		       u8 addr_type, u8 *dev_class, s8 rssi, u32 flags,
 		       u8 *eir, u16 eir_len, u8 *scan_rsp, u8 scan_rsp_len)
@@ -8809,6 +8927,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	char buf[512];
 	struct mgmt_ev_device_found *ev = (void *)buf;
 	size_t ev_size;
+	bool report_device_found = hci_discovery_active(hdev);
 
 	/* Don't send events for a non-kernel initiated discovery. With
 	 * LE one exception is if we have pend_le_reports > 0 in which
@@ -8817,11 +8936,10 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	if (!hci_discovery_active(hdev)) {
 		if (link_type == ACL_LINK)
 			return;
-		if (link_type == LE_LINK &&
-		    list_empty(&hdev->pend_le_reports) &&
-		    !hci_is_adv_monitoring(hdev)) {
+		if (link_type == LE_LINK && !list_empty(&hdev->pend_le_reports))
+			report_device_found = true;
+		else if (!hci_is_adv_monitoring(hdev))
 			return;
-		}
 	}
 
 	if (hdev->discovery.result_filtering) {
@@ -8884,7 +9002,7 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	ev->eir_len = cpu_to_le16(eir_len + scan_rsp_len);
 	ev_size = sizeof(*ev) + eir_len + scan_rsp_len;
 
-	mgmt_event(MGMT_EV_DEVICE_FOUND, hdev, ev, ev_size, NULL);
+	mgmt_adv_monitor_device_found(hdev, ev, ev_size, report_device_found);
 }
 
 void mgmt_remote_name(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
@@ -8893,6 +9011,7 @@ void mgmt_remote_name(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	struct mgmt_ev_device_found *ev;
 	char buf[sizeof(*ev) + HCI_MAX_NAME_LENGTH + 2];
 	u16 eir_len;
+	u32 flags;
 
 	ev = (struct mgmt_ev_device_found *) buf;
 
@@ -8902,10 +9021,17 @@ void mgmt_remote_name(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	ev->addr.type = link_to_bdaddr(link_type, addr_type);
 	ev->rssi = rssi;
 
-	eir_len = eir_append_data(ev->eir, 0, EIR_NAME_COMPLETE, name,
-				  name_len);
+	if (name) {
+		eir_len = eir_append_data(ev->eir, 0, EIR_NAME_COMPLETE, name,
+					  name_len);
+		flags = 0;
+	} else {
+		eir_len = 0;
+		flags = MGMT_DEV_FOUND_NAME_REQUEST_FAILED;
+	}
 
 	ev->eir_len = cpu_to_le16(eir_len);
+	ev->flags = cpu_to_le32(flags);
 
 	mgmt_event(MGMT_EV_DEVICE_FOUND, hdev, ev, sizeof(*ev) + eir_len, NULL);
 }
