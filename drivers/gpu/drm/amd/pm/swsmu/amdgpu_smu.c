@@ -190,6 +190,10 @@ static int smu_dpm_set_vcn_enable_locked(struct smu_context *smu,
 	struct smu_power_gate *power_gate = &smu_power->power_gate;
 	int ret = 0;
 
+	// Do not perform VCN power gating to avoid SMU Hang
+	if (smu->adev->asic_type == CHIP_RENOIR)
+		return ret;
+
 	if (!smu->ppt_funcs->dpm_set_vcn_enable)
 		return 0;
 
@@ -1453,9 +1457,13 @@ static int smu_hw_fini(void *handle)
 
 	if (smu->is_apu) {
 		smu_powergate_sdma(&adev->smu, true);
-		smu_dpm_set_vcn_enable(smu, false);
-		smu_dpm_set_jpeg_enable(smu, false);
 	}
+
+	smu_dpm_set_vcn_enable(smu, false);
+	smu_dpm_set_jpeg_enable(smu, false);
+
+	adev->vcn.cur_state = AMD_PG_STATE_GATE;
+	adev->jpeg.cur_state = AMD_PG_STATE_GATE;
 
 	if (!smu->pm_enabled)
 		return 0;

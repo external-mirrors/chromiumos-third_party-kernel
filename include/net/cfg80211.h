@@ -5257,7 +5257,6 @@ struct cfg80211_cqm_config;
  *	netdev and may otherwise be used by driver read-only, will be update
  *	by cfg80211 on change_interface
  * @mgmt_registrations: list of registrations for management frames
- * @mgmt_registrations_lock: lock for the list
  * @mgmt_registrations_need_update: mgmt registrations were updated,
  *	need to propagate the update to the driver
  * @mtx: mutex used to lock data in this struct, may be used by drivers
@@ -5304,7 +5303,6 @@ struct wireless_dev {
 	u32 identifier;
 
 	struct list_head mgmt_registrations;
-	spinlock_t mgmt_registrations_lock;
 	u8 mgmt_registrations_need_update:1;
 
 	struct mutex mtx;
@@ -6190,6 +6188,17 @@ static inline void cfg80211_gen_new_bssid(const u8 *bssid, u8 max_bssid,
 
 	u64_to_ether_addr(new_bssid_u64, new_bssid);
 }
+
+/**
+ * cfg80211_get_ies_channel_number - returns the channel number from ies
+ * @ie: IEs
+ * @ielen: length of IEs
+ * @band: enum nl80211_band of the channel
+ *
+ * Returns the channel number, or -1 if none could be determined.
+ */
+int cfg80211_get_ies_channel_number(const u8 *ie, size_t ielen,
+				    enum nl80211_band band);
 
 /**
  * cfg80211_is_element_inherited - returns if element ID should be inherited

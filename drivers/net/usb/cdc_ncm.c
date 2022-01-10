@@ -181,6 +181,8 @@ static u32 cdc_ncm_check_tx_max(struct usbnet *dev, u32 new_tx)
 		min = ctx->max_datagram_size + ctx->max_ndp_size + sizeof(struct usb_cdc_ncm_nth32);
 
 	max = min_t(u32, CDC_NCM_NTB_MAX_SIZE_TX, le32_to_cpu(ctx->ncm_parm.dwNtbOutMaxSize));
+	if (max == 0)
+		max = CDC_NCM_NTB_MAX_SIZE_TX; /* dwNtbOutMaxSize not set */
 
 	/* some devices set dwNtbOutMaxSize too low for the above default */
 	min = min(min, max);
@@ -628,7 +630,7 @@ out:
 	/* set MTU to max supported by the device if necessary */
 	dev->net->mtu = min_t(int, dev->net->mtu, ctx->max_datagram_size - cdc_ncm_eth_hlen(dev));
 
-	/* do not exceed operater preferred MTU */
+	/* do not exceed operator preferred MTU */
 	if (ctx->mbim_extended_desc) {
 		mbim_mtu = le16_to_cpu(ctx->mbim_extended_desc->wMTU);
 		if (mbim_mtu != 0 && mbim_mtu < dev->net->mtu)
@@ -685,7 +687,7 @@ static int cdc_ncm_setup(struct usbnet *dev)
 	struct cdc_ncm_ctx *ctx = (struct cdc_ncm_ctx *)dev->data[0];
 	u32 def_rx, def_tx;
 
-	/* be conservative when selecting intial buffer size to
+	/* be conservative when selecting initial buffer size to
 	 * increase the number of hosts this will work for
 	 */
 	def_rx = min_t(u32, CDC_NCM_NTB_DEF_SIZE_RX,

@@ -153,6 +153,30 @@ struct bt_voice {
 
 #define BT_SCM_PKT_STATUS	0x03
 
+#define BT_CODEC	19
+
+struct	bt_codec_caps {
+	__u8	len;
+	__u8	data[];
+} __packed;
+
+struct bt_codec {
+	__u8	id;
+	__u16	cid;
+	__u16	vid;
+	__u8	data_path;
+	__u8	num_caps;
+} __packed;
+
+struct bt_codecs {
+	__u8		num_codecs;
+	struct bt_codec	codecs[];
+} __packed;
+
+#define BT_CODEC_CVSD		0x02
+#define BT_CODEC_TRANSPARENT	0x03
+#define BT_CODEC_MSBC		0x05
+
 __printf(1, 2)
 void bt_info(const char *fmt, ...);
 __printf(1, 2)
@@ -377,6 +401,11 @@ struct hci_ctrl {
 	};
 };
 
+struct mgmt_ctrl {
+	struct hci_dev *hdev;
+	u16 opcode;
+};
+
 struct bt_skb_cb {
 	u8 pkt_type;
 	u8 force_active;
@@ -386,6 +415,7 @@ struct bt_skb_cb {
 		struct l2cap_ctrl l2cap;
 		struct sco_ctrl sco;
 		struct hci_ctrl hci;
+		struct mgmt_ctrl mgmt;
 	};
 };
 #define bt_cb(skb) ((struct bt_skb_cb *)((skb)->cb))
