@@ -87,6 +87,7 @@ struct discovery_state {
 	u8			(*uuids)[16];
 	unsigned long		scan_start;
 	unsigned long		scan_duration;
+	unsigned long		name_resolve_timeout;
 };
 
 #define SUSPEND_NOTIFIER_TIMEOUT	msecs_to_jiffies(2000) /* 2 seconds */
@@ -222,6 +223,7 @@ struct oob_data {
 
 struct adv_info {
 	struct list_head list;
+	bool enabled;
 	bool pending;
 	__u8	instance;
 	__u32	flags;
@@ -244,6 +246,15 @@ struct adv_info {
 #define HCI_DEFAULT_ADV_DURATION	2
 
 #define HCI_ADV_TX_POWER_NO_PREFERENCE 0x7F
+
+struct monitored_device {
+	struct list_head list;
+
+	bdaddr_t bdaddr;
+	__u8     addr_type;
+	__u16    handle;
+	bool     notified;
+};
 
 struct adv_pattern {
 	struct list_head list;
@@ -564,8 +575,6 @@ struct hci_dev {
 	__u8			cur_adv_instance;
 	__u16			adv_instance_timeout;
 	struct delayed_work	adv_instance_expire;
-	/* We can have a single directed advertisement using adv handle 0 */
-	bool			ext_directed_advertising;
 
 	struct idr		adv_monitors_idr;
 	unsigned int		adv_monitors_cnt;
@@ -582,6 +591,9 @@ struct hci_dev {
 	} interleave_scan_state;
 
 	struct delayed_work	interleave_scan;
+
+	struct list_head	monitored_devices;
+	bool			advmon_pend_notify;
 
 #if IS_ENABLED(CONFIG_BT_LEDS)
 	struct led_trigger	*power_led;
@@ -605,9 +617,7 @@ struct hci_dev {
 	int (*set_bdaddr)(struct hci_dev *hdev, const bdaddr_t *bdaddr);
 	void (*cmd_timeout)(struct hci_dev *hdev);
 	bool (*prevent_wake)(struct hci_dev *hdev);
-#ifdef CONFIG_BT_FEATURE_QUALITY_REPORT
 	int (*set_quality_report)(struct hci_dev *hdev, bool enable);
-#endif
 };
 
 #define HCI_PHY_HANDLE(handle)	(handle & 0xff)
@@ -631,6 +641,7 @@ struct hci_conn {
 	__u8		init_addr_type;
 	bdaddr_t	resp_addr;
 	__u8		resp_addr_type;
+	__u8		adv_instance;
 	__u16		handle;
 	__u16		state;
 	__u8		mode;
@@ -753,18 +764,12 @@ extern struct mutex hci_cb_list_lock;
 #define hci_dev_test_and_clear_flag(hdev, nr)  test_and_clear_bit((nr), (hdev)->dev_flags)
 #define hci_dev_test_and_change_flag(hdev, nr) test_and_change_bit((nr), (hdev)->dev_flags)
 
-#ifdef CONFIG_BT_FEATURE_QUALITY_REPORT
-#define hci_dev_clear_flag_quality_report(x) { hci_dev_clear_flag(hdev, x); }
-#else
-#define hci_dev_clear_flag_quality_report(x) {}
-#endif
-
-#define hci_dev_clear_volatile_flags(hdev)				\
-	do {								\
-		hci_dev_clear_flag(hdev, HCI_LE_SCAN);			\
-		hci_dev_clear_flag(hdev, HCI_LE_ADV);			\
-		hci_dev_clear_flag(hdev, HCI_PERIODIC_INQ);		\
-		hci_dev_clear_flag_quality_report(HCI_QUALITY_REPORT)	\
+#define hci_dev_clear_volatile_flags(hdev)			\
+	do {							\
+		hci_dev_clear_flag(hdev, HCI_LE_SCAN);		\
+		hci_dev_clear_flag(hdev, HCI_LE_ADV);		\
+		hci_dev_clear_flag(hdev, HCI_PERIODIC_INQ);	\
+		hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);	\
 	} while (0)
 
 /* ----- HCI interface to upper protocols ----- */
@@ -865,7 +870,7 @@ static inline bool keychron_conn_is_present(struct hci_dev *hdev)
 
 static inline bool restrict_le_conn_params(struct hci_dev *hdev)
 {
-	if (!test_bit(HCI_QUIRK_INTEL_STP_CONTROLLER, &hdev->quirks))
+	if (!test_bit(HCI_QUIRK_RESTRICT_CONN_PARAMS, &hdev->quirks))
 		return false;
 
 	if (!keychron_conn_is_present(hdev))
@@ -1278,6 +1283,7 @@ struct hci_dev *hci_alloc_dev(void);
 void hci_free_dev(struct hci_dev *hdev);
 int hci_register_dev(struct hci_dev *hdev);
 void hci_unregister_dev(struct hci_dev *hdev);
+void hci_cleanup_dev(struct hci_dev *hdev);
 int hci_suspend_dev(struct hci_dev *hdev);
 int hci_resume_dev(struct hci_dev *hdev);
 int hci_reset_dev(struct hci_dev *hdev);
@@ -1461,6 +1467,9 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 
 #define scan_coded(dev) (((dev)->le_tx_def_phys & HCI_LE_SET_PHY_CODED) || \
 			 ((dev)->le_rx_def_phys & HCI_LE_SET_PHY_CODED))
+
+/* Use LL Privacy based address resolution if supported */
+#define use_ll_privacy(dev) ((dev)->le_features[0] & HCI_LE_LL_PRIVACY)
 
 /* Use ext scanning if set ext scan param and ext scan enable is supported */
 #define use_ext_scan(dev) (((dev)->commands[37] & 0x20) && \
@@ -1823,6 +1832,8 @@ void hci_mgmt_chan_unregister(struct hci_mgmt_chan *c);
 #define DISCOV_BREDR_INQUIRY_LEN	0x08
 #define DISCOV_LE_RESTART_DELAY		msecs_to_jiffies(200)	/* msec */
 
+#define NAME_RESOLVE_DURATION		msecs_to_jiffies(10240)	/* 10.24 sec */
+
 void mgmt_fill_version_info(void *ver);
 int mgmt_new_settings(struct hci_dev *hdev);
 void mgmt_index_added(struct hci_dev *hdev);
@@ -1900,6 +1911,8 @@ void mgmt_adv_monitor_removed(struct hci_dev *hdev, u16 handle);
 int mgmt_phy_configuration_changed(struct hci_dev *hdev, struct sock *skip);
 int mgmt_add_adv_patterns_monitor_complete(struct hci_dev *hdev, u8 status);
 int mgmt_remove_adv_monitor_complete(struct hci_dev *hdev, u8 status);
+void mgmt_adv_monitor_device_lost(struct hci_dev *hdev, u16 handle,
+				  bdaddr_t *bdaddr, u8 addr_type);
 
 u8 hci_le_conn_update(struct hci_conn *conn, u16 min, u16 max, u16 latency,
 		      u16 to_multiplier);
