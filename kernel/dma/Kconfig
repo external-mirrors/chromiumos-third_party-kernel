@@ -78,7 +78,7 @@ config ARCH_HAS_FORCE_DMA_UNENCRYPTED
 
 config COIOMMU
 	bool
-	depends on HAS_DMA
+	depends on HAS_DMA && SPARSEMEM
 	select DMA_OPS
 	select IOMMU_API
 
