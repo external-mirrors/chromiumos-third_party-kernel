@@ -292,6 +292,12 @@
 		enable-active-high;
 		regulator-always-on;
 	};
+
+	mtk_fsource: fsource {
+		compatible = "mtk-fsource";
+		vfsource-supply = <&mt6359_vefuse_ldo_reg>;
+	};
+
 };
 
 &afe {
