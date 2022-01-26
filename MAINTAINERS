@@ -4325,6 +4325,12 @@ S:	Maintained
 F:	drivers/auxdisplay/cfag12864bfb.c
 F:	include/linux/cfag12864b.h
 
+CHAMELEON V3 FRAMEBUFFER DRIVER
+M:	Paweł Anikiel <pan@semihalf.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/media/google,fb-chameleonv3.yaml
+F:	drivers/media/platform/chv3-fb.c
+
 CHAR and MISC DRIVERS
 M:	Arnd Bergmann <arnd@arndb.de>
 M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
