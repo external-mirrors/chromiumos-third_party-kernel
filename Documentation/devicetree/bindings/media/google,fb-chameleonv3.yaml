@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/google,fb-chameleonv3.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Google Chameleon v3 Framebuffer
+
+maintainers:
+  - Paweł Anikiel <pan@semihalf.com>
+
+description:
+  The Google Chameleon v3 can act like a monitor which can be connected
+  to an external device via HDMI or DisplayPort.
+
+properties:
+  compatible:
+    const: google,fb-chameleonv3
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    video@c0050000 {
+        compatible = "google,fb-chameleonv3";
+        reg = <0xc0050000 0x1010>;
+        interrupts = <0 19 IRQ_TYPE_LEVEL_HIGH>;
+    };
