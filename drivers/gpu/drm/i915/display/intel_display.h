@@ -57,6 +57,7 @@ struct intel_plane;
 struct intel_plane_state;
 struct intel_remapped_info;
 struct intel_rotation_info;
+struct pci_dev;
 
 enum i915_gpio {
 	GPIOA,
@@ -638,6 +639,7 @@ void intel_display_driver_register(struct drm_i915_private *i915);
 void intel_display_driver_unregister(struct drm_i915_private *i915);
 
 /* modesetting */
+bool intel_modeset_probe_defer(struct pci_dev *pdev);
 void intel_modeset_init_hw(struct drm_i915_private *i915);
 int intel_modeset_init_noirq(struct drm_i915_private *i915);
 int intel_modeset_init_nogem(struct drm_i915_private *i915);

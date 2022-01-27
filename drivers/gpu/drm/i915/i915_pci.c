@@ -22,8 +22,6 @@
  *
  */
 
-#include <linux/vga_switcheroo.h>
-
 #include <drm/drm_drv.h>
 #include <drm/i915_pciids.h>
 
@@ -930,9 +928,10 @@ static const struct intel_device_info adl_s_info = {
 
 #define XE_LPD_FEATURES \
 	.abox_mask = GENMASK(1, 0),						\
-	.color = { .degamma_lut_size = 0, .gamma_lut_size = 0 },		\
-	.cpu_transcoder_mask = BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |		\
-		BIT(TRANSCODER_C) | BIT(TRANSCODER_D),				\
+	.color = { .degamma_lut_size = 128, .gamma_lut_size = 1024,		\
+		   .degamma_lut_tests = DRM_COLOR_LUT_NON_DECREASING |		\
+					DRM_COLOR_LUT_EQUAL_CHANNELS,		\
+	},									\
 	.dbuf.size = 4096,							\
 	.dbuf.slice_mask = BIT(DBUF_S1) | BIT(DBUF_S2) | BIT(DBUF_S3) |		\
 		BIT(DBUF_S4),							\
@@ -954,12 +953,16 @@ static const struct intel_device_info adl_s_info = {
 		[TRANSCODER_B] = PIPE_B_OFFSET,					\
 		[TRANSCODER_C] = PIPE_C_OFFSET,					\
 		[TRANSCODER_D] = PIPE_D_OFFSET,					\
+		[TRANSCODER_DSI_0] = PIPE_DSI0_OFFSET,				\
+		[TRANSCODER_DSI_1] = PIPE_DSI1_OFFSET,				\
 	},									\
 	.trans_offsets = {							\
 		[TRANSCODER_A] = TRANSCODER_A_OFFSET,				\
 		[TRANSCODER_B] = TRANSCODER_B_OFFSET,				\
 		[TRANSCODER_C] = TRANSCODER_C_OFFSET,				\
 		[TRANSCODER_D] = TRANSCODER_D_OFFSET,				\
+		[TRANSCODER_DSI_0] = TRANSCODER_DSI0_OFFSET,			\
+		[TRANSCODER_DSI_1] = TRANSCODER_DSI1_OFFSET,			\
 	},									\
 	XE_LPD_CURSOR_OFFSETS
 
@@ -968,6 +971,9 @@ static const struct intel_device_info adl_p_info = {
 	XE_LPD_FEATURES,
 	PLATFORM(INTEL_ALDERLAKE_P),
 	.require_force_probe = 1,
+	.cpu_transcoder_mask = BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |
+			       BIT(TRANSCODER_C) | BIT(TRANSCODER_D) |
+			       BIT(TRANSCODER_DSI_0) | BIT(TRANSCODER_DSI_1),
 	.display.has_cdclk_crawl = 1,
 	.display.has_modular_fia = 1,
 	.display.has_psr_hw_tracking = 0,
@@ -1037,6 +1043,8 @@ static const struct intel_device_info dg2_info = {
 		BIT(VECS0) | BIT(VECS1) |
 		BIT(VCS0) | BIT(VCS2),
 	.require_force_probe = 1,
+	.cpu_transcoder_mask = BIT(TRANSCODER_A) | BIT(TRANSCODER_B) |
+			       BIT(TRANSCODER_C) | BIT(TRANSCODER_D),
 };
 
 #undef PLATFORM
@@ -1187,11 +1195,8 @@ static int i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (PCI_FUNC(pdev->devfn))
 		return -ENODEV;
 
-	/*
-	 * apple-gmux is needed on dual GPU MacBook Pro
-	 * to probe the panel if we're the inactive GPU.
-	 */
-	if (vga_switcheroo_client_probe_defer(pdev))
+	/* Detect if we need to wait for other drivers early on */
+	if (intel_modeset_probe_defer(pdev))
 		return -EPROBE_DEFER;
 
 	err = i915_driver_probe(pdev, ent);
