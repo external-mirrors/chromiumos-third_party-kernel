@@ -18,7 +18,6 @@
 #include "debug.h"
 #include "bf.h"
 #include "sar.h"
-#include "vndcmd.h"
 
 bool rtw_disable_lps_deep_mode;
 EXPORT_SYMBOL(rtw_disable_lps_deep_mode);
@@ -2146,8 +2145,6 @@ int rtw_register_hw(struct rtw_dev *rtwdev, struct ieee80211_hw *hw)
 		rtw_err(rtwdev, "failed to init regd\n");
 		return ret;
 	}
-
-	rtw_register_vndcmd(hw);
 
 	ret = ieee80211_register_hw(hw);
 	if (ret) {
