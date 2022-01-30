@@ -2131,5 +2131,7 @@ void rtw_core_fw_scan_notify(struct rtw_dev *rtwdev, bool start);
 int rtw_dump_fw(struct rtw_dev *rtwdev, const u32 ocp_src, u32 size,
 		u32 fwcd_item);
 int rtw_dump_reg(struct rtw_dev *rtwdev, const u32 addr, const u32 size);
+void rtw_restore_no_ir_flag(struct rtw_dev *rtwdev);
+void rtw_replace_radar_flag_with_no_ir(struct ieee80211_hw *hw);
 
 #endif
