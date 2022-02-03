@@ -447,6 +447,8 @@ struct tb_regs_hop {
 	u32 unknown3:3; /* set to zero */
 } __packed;
 
+#define TB_PLUG_EVENTS_USB_DISABLE		BIT(2)
+
 /* TMU Thunderbolt 3 registers */
 #define TB_TIME_VSEC_3_CS_9			0x9
 #define TB_TIME_VSEC_3_CS_9_TMU_OBJ_MASK	GENMASK(17, 16)
@@ -502,6 +504,9 @@ struct tb_regs_hop {
 #define TB_LC_POWER				0x740
 
 /* Link controller registers */
+#define TB_LC_CS_42				0x2a
+#define TB_LC_CS_42_USB_PLUGGED			BIT(31)
+
 #define TB_LC_PORT_ATTR				0x8d
 #define TB_LC_PORT_ATTR_BE			BIT(12)
 
@@ -521,5 +526,8 @@ struct tb_regs_hop {
 #define TB_LC_SX_CTRL_SLP			BIT(31)
 #define TB_LC_LINK_ATTR				0x97
 #define TB_LC_LINK_ATTR_CPS			BIT(18)
+
+#define TB_LC_LINK_REQ				0xad
+#define TB_LC_LINK_REQ_XHCI_CONNECT		BIT(31)
 
 #endif
