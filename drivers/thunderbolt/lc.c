@@ -274,7 +274,7 @@ static int __tb_lc_xhci_connect(struct tb_port *port, bool connect)
  * tb_lc_xhci_connect() - Connect internal xHCI
  * @port: Device router lane 0 adapter
  *
- * Tells LC to connect the internal xHCI to @port. Returns %0 in success
+ * Tells LC to connect the internal xHCI to @port. Returns %0 on success
  * and negative errno in case of failure. Can be called for Thunderbolt 3
  * routers only.
  */

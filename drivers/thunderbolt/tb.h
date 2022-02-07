@@ -992,6 +992,10 @@ void tb_lc_unconfigure_port(struct tb_port *port);
 int tb_lc_configure_xdomain(struct tb_port *port);
 void tb_lc_unconfigure_xdomain(struct tb_port *port);
 int tb_lc_start_lane_initialization(struct tb_port *port);
+bool tb_lc_is_usb_plugged(struct tb_port *port);
+bool tb_lc_is_xhci_connected(struct tb_port *port);
+int tb_lc_xhci_connect(struct tb_port *port);
+void tb_lc_xhci_disconnect(struct tb_port *port);
 int tb_lc_set_wake(struct tb_switch *sw, unsigned int flags);
 int tb_lc_set_sleep(struct tb_switch *sw);
 bool tb_lc_lane_bonding_possible(struct tb_switch *sw);
@@ -999,10 +1003,6 @@ bool tb_lc_dp_sink_query(struct tb_switch *sw, struct tb_port *in);
 int tb_lc_dp_sink_alloc(struct tb_switch *sw, struct tb_port *in);
 int tb_lc_dp_sink_dealloc(struct tb_switch *sw, struct tb_port *in);
 int tb_lc_force_power(struct tb_switch *sw);
-bool tb_lc_is_usb_plugged(struct tb_port *port);
-bool tb_lc_is_xhci_connected(struct tb_port *port);
-int tb_lc_xhci_connect(struct tb_port *port);
-void tb_lc_xhci_disconnect(struct tb_port *port);
 
 static inline int tb_route_length(u64 route)
 {

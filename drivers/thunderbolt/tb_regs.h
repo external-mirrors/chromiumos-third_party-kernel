@@ -438,7 +438,6 @@ struct tb_regs_hop {
 	u32 unknown3:3; /* set to zero */
 } __packed;
 
- /* Plug Events registers */
 #define TB_PLUG_EVENTS_USB_DISABLE		BIT(2)
 
 /* Common link controller registers */
