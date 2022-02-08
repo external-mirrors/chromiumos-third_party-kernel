@@ -1978,8 +1978,6 @@ static __latent_entropy struct task_struct *copy_process(
 			return ERR_PTR(-EINVAL);
 	}
 
-	cpufreq_task_times_init(p);
-
 	/*
 	 * Force any signals received before this point to be delivered
 	 * before the fork happens.  Collect up signals sent to multiple
@@ -2010,6 +2008,8 @@ static __latent_entropy struct task_struct *copy_process(
 		p->flags |= PF_IO_WORKER;
 		siginitsetinv(&p->blocked, sigmask(SIGKILL)|sigmask(SIGSTOP));
 	}
+
+	cpufreq_task_times_init(p);
 
 	p->set_child_tid = (clone_flags & CLONE_CHILD_SETTID) ? args->child_tid : NULL;
 	/*
