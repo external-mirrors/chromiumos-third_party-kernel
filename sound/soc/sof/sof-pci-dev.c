@@ -70,10 +70,9 @@ static const struct dmi_system_id sof_tplg_table[] = {
 	{
 		.callback = sof_tplg_cb,
 		.matches = {
-			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Brya"),
-			DMI_MATCH(DMI_OEM_STRING, "AUDIO_AMP-MAX98360_ALC5682VS_I2S_2WAY"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Felwinter"),
 		},
-		.driver_data = "sof-adl-max98360a-rt5682-2way.tplg",
+		.driver_data = "sof-adl-max98360a-rt5682-4ch.tplg",
 	},
 	{}
 };
