@@ -54,7 +54,6 @@ enum t7xx_fsm_cmd_state {
 	FSM_CMD_EXCEPTION,
 	FSM_CMD_PRE_STOP,
 	FSM_CMD_STOP,
-	FSM_CMD_RECOVER,
 };
 
 enum t7xx_ex_reason {
@@ -82,7 +81,6 @@ struct t7xx_fsm_ctl {
 	struct t7xx_modem	*md;
 	enum md_state		md_state;
 	unsigned int		curr_state;
-	unsigned int		last_state;
 	u32			prev_status;
 	struct list_head	command_queue;
 	struct list_head	event_queue;

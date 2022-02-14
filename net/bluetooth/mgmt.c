@@ -3925,7 +3925,9 @@ static int exp_debug_feature_changed(bool enabled, struct sock *skip)
 }
 #endif
 
-static int exp_quality_report_feature_changed(bool enabled, struct sock *skip)
+static int exp_quality_report_feature_changed(bool enabled,
+					      struct hci_dev *hdev,
+					      struct sock *skip)
 {
 	struct mgmt_ev_exp_feature_changed ev;
 
@@ -3935,7 +3937,7 @@ static int exp_quality_report_feature_changed(bool enabled, struct sock *skip)
 	memcpy(ev.uuid, quality_report_uuid, 16);
 	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);
 
-	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, NULL,
+	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
 }
@@ -4158,14 +4160,15 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 				&rp, sizeof(rp));
 
 	if (changed)
-		exp_quality_report_feature_changed(val, sk);
+		exp_quality_report_feature_changed(val, hdev, sk);
 
 unlock_quality_report:
 	hci_req_sync_unlock(hdev);
 	return err;
 }
 
-static int exp_offload_codec_feature_changed(bool enabled, struct sock *skip)
+static int exp_offload_codec_feature_changed(bool enabled, struct hci_dev *hdev,
+					     struct sock *skip)
 {
 	struct mgmt_ev_exp_feature_changed ev;
 
@@ -4173,7 +4176,7 @@ static int exp_offload_codec_feature_changed(bool enabled, struct sock *skip)
 	memcpy(ev.uuid, offload_codecs_uuid, 16);
 	ev.flags = cpu_to_le32(enabled ? BIT(0) : 0);
 
-	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, NULL,
+	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
 				  HCI_MGMT_EXP_FEATURE_EVENTS, skip);
 }
@@ -4231,7 +4234,7 @@ static int set_offload_codec_func(struct sock *sk, struct hci_dev *hdev,
 				&rp, sizeof(rp));
 
 	if (changed)
-		exp_offload_codec_feature_changed(val, sk);
+		exp_offload_codec_feature_changed(val, hdev, sk);
 
 	return err;
 }
@@ -9611,17 +9614,44 @@ void mgmt_adv_monitor_device_lost(struct hci_dev *hdev, u16 handle,
 		   NULL);
 }
 
+static void mgmt_send_adv_monitor_device_found(struct hci_dev *hdev,
+					       struct sk_buff *skb,
+					       struct sock *skip_sk,
+					       u16 handle)
+{
+	struct sk_buff *advmon_skb;
+	size_t advmon_skb_len;
+	__le16 *monitor_handle;
+
+	if (!skb)
+		return;
+
+	advmon_skb_len = (sizeof(struct mgmt_ev_adv_monitor_device_found) -
+			  sizeof(struct mgmt_ev_device_found)) + skb->len;
+	advmon_skb = mgmt_alloc_skb(hdev, MGMT_EV_ADV_MONITOR_DEVICE_FOUND,
+				    advmon_skb_len);
+	if (!advmon_skb)
+		return;
+
+	/* ADV_MONITOR_DEVICE_FOUND is similar to DEVICE_FOUND event except
+	 * that it also has 'monitor_handle'. Make a copy of DEVICE_FOUND and
+	 * store monitor_handle of the matched monitor.
+	 */
+	monitor_handle = skb_put(advmon_skb, sizeof(*monitor_handle));
+	*monitor_handle = cpu_to_le16(handle);
+	skb_put_data(advmon_skb, skb->data, skb->len);
+
+	mgmt_event_skb(advmon_skb, skip_sk);
+}
+
 static void mgmt_adv_monitor_device_found(struct hci_dev *hdev,
 					  bdaddr_t *bdaddr, bool report_device,
 					  struct sk_buff *skb,
 					  struct sock *skip_sk)
 {
-	struct sk_buff *advmon_skb;
-	size_t advmon_skb_len;
-	__le16 *monitor_handle;
 	struct monitored_device *dev, *tmp;
 	bool matched = false;
-	bool notify = false;
+	bool notified = false;
 
 	/* We have received the Advertisement Report because:
 	 * 1. the kernel has initiated active discovery
@@ -9643,25 +9673,6 @@ static void mgmt_adv_monitor_device_found(struct hci_dev *hdev,
 		return;
 	}
 
-	advmon_skb_len = (sizeof(struct mgmt_ev_adv_monitor_device_found) -
-			  sizeof(struct mgmt_ev_device_found)) + skb->len;
-	advmon_skb = mgmt_alloc_skb(hdev, MGMT_EV_ADV_MONITOR_DEVICE_FOUND,
-				    advmon_skb_len);
-	if (!advmon_skb) {
-		if (report_device)
-			mgmt_event_skb(skb, skip_sk);
-		else
-			kfree_skb(skb);
-		return;
-	}
-
-	/* ADV_MONITOR_DEVICE_FOUND is similar to DEVICE_FOUND event except
-	 * that it also has 'monitor_handle'. Make a copy of DEVICE_FOUND and
-	 * store monitor_handle of the matched monitor.
-	 */
-	monitor_handle = skb_put(advmon_skb, sizeof(*monitor_handle));
-	skb_put_data(advmon_skb, skb->data, skb->len);
-
 	hdev->advmon_pend_notify = false;
 
 	list_for_each_entry_safe(dev, tmp, &hdev->monitored_devices, list) {
@@ -9669,8 +9680,10 @@ static void mgmt_adv_monitor_device_found(struct hci_dev *hdev,
 			matched = true;
 
 			if (!dev->notified) {
-				*monitor_handle = cpu_to_le16(dev->handle);
-				notify = true;
+				mgmt_send_adv_monitor_device_found(hdev, skb,
+								   skip_sk,
+								   dev->handle);
+				notified = true;
 				dev->notified = true;
 			}
 		}
@@ -9680,25 +9693,19 @@ static void mgmt_adv_monitor_device_found(struct hci_dev *hdev,
 	}
 
 	if (!report_device &&
-	    ((matched && !notify) || !msft_monitor_supported(hdev))) {
+	    ((matched && !notified) || !msft_monitor_supported(hdev))) {
 		/* Handle 0 indicates that we are not active scanning and this
 		 * is a subsequent advertisement report for an already matched
 		 * Advertisement Monitor or the controller offloading support
 		 * is not available.
 		 */
-		*monitor_handle = 0;
-		notify = true;
+		mgmt_send_adv_monitor_device_found(hdev, skb, skip_sk, 0);
 	}
 
 	if (report_device)
 		mgmt_event_skb(skb, skip_sk);
 	else
 		kfree_skb(skb);
-
-	if (notify)
-		mgmt_event_skb(advmon_skb, skip_sk);
-	else
-		kfree_skb(advmon_skb);
 }
 
 void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
