@@ -26,7 +26,7 @@
 		pinctrl-0 = <&pp1200_mipibrdg_en>;
 
 		enable-active-high;
-		regulator-boot-on;
+		regulator-always-on;
 
 		gpio = <&pio 54 GPIO_ACTIVE_HIGH>;
 	};
@@ -38,7 +38,7 @@
 		pinctrl-0 = <&pp1800_lcd_en>;
 
 		enable-active-high;
-		regulator-boot-on;
+		regulator-always-on;
 
 		gpio = <&pio 36 GPIO_ACTIVE_HIGH>;
 	};
@@ -63,7 +63,7 @@
 		pinctrl-0 = <&vddio_mipibrdg_en>;
 
 		enable-active-high;
-		regulator-boot-on;
+		regulator-always-on;
 
 		gpio = <&pio 37 GPIO_ACTIVE_HIGH>;
 	};
