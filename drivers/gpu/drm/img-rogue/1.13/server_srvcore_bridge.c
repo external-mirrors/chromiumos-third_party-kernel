@@ -729,6 +729,11 @@ PVRSRVBridgeGetMultiCoreInfo(IMG_UINT32 ui32DispatchTableEntry,
 				     psGetMultiCoreInfoIN->ui32CapsSize,
 				     &psGetMultiCoreInfoOUT->ui32NumCores,
 				     pui64CapsInt);
+	/* Exit early if bridged call fails */
+	if (unlikely(psGetMultiCoreInfoOUT->eError != PVRSRV_OK))
+	{
+		goto GetMultiCoreInfo_exit;
+	}
 
 	/* If dest ptr is non-null and we have data to copy */
 	if ((pui64CapsInt) &&
@@ -920,6 +925,11 @@ PVRSRVBridgeFindProcessMemStats(IMG_UINT32 ui32DispatchTableEntry,
 					psFindProcessMemStatsIN->
 					bbAllProcessStats,
 					pui32MemStatsArrayInt);
+	/* Exit early if bridged call fails */
+	if (unlikely(psFindProcessMemStatsOUT->eError != PVRSRV_OK))
+	{
+		goto FindProcessMemStats_exit;
+	}
 
 	/* If dest ptr is non-null and we have data to copy */
 	if ((pui32MemStatsArrayInt) &&

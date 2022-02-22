@@ -2904,6 +2904,11 @@ PVRSRVBridgeHeapCfgHeapConfigName(IMG_UINT32 ui32DispatchTableEntry,
 				  psHeapCfgHeapConfigNameIN->
 				  ui32HeapConfigNameBufSz,
 				  puiHeapConfigNameInt);
+	/* Exit early if bridged call fails */
+	if (unlikely(psHeapCfgHeapConfigNameOUT->eError != PVRSRV_OK))
+	{
+		goto HeapCfgHeapConfigName_exit;
+	}
 
 	/* If dest ptr is non-null and we have data to copy */
 	if ((puiHeapConfigNameInt) &&
@@ -3046,6 +3051,11 @@ PVRSRVBridgeHeapCfgHeapDetails(IMG_UINT32 ui32DispatchTableEntry,
 			       ui32Log2DataPageSizeOut,
 			       &psHeapCfgHeapDetailsOUT->
 			       ui32Log2ImportAlignmentOut);
+	/* Exit early if bridged call fails */
+	if (unlikely(psHeapCfgHeapDetailsOUT->eError != PVRSRV_OK))
+	{
+		goto HeapCfgHeapDetails_exit;
+	}
 
 	/* If dest ptr is non-null and we have data to copy */
 	if ((puiHeapNameOutInt) &&
