@@ -844,6 +844,9 @@ PVRSRVBridgeRGXKickCDM2(IMG_UINT32 ui32DispatchTableEntry,
 		psClientUpdateUFOSyncPrimBlockInt =
 		    (SYNC_PRIMITIVE_BLOCK **) IMG_OFFSET_ADDR(pArrayArgsBuffer,
 							      ui32NextOffset);
+		OSCachedMemSet(psClientUpdateUFOSyncPrimBlockInt, 0,
+			       psRGXKickCDM2IN->ui32ClientUpdateCount *
+			       sizeof(SYNC_PRIMITIVE_BLOCK *));
 		ui32NextOffset +=
 		    psRGXKickCDM2IN->ui32ClientUpdateCount *
 		    sizeof(SYNC_PRIMITIVE_BLOCK *);
@@ -1047,7 +1050,7 @@ RGXKickCDM2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hClientUpdateUFOSyncPrimBlockInt2[i])
+			if (psClientUpdateUFOSyncPrimBlockInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,

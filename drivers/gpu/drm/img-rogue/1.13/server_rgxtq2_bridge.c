@@ -677,6 +677,10 @@ PVRSRVBridgeRGXTDMSubmitTransfer2(IMG_UINT32 ui32DispatchTableEntry,
 		psUpdateUFOSyncPrimBlockInt =
 		    (SYNC_PRIMITIVE_BLOCK **) IMG_OFFSET_ADDR(pArrayArgsBuffer,
 							      ui32NextOffset);
+		OSCachedMemSet(psUpdateUFOSyncPrimBlockInt, 0,
+			       psRGXTDMSubmitTransfer2IN->
+			       ui32ClientUpdateCount *
+			       sizeof(SYNC_PRIMITIVE_BLOCK *));
 		ui32NextOffset +=
 		    psRGXTDMSubmitTransfer2IN->ui32ClientUpdateCount *
 		    sizeof(SYNC_PRIMITIVE_BLOCK *);
@@ -842,6 +846,9 @@ PVRSRVBridgeRGXTDMSubmitTransfer2(IMG_UINT32 ui32DispatchTableEntry,
 	{
 		psSyncPMRsInt =
 		    (PMR **) IMG_OFFSET_ADDR(pArrayArgsBuffer, ui32NextOffset);
+		OSCachedMemSet(psSyncPMRsInt, 0,
+			       psRGXTDMSubmitTransfer2IN->ui32SyncPMRCount *
+			       sizeof(PMR *));
 		ui32NextOffset +=
 		    psRGXTDMSubmitTransfer2IN->ui32SyncPMRCount * sizeof(PMR *);
 		hSyncPMRsInt2 =
@@ -990,7 +997,7 @@ RGXTDMSubmitTransfer2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hUpdateUFOSyncPrimBlockInt2[i])
+			if (psUpdateUFOSyncPrimBlockInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,
@@ -1010,7 +1017,7 @@ RGXTDMSubmitTransfer2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hSyncPMRsInt2[i])
+			if (psSyncPMRsInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,
