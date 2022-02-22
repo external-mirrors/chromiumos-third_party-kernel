@@ -519,6 +519,11 @@ PVRSRVBridgeTLDiscoverStreams(IMG_UINT32 ui32DispatchTableEntry,
 				      psTLDiscoverStreamsIN->ui32Size,
 				      puiStreamsInt,
 				      &psTLDiscoverStreamsOUT->ui32NumFound);
+	/* Exit early if bridged call fails */
+	if (unlikely(psTLDiscoverStreamsOUT->eError != PVRSRV_OK))
+	{
+		goto TLDiscoverStreams_exit;
+	}
 
 	/* If dest ptr is non-null and we have data to copy */
 	if ((puiStreamsInt) &&

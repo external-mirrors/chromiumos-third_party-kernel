@@ -143,6 +143,9 @@ PVRSRVBridgeCacheOpQueue(IMG_UINT32 ui32DispatchTableEntry,
 	{
 		psPMRInt =
 		    (PMR **) IMG_OFFSET_ADDR(pArrayArgsBuffer, ui32NextOffset);
+		OSCachedMemSet(psPMRInt, 0,
+			       psCacheOpQueueIN->ui32NumCacheOps *
+			       sizeof(PMR *));
 		ui32NextOffset +=
 		    psCacheOpQueueIN->ui32NumCacheOps * sizeof(PMR *);
 		hPMRInt2 =
@@ -312,7 +315,7 @@ CacheOpQueue_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hPMRInt2[i])
+			if (psPMRInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,

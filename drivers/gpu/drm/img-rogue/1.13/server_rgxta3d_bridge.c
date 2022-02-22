@@ -147,6 +147,8 @@ PVRSRVBridgeRGXCreateHWRTDataSet(IMG_UINT32 ui32DispatchTableEntry,
 		psapsFreeListsInt =
 		    (RGX_FREELIST **) IMG_OFFSET_ADDR(pArrayArgsBuffer,
 						      ui32NextOffset);
+		OSCachedMemSet(psapsFreeListsInt, 0,
+			       RGXFW_MAX_FREELISTS * sizeof(RGX_FREELIST *));
 		ui32NextOffset += RGXFW_MAX_FREELISTS * sizeof(RGX_FREELIST *);
 		hapsFreeListsInt2 =
 		    (IMG_HANDLE *) IMG_OFFSET_ADDR(pArrayArgsBuffer,
@@ -294,7 +296,7 @@ RGXCreateHWRTDataSet_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hapsFreeListsInt2[i])
+			if (psapsFreeListsInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,
@@ -1541,6 +1543,9 @@ PVRSRVBridgeRGXKickTA3D2(IMG_UINT32 ui32DispatchTableEntry,
 		psClientTAFenceSyncPrimBlockInt =
 		    (SYNC_PRIMITIVE_BLOCK **) IMG_OFFSET_ADDR(pArrayArgsBuffer,
 							      ui32NextOffset);
+		OSCachedMemSet(psClientTAFenceSyncPrimBlockInt, 0,
+			       psRGXKickTA3D2IN->ui32ClientTAFenceCount *
+			       sizeof(SYNC_PRIMITIVE_BLOCK *));
 		ui32NextOffset +=
 		    psRGXKickTA3D2IN->ui32ClientTAFenceCount *
 		    sizeof(SYNC_PRIMITIVE_BLOCK *);
@@ -1622,6 +1627,9 @@ PVRSRVBridgeRGXKickTA3D2(IMG_UINT32 ui32DispatchTableEntry,
 		psClientTAUpdateSyncPrimBlockInt =
 		    (SYNC_PRIMITIVE_BLOCK **) IMG_OFFSET_ADDR(pArrayArgsBuffer,
 							      ui32NextOffset);
+		OSCachedMemSet(psClientTAUpdateSyncPrimBlockInt, 0,
+			       psRGXKickTA3D2IN->ui32ClientTAUpdateCount *
+			       sizeof(SYNC_PRIMITIVE_BLOCK *));
 		ui32NextOffset +=
 		    psRGXKickTA3D2IN->ui32ClientTAUpdateCount *
 		    sizeof(SYNC_PRIMITIVE_BLOCK *);
@@ -1703,6 +1711,9 @@ PVRSRVBridgeRGXKickTA3D2(IMG_UINT32 ui32DispatchTableEntry,
 		psClient3DUpdateSyncPrimBlockInt =
 		    (SYNC_PRIMITIVE_BLOCK **) IMG_OFFSET_ADDR(pArrayArgsBuffer,
 							      ui32NextOffset);
+		OSCachedMemSet(psClient3DUpdateSyncPrimBlockInt, 0,
+			       psRGXKickTA3D2IN->ui32Client3DUpdateCount *
+			       sizeof(SYNC_PRIMITIVE_BLOCK *));
 		ui32NextOffset +=
 		    psRGXKickTA3D2IN->ui32Client3DUpdateCount *
 		    sizeof(SYNC_PRIMITIVE_BLOCK *);
@@ -1924,6 +1935,9 @@ PVRSRVBridgeRGXKickTA3D2(IMG_UINT32 ui32DispatchTableEntry,
 	{
 		psSyncPMRsInt =
 		    (PMR **) IMG_OFFSET_ADDR(pArrayArgsBuffer, ui32NextOffset);
+		OSCachedMemSet(psSyncPMRsInt, 0,
+			       psRGXKickTA3D2IN->ui32SyncPMRCount *
+			       sizeof(PMR *));
 		ui32NextOffset +=
 		    psRGXKickTA3D2IN->ui32SyncPMRCount * sizeof(PMR *);
 		hSyncPMRsInt2 =
@@ -2192,7 +2206,7 @@ RGXKickTA3D2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hClientTAFenceSyncPrimBlockInt2[i])
+			if (psClientTAFenceSyncPrimBlockInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,
@@ -2211,7 +2225,7 @@ RGXKickTA3D2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hClientTAUpdateSyncPrimBlockInt2[i])
+			if (psClientTAUpdateSyncPrimBlockInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,
@@ -2230,7 +2244,7 @@ RGXKickTA3D2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hClient3DUpdateSyncPrimBlockInt2[i])
+			if (psClient3DUpdateSyncPrimBlockInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,
@@ -2293,7 +2307,7 @@ RGXKickTA3D2_exit:
 		{
 
 			/* Unreference the previously looked up handle */
-			if (hSyncPMRsInt2[i])
+			if (psSyncPMRsInt[i])
 			{
 				PVRSRVReleaseHandleUnlocked(psConnection->
 							    psHandleBase,

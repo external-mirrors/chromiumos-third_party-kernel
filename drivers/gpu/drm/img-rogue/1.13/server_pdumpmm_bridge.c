@@ -525,6 +525,11 @@ PVRSRVBridgePMRPDumpSymbolicAddr(IMG_UINT32 ui32DispatchTableEntry,
 				  puiSymbolicAddrInt,
 				  &psPMRPDumpSymbolicAddrOUT->uiNewOffset,
 				  &psPMRPDumpSymbolicAddrOUT->uiNextSymName);
+	/* Exit early if bridged call fails */
+	if (unlikely(psPMRPDumpSymbolicAddrOUT->eError != PVRSRV_OK))
+	{
+		goto PMRPDumpSymbolicAddr_exit;
+	}
 
 	/* If dest ptr is non-null and we have data to copy */
 	if ((puiMemspaceNameInt) &&
