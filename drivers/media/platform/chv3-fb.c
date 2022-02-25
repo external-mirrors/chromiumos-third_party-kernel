@@ -314,7 +314,12 @@ static int fb_open(struct file *file)
 	if (!res) {
 		if (v4l2_fh_is_singular_file(file)) {
 			fb_update_fmt(fb);
-			writel(fb->fmt.sizeimage, fb->iobase + FB_BUFFERSIZE);
+			if (fb->fmt.sizeimage) {
+				writel(fb->fmt.sizeimage, fb->iobase + FB_BUFFERSIZE);
+			} else {
+				res = -ENODEV;
+				v4l2_fh_release(file);
+			}
 		}
 	}
 	mutex_unlock(&fb->fb_lock);
