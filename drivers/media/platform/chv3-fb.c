@@ -243,10 +243,17 @@ static int fb_start_streaming(struct vb2_queue *q, unsigned int count)
 static void fb_stop_streaming(struct vb2_queue *q)
 {
 	struct chv3_fb *fb = vb2_get_drv_priv(q);
+	struct chv3_fb_buffer *buf;
+	unsigned long flags;
 
-	vb2_wait_for_all_buffers(q);
 	fb->streaming = 0;
 	writel(0, fb->iobase + FB_EN);
+
+	spin_lock_irqsave(&fb->bufs_lock, flags);
+	list_for_each_entry(buf, &fb->bufs, link)
+		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+	INIT_LIST_HEAD(&fb->bufs);
+	spin_unlock_irqrestore(&fb->bufs_lock, flags);
 }
 
 static struct chv3_fb_buffer *to_chv3_fb_buffer(struct vb2_v4l2_buffer *b)
