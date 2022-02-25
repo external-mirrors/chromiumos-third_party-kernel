@@ -188,7 +188,7 @@ int platform_set_irqs_ioctl_level_trigger(uint32_t irq_number_host, void *data)
 	level_irq->trigger = NULL;
 	level_irq->irq_num = irq_number_host;
 	level_irq->unmask = NULL;
-	level_irq->is_masked = true;
+	level_irq->is_masked = false;
 	list_add(&(level_irq->list), &level_triggered_irqs);
 
 	return plat_irq_forward_set_level_trigger(data, irq_number_host,
