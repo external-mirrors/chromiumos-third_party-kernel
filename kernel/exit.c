@@ -751,6 +751,7 @@ void __noreturn do_exit(long code)
 	 */
 	force_uaccess_begin();
 
+	profile_task_exit(tsk);
 	kcov_task_exit(tsk);
 
 	coredump_task_exit(tsk);
