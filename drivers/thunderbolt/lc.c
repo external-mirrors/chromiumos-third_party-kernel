@@ -218,6 +218,32 @@ bool tb_lc_is_clx_supported(struct tb_port *port)
 }
 
 /**
+ * tb_lc_is_usb_plugged() - Is there USB device connected to port
+ * @port: Device router lane 0 adapter
+ *
+ * Returns true if the @port has USB type-C device connected.
+ */
+bool tb_lc_is_usb_plugged(struct tb_port *port)
+{
+       struct tb_switch *sw = port->sw;
+       int cap, ret;
+       u32 val;
+
+       if (sw->generation != 3)
+               return false;
+
+       cap = find_port_lc_cap(port);
+       if (cap < 0)
+               return false;
+
+       ret = tb_sw_read(sw, &val, TB_CFG_SWITCH, cap + TB_LC_CS_42, 1);
+       if (ret)
+               return false;
+
+       return !!(val & TB_LC_CS_42_USB_PLUGGED);
+}
+
+/**
  * tb_lc_is_xhci_connected() - Is the internal xHCI connected
  * @port: Device router lane 0 adapter
  *
