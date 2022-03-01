@@ -174,6 +174,9 @@ static int fb_queue_setup(struct vb2_queue *q,
 {
 	struct chv3_fb *fb = vb2_get_drv_priv(q);
 
+	if (!fb->fmt.sizeimage)
+		return -EIO;
+
 	if (*nplanes) {
 		if (sizes[0] < fb->fmt.sizeimage)
 			return -EINVAL;
@@ -314,12 +317,7 @@ static int fb_open(struct file *file)
 	if (!res) {
 		if (v4l2_fh_is_singular_file(file)) {
 			fb_update_fmt(fb);
-			if (fb->fmt.sizeimage) {
-				writel(fb->fmt.sizeimage, fb->iobase + FB_BUFFERSIZE);
-			} else {
-				res = -ENODEV;
-				v4l2_fh_release(file);
-			}
+			writel(fb->fmt.sizeimage, fb->iobase + FB_BUFFERSIZE);
 		}
 	}
 	mutex_unlock(&fb->fb_lock);
