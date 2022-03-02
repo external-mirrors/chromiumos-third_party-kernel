@@ -3146,7 +3146,7 @@ static inline bool i915_terminally_wedged(struct i915_gpu_error *error)
 
 static inline bool i915_reset_in_progress_or_wedged(struct i915_gpu_error *error)
 {
-	return i915_reset_in_progress(error) | i915_terminally_wedged(error);
+	return i915_reset_in_progress(error) || i915_terminally_wedged(error);
 }
 
 static inline u32 i915_reset_count(struct i915_gpu_error *error)
