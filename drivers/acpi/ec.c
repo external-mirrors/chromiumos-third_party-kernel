@@ -28,6 +28,7 @@
 #include <linux/suspend.h>
 #include <linux/acpi.h>
 #include <linux/dmi.h>
+#include <linux/manatee.h>
 #include <asm/io.h>
 
 #include "internal.h"
@@ -1731,6 +1732,10 @@ void __init acpi_ec_dsdt_probe(void)
 	acpi_status status;
 	int ret;
 
+	/* ManaTEE hypervisor does not take control over EC driver */
+	if (manatee_hyp_domain())
+		return;
+
 	/*
 	 * If a platform has ECDT, there is no need to proceed as the
 	 * following probe is not a part of the ACPI device enumeration,
@@ -1932,6 +1937,10 @@ void __init acpi_ec_ecdt_probe(void)
 	struct acpi_ec *ec;
 	acpi_status status;
 	int ret;
+
+	/* ManaTEE hypervisor does not take control over EC driver */
+	if (manatee_hyp_domain())
+		return;
 
 	/* Generate a boot ec context. */
 	dmi_check_system(ec_dmi_table);
@@ -2234,6 +2243,10 @@ static const struct dmi_system_id acpi_ec_no_wakeup[] = {
 void __init acpi_ec_init(void)
 {
 	int result;
+
+	/* ManaTEE hypervisor does not take control over EC driver */
+	if (manatee_hyp_domain())
+		return;
 
 	result = acpi_ec_init_workqueues();
 	if (result)
