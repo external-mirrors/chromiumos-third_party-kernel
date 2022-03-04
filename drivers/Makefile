@@ -191,3 +191,5 @@ obj-$(CONFIG_COUNTER)		+= counter/
 obj-$(CONFIG_MOST)		+= most/
 
 obj-$(CONFIG_PKGLIST)		+= pkglist/
+
+obj-$(CONFIG_MANATEE)	+= manatee/
