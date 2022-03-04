@@ -243,4 +243,6 @@ source "drivers/hte/Kconfig"
 
 source "drivers/pkglist/Kconfig"
 
+source "drivers/manatee/Kconfig"
+
 endmenu

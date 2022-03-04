@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "ManaTEE driver support"
+	depends on MANATEE
+
+choice
+	prompt "ManaTEE kernel mode type"
+	default MANATEE_HYP
+	help
+	  This is the system boot mode type of your ManaTEE kernel. Select one of
+	  the option depending where the kernel is placed in ManaTEE stack.
+	  Note that selecting none of the mode type imply hypervisor mode
+	  by default.
+
+config MANATEE_HYP
+	bool "ManaTEE hypervisor mode"
+	depends on KVM
+	help
+	  Select to indicate the kernel is running as ManaTEE hypervisor.
+
+config MANATEE_CHROMEOS
+	bool "ManaTEE ChromeOS mode"
+	help
+	  Select to indicate the kernel is running as ManaTEE main ChromeOS VM.
+
+endchoice
+
+endmenu
