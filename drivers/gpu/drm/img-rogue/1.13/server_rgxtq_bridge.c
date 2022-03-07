@@ -309,7 +309,7 @@ RGXCreateTransferContext_exit:
 			LockHandle(psConnection->psHandleBase);
 
 			eError =
-			    PVRSRVReleaseHandleUnlocked(psConnection->
+			    PVRSRVDestroyHandleUnlocked(psConnection->
 							psHandleBase,
 							(IMG_HANDLE)
 							psRGXCreateTransferContextOUT->
@@ -379,11 +379,11 @@ PVRSRVBridgeRGXDestroyTransferContext(IMG_UINT32 ui32DispatchTableEntry,
 	LockHandle(psConnection->psHandleBase);
 
 	psRGXDestroyTransferContextOUT->eError =
-	    PVRSRVReleaseHandleStagedUnlock(psConnection->psHandleBase,
-					    (IMG_HANDLE)
-					    psRGXDestroyTransferContextIN->
-					    hTransferContext,
-					    PVRSRV_HANDLE_TYPE_RGX_SERVER_TQ_CONTEXT);
+	    PVRSRVDestroyHandleStagedUnlocked(psConnection->psHandleBase,
+					      (IMG_HANDLE)
+					      psRGXDestroyTransferContextIN->
+					      hTransferContext,
+					      PVRSRV_HANDLE_TYPE_RGX_SERVER_TQ_CONTEXT);
 	if (unlikely
 	    ((psRGXDestroyTransferContextOUT->eError != PVRSRV_OK)
 	     && (psRGXDestroyTransferContextOUT->eError != PVRSRV_ERROR_RETRY)))
