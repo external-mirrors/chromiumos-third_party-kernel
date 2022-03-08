@@ -101,6 +101,47 @@ irqreturn_t cros_ec_irq_thread(int irq, void *data)
 }
 EXPORT_SYMBOL(cros_ec_irq_thread);
 
+static int cros_ec_fixup_s0ixwake_mask(struct cros_ec_device *ec_dev)
+{
+	int ret;
+	struct {
+		struct cros_ec_command msg;
+		union {
+			struct ec_params_host_event param;
+			struct ec_response_host_event resp;
+		} u;
+	} __packed buf;
+
+	buf.msg.version = 0;
+	buf.msg.command = EC_CMD_HOST_EVENT;
+	buf.msg.outsize = sizeof(buf.u.param);
+	buf.msg.insize = sizeof(buf.u.resp);
+
+	buf.u.param.action = EC_HOST_EVENT_GET;
+	buf.u.param.mask_type = EC_HOST_EVENT_LAZY_WAKE_MASK_S0IX;
+
+	ret = cros_ec_cmd_xfer_status(ec_dev, &buf.msg);
+
+	/* remove EC_HOST_EVENT_HANG_DETECT if it is set. */
+	if (ret > 0 && (buf.u.resp.value &
+		EC_HOST_EVENT_MASK(EC_HOST_EVENT_HANG_DETECT))) {
+
+		buf.msg.version = 0;
+		buf.msg.command = EC_CMD_HOST_EVENT;
+		buf.msg.outsize = sizeof(buf.u.param);
+		buf.msg.insize = 0;
+
+		buf.u.param.value = buf.u.resp.value &
+			~(EC_HOST_EVENT_MASK(EC_HOST_EVENT_HANG_DETECT));
+		buf.u.param.action = EC_HOST_EVENT_SET;
+		buf.u.param.mask_type = EC_HOST_EVENT_LAZY_WAKE_MASK_S0IX;
+
+		ret = cros_ec_cmd_xfer_status(ec_dev, &buf.msg);
+	}
+
+	return ret;
+}
+
 static int cros_ec_sleep_event(struct cros_ec_device *ec_dev, u8 sleep_event)
 {
 	int ret;
@@ -205,6 +246,12 @@ int cros_ec_register(struct cros_ec_device *ec_dev)
 	err = cros_ec_query_all(ec_dev);
 	if (err) {
 		dev_err(dev, "Cannot identify the EC: error %d\n", err);
+		return err;
+	}
+
+	err = cros_ec_fixup_s0ixwake_mask(ec_dev);
+	if (err < 0) {
+		dev_err(dev, "Cannot send EC_CMD_HOST_EVENT to EC: error %d\n", err);
 		return err;
 	}
 
