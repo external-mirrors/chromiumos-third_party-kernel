@@ -38,6 +38,8 @@
 
 extern unsigned int ath11k_frame_mode;
 
+#define ATH11K_SCAN_TIMEOUT_HZ (20 * HZ)
+
 #define ATH11K_MON_TIMER_INTERVAL  10
 #define ATH11K_RESET_TIMEOUT_HZ (20 * HZ)
 #define ATH11K_RESET_MAX_FAIL_COUNT_FIRST 3
@@ -193,6 +195,12 @@ enum ath11k_scan_state {
 	ATH11K_SCAN_STARTING,
 	ATH11K_SCAN_RUNNING,
 	ATH11K_SCAN_ABORTING,
+};
+
+enum ath11k_11d_state {
+	ATH11K_11D_IDLE,
+	ATH11K_11D_PREPARING,
+	ATH11K_11D_RUNNING,
 };
 
 enum ath11k_dev_flags {
@@ -639,6 +647,10 @@ struct ath11k {
 #endif
 	bool dfs_block_radar_events;
 	struct ath11k_thermal thermal;
+	u32 vdev_id_11d_scan;
+	struct completion completed_11d_scan;
+	enum ath11k_11d_state state_11d;
+	bool regdom_set_by_user;
 	int hw_rate_code;
 	s8 max_allowed_tx_power;
 };
@@ -827,6 +839,8 @@ struct ath11k_base {
 	/* continuous recovery fail count */
 	atomic_t fail_cont_count;
 	unsigned long reset_fail_timeout;
+	struct work_struct update_11d_work;
+	u8 new_alpha2[3];
 	struct {
 		/* protected by data_lock */
 		u32 fw_crash_counter;
@@ -840,6 +854,8 @@ struct ath11k_base {
 	/* true means radio is on */
 	bool rfkill_radio_on;
 
+	/* To synchronize 11d scan vdev id */
+	struct mutex vdev_id_11d_lock;
 	struct timer_list mon_reap_timer;
 
 	struct completion htc_suspend;
