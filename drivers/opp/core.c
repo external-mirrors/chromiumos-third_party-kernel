@@ -114,6 +114,59 @@ unsigned long dev_pm_opp_get_voltage(struct dev_pm_opp *opp)
 EXPORT_SYMBOL_GPL(dev_pm_opp_get_voltage);
 
 /**
+ * dev_pm_opp_get_voltage_supply() - Gets the voltage corresponding to an opp
+ * with index
+ * @opp:        opp for which voltage has to be returned for
+ * @index:      index to specify the returned supplies
+ *
+ * Return: voltage in micro volt corresponding to the opp with index, else
+ * return 0
+ *
+ * This is useful for devices with multiple power supplies.
+ */
+unsigned long dev_pm_opp_get_voltage_supply(struct dev_pm_opp *opp,
+					    unsigned int index)
+{
+	if (IS_ERR_OR_NULL(opp)) {
+		pr_err("%s: Invalid parameters\n", __func__);
+		return 0;
+	}
+
+	if (index >= opp->opp_table->regulator_count) {
+		pr_err("%s: Invalid supply index: %u\n", __func__, index);
+		return 0;
+	}
+
+	return opp->supplies[index].u_volt;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_get_voltage_supply);
+
+/**
+ * dev_pm_opp_get_power() - Gets the power corresponding to an opp
+ * @opp:	opp for which power has to be returned for
+ *
+ * Return: power in micro watt corresponding to the opp, else
+ * return 0
+ *
+ * This is useful only for devices with single power supply.
+ */
+unsigned long dev_pm_opp_get_power(struct dev_pm_opp *opp)
+{
+	unsigned long opp_power = 0;
+	int i;
+
+	if (IS_ERR_OR_NULL(opp)) {
+		pr_err("%s: Invalid parameters\n", __func__);
+		return 0;
+	}
+	for (i = 0; i < opp->opp_table->regulator_count; i++)
+		opp_power += opp->supplies[i].u_watt;
+
+	return opp_power;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_get_power);
+
+/**
  * dev_pm_opp_get_freq() - Gets the frequency corresponding to an available opp
  * @opp:	opp for which frequency has to be returned for
  *
