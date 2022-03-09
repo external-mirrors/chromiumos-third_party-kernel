@@ -414,7 +414,7 @@ android_compat_clock_adjtime(struct pt_regs *regs)
 }
 #endif /* CONFIG_COMPAT */
 
-static struct syscall_whitelist whitelists[] = {
+static const struct syscall_whitelist whitelists[] __initconst = {
 	SYSCALL_WHITELIST(read_write_test),
 	SYSCALL_WHITELIST(android),
 	PERMISSIVE_SYSCALL_WHITELIST(android),
@@ -424,8 +424,8 @@ static struct syscall_whitelist whitelists[] = {
 	PERMISSIVE_SYSCALL_WHITELIST(complete)
 };
 
-static int alt_syscall_apply_whitelist(const struct syscall_whitelist *wl,
-				       struct alt_sys_call_table *t)
+static int __init alt_syscall_apply_whitelist(const struct syscall_whitelist *wl,
+					      struct alt_sys_call_table *t)
 {
 	unsigned int i;
 	unsigned long *whitelist = kcalloc(BITS_TO_LONGS(t->size),
@@ -459,7 +459,7 @@ static int alt_syscall_apply_whitelist(const struct syscall_whitelist *wl,
 }
 
 #ifdef CONFIG_COMPAT
-static int
+static int __init
 alt_syscall_apply_compat_whitelist(const struct syscall_whitelist *wl,
 				   struct alt_sys_call_table *t)
 {
@@ -494,7 +494,7 @@ alt_syscall_apply_compat_whitelist(const struct syscall_whitelist *wl,
 	return 0;
 }
 #else
-static inline int
+static inline int __init
 alt_syscall_apply_compat_whitelist(const struct syscall_whitelist *wl,
 				   struct alt_sys_call_table *t)
 {
@@ -502,7 +502,7 @@ alt_syscall_apply_compat_whitelist(const struct syscall_whitelist *wl,
 }
 #endif /* CONFIG_COMPAT */
 
-static int alt_syscall_init_one(const struct syscall_whitelist *wl)
+static int __init alt_syscall_init_one(const struct syscall_whitelist *wl)
 {
 	struct alt_sys_call_table *t;
 	int err;
@@ -530,10 +530,8 @@ static int alt_syscall_init_one(const struct syscall_whitelist *wl)
  * Register an alternate syscall table for each whitelist.  Note that the
  * lack of a module_exit() is intentional - once a syscall table is registered
  * it cannot be unregistered.
- *
- * TODO(abrestic) Support unregistering syscall tables?
  */
-static int chromiumos_alt_syscall_init(void)
+static int __init chromiumos_alt_syscall_init(void)
 {
 	unsigned int i;
 	int err;
