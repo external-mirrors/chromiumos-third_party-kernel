@@ -18,6 +18,7 @@
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/module.h>
+#include <linux/reset.h>
 
 #include <sound/sof.h>
 #include <sound/sof/xtensa.h>
@@ -26,6 +27,7 @@
 #include "../adsp_helper.h"
 #include "../adsp-pcm.h"
 #include "../mediatek-ops.h"
+#include "../mtk-adsp-common.h"
 #include "mt8195.h"
 #include "mt8195-clk.h"
 
@@ -34,6 +36,10 @@
 static struct snd_soc_acpi_mach sof_mt8195_mach = {
 	.drv_name = "mt8195_mt6359_rt1019_rt5682",
 	.sof_tplg_filename = "sof-mt8195-mt6359-rt1019-rt5682.tplg",
+};
+
+struct mt8195_private_data{
+	struct reset_control *rstc;
 };
 
 static int mt8195_get_mailbox_offset(struct snd_sof_dev *sdev)
@@ -308,10 +314,31 @@ static int mt8195_run(struct snd_sof_dev *sdev)
 	return 0;
 }
 
+static int mt8195_reset(struct snd_sof_dev *sdev)
+{
+	struct adsp_priv *priv = sdev->pdata->hw_pdata;
+	struct mt8195_private_data *mt8195_private = priv->private_data;
+	int ret;
+
+	/* reset adspsys : audio local bus, adsp ao domain,and config registers
+	   except altvectsel, reset_sw */
+	reset_control_assert(mt8195_private->rstc);
+	udelay(2);
+	reset_control_deassert(mt8195_private->rstc);
+
+	/* power on adsp sram again due to sw reset*/
+	ret = adsp_sram_power_on(sdev->dev, true);
+	if (ret)
+		dev_err(sdev->dev, "reset : dsp_sram_power_on fail!\n");
+
+	return ret;
+}
+
 static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 {
 	struct platform_device *pdev = container_of(sdev->dev, struct platform_device, dev);
 	struct adsp_priv *priv;
+	struct mt8195_private_data *mt8195_private;
 	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -351,6 +378,18 @@ static int mt8195_dsp_probe(struct snd_sof_dev *sdev)
 	ret = adsp_memory_remap_init(&pdev->dev, priv->adsp);
 	if (ret) {
 		dev_err(sdev->dev, "adsp_memory_remap_init fail!\n");
+		goto err_adsp_sram_power_off;
+	}
+
+	priv->private_data = devm_kzalloc(&pdev->dev, sizeof(struct mt8195_private_data), GFP_KERNEL);
+	if (!priv->private_data)
+		goto err_adsp_sram_power_off;
+
+	mt8195_private = priv->private_data;
+	mt8195_private->rstc = devm_reset_control_get_exclusive(&pdev->dev, "adspsys");
+	if (IS_ERR(mt8195_private->rstc)) {
+		ret = PTR_ERR(mt8195_private->rstc);
+		dev_err(sdev->dev, "could not get adspsys reset:%d\n", ret);
 		goto err_adsp_sram_power_off;
 	}
 
@@ -564,6 +603,33 @@ static int mt8195_ipc_pcm_params(struct snd_sof_dev *sdev,
 	return 0;
 }
 
+static void mt8195_adsp_dump(struct snd_sof_dev *sdev, u32 flags)
+{
+	u32 dbg_pc, dbg_data, dbg_bus0, dbg_bus1, dbg_inst;
+	u32 dbg_ls0stat, dbg_ls1stat, faultbus, faultinfo;
+	u32 swreset;
+
+	/* dump debug registers */
+	dbg_pc = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGPC);
+	dbg_data = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGDATA);
+	dbg_bus0 = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGBUS0);
+	dbg_bus1 = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGBUS1);
+	dbg_inst = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGINST);
+	dbg_ls0stat = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGLS0STAT);
+	dbg_ls1stat = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PDEBUGLS1STAT);
+	faultbus = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PFAULTBUS);
+	faultinfo = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_PFAULTINFO);
+	swreset = snd_sof_dsp_read(sdev, DSP_REG_BAR, DSP_RESET_SW);
+
+	dev_info(sdev->dev, "adsp dump : pc 0x%x, data 0x%x, bus0 0x%x, bus1 0x%x, swrest 0x%x",
+		 dbg_pc, dbg_data, dbg_bus0, dbg_bus1, swreset);
+	dev_info(sdev->dev, "ls0stat 0x%x, ls1stat 0x%x, faultbus 0x%x, faultinfo 0x%x",
+		 dbg_ls0stat, dbg_ls1stat, faultbus, faultinfo);
+
+	mtk_adsp_dump(sdev, flags);
+}
+
+
 static struct snd_soc_dai_driver mt8195_dai[] = {
 {
 	.name = "SOF_DL2",
@@ -604,6 +670,7 @@ const struct snd_sof_dsp_ops sof_mt8195_ops = {
 
 	/* DSP core boot */
 	.run		= mt8195_run,
+	.reset 		= mt8195_reset,
 
 	/* Block IO */
 	.block_read	= sof_block_read,
@@ -643,6 +710,9 @@ const struct snd_sof_dsp_ops sof_mt8195_ops = {
 
 	/* Firmware ops */
 	.dsp_arch_ops = &sof_xtensa_arch_ops,
+
+	/* Debug information */
+	.dbg_dump = mt8195_adsp_dump,
 
 	/* DAI drivers */
 	.drv = mt8195_dai,
