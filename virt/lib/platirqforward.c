@@ -229,7 +229,7 @@ int platform_set_irqs_ioctl_edge_trigger(uint32_t irq_number_host, void *data)
 
 int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 {
-	u8 *data = NULL;
+	u8 *data;
 	unsigned long minsz;
 	struct plat_irq_forward_set hdr;
 
@@ -238,7 +238,12 @@ int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 	if (copy_from_user(&hdr, (void __user *)arg, minsz))
 		return -EFAULT;
 
-	data = memdup_user((void __user *)(arg + minsz), sizeof(int32_t));
+	/* Just one FD is supported for now */
+	if (hdr.count != 1)
+		return -EINVAL;
+
+	data = memdup_user((void __user *)(arg + minsz),
+			   hdr.count * sizeof(int32_t));
 	if (IS_ERR(data))
 		return PTR_ERR(data);
 
