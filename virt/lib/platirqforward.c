@@ -81,45 +81,28 @@ static irqreturn_t plat_irq_forward_handler_edge(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static int plat_irq_forward_set_level_trigger(void *data,
-		uint32_t irq_number_host,
-		struct plat_irq_forward_level_triggered *level)
+static int plat_irq_forward_request(unsigned int irq_num,
+				    void *data,
+				    char *name,
+				    irq_handler_t handler)
 {
-	int32_t fd = *(int32_t *)data;
-	struct eventfd_ctx *trigger;
 	int ret;
 
-	if (fd < 0) /* Disable only */
-		return 0;
-
-	trigger = eventfd_ctx_fdget(fd);
-	if (IS_ERR(trigger))
-		return PTR_ERR(trigger);
-
-	level->trigger = trigger;
-	spin_lock_init(&(level->spinlock));
-
-	ret = request_irq(irq_number_host, plat_irq_forward_handler_level,
-			  IRQF_SHARED, "level-triggered-irq", level);
+	ret = request_irq(irq_num, handler, IRQF_SHARED, name, data);
 	if (ret == -EINVAL) {
-		ret = acpi_register_gsi(NULL, irq_number_host,
-					ACPI_LEVEL_SENSITIVE, ACPI_ACTIVE_LOW);
-		if (ret < 0) {
-			level->trigger = NULL;
-			eventfd_ctx_put(trigger);
-			return ret;
-		}
-		ret = request_irq(irq_number_host,
-				  plat_irq_forward_handler_level,
-				  IRQF_SHARED, "level-triggered-irq", level);
-	}
-	if (ret) {
-		level->trigger = NULL;
-		eventfd_ctx_put(trigger);
-		return ret;
+		ret = acpi_register_gsi(NULL, irq_num, ACPI_LEVEL_SENSITIVE,
+					ACPI_ACTIVE_LOW);
+		if (ret < 0)
+			goto out;
+
+		ret = request_irq(irq_num, handler, IRQF_SHARED, name, data);
 	}
 
-	return 0;
+out:
+	if (ret)
+		pr_err("%s: failed to configure IRQ=%d direct mode\n",
+		       __func__, irq_num);
+	return ret;
 }
 
 static int plat_irq_forward_set_level_unmask(void *data,
@@ -134,55 +117,13 @@ static int plat_irq_forward_set_level_unmask(void *data,
 	return -1;
 }
 
-static int plat_irq_forward_set_edge_trigger(void *data,
-		uint32_t irq_number_host,
-		struct plat_irq_forward_edge_triggered *edge)
-{
-	int32_t fd = *(int32_t *)data;
-	struct eventfd_ctx *trigger;
-	int ret;
-
-	if (fd < 0) /* Disable only */
-		return 0;
-
-	trigger = eventfd_ctx_fdget(fd);
-	if (IS_ERR(trigger))
-		return PTR_ERR(trigger);
-
-	edge->trigger = trigger;
-
-	ret = request_irq(irq_number_host, plat_irq_forward_handler_edge,
-			  IRQF_SHARED, "edge-triggered-irq", edge);
-
-	/* no irq descriptor initialized yet. allocate one owned by
-	 * irq-forwarder module.
-	 */
-	if (ret == -EINVAL) {
-		ret = acpi_register_gsi(NULL, irq_number_host,
-					ACPI_EDGE_SENSITIVE, ACPI_ACTIVE_LOW);
-		if (ret < 0) {
-			edge->trigger = NULL;
-			eventfd_ctx_put(trigger);
-			return ret;
-		}
-		ret = request_irq(irq_number_host,
-				  plat_irq_forward_handler_edge,
-				  IRQF_SHARED, "edge-triggered-irq", edge);
-	}
-	if (ret) {
-		edge->trigger = NULL;
-		eventfd_ctx_put(trigger);
-		return ret;
-	}
-
-	return 0;
-}
-
-
 int platform_set_irqs_ioctl_level_trigger(uint32_t irq_number_host, void *data)
 {
 	struct plat_irq_forward_level_triggered *level_irq = kzalloc(
 		sizeof(struct plat_irq_forward_level_triggered), GFP_KERNEL);
+	int32_t fd = *(int32_t *)data;
+	int ret;
+
 	if (!level_irq)
 		return -ENOMEM;
 	level_irq->trigger = NULL;
@@ -191,8 +132,24 @@ int platform_set_irqs_ioctl_level_trigger(uint32_t irq_number_host, void *data)
 	level_irq->is_masked = false;
 	list_add(&(level_irq->list), &level_triggered_irqs);
 
-	return plat_irq_forward_set_level_trigger(data, irq_number_host,
-						  level_irq);
+	if (fd < 0) /* Disable only */
+		return 0;
+
+	level_irq->trigger = eventfd_ctx_fdget(fd);
+	if (IS_ERR(level_irq->trigger))
+		return PTR_ERR(level_irq->trigger);
+
+	spin_lock_init(&level_irq->spinlock);
+
+	ret = plat_irq_forward_request(irq_number_host, level_irq,
+				       "level-triggered-irq",
+				       plat_irq_forward_handler_level);
+	if (ret) {
+		eventfd_ctx_put(level_irq->trigger);
+		level_irq->trigger = NULL;
+	}
+
+	return ret;
 }
 
 int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data)
@@ -217,14 +174,31 @@ int platform_set_irqs_ioctl_edge_trigger(uint32_t irq_number_host, void *data)
 {
 	struct plat_irq_forward_edge_triggered *edge_irq = kzalloc(
 		sizeof(struct plat_irq_forward_edge_triggered), GFP_KERNEL);
+	int32_t fd = *(int32_t *)data;
+	int ret;
+
 	if (!edge_irq)
 		return -ENOMEM;
 	edge_irq->trigger = NULL;
 	edge_irq->irq_num = irq_number_host;
 	list_add(&(edge_irq->list), &edge_triggered_irqs);
 
-	return plat_irq_forward_set_edge_trigger(data, irq_number_host,
-						 edge_irq);
+	if (fd < 0) /* Disable only */
+		return 0;
+
+	edge_irq->trigger = eventfd_ctx_fdget(fd);
+	if (IS_ERR(edge_irq->trigger))
+		return PTR_ERR(edge_irq->trigger);
+
+	ret = plat_irq_forward_request(irq_number_host, edge_irq,
+				       "edge-triggered-irq",
+				       plat_irq_forward_handler_edge);
+	if (ret) {
+		eventfd_ctx_put(edge_irq->trigger);
+		edge_irq->trigger = NULL;
+	}
+
+	return ret;
 }
 
 int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
