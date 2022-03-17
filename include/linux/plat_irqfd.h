@@ -29,6 +29,12 @@ struct plat_irq_forward {
 	char			*name;
 };
 
+struct gpe_fwd {
+	struct list_head        list;
+	uint32_t                gpe;
+	struct plat_irq_forward *sci;
+};
+
 int plat_irq_forward_irqfd_enable(int (*handler)(int irq, void *data),
 		void *data, struct plat_irq_forward_irqfd **pirqfd, int fd);
 
