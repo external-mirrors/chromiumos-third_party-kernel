@@ -116,6 +116,27 @@ static struct plat_irq_forward *plat_irq_forward_find(
 	return NULL;
 }
 
+static void plat_irq_forward_del(uint32_t irq_number_host)
+{
+	struct plat_irq_forward *irq, *tmp;
+
+	list_for_each_entry_safe(irq, tmp, &plat_fwd_irq_list, list) {
+		if (irq->irq_num != irq_number_host)
+			continue;
+
+		if (irq->trigger) {
+			irq_clear_status_flags(irq->irq_num,
+					       IRQ_NOAUTOEN);
+			free_irq(irq->irq_num, irq);
+			kfree(irq->name);
+			eventfd_ctx_put(irq->trigger);
+		}
+		list_del(&irq->list);
+		kfree(irq);
+		break;
+	}
+}
+
 static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
 					   uint32_t flags)
 {
@@ -123,6 +144,14 @@ static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
 	int32_t fd = *(int32_t *)data;
 	struct plat_irq_forward *irq;
 	int error;
+
+	/* Disable only */
+	if (fd < 0) {
+		mutex_lock(&plat_fwd_irq_mutex);
+		plat_irq_forward_del(irq_number_host);
+		mutex_unlock(&plat_fwd_irq_mutex);
+		return 0;
+	}
 
 	mutex_lock(&plat_fwd_irq_mutex);
 	irq = plat_irq_forward_find(irq_number_host);
