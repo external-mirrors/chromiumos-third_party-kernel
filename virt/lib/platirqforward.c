@@ -35,6 +35,8 @@ MODULE_ALIAS("devname:plat-irq-forward");
 static DEFINE_MUTEX(plat_fwd_irq_mutex);
 static LIST_HEAD(plat_fwd_irq_list);
 
+static LIST_HEAD(gpes_list);
+
 static int plat_irq_forward_unmask_handler_level(int irq, void *data)
 {
 	struct plat_irq_forward *l = data;
@@ -185,11 +187,13 @@ static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
 	spin_lock_init(&irq->spinlock);
 	list_add(&irq->list, &plat_fwd_irq_list);
 
-	error = plat_irq_forward_request(irq,
+	if (!(flags & PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_TRIGGER_EVENTFD)) {
+		error = plat_irq_forward_request(irq,
 				is_level ? plat_irq_forward_handler_level :
 					   plat_irq_forward_handler_edge);
-	if (error)
-		goto err_put_ctx;
+		if (error)
+			goto err_put_ctx;
+	}
 
 	mutex_unlock(&plat_fwd_irq_mutex);
 	return 0;
@@ -262,11 +266,152 @@ int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 		return platform_set_irqs_ioctl_trigger(
 				hdr.irq_number_host, data,
 				hdr.action_flags);
+	case PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_TRIGGER_EVENTFD:
+		return platform_set_irqs_ioctl_trigger(
+				acpi_gbl_FADT.sci_interrupt, data,
+				hdr.action_flags);
+	case PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_UNMASK_EVENTFD:
+		return platform_set_irqs_ioctl_level_unmask(
+				acpi_gbl_FADT.sci_interrupt, data);
 	default:
 		return -EINVAL;
 	}
 
 	kfree(data);
+	return 0;
+}
+
+static u32 gpe_forward_handler_level(acpi_handle dev, u32 gpe, void *data)
+{
+	struct gpe_fwd *gf = data;
+	struct plat_irq_forward *sci = gf->sci;
+	unsigned long flags;
+	bool already_masked;
+
+	spin_lock_irqsave(&sci->spinlock, flags);
+
+	/*
+	 * Multiple GPEs may be handled within a single SCI interrupt.
+	 * Ensure that we trigger one SCI per one physical SCI
+	 * and don't do nested masking of SCI irq.
+	 */
+	already_masked = sci->is_masked;
+	if (!already_masked) {
+		disable_irq_nosync(sci->irq_num);
+		sci->is_masked = true;
+	}
+
+	spin_unlock_irqrestore(&sci->spinlock, flags);
+
+	if (!already_masked)
+		eventfd_signal(sci->trigger, 1);
+
+	return ACPI_INTERRUPT_HANDLED;
+}
+
+static struct gpe_fwd *gpe_fwd_find(uint32_t gpe)
+{
+	struct gpe_fwd *gf;
+
+	list_for_each_entry(gf, &gpes_list, list) {
+		if (gf->gpe == gpe)
+			return gf;
+	}
+
+	return NULL;
+}
+
+static void gpe_fwd_del(uint32_t gpe)
+{
+	struct gpe_fwd *gf, *tmp;
+
+	list_for_each_entry_safe(gf, tmp, &gpes_list, list) {
+		if (gf->gpe != gpe)
+			continue;
+
+		acpi_remove_gpe_handler(NULL, gpe, &gpe_forward_handler_level);
+		list_del(&gf->list);
+		kfree(gf);
+		break;
+	}
+}
+
+static int gpe_set_ioctl_trigger(uint32_t gpe)
+{
+	struct plat_irq_forward *sci;
+	struct gpe_fwd *gf;
+	acpi_status status;
+	int error;
+
+	mutex_lock(&plat_fwd_irq_mutex);
+	// We must already have a trigger for the SCI before we add a GPE
+	sci = plat_irq_forward_find(acpi_gbl_FADT.sci_interrupt);
+	if (!sci) {
+		error = -ENXIO;
+		goto err;
+	}
+
+	gf = gpe_fwd_find(gpe);
+	if (gf) {
+		error = -EEXIST;
+		goto err;
+	}
+
+	gf = kzalloc(sizeof(*gf), GFP_KERNEL);
+	if (!gf){
+		error = -ENOMEM;
+		goto err;
+	}
+
+	gf->gpe = gpe;
+	gf->sci = sci;
+	status = acpi_install_gpe_raw_handler(NULL, gpe,
+					      ACPI_GPE_LEVEL_TRIGGERED,
+					      &gpe_forward_handler_level, gf);
+	if (ACPI_FAILURE(status)) {
+		error = -EINVAL;
+		goto free;
+	}
+
+	list_add(&gf->list, &gpes_list);
+
+	mutex_unlock(&plat_fwd_irq_mutex);
+	return 0;
+
+free:
+	kfree(gf);
+err:
+	mutex_unlock(&plat_fwd_irq_mutex);
+	return error;
+}
+
+static void gpe_clear_ioctl_trigger(uint32_t gpe)
+{
+	mutex_lock(&plat_fwd_irq_mutex);
+	gpe_fwd_del(gpe);
+	mutex_unlock(&plat_fwd_irq_mutex);
+}
+
+int gpe_forward_ioctl(void *device_data, unsigned long arg)
+{
+	struct gpe_forward_set hdr;
+	unsigned long minsz;
+
+	minsz = offsetofend(struct gpe_forward_set, gpe_host_nr);
+
+	if (copy_from_user(&hdr, (void __user *)arg, minsz))
+		return -EFAULT;
+
+	switch (hdr.action_flags) {
+	case ACPI_GPE_FORWARD_SET_TRIGGER:
+		return gpe_set_ioctl_trigger(hdr.gpe_host_nr);
+	case ACPI_GPE_FORWARD_CLEAR_TRIGGER:
+		gpe_clear_ioctl_trigger(hdr.gpe_host_nr);
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -281,6 +426,9 @@ static long plat_irq_forward_fops_unl_ioctl(struct file *filep,
 	switch (cmd) {
 	case PLAT_IRQ_FORWARD_SET:
 		ret = (long) plat_irq_forward_ioctl(filep, arg);
+		break;
+	case ACPI_GPE_FORWARD_SET:
+		ret = gpe_forward_ioctl(filep, arg);
 		break;
 	default:
 		ret = -EINVAL;
