@@ -810,6 +810,8 @@
 			mediatek,topckgen = <&topckgen>;
 			power-domains = <&spm MT8195_POWER_DOMAIN_AUDIO>;
 			interrupts = <GIC_SPI 822 IRQ_TYPE_LEVEL_HIGH 0>;
+			resets = <&watchdog 14>;
+			reset-names = "audiosys";
 			clocks = <&clk26m>,
 				<&apmixedsys CLK_APMIXED_APLL1>,
 				<&apmixedsys CLK_APMIXED_APLL2>,
@@ -3837,8 +3839,6 @@
 		reg = <0 0x10803000 0 0x1000>,
 		      <0 0x10840000 0 0x40000>;
 		reg-names = "cfg", "sram";
-		resets = <&watchdog 21>;
-		reset-names = "adspsys";
 		clocks = <&topckgen CLK_TOP_ADSP>,
 			 <&clk26m>,
 			 <&topckgen CLK_TOP_AUDIO_LOCAL_BUS>,
