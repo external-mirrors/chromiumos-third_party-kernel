@@ -32,6 +32,7 @@ MODULE_AUTHOR(AUTHOR);
 MODULE_DESCRIPTION(DESC);
 MODULE_ALIAS("devname:plat-irq-forward");
 
+static DEFINE_MUTEX(plat_fwd_irq_mutex);
 static LIST_HEAD(plat_fwd_irq_list);
 
 static int plat_irq_forward_unmask_handler_level(int irq, void *data)
@@ -102,16 +103,17 @@ out:
 	return ret;
 }
 
-static int plat_irq_forward_set_level_unmask(void *data,
-					     struct plat_irq_forward *level)
+static struct plat_irq_forward *plat_irq_forward_find(
+						uint32_t irq_number_host)
 {
-	int32_t fd = *(int32_t *)data;
+	struct plat_irq_forward *irq;
 
-	if (fd >= 0)
-		return plat_irq_forward_irqfd_enable(
-				plat_irq_forward_unmask_handler_level,
-				level, &(level->unmask), fd);
-	return -1;
+	list_for_each_entry(irq, &plat_fwd_irq_list, list) {
+		if (irq->irq_num == irq_number_host)
+			return irq;
+	}
+
+	return NULL;
 }
 
 static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
@@ -121,6 +123,13 @@ static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
 	int32_t fd = *(int32_t *)data;
 	struct plat_irq_forward *irq;
 	int error;
+
+	mutex_lock(&plat_fwd_irq_mutex);
+	irq = plat_irq_forward_find(irq_number_host);
+	if (irq) {
+		error = -EEXIST;
+		goto err;
+	}
 
 	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
 	if (!irq) {
@@ -153,6 +162,7 @@ static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
 	if (error)
 		goto err_put_ctx;
 
+	mutex_unlock(&plat_fwd_irq_mutex);
 	return 0;
 
 err_put_ctx:
@@ -163,23 +173,32 @@ err_free_name:
 err_free_irq:
 	kfree(irq);
 err:
+	mutex_unlock(&plat_fwd_irq_mutex);
 	return error;
 }
 
 int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data)
 {
-	struct list_head *position = NULL;
-	struct plat_irq_forward *level_irq = NULL;
+	int32_t fd = *(int32_t *)data;
+	struct plat_irq_forward *irq;
+	int error;
 
-	// We must already have a trigger for the IRQ before we add an unmask
-	list_for_each(position, &plat_fwd_irq_list) {
-		level_irq = list_entry(position, struct plat_irq_forward, list);
-		if (level_irq->irq_num == irq_number_host)
-			return plat_irq_forward_set_level_unmask(data,
-								 level_irq);
+	if (fd < 0)
+		return -EINVAL;
+
+	mutex_lock(&plat_fwd_irq_mutex);
+	irq = plat_irq_forward_find(irq_number_host);
+	if (!irq) {
+		error = -ENXIO;
+		goto err;
 	}
 
-	return -1;
+	error = plat_irq_forward_irqfd_enable(
+				plat_irq_forward_unmask_handler_level,
+				irq, &irq->unmask, fd);
+err:
+	mutex_unlock(&plat_fwd_irq_mutex);
+	return error;
 }
 
 int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
