@@ -81,16 +81,19 @@ static irqreturn_t plat_irq_forward_handler_edge(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static int plat_irq_forward_request(struct plat_irq_forward *irq,
-				    irq_handler_t handler)
+static int plat_irq_forward_request(struct plat_irq_forward *irq)
 {
+	bool is_level = irq->flags & PLAT_IRQ_FORWARD_SET_LEVEL_TRIGGER_EVENTFD;
+	irq_handler_t handler = is_level ? plat_irq_forward_handler_level :
+					   plat_irq_forward_handler_edge;
+	int trigger = is_level ? ACPI_LEVEL_SENSITIVE : ACPI_EDGE_SENSITIVE;
 	int ret;
 
 	ret = request_irq(irq->irq_num, handler, IRQF_SHARED, irq->name, irq);
 	if (ret == -EINVAL) {
-		/* TODO: Retrieve polarity and trigger type */
-		ret = acpi_register_gsi(NULL, irq->irq_num,
-					ACPI_LEVEL_SENSITIVE, ACPI_ACTIVE_LOW);
+		/* TODO: Retrieve polarity */
+		ret = acpi_register_gsi(NULL, irq->irq_num, trigger,
+					ACPI_ACTIVE_LOW);
 		if (ret < 0)
 			goto out;
 
@@ -188,9 +191,7 @@ static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
 	list_add(&irq->list, &plat_fwd_irq_list);
 
 	if (!(flags & PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_TRIGGER_EVENTFD)) {
-		error = plat_irq_forward_request(irq,
-				is_level ? plat_irq_forward_handler_level :
-					   plat_irq_forward_handler_edge);
+		error = plat_irq_forward_request(irq);
 		if (error)
 			goto err_put_ctx;
 	}
