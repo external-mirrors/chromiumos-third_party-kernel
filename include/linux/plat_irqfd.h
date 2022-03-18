@@ -18,19 +18,15 @@ struct plat_irq_forward_irqfd {
 	struct plat_irq_forward_irqfd	**pirqfd;
 };
 
-struct plat_irq_forward_edge_triggered {
-	struct eventfd_ctx	*trigger;
-	uint32_t		irq_num;
-	struct list_head	list;
-};
-
-struct plat_irq_forward_level_triggered {
+struct plat_irq_forward {
+	u32			flags;
 	struct eventfd_ctx	*trigger;
 	uint32_t		irq_num;
 	struct list_head	list;
 	struct plat_irq_forward_irqfd	*unmask;
 	bool			is_masked;
 	spinlock_t		spinlock;
+	char			*name;
 };
 
 int plat_irq_forward_irqfd_enable(int (*handler)(int irq, void *data),
