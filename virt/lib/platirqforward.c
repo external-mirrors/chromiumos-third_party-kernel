@@ -32,15 +32,12 @@ MODULE_AUTHOR(AUTHOR);
 MODULE_DESCRIPTION(DESC);
 MODULE_ALIAS("devname:plat-irq-forward");
 
-static LIST_HEAD(level_triggered_irqs);
-static LIST_HEAD(edge_triggered_irqs);
-
+static LIST_HEAD(plat_fwd_irq_list);
 
 static int plat_irq_forward_unmask_handler_level(int irq, void *data)
 {
+	struct plat_irq_forward *l = data;
 	unsigned long flags;
-	struct plat_irq_forward_level_triggered *l =
-			(struct plat_irq_forward_level_triggered *) data;
 
 	spin_lock_irqsave(&(l->spinlock), flags);
 	if (l->is_masked) {
@@ -54,10 +51,10 @@ static int plat_irq_forward_unmask_handler_level(int irq, void *data)
 
 static irqreturn_t plat_irq_forward_handler_level(int irq, void *data)
 {
+	struct plat_irq_forward *l = data;
 	unsigned long flags;
 	int ret = IRQ_NONE;
-	struct plat_irq_forward_level_triggered *l =
-			(struct plat_irq_forward_level_triggered *) data;
+
 	spin_lock_irqsave(&(l->spinlock), flags);
 
 	disable_irq_nosync(irq);
@@ -74,39 +71,39 @@ static irqreturn_t plat_irq_forward_handler_level(int irq, void *data)
 
 static irqreturn_t plat_irq_forward_handler_edge(int irq, void *data)
 {
-	struct plat_irq_forward_edge_triggered *e =
-			(struct plat_irq_forward_edge_triggered *) data;
+	struct plat_irq_forward *e = data;
+
 	eventfd_signal(e->trigger, 1);
 
 	return IRQ_HANDLED;
 }
 
-static int plat_irq_forward_request(unsigned int irq_num,
-				    void *data,
-				    char *name,
+static int plat_irq_forward_request(struct plat_irq_forward *irq,
 				    irq_handler_t handler)
 {
 	int ret;
 
-	ret = request_irq(irq_num, handler, IRQF_SHARED, name, data);
+	ret = request_irq(irq->irq_num, handler, IRQF_SHARED, irq->name, irq);
 	if (ret == -EINVAL) {
-		ret = acpi_register_gsi(NULL, irq_num, ACPI_LEVEL_SENSITIVE,
-					ACPI_ACTIVE_LOW);
+		/* TODO: Retrieve polarity and trigger type */
+		ret = acpi_register_gsi(NULL, irq->irq_num,
+					ACPI_LEVEL_SENSITIVE, ACPI_ACTIVE_LOW);
 		if (ret < 0)
 			goto out;
 
-		ret = request_irq(irq_num, handler, IRQF_SHARED, name, data);
+		ret = request_irq(irq->irq_num, handler, IRQF_SHARED, irq->name,
+				  irq);
 	}
 
 out:
 	if (ret)
 		pr_err("%s: failed to configure IRQ=%d direct mode\n",
-		       __func__, irq_num);
+		       __func__, irq->irq_num);
 	return ret;
 }
 
 static int plat_irq_forward_set_level_unmask(void *data,
-		struct plat_irq_forward_level_triggered *level)
+					     struct plat_irq_forward *level)
 {
 	int32_t fd = *(int32_t *)data;
 
@@ -117,88 +114,72 @@ static int plat_irq_forward_set_level_unmask(void *data,
 	return -1;
 }
 
-int platform_set_irqs_ioctl_level_trigger(uint32_t irq_number_host, void *data)
+static int platform_set_irqs_ioctl_trigger(uint32_t irq_number_host, void *data,
+					   uint32_t flags)
 {
-	struct plat_irq_forward_level_triggered *level_irq = kzalloc(
-		sizeof(struct plat_irq_forward_level_triggered), GFP_KERNEL);
+	bool is_level = flags & PLAT_IRQ_FORWARD_SET_LEVEL_TRIGGER_EVENTFD;
 	int32_t fd = *(int32_t *)data;
-	int ret;
+	struct plat_irq_forward *irq;
+	int error;
 
-	if (!level_irq)
-		return -ENOMEM;
-	level_irq->trigger = NULL;
-	level_irq->irq_num = irq_number_host;
-	level_irq->unmask = NULL;
-	level_irq->is_masked = false;
-	list_add(&(level_irq->list), &level_triggered_irqs);
-
-	if (fd < 0) /* Disable only */
-		return 0;
-
-	level_irq->trigger = eventfd_ctx_fdget(fd);
-	if (IS_ERR(level_irq->trigger))
-		return PTR_ERR(level_irq->trigger);
-
-	spin_lock_init(&level_irq->spinlock);
-
-	ret = plat_irq_forward_request(irq_number_host, level_irq,
-				       "level-triggered-irq",
-				       plat_irq_forward_handler_level);
-	if (ret) {
-		eventfd_ctx_put(level_irq->trigger);
-		level_irq->trigger = NULL;
+	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
+	if (!irq) {
+		error = -ENOMEM;
+		goto err;
 	}
 
-	return ret;
+	irq->name = kasprintf(GFP_KERNEL, "%s-triggered-irq[%d]",
+			      is_level ? "level" : "edge", irq_number_host);
+	if (!irq->name) {
+		error = -ENOMEM;
+		goto err_free_irq;
+	}
+
+	irq->trigger = eventfd_ctx_fdget(fd);
+	if (IS_ERR(irq->trigger)) {
+		error = PTR_ERR(irq->trigger);
+		goto err_free_name;
+	}
+
+	irq->irq_num = irq_number_host;
+	irq->flags = flags;
+	irq->is_masked = false;
+	spin_lock_init(&irq->spinlock);
+	list_add(&irq->list, &plat_fwd_irq_list);
+
+	error = plat_irq_forward_request(irq,
+				is_level ? plat_irq_forward_handler_level :
+					   plat_irq_forward_handler_edge);
+	if (error)
+		goto err_put_ctx;
+
+	return 0;
+
+err_put_ctx:
+	eventfd_ctx_put(irq->trigger);
+	list_del(&irq->list);
+err_free_name:
+	kfree(irq->name);
+err_free_irq:
+	kfree(irq);
+err:
+	return error;
 }
 
 int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data)
 {
 	struct list_head *position = NULL;
-	struct plat_irq_forward_level_triggered *level_irq = NULL;
+	struct plat_irq_forward *level_irq = NULL;
 
 	// We must already have a trigger for the IRQ before we add an unmask
-	list_for_each(position, &level_triggered_irqs) {
-		level_irq = list_entry(position,
-				       struct plat_irq_forward_level_triggered,
-				       list);
+	list_for_each(position, &plat_fwd_irq_list) {
+		level_irq = list_entry(position, struct plat_irq_forward, list);
 		if (level_irq->irq_num == irq_number_host)
 			return plat_irq_forward_set_level_unmask(data,
 								 level_irq);
 	}
 
 	return -1;
-}
-
-int platform_set_irqs_ioctl_edge_trigger(uint32_t irq_number_host, void *data)
-{
-	struct plat_irq_forward_edge_triggered *edge_irq = kzalloc(
-		sizeof(struct plat_irq_forward_edge_triggered), GFP_KERNEL);
-	int32_t fd = *(int32_t *)data;
-	int ret;
-
-	if (!edge_irq)
-		return -ENOMEM;
-	edge_irq->trigger = NULL;
-	edge_irq->irq_num = irq_number_host;
-	list_add(&(edge_irq->list), &edge_triggered_irqs);
-
-	if (fd < 0) /* Disable only */
-		return 0;
-
-	edge_irq->trigger = eventfd_ctx_fdget(fd);
-	if (IS_ERR(edge_irq->trigger))
-		return PTR_ERR(edge_irq->trigger);
-
-	ret = plat_irq_forward_request(irq_number_host, edge_irq,
-				       "edge-triggered-irq",
-				       plat_irq_forward_handler_edge);
-	if (ret) {
-		eventfd_ctx_put(edge_irq->trigger);
-		edge_irq->trigger = NULL;
-	}
-
-	return ret;
 }
 
 int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
@@ -223,14 +204,16 @@ int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 
 	switch (hdr.action_flags) {
 	case PLAT_IRQ_FORWARD_SET_LEVEL_TRIGGER_EVENTFD:
-		return platform_set_irqs_ioctl_level_trigger(
-				hdr.irq_number_host, data);
+		return platform_set_irqs_ioctl_trigger(
+				hdr.irq_number_host, data,
+				hdr.action_flags);
 	case PLAT_IRQ_FORWARD_SET_LEVEL_UNMASK_EVENTFD:
 		return platform_set_irqs_ioctl_level_unmask(
 				hdr.irq_number_host, data);
 	case PLAT_IRQ_FORWARD_SET_EDGE_TRIGGER:
-		return platform_set_irqs_ioctl_edge_trigger(
-				hdr.irq_number_host, data);
+		return platform_set_irqs_ioctl_trigger(
+				hdr.irq_number_host, data,
+				hdr.action_flags);
 	default:
 		return -EINVAL;
 	}
