@@ -29,6 +29,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/sysfs.h>
 #include <linux/acpi.h>
+#include <linux/manatee.h>
 #include "sleep.h"
 #include "internal.h"
 
@@ -145,6 +146,10 @@ int acpi_extract_power_resources(union acpi_object *package, unsigned int start,
 	unsigned int i;
 	int err = 0;
 
+	/* Power-related ACPI calls are disabled in ManaTEE guest. */
+	if (manatee_chromeos_domain())
+		goto out;
+
 	for (i = start; i < package->package.count; i++) {
 		union acpi_object *element = &package->package.elements[i];
 		acpi_handle rhandle;
@@ -174,6 +179,7 @@ int acpi_extract_power_resources(union acpi_object *package, unsigned int start,
 	if (err)
 		acpi_power_resources_list_free(list);
 
+out:
 	return err;
 }
 
@@ -187,6 +193,10 @@ static int acpi_power_get_state(acpi_handle handle, int *state)
 
 	if (!handle || !state)
 		return -EINVAL;
+
+	/* Power-related ACPI calls are disabled in ManaTEE guest. */
+	if (manatee_chromeos_domain())
+		return -ENODEV;
 
 	status = acpi_evaluate_integer(handle, "_STA", NULL, &sta);
 	if (ACPI_FAILURE(status))
@@ -650,6 +660,10 @@ int acpi_device_sleep_wake(struct acpi_device *dev,
 	union acpi_object in_arg[3];
 	struct acpi_object_list arg_list = { 3, in_arg };
 	acpi_status status = AE_OK;
+
+	/* Power-related ACPI calls are disabled in ManaTEE guest. */
+	if (manatee_chromeos_domain())
+		return 0;
 
 	/*
 	 * Try to execute _DSW first.

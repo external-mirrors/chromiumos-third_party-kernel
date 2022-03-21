@@ -19,6 +19,7 @@
 #include <linux/platform_data/x86/apple.h>
 #include <linux/pgtable.h>
 #include <linux/crc32.h>
+#include <linux/manatee.h>
 
 #include "internal.h"
 
@@ -992,6 +993,10 @@ static void acpi_bus_get_power_flags(struct acpi_device *device)
 {
 	unsigned long long dsc = ACPI_STATE_D0;
 	u32 i;
+
+	/* Power-related ACPI calls are disabled in ManaTEE guest. */
+	if (manatee_chromeos_domain())
+		return;
 
 	/* Presence of _PS0|_PR0 indicates 'power manageable' */
 	if (!acpi_has_method(device->handle, "_PS0") &&

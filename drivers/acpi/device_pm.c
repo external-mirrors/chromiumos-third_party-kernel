@@ -17,6 +17,7 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
+#include <linux/manatee.h>
 
 #include "fan.h"
 #include "internal.h"
@@ -304,6 +305,10 @@ int acpi_bus_init_power(struct acpi_device *device)
 {
 	int state;
 	int result;
+
+	/* Power-related ACPI calls are disabled in ManaTEE guest. */
+	if (manatee_chromeos_domain())
+		return -EINVAL;
 
 	if (!device)
 		return -EINVAL;
