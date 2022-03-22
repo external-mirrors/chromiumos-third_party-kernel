@@ -19,6 +19,7 @@
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <linux/dmi.h>
+#include <linux/manatee.h>
 #include <acpi/button.h>
 
 #define ACPI_BUTTON_CLASS		"button"
@@ -418,7 +419,7 @@ static void acpi_button_notify(struct acpi_device *device, u32 event)
 			int keycode;
 
 			acpi_pm_wakeup_event(&device->dev);
-			if (button->suspended)
+			if (button->suspended && !manatee_hyp_domain())
 				break;
 
 			keycode = test_bit(KEY_SLEEP, input->keybit) ?
