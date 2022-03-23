@@ -871,7 +871,7 @@ static int mtk_iommu_probe(struct platform_device *pdev)
 			id = i;
 
 		plarbdev = of_find_device_by_node(larbnode);
-		if (!plarbdev || !plarbdev->dev.driver) {
+		if (!plarbdev) {
 			of_node_put(larbnode);
 			return -ENODEV;
 		}
