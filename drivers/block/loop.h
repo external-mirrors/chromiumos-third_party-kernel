@@ -32,6 +32,7 @@ struct loop_device {
 	loff_t		lo_offset;
 	loff_t		lo_sizelimit;
 	int		lo_flags;
+	bool		block_open_on_autoclear;
 	char		lo_file_name[LO_NAME_SIZE];
 
 	struct file *	lo_backing_file;
