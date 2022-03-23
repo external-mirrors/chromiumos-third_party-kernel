@@ -11,8 +11,11 @@
 #include "sc7280-idp-ec-h1.dtsi"
 
 / {
-	model = "Qualcomm Technologies, Inc. sc7280 CRD platform";
-	compatible = "qcom,sc7280-crd", "google,hoglin", "qcom,sc7280";
+	model = "Qualcomm Technologies, Inc. sc7280 CRD platform (rev3 - 4)";
+	compatible = "qcom,sc7280-crd",
+		     "google,hoglin-rev3", "google,hoglin-rev4",
+		     "google,piglin-rev3", "google,piglin-rev4",
+		     "qcom,sc7280";
 
 	aliases {
 		serial0 = &uart5;
@@ -20,6 +23,18 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
+	};
+};
+
+&apps_rsc {
+	pmg1110-regulators {
+		compatible = "qcom,pmg1110-rpmh-regulators";
+		qcom,pmic-id = "k";
+
+		vreg_s1k_1p0: smps1 {
+			regulator-min-microvolt = <1010000>;
+			regulator-max-microvolt = <1170000>;
+		};
 	};
 };
 
