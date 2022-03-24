@@ -20,6 +20,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
 #include <linux/pkeys.h>
+#include <linux/random.h>
 #include <linux/mm_inline.h>
 
 #include <asm/elf.h>
@@ -1924,6 +1925,7 @@ enum reclaim_type {
 };
 
 struct walk_data {
+	unsigned long nr_to_try;
 	enum reclaim_type type;
 };
 
@@ -2049,6 +2051,8 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
 			goto huge_unlock;
 
+		if (!data->nr_to_try)
+			goto huge_unlock;
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
@@ -2066,6 +2070,15 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		if (isolate_lru_page(page))
 			goto huge_unlock;
 
+		/*
+		 * Reclaim the whole huge page even if it would make us go
+		 * over our limit. The alternative would be to split the
+		 * huge page, but if we try to do that pmd_trans_unstable()
+		 * below would fail, and we wouldn't progress.
+		 */
+		data->nr_to_try -= min_t(unsigned long, data->nr_to_try,
+		    thp_nr_pages(page));
+
 		/* Clear all the references to make sure it gets reclaimed */
 		pmdp_test_and_clear_young(vma, addr, pmd);
 		ClearPageReferenced(page);
@@ -2081,6 +2094,8 @@ regular_page:
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
+		if (!data->nr_to_try)
+			break;
 		ptent = *pte;
 		if (!pte_present(ptent))
 			continue;
@@ -2125,6 +2140,7 @@ regular_page:
 			continue;
 
 		isolated++;
+		data->nr_to_try--;
 		list_add(&page->lru, &page_list);
 		/* Clear all the references to make sure it gets reclaimed */
 		ptep_test_and_clear_young(vma, addr, pte);
@@ -2247,7 +2263,8 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	char buffer[PROC_NUMBUF];
 	struct mm_struct *mm;
 	enum reclaim_type type;
-	char *type_buf;
+	unsigned long num;
+	char *tok, *type_buf;
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
@@ -2257,18 +2274,23 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 		return -EFAULT;
 
 	type_buf = strstrip(buffer);
-	if (!strcmp(type_buf, "file"))
+	tok = strsep(&type_buf, " ");
+	if (!strcmp(tok, "file"))
 		type = RECLAIM_FILE;
-	else if (!strcmp(type_buf, "anon"))
+	else if (!strcmp(tok, "anon"))
 		type = RECLAIM_ANON;
 #ifdef CONFIG_SHMEM
-	else if (!strcmp(type_buf, "shmem"))
+	else if (!strcmp(tok, "shmem"))
 		type = RECLAIM_SHMEM;
 #endif
-	else if (!strcmp(type_buf, "all"))
+	else if (!strcmp(tok, "all"))
 		type = RECLAIM_ALL;
 	else
 		return -EINVAL;
+
+	tok = strsep(&type_buf, " ");
+	if (!tok || kstrtol(tok, 10, &num) < 0)
+		num = ULONG_MAX;
 
 	task = get_proc_task(file->f_path.dentry->d_inode);
 	if (!task)
