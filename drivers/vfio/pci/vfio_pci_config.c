@@ -25,6 +25,7 @@
 #include <linux/uaccess.h>
 #include <linux/vfio.h>
 #include <linux/slab.h>
+#include <linux/manatee.h>
 
 #include "vfio_pci_private.h"
 
@@ -730,13 +731,21 @@ static int __init init_pci_cap_pm_perm(struct perm_bits *perm)
 	if (alloc_perm_bits(perm, pci_cap_length[PCI_CAP_ID_PM]))
 		return -ENOMEM;
 
-	perm->writefn = vfio_pm_config_write;
-
 	/*
 	 * We always virtualize the next field so we can remove
 	 * capabilities from the chain if we want to.
 	 */
 	p_setb(perm, PCI_CAP_LIST_NEXT, (u8)ALL_VIRT, NO_WRITE);
+
+	if (manatee_hyp_domain()) {
+		/* Completely virtualize PM capability */
+		p_setd(perm, PCI_PM_CTRL, ALL_VIRT,
+		       PCI_PM_CTRL_DATA_SEL_MASK |
+		       PCI_PM_CTRL_PME_ENABLE | PCI_PM_CTRL_STATE_MASK);
+		return 0;
+	}
+
+	perm->writefn = vfio_pm_config_write;
 
 	/*
 	 * Power management is defined *per function*, so we can let
