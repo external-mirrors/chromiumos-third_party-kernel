@@ -654,10 +654,31 @@ static bool pci_has_legacy_pm_support(struct pci_dev *pci_dev)
 
 /* New power management framework */
 
-static int pci_pm_prepare(struct device *dev)
+static bool skip_pci_pm(struct pci_dev *pdev)
+{
+	/* XXX this is just a placeholder */
+	return false;
+}
+
+#define PM_OP_CALL_PREPARE		0
+#define PM_OP_CALL_SUSPEND		1
+#define PM_OP_CALL_SUSPEND_LATE		2
+#define PM_OP_CALL_SUSPEND_NOIRQ	3
+#define PM_OP_CALL_RESUME		4
+#define PM_OP_CALL_RESUME_EARLY		5
+#define PM_OP_CALL_RESUME_NOIRQ		6
+#define PM_OP_CALL_COMPLETE		7
+#define PM_OP_CALL_RPM_SUSPEND		8
+#define PM_OP_CALL_RPM_RESUME		9
+#define PM_OP_CALL_RPM_IDLE		10
+
+static int __pci_pm_prepare(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		return 0;
 
 	if (pm && pm->prepare) {
 		int error = pm->prepare(dev);
@@ -678,9 +699,22 @@ static int pci_pm_prepare(struct device *dev)
 	return 1;
 }
 
-static void pci_pm_complete(struct device *dev)
+static int pci_pm_prepare(struct device *dev)
+{
+	return __pci_pm_prepare(dev, true);
+}
+
+static int pci_pm_prepare_noskip(struct device *dev)
+{
+	return __pci_pm_prepare(dev, false);
+}
+
+static void __pci_pm_complete(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		return;
 
 	pci_dev_complete_resume(pci_dev);
 	pm_generic_complete(dev);
@@ -702,6 +736,15 @@ static void pci_pm_complete(struct device *dev)
 	}
 }
 
+static void pci_pm_complete(struct device *dev)
+{
+	__pci_pm_complete(dev, true);
+}
+
+static void pci_pm_complete_noskip(struct device *dev)
+{
+	__pci_pm_complete(dev, false);
+}
 #else /* !CONFIG_PM_SLEEP */
 
 #define pci_pm_prepare	NULL
@@ -723,10 +766,13 @@ static void pcie_pme_root_status_cleanup(struct pci_dev *pci_dev)
 		pcie_clear_root_pme_status(pci_dev);
 }
 
-static int pci_pm_suspend(struct device *dev)
+static int __pci_pm_suspend(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		return 0;
 
 	pci_dev->skip_bus_pm = false;
 
@@ -779,9 +825,24 @@ static int pci_pm_suspend(struct device *dev)
 	return 0;
 }
 
-static int pci_pm_suspend_late(struct device *dev)
+static int pci_pm_suspend(struct device *dev)
 {
+	return __pci_pm_suspend(dev, true);
+}
+
+static int pci_pm_suspend_noskip(struct device *dev)
+{
+	return __pci_pm_suspend(dev, false);
+}
+
+static int __pci_pm_suspend_late(struct device *dev, bool may_skip)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+
 	if (dev_pm_skip_suspend(dev))
+		return 0;
+
+	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
 	pci_fixup_device(pci_fixup_suspend, to_pci_dev(dev));
@@ -789,12 +850,25 @@ static int pci_pm_suspend_late(struct device *dev)
 	return pm_generic_suspend_late(dev);
 }
 
-static int pci_pm_suspend_noirq(struct device *dev)
+static int pci_pm_suspend_late(struct device *dev)
+{
+	return __pci_pm_suspend_late(dev, true);
+}
+
+static int pci_pm_suspend_late_noskip(struct device *dev)
+{
+	return __pci_pm_suspend_late(dev, false);
+}
+
+static int __pci_pm_suspend_noirq(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 
 	if (dev_pm_skip_suspend(dev))
+		return 0;
+
+	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
 	if (pci_has_legacy_pm_support(pci_dev))
@@ -889,7 +963,17 @@ Fixup:
 	return 0;
 }
 
-static int pci_pm_resume_noirq(struct device *dev)
+static int pci_pm_suspend_noirq(struct device *dev)
+{
+	return __pci_pm_suspend_noirq(dev, true);
+}
+
+static int pci_pm_suspend_noirq_noskip(struct device *dev)
+{
+	return __pci_pm_suspend_noirq(dev, false);
+}
+
+static int __pci_pm_resume_noirq(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
@@ -897,6 +981,9 @@ static int pci_pm_resume_noirq(struct device *dev)
 	bool skip_bus_pm = pci_dev->skip_bus_pm;
 
 	if (dev_pm_skip_resume(dev))
+		return 0;
+
+	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
 	/*
@@ -923,18 +1010,46 @@ static int pci_pm_resume_noirq(struct device *dev)
 	return 0;
 }
 
-static int pci_pm_resume_early(struct device *dev)
+static int pci_pm_resume_noirq(struct device *dev)
 {
+	return __pci_pm_resume_noirq(dev, true);
+}
+
+static int pci_pm_resume_noirq_noskip(struct device *dev)
+{
+	return __pci_pm_resume_noirq(dev, false);
+}
+
+static int __pci_pm_resume_early(struct device *dev, bool may_skip)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+
 	if (dev_pm_skip_resume(dev))
+		return 0;
+
+	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
 	return pm_generic_resume_early(dev);
 }
 
-static int pci_pm_resume(struct device *dev)
+static int pci_pm_resume_early(struct device *dev)
+{
+	return __pci_pm_resume_early(dev, true);
+}
+
+static int pci_pm_resume_early_noskip(struct device *dev)
+{
+	return __pci_pm_resume_early(dev, false);
+}
+
+static int __pci_pm_resume(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		return 0;
 
 	/*
 	 * This is necessary for the suspend error path in which resume is
@@ -958,6 +1073,15 @@ static int pci_pm_resume(struct device *dev)
 	return 0;
 }
 
+static int pci_pm_resume(struct device *dev)
+{
+	return __pci_pm_resume(dev, true);
+}
+
+static int pci_pm_resume_noskip(struct device *dev)
+{
+	return __pci_pm_resume(dev, false);
+}
 #else /* !CONFIG_SUSPEND */
 
 #define pci_pm_suspend		NULL
@@ -1223,12 +1347,15 @@ static int pci_pm_restore(struct device *dev)
 
 #ifdef CONFIG_PM
 
-static int pci_pm_runtime_suspend(struct device *dev)
+static int __pci_pm_runtime_suspend(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 	pci_power_t prev = pci_dev->current_state;
 	int error;
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		panic("%s: skip unexpected\n", __func__);
 
 	/*
 	 * If pci_dev->driver is not set (unbound), we leave the device in D0,
@@ -1278,12 +1405,25 @@ static int pci_pm_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int pci_pm_runtime_resume(struct device *dev)
+static int pci_pm_runtime_suspend(struct device *dev)
+{
+	return __pci_pm_runtime_suspend(dev, true);
+}
+
+static int pci_pm_runtime_suspend_noskip(struct device *dev)
+{
+	return __pci_pm_runtime_suspend(dev, false);
+}
+
+static int __pci_pm_runtime_resume(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 	pci_power_t prev_state = pci_dev->current_state;
 	int error = 0;
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		panic("%s: skip unexpected\n", __func__);
 
 	/*
 	 * Restoring config space is necessary even if the device is not bound
@@ -1309,10 +1449,23 @@ static int pci_pm_runtime_resume(struct device *dev)
 	return error;
 }
 
-static int pci_pm_runtime_idle(struct device *dev)
+static int pci_pm_runtime_resume(struct device *dev)
+{
+	return __pci_pm_runtime_resume(dev, true);
+}
+
+static int pci_pm_runtime_resume_noskip(struct device *dev)
+{
+	return __pci_pm_runtime_resume(dev, false);
+}
+
+static int __pci_pm_runtime_idle(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+
+	if (may_skip && skip_pci_pm(pci_dev))
+		panic("%s: skip unexpected\n", __func__);
 
 	/*
 	 * If pci_dev->driver is not set (unbound), the device should
@@ -1328,6 +1481,16 @@ static int pci_pm_runtime_idle(struct device *dev)
 		return pm->runtime_idle(dev);
 
 	return 0;
+}
+
+static int pci_pm_runtime_idle(struct device *dev)
+{
+	return __pci_pm_runtime_idle(dev, true);
+}
+
+static int pci_pm_runtime_idle_noskip(struct device *dev)
+{
+	return __pci_pm_runtime_idle(dev, false);
 }
 
 static const struct dev_pm_ops pci_dev_pm_ops = {
@@ -1354,6 +1517,83 @@ static const struct dev_pm_ops pci_dev_pm_ops = {
 };
 
 #define PCI_PM_OPS_PTR	(&pci_dev_pm_ops)
+
+int pci_pm_op_call(struct pci_dev *pdev, u8 id)
+{
+	struct device *dev;
+	bool can_wakeup = !!(id & (1 << 7));
+	bool may_wakeup = !!(id & (1 << 6));
+	int ret = 0;
+
+	/*
+	 * op calls are only allowed for devices that are skipped
+	 * during normal PM.
+	 */
+	if (!skip_pci_pm(pdev))
+		return -EINVAL;
+
+	id &= 0x3f;
+
+	pci_dev_lock(pdev);
+	dev = &pdev->dev;
+
+	if (can_wakeup) {
+		if (!device_can_wakeup(dev))
+			device_set_wakeup_capable(dev, true);
+		if (may_wakeup && !device_may_wakeup(dev))
+			device_wakeup_enable(dev);
+		else if (!may_wakeup && device_may_wakeup(dev))
+			device_wakeup_disable(dev);
+	} else {
+		if (device_may_wakeup(dev))
+			device_wakeup_disable(dev);
+		if (device_can_wakeup(dev))
+			device_set_wakeup_capable(dev, false);
+	}
+
+	switch (id) {
+	case PM_OP_CALL_PREPARE:
+		ret = pci_pm_prepare_noskip(dev);
+		break;
+	case PM_OP_CALL_SUSPEND:
+		ret = pci_pm_suspend_noskip(dev);
+		break;
+	case PM_OP_CALL_SUSPEND_LATE:
+		ret = pci_pm_suspend_late_noskip(dev);
+		break;
+	case PM_OP_CALL_SUSPEND_NOIRQ:
+		ret = pci_pm_suspend_noirq_noskip(dev);
+		break;
+	case PM_OP_CALL_RESUME:
+		ret = pci_pm_resume_noskip(dev);
+		break;
+	case PM_OP_CALL_RESUME_EARLY:
+		ret = pci_pm_resume_early_noskip(dev);
+		break;
+	case PM_OP_CALL_RESUME_NOIRQ:
+		ret = pci_pm_resume_noirq_noskip(dev);
+		break;
+	case PM_OP_CALL_COMPLETE:
+		pci_pm_complete_noskip(dev);
+		break;
+	case PM_OP_CALL_RPM_SUSPEND:
+		ret = pci_pm_runtime_suspend_noskip(dev);
+		break;
+	case PM_OP_CALL_RPM_RESUME:
+		ret = pci_pm_runtime_resume_noskip(dev);
+		break;
+	case PM_OP_CALL_RPM_IDLE:
+		ret = pci_pm_runtime_idle_noskip(dev);
+		break;
+	default:
+		ret = -EINVAL;
+		pci_err(pdev, "%s: unknown id %u\n", __func__, id);
+	}
+
+	pci_dev_unlock(pdev);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pci_pm_op_call);
 
 #else /* !CONFIG_PM */
 

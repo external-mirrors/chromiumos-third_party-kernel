@@ -711,4 +711,6 @@ bool pci_allowed_to_attach(struct pci_driver *drv, struct pci_dev *dev);
 void pci_dev_restore(struct pci_dev *dev);
 void pci_dev_save_and_disable(struct pci_dev *dev);
 
+void pci_dev_lock(struct pci_dev *dev);
+void pci_dev_unlock(struct pci_dev *dev);
 #endif /* DRIVERS_PCI_H */
