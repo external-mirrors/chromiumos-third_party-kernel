@@ -27,6 +27,7 @@
 #include <linux/vgaarb.h>
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
+#include <linux/manatee.h>
 
 #include "vfio_pci_private.h"
 
@@ -497,6 +498,7 @@ out:
 }
 
 static struct pci_driver vfio_pci_driver;
+static struct pci_driver vfio_pci_driver_pm;
 
 static struct vfio_pci_device *get_pf_vdev(struct vfio_pci_device *vdev)
 {
@@ -510,7 +512,8 @@ static struct vfio_pci_device *get_pf_vdev(struct vfio_pci_device *vdev)
 	if (!pf_dev)
 		return NULL;
 
-	if (pci_dev_driver(physfn) != &vfio_pci_driver) {
+	if (pci_dev_driver(physfn) != &vfio_pci_driver &&
+	    pci_dev_driver(physfn) != &vfio_pci_driver_pm) {
 		vfio_device_put(pf_dev);
 		return NULL;
 	}
@@ -1912,7 +1915,7 @@ static int vfio_pci_bus_notifier(struct notifier_block *nb,
 		   pdev->is_virtfn && physfn == vdev->pdev) {
 		struct pci_driver *drv = pci_dev_driver(pdev);
 
-		if (drv && drv != &vfio_pci_driver)
+		if (drv && drv != &vfio_pci_driver && drv != &vfio_pci_driver_pm)
 			pci_warn(vdev->pdev,
 				 "VF %s bound to driver %s while PF bound to vfio-pci\n",
 				 pci_name(pdev), drv->name);
@@ -2077,6 +2080,14 @@ out_group_put:
 	return ret;
 }
 
+static int vfio_pci_probe_pm(struct pci_dev *pdev, const struct pci_device_id *id)
+{
+	if (!pdev->pm_cap)
+		return -EINVAL;
+
+	return vfio_pci_probe(pdev, id);
+}
+
 static void vfio_pci_remove(struct pci_dev *pdev)
 {
 	struct vfio_pci_device *vdev = dev_get_drvdata(&pdev->dev);
@@ -2161,6 +2172,19 @@ static struct pci_driver vfio_pci_driver = {
 	.err_handler		= &vfio_err_handlers,
 };
 
+static const struct dev_pm_ops vfio_pci_pm_ops = {};
+
+/* struct members mostly copied from vfio_pci_driver */
+static struct pci_driver vfio_pci_driver_pm = {
+	.name			= "vfio-pci-pm",
+	.id_table		= NULL, /* only dynamic ids */
+	.probe			= vfio_pci_probe_pm,
+	.remove			= vfio_pci_remove,
+	.sriov_configure	= vfio_pci_sriov_configure,
+	.err_handler		= &vfio_err_handlers,
+	.driver.pm		= &vfio_pci_pm_ops,
+};
+
 static DEFINE_MUTEX(reflck_lock);
 
 static struct vfio_pci_reflck *vfio_pci_reflck_alloc(void)
@@ -2192,7 +2216,8 @@ static int vfio_pci_reflck_find(struct pci_dev *pdev, void *data)
 	if (!device)
 		return 0;
 
-	if (pci_dev_driver(pdev) != &vfio_pci_driver) {
+	if (pci_dev_driver(pdev) != &vfio_pci_driver &&
+	    pci_dev_driver(pdev) != &vfio_pci_driver_pm) {
 		vfio_device_put(device);
 		return 0;
 	}
@@ -2254,7 +2279,8 @@ static int vfio_pci_get_unused_devs(struct pci_dev *pdev, void *data)
 	if (!device)
 		return -EINVAL;
 
-	if (pci_dev_driver(pdev) != &vfio_pci_driver) {
+	if (pci_dev_driver(pdev) != &vfio_pci_driver &&
+	    pci_dev_driver(pdev) != &vfio_pci_driver_pm) {
 		vfio_device_put(device);
 		return -EBUSY;
 	}
@@ -2284,7 +2310,8 @@ static int vfio_pci_try_zap_and_vma_lock_cb(struct pci_dev *pdev, void *data)
 	if (!device)
 		return -EINVAL;
 
-	if (pci_dev_driver(pdev) != &vfio_pci_driver) {
+	if (pci_dev_driver(pdev) != &vfio_pci_driver &&
+	    pci_dev_driver(pdev) != &vfio_pci_driver_pm) {
 		vfio_device_put(device);
 		return -EBUSY;
 	}
@@ -2382,6 +2409,8 @@ put_devs:
 static void __exit vfio_pci_cleanup(void)
 {
 	pci_unregister_driver(&vfio_pci_driver);
+	if (manatee_hyp_domain())
+		pci_unregister_driver(&vfio_pci_driver_pm);
 	vfio_pci_uninit_perm_bits();
 }
 
@@ -2423,6 +2452,20 @@ static void __init vfio_pci_fill_ids(void)
 			pr_info("add [%04x:%04x[%04x:%04x]] class %#08x/%08x\n",
 				vendor, device, subvendor, subdevice,
 				class, class_mask);
+
+		if (!manatee_hyp_domain())
+			continue;
+
+		rc = pci_add_dynid(&vfio_pci_driver_pm, vendor, device,
+				   subvendor, subdevice, class, class_mask, 0);
+		if (rc)
+			pr_warn("failed to add dynamic id [%04x:%04x[%04x:%04x]] class %#08x/%08x (%d)\n",
+				vendor, device, subvendor, subdevice,
+				class, class_mask, rc);
+		else
+			pr_info("add [%04x:%04x[%04x:%04x]] class %#08x/%08x\n",
+				vendor, device, subvendor, subdevice,
+				class, class_mask);
 	}
 }
 
@@ -2440,12 +2483,21 @@ static int __init vfio_pci_init(void)
 	if (ret)
 		goto out_driver;
 
+	if (manatee_hyp_domain()) {
+		ret = pci_register_driver(&vfio_pci_driver_pm);
+		if (ret)
+			goto out_driver_pm;
+	}
+
 	vfio_pci_fill_ids();
 
 	if (disable_denylist)
 		pr_warn("device denylist disabled.\n");
 
 	return 0;
+
+out_driver_pm:
+	pci_unregister_driver(&vfio_pci_driver);
 
 out_driver:
 	vfio_pci_uninit_perm_bits();
