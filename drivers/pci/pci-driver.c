@@ -21,6 +21,7 @@
 #include <linux/acpi.h>
 #include <linux/dma-map-ops.h>
 #include <linux/coiommu.h>
+#include <linux/manatee.h>
 #include "pci.h"
 #include "pcie/portdrv.h"
 
@@ -691,6 +692,18 @@ static bool skip_pci_pm(struct pci_dev *pdev)
 #define PM_OP_CALL_RPM_RESUME		9
 #define PM_OP_CALL_RPM_IDLE		10
 
+/*
+ * Bit 0 - 5 are reserved for PM op call ID
+ * Bit 6 is reserved for device_may_wakeup
+ * Bit 7 is reserved for device_can_wakeup
+ */
+static void pci_pm_op_hyp_call(struct pci_dev *pci_dev, u8 id)
+{
+	id |= device_can_wakeup(&pci_dev->dev) << 7;
+	id |= device_may_wakeup(&pci_dev->dev) << 6;
+	pci_write_config_byte(pci_dev, PCI_REVISION_ID, id);
+}
+
 static int __pci_pm_prepare(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
@@ -704,17 +717,26 @@ static int __pci_pm_prepare(struct device *dev, bool may_skip)
 		if (error < 0)
 			return error;
 
-		if (!error && dev_pm_test_driver_flags(dev, DPM_FLAG_SMART_PREPARE))
+		if (!error && dev_pm_test_driver_flags(dev, DPM_FLAG_SMART_PREPARE)) {
+			if (manatee_chromeos_domain())
+				pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_PREPARE);
 			return 0;
+		}
 	}
-	if (pci_dev_need_resume(pci_dev))
+	if (pci_dev_need_resume(pci_dev)) {
+		if (manatee_chromeos_domain())
+			pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_PREPARE);
 		return 0;
+	}
 
 	/*
 	 * The PME setting needs to be adjusted here in case the direct-complete
 	 * optimization is used with respect to this device.
 	 */
 	pci_dev_adjust_pme(pci_dev);
+
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_PREPARE);
 	return 1;
 }
 
@@ -734,6 +756,9 @@ static void __pci_pm_complete(struct device *dev, bool may_skip)
 
 	if (may_skip && skip_pci_pm(pci_dev))
 		return;
+
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_COMPLETE);
 
 	pci_dev_complete_resume(pci_dev);
 	pm_generic_complete(dev);
@@ -789,17 +814,24 @@ static int __pci_pm_suspend(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+	int ret;
 
 	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
 	pci_dev->skip_bus_pm = false;
 
-	if (pci_has_legacy_pm_support(pci_dev))
-		return pci_legacy_suspend(dev, PMSG_SUSPEND);
+	if (pci_has_legacy_pm_support(pci_dev)) {
+		ret = pci_legacy_suspend(dev, PMSG_SUSPEND);
+		if (!ret && manatee_chromeos_domain())
+			pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_SUSPEND);
+		return ret;
+	}
 
 	if (!pm) {
 		pci_pm_default_suspend(pci_dev);
+		if (manatee_chromeos_domain())
+			pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_SUSPEND);
 		return 0;
 	}
 
@@ -841,6 +873,8 @@ static int __pci_pm_suspend(struct device *dev, bool may_skip)
 		}
 	}
 
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_SUSPEND);
 	return 0;
 }
 
@@ -857,6 +891,7 @@ static int pci_pm_suspend_noskip(struct device *dev)
 static int __pci_pm_suspend_late(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int ret;
 
 	if (dev_pm_skip_suspend(dev))
 		return 0;
@@ -866,7 +901,11 @@ static int __pci_pm_suspend_late(struct device *dev, bool may_skip)
 
 	pci_fixup_device(pci_fixup_suspend, to_pci_dev(dev));
 
-	return pm_generic_suspend_late(dev);
+	ret = pm_generic_suspend_late(dev);
+
+	if (!ret && manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_SUSPEND_LATE);
+	return ret;
 }
 
 static int pci_pm_suspend_late(struct device *dev)
@@ -883,6 +922,7 @@ static int __pci_pm_suspend_noirq(struct device *dev, bool may_skip)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+	int ret;
 
 	if (dev_pm_skip_suspend(dev))
 		return 0;
@@ -890,8 +930,12 @@ static int __pci_pm_suspend_noirq(struct device *dev, bool may_skip)
 	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
-	if (pci_has_legacy_pm_support(pci_dev))
-		return pci_legacy_suspend_late(dev, PMSG_SUSPEND);
+	if (pci_has_legacy_pm_support(pci_dev)) {
+		ret = pci_legacy_suspend_late(dev, PMSG_SUSPEND);
+		if (!ret && manatee_chromeos_domain())
+			pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_SUSPEND_NOIRQ);
+		return ret;
+	}
 
 	if (!pm) {
 		pci_save_state(pci_dev);
@@ -979,6 +1023,8 @@ Fixup:
 	if (device_can_wakeup(dev) && !device_may_wakeup(dev))
 		dev->power.may_skip_resume = false;
 
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_SUSPEND_NOIRQ);
 	return 0;
 }
 
@@ -1004,6 +1050,9 @@ static int __pci_pm_resume_noirq(struct device *dev, bool may_skip)
 
 	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
+
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RESUME_NOIRQ);
 
 	/*
 	 * In the suspend-to-idle case, devices left in D0 during suspend will
@@ -1049,6 +1098,8 @@ static int __pci_pm_resume_early(struct device *dev, bool may_skip)
 	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
 
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RESUME_EARLY);
 	return pm_generic_resume_early(dev);
 }
 
@@ -1069,6 +1120,9 @@ static int __pci_pm_resume(struct device *dev, bool may_skip)
 
 	if (may_skip && skip_pci_pm(pci_dev))
 		return 0;
+
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RESUME);
 
 	/*
 	 * This is necessary for the suspend error path in which resume is
@@ -1383,6 +1437,8 @@ static int __pci_pm_runtime_suspend(struct device *dev, bool may_skip)
 	 */
 	if (!pci_dev->driver) {
 		pci_save_state(pci_dev);
+		if (manatee_chromeos_domain())
+			pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RPM_SUSPEND);
 		return 0;
 	}
 
@@ -1413,6 +1469,8 @@ static int __pci_pm_runtime_suspend(struct device *dev, bool may_skip)
 		pci_WARN_ONCE(pci_dev, pci_dev->current_state != prev,
 			      "PCI PM: State of device not saved by %pS\n",
 			      pm->runtime_suspend);
+		if (manatee_chromeos_domain())
+			pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RPM_SUSPEND);
 		return 0;
 	}
 
@@ -1421,6 +1479,8 @@ static int __pci_pm_runtime_suspend(struct device *dev, bool may_skip)
 		pci_finish_runtime_suspend(pci_dev);
 	}
 
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RPM_SUSPEND);
 	return 0;
 }
 
@@ -1443,6 +1503,9 @@ static int __pci_pm_runtime_resume(struct device *dev, bool may_skip)
 
 	if (may_skip && skip_pci_pm(pci_dev))
 		panic("%s: skip unexpected\n", __func__);
+
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RPM_RESUME);
 
 	/*
 	 * Restoring config space is necessary even if the device is not bound
@@ -1498,6 +1561,9 @@ static int __pci_pm_runtime_idle(struct device *dev, bool may_skip)
 
 	if (pm->runtime_idle)
 		return pm->runtime_idle(dev);
+
+	if (manatee_chromeos_domain())
+		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RPM_IDLE);
 
 	return 0;
 }
