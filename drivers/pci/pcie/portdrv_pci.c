@@ -15,6 +15,7 @@
 #include <linux/init.h>
 #include <linux/aer.h>
 #include <linux/dmi.h>
+#include <linux/manatee.h>
 
 #include "../pci.h"
 #include "portdrv.h"
@@ -123,7 +124,7 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 	dev_pm_set_driver_flags(&dev->dev, DPM_FLAG_NO_DIRECT_COMPLETE |
 					   DPM_FLAG_SMART_SUSPEND);
 
-	if (pci_bridge_d3_possible(dev)) {
+	if (pci_bridge_d3_possible(dev) && !manatee_hyp_domain()) {
 		/*
 		 * Keep the port resumed 100ms to make sure things like
 		 * config space accesses from userspace (lspci) will not
