@@ -713,4 +713,5 @@ void pci_dev_save_and_disable(struct pci_dev *dev);
 
 void pci_dev_lock(struct pci_dev *dev);
 void pci_dev_unlock(struct pci_dev *dev);
+pci_power_t pci_pm_hyp_current_state(struct pci_dev *pci_dev);
 #endif /* DRIVERS_PCI_H */

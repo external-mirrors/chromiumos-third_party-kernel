@@ -497,7 +497,9 @@ static void pci_device_shutdown(struct device *dev)
 	 * If it is not a kexec reboot, firmware will hit the PCI
 	 * devices with big hammer and stop their DMA any way.
 	 */
-	if (kexec_in_progress && (pci_dev->current_state <= PCI_D3hot))
+	if (kexec_in_progress && (pci_dev->current_state <= PCI_D3hot)
+	    && (!manatee_chromeos_domain() ||
+		pci_pm_hyp_current_state(pci_dev) <= PCI_D3hot))
 		pci_clear_master(pci_dev);
 }
 
@@ -678,6 +680,20 @@ EXPORT_SYMBOL_GPL(pci_exit_coordinated_pm);
 static bool skip_pci_pm(struct pci_dev *pdev)
 {
 	return pdev->coordinated_pm;
+}
+
+pci_power_t pci_pm_hyp_current_state(struct pci_dev *pci_dev)
+{
+	int err;
+	u8 state;
+
+	err = pci_read_config_byte(pci_dev, PCI_BIST, &state);
+	if (err) {
+		pci_emerg(pci_dev, "%s failed: %d\n", __func__, err);
+		state = 0;
+	}
+
+	return (pci_power_t)state;
 }
 
 #define PM_OP_CALL_PREPARE		0
@@ -1479,8 +1495,12 @@ static int __pci_pm_runtime_suspend(struct device *dev, bool may_skip)
 		pci_finish_runtime_suspend(pci_dev);
 	}
 
-	if (manatee_chromeos_domain())
+	if (manatee_chromeos_domain()) {
 		pci_pm_op_hyp_call(pci_dev, PM_OP_CALL_RPM_SUSPEND);
+		pci_dev->runtime_d3cold =
+			pci_pm_hyp_current_state(pci_dev) == PCI_D3cold;
+	}
+
 	return 0;
 }
 

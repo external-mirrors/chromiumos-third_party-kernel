@@ -17,6 +17,7 @@
 #include <linux/pci-acpi.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_qos.h>
+#include <linux/manatee.h>
 #include "pci.h"
 
 /*
@@ -846,7 +847,9 @@ static void pci_acpi_wake_dev(struct acpi_device_wakeup_context *context)
 	if (pci_dev->pme_poll)
 		pci_dev->pme_poll = false;
 
-	if (pci_dev->current_state == PCI_D3cold) {
+	if (pci_dev->current_state == PCI_D3cold ||
+	    (manatee_chromeos_domain() &&
+	     pci_pm_hyp_current_state(pci_dev) == PCI_D3cold)) {
 		pci_wakeup_event(pci_dev);
 		pm_request_resume(&pci_dev->dev);
 		return;

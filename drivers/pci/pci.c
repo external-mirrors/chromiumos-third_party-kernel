@@ -31,6 +31,7 @@
 #include <linux/vmalloc.h>
 #include <asm/dma.h>
 #include <linux/aer.h>
+#include <linux/manatee.h>
 #include "pci.h"
 
 DEFINE_MUTEX(pci_slot_mutex);
@@ -2332,7 +2333,9 @@ static void pci_pme_list_scan(struct work_struct *work)
 			 * If the device is in D3cold it should not be
 			 * polled either.
 			 */
-			if (pme_dev->dev->current_state == PCI_D3cold)
+			if (pme_dev->dev->current_state == PCI_D3cold ||
+			    (manatee_chromeos_domain() &&
+			     pci_pm_hyp_current_state(pme_dev->dev) == PCI_D3cold))
 				continue;
 
 			pci_pme_wakeup(pme_dev->dev, NULL);
@@ -2786,7 +2789,9 @@ void pci_dev_adjust_pme(struct pci_dev *pci_dev)
 	spin_lock_irq(&dev->power.lock);
 
 	if (pm_runtime_suspended(dev) && !device_may_wakeup(dev) &&
-	    pci_dev->current_state < PCI_D3cold)
+	    pci_dev->current_state < PCI_D3cold &&
+	    (!manatee_chromeos_domain() ||
+	     pci_pm_hyp_current_state(pci_dev) < PCI_D3cold))
 		__pci_pme_active(pci_dev, false);
 
 	spin_unlock_irq(&dev->power.lock);
@@ -2809,7 +2814,9 @@ void pci_dev_complete_resume(struct pci_dev *pci_dev)
 
 	spin_lock_irq(&dev->power.lock);
 
-	if (pm_runtime_suspended(dev) && pci_dev->current_state < PCI_D3cold)
+	if (pm_runtime_suspended(dev) && pci_dev->current_state < PCI_D3cold &&
+	    (!manatee_chromeos_domain() ||
+	     pci_pm_hyp_current_state(pci_dev) < PCI_D3cold))
 		__pci_pme_active(pci_dev, true);
 
 	spin_unlock_irq(&dev->power.lock);
@@ -2833,7 +2840,9 @@ void pci_config_pm_runtime_get(struct pci_dev *pdev)
 	 * registers are still accessible for devices suspended but
 	 * not in D3cold.
 	 */
-	if (pdev->current_state == PCI_D3cold)
+	if (pdev->current_state == PCI_D3cold ||
+	    (manatee_chromeos_domain() &&
+	     pci_pm_hyp_current_state(pdev) == PCI_D3cold))
 		pm_runtime_resume(dev);
 }
 
