@@ -17,8 +17,6 @@
 #include "acp-dsp-offset.h"
 #include "../sof-audio.h"
 
-#define CONT_UPDATE_POSN 1
-
 int acp_pcm_hw_params(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
 		      struct snd_pcm_hw_params *params, struct sof_ipc_stream_params *ipc_params)
 {
@@ -39,7 +37,7 @@ int acp_pcm_hw_params(struct snd_sof_dev *sdev, struct snd_pcm_substream *substr
 
 	ipc_params->buffer.phy_addr = stream->reg_offset;
 	ipc_params->stream_tag = stream->stream_tag;
-	ipc_params->cont_update_posn = CONT_UPDATE_POSN;
+
 	/* write buffer size of stream in scratch memory */
 
 	buf_offset = offsetof(struct scratch_reg_conf, buf_size);
@@ -84,34 +82,87 @@ int acp_pcm_close(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream)
 }
 EXPORT_SYMBOL_NS(acp_pcm_close, SND_SOC_SOF_AMD_COMMON);
 
-snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev,
-                                       struct snd_pcm_substream *substream)
+static const struct acp_pcm_table pcm_dev[] = {
+	{I2S_BT, "I2SBT"},
+	{I2S_SP, "I2SSP"},
+	{PDM_DMIC, "DMIC"},
+};
+
+static enum acp_pcm_types get_id_from_list(const char *name)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(pcm_dev); i++) {
+		if (!strcmp(name, pcm_dev[i].pcm_name))
+			return pcm_dev[i].pcm_index;
+	}
+
+	return PCM_NONE;
+}
+
+static u64 acp_get_byte_count(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+				enum acp_pcm_types pcm_id)
+{
+	u64 bytescount, low = 0, high = 0;
+	u32 reg1 = 0, reg2 = 0;
+
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
+		switch (pcm_id) {
+		case I2S_BT:
+			reg1 = ACP_BT_TX_LINEARPOSITIONCNTR_HIGH;
+			reg2 = ACP_BT_TX_LINEARPOSITIONCNTR_LOW;
+			break;
+		case I2S_SP:
+			reg1 = ACP_I2S_TX_LINEARPOSITIONCNTR_HIGH;
+			reg2 = ACP_I2S_TX_LINEARPOSITIONCNTR_LOW;
+			break;
+		default:
+			return -EINVAL;
+		}
+	} else {
+		switch (pcm_id) {
+		case I2S_BT:
+			reg1 = ACP_BT_RX_LINEARPOSITIONCNTR_HIGH;
+			reg2 = ACP_BT_RX_LINEARPOSITIONCNTR_LOW;
+			break;
+		case I2S_SP:
+			reg1 = ACP_I2S_RX_LINEARPOSITIONCNTR_HIGH;
+			reg2 = ACP_I2S_RX_LINEARPOSITIONCNTR_LOW;
+			break;
+		case PDM_DMIC:
+			reg1 = ACP_WOV_RX_LINEARPOSITIONCNTR_HIGH;
+			reg2 = ACP_WOV_RX_LINEARPOSITIONCNTR_LOW;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	high = snd_sof_dsp_read(sdev, ACP_DSP_BAR, reg1);
+	low = snd_sof_dsp_read(sdev, ACP_DSP_BAR, reg2);
+
+	bytescount = (high << 32) | low;
+	return bytescount;
+}
+
+snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
 	struct snd_soc_component *scomp = sdev->component;
+	enum acp_pcm_types pcm_id = PCM_NONE;
 	struct snd_sof_pcm *spcm;
-	struct sof_ipc_stream_posn posn;
-	struct snd_sof_pcm_stream *stream;
-	snd_pcm_uframes_t pos;
-	int ret;
+	u32 pos, buffersize;
+	u64 bytescount;
 
 	spcm = snd_sof_find_spcm_dai(scomp, rtd);
-        if (!spcm) {
-                dev_warn_ratelimited(sdev->dev, "warn: can't find PCM with DAI ID %d\n",
-                                     rtd->dai_link->id);
-                return 0;
-        }
+	pcm_id = get_id_from_list(spcm->pcm.pcm_name);
 
-	stream = &spcm->stream[substream->stream];
-	ret = snd_sof_ipc_msg_data(sdev, substream, &posn, sizeof(posn));
-        if (ret < 0) {
-                dev_warn(sdev->dev, "failed to read stream position: %d\n", ret);
-                return 0;
-        }
-	memcpy(&stream->posn, &posn, sizeof(posn));
-	pos = spcm->stream[substream->stream].posn.host_posn;
-	pos = bytes_to_frames(substream->runtime, pos);
+	bytescount = acp_get_byte_count(sdev, substream, pcm_id);
+	if (bytescount < 0)
+		return -EINVAL;
+	buffersize = frames_to_bytes(substream->runtime, substream->runtime->buffer_size);
+	pos = do_div(bytescount, buffersize);
 
-	return pos;
+	return bytes_to_frames(substream->runtime, pos);
 }
 EXPORT_SYMBOL_NS(acp_pcm_pointer, SND_SOC_SOF_AMD_COMMON);

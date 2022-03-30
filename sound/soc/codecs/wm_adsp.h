@@ -10,128 +10,37 @@
 #ifndef __WM_ADSP_H
 #define __WM_ADSP_H
 
+#include <linux/firmware/cirrus/cs_dsp.h>
+#include <linux/firmware/cirrus/wmfw.h>
+
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/compress_driver.h>
-
-#include "wmfw.h"
 
 /* Return values for wm_adsp_compr_handle_irq */
 #define WM_ADSP_COMPR_OK                 0
 #define WM_ADSP_COMPR_VOICE_TRIGGER      1
 
-#define CS_ADSP2_REGION_0 BIT(0)
-#define CS_ADSP2_REGION_1 BIT(1)
-#define CS_ADSP2_REGION_2 BIT(2)
-#define CS_ADSP2_REGION_3 BIT(3)
-#define CS_ADSP2_REGION_4 BIT(4)
-#define CS_ADSP2_REGION_5 BIT(5)
-#define CS_ADSP2_REGION_6 BIT(6)
-#define CS_ADSP2_REGION_7 BIT(7)
-#define CS_ADSP2_REGION_8 BIT(8)
-#define CS_ADSP2_REGION_9 BIT(9)
-#define CS_ADSP2_REGION_1_9 (CS_ADSP2_REGION_1 | \
-		CS_ADSP2_REGION_2 | CS_ADSP2_REGION_3 | \
-		CS_ADSP2_REGION_4 | CS_ADSP2_REGION_5 | \
-		CS_ADSP2_REGION_6 | CS_ADSP2_REGION_7 | \
-		CS_ADSP2_REGION_8 | CS_ADSP2_REGION_9)
-#define CS_ADSP2_REGION_ALL (CS_ADSP2_REGION_0 | CS_ADSP2_REGION_1_9)
-
-struct cs_dsp_region {
-	int type;
-	unsigned int base;
-};
-
-struct cs_dsp_alg_region {
-	struct list_head list;
-	unsigned int alg;
-	int type;
-	unsigned int base;
-};
-
 struct wm_adsp_compr;
 struct wm_adsp_compr_buf;
-struct cs_dsp_ops;
 
 struct wm_adsp {
+	struct cs_dsp cs_dsp;
 	const char *part;
-	const char *name;
 	const char *fwf_name;
-	int rev;
-	int num;
-	int type;
-	struct device *dev;
-	struct regmap *regmap;
 	struct snd_soc_component *component;
 
-	const struct cs_dsp_ops *ops;
-
-	unsigned int base;
-	unsigned int base_sysinfo;
-	unsigned int sysclk_reg;
-	unsigned int sysclk_mask;
-	unsigned int sysclk_shift;
-
-	struct list_head alg_regions;
-
-	unsigned int fw_id;
-	unsigned int fw_id_version;
-	unsigned int fw_vendor_id;
-
-	const struct cs_dsp_region *mem;
-	int num_mems;
+	unsigned int sys_config_size;
 
 	int fw;
-	int fw_ver;
-
-	bool preloaded;
-	bool booted;
-	bool running;
-	bool fatal_error;
-
-	struct list_head ctl_list;
 
 	struct work_struct boot_work;
 
+	bool preloaded;
+	bool fatal_error;
+
 	struct list_head compr_list;
 	struct list_head buffer_list;
-
-	struct mutex pwr_lock;
-
-	unsigned int lock_regions;
-
-#ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_root;
-	char *wmfw_file_name;
-	char *bin_file_name;
-#endif
-
-};
-
-struct cs_dsp_ops {
-	unsigned int sys_config_size;
-
-	bool (*validate_version)(struct wm_adsp *dsp, unsigned int version);
-	unsigned int (*parse_sizes)(struct wm_adsp *dsp,
-				    const char * const file,
-				    unsigned int pos,
-				    const struct firmware *firmware);
-	int (*setup_algs)(struct wm_adsp *dsp);
-	unsigned int (*region_to_reg)(struct cs_dsp_region const *mem,
-				      unsigned int offset);
-
-	void (*show_fw_status)(struct wm_adsp *dsp);
-	void (*stop_watchdog)(struct wm_adsp *dsp);
-
-	int (*enable_memory)(struct wm_adsp *dsp);
-	void (*disable_memory)(struct wm_adsp *dsp);
-	int (*lock_memory)(struct wm_adsp *dsp, unsigned int lock_regions);
-
-	int (*enable_core)(struct wm_adsp *dsp);
-	void (*disable_core)(struct wm_adsp *dsp);
-
-	int (*start_core)(struct wm_adsp *dsp);
-	void (*stop_core)(struct wm_adsp *dsp);
 };
 
 #define WM_ADSP1(wname, num) \

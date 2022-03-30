@@ -7,6 +7,7 @@
 #include <linux/debugfs.h>
 #include <linux/bitfield.h>
 #include <linux/firmware.h>
+#include <linux/vmalloc.h>
 
 #include "t7xx_hif_cldma.h"
 #include "t7xx_pci_rescan.h"
@@ -772,7 +773,6 @@ static void t7xx_devlink_region_deinit(struct t7xx_devlink *dl)
 	dl->mode = T7XX_FB_NO_MODE;
 	devlink_unregister(dl_ctx);
 	t7xx_devlink_destroy_region(dl);
-	devlink_free(dl_ctx);
 }
 
 static void t7xx_devlink_work_handler(struct work_struct *data)
@@ -847,6 +847,9 @@ static void t7xx_devlink_uninit(struct t7xx_port *port)
 		dev_kfree_skb(skb);
 
 	spin_unlock_irqrestore(&port->rx_skb_list.lock, flags);
+
+        if(dl->dl_ctx)
+                devlink_free(dl->dl_ctx);
 }
 
 static int t7xx_devlink_enable_chl(struct t7xx_port *port)
@@ -879,4 +882,3 @@ struct port_ops devlink_port_ops = {
 	.enable_chl = &t7xx_devlink_enable_chl,
 	.disable_chl = &t7xx_devlink_disable_chl,
 };
-
