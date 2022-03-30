@@ -757,7 +757,6 @@ config SCHED_OMIT_FRAME_POINTER
 
 config MANATEE
 	bool "ManaTEE support"
-	depends on KVM
 	help
 	  Say Y here to enable options for ManaTEE mode type detection.
 
