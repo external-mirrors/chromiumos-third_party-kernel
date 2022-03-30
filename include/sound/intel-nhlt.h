@@ -77,7 +77,7 @@ struct nhlt_endpoint {
 	struct nhlt_specific_cfg config;
 } __packed;
 
-struct acpi_table_nhlt {
+struct nhlt_acpi_table {
 	struct acpi_table_header header;
 	u8 endpoint_count;
 	struct nhlt_endpoint desc[];
@@ -126,45 +126,45 @@ enum {
 	NHLT_MIC_ARRAY_VENDOR_DEFINED = 0xf,
 };
 
-struct acpi_table_nhlt *intel_nhlt_init(struct device *dev);
+struct nhlt_acpi_table *intel_nhlt_init(struct device *dev);
 
-void intel_nhlt_free(struct acpi_table_nhlt *addr);
+void intel_nhlt_free(struct nhlt_acpi_table *addr);
 
-int intel_nhlt_get_dmic_geo(struct device *dev, struct acpi_table_nhlt *nhlt);
+int intel_nhlt_get_dmic_geo(struct device *dev, struct nhlt_acpi_table *nhlt);
 
-bool intel_nhlt_has_endpoint_type(struct acpi_table_nhlt *nhlt, u8 link_type);
+bool intel_nhlt_has_endpoint_type(struct nhlt_acpi_table *nhlt, u8 link_type);
 struct nhlt_specific_cfg *
-intel_nhlt_get_endpoint_blob(struct device *dev, struct acpi_table_nhlt *nhlt,
+intel_nhlt_get_endpoint_blob(struct device *dev, struct nhlt_acpi_table *nhlt,
 			     u32 bus_id, u8 link_type, u8 vbps, u8 bps,
 			     u8 num_ch, u32 rate, u8 dir, u8 dev_type);
 
 #else
 
-struct acpi_table_nhlt;
+struct nhlt_acpi_table;
 
-static inline struct acpi_table_nhlt *intel_nhlt_init(struct device *dev)
+static inline struct nhlt_acpi_table *intel_nhlt_init(struct device *dev)
 {
 	return NULL;
 }
 
-static inline void intel_nhlt_free(struct acpi_table_nhlt *addr)
+static inline void intel_nhlt_free(struct nhlt_acpi_table *addr)
 {
 }
 
 static inline int intel_nhlt_get_dmic_geo(struct device *dev,
-					  struct acpi_table_nhlt *nhlt)
+					  struct nhlt_acpi_table *nhlt)
 {
 	return 0;
 }
 
-static inline bool intel_nhlt_has_endpoint_type(struct acpi_table_nhlt *nhlt,
+static inline bool intel_nhlt_has_endpoint_type(struct nhlt_acpi_table *nhlt,
 						u8 link_type)
 {
 	return false;
 }
 
 static inline struct nhlt_specific_cfg *
-intel_nhlt_get_endpoint_blob(struct device *dev, struct acpi_table_nhlt *nhlt,
+intel_nhlt_get_endpoint_blob(struct device *dev, struct nhlt_acpi_table *nhlt,
 			     u32 bus_id, u8 link_type, u8 vbps, u8 bps,
 			     u8 num_ch, u32 rate, u8 dir, u8 dev_type)
 {

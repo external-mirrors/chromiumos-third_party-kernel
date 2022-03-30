@@ -14,6 +14,7 @@
 #include "topology.h"
 #include "kcontrol.h"
 
+/* Must be called with adev->comp_list_mutex held. */
 static struct avs_tplg *
 avs_path_find_tplg(struct avs_dev *adev, const char *name)
 {
@@ -215,7 +216,7 @@ static bool avs_dma_type_is_input(u32 dma_type)
 
 static int avs_copier_create(struct avs_dev *adev, struct avs_path_module *mod)
 {
-	struct acpi_table_nhlt *nhlt = adev->nhlt;
+	struct nhlt_acpi_table *nhlt = adev->nhlt;
 	struct avs_tplg_module *t = mod->template;
 	struct avs_copier_cfg *cfg;
 	struct nhlt_specific_cfg *ep_blob;
@@ -252,7 +253,7 @@ static int avs_copier_create(struct avs_dev *adev, struct avs_path_module *mod)
 			fmt->num_channels, fmt->sampling_freq, direction,
 			NHLT_DEVICE_I2S);
 		if (!ep_blob) {
-			dev_err(adev->dev, "no ep_blob found\n");
+			dev_err(adev->dev, "no I2S ep_blob found\n");
 			return -ENOENT;
 		}
 
@@ -276,7 +277,7 @@ static int avs_copier_create(struct avs_dev *adev, struct avs_path_module *mod)
 				fmt->bit_depth, fmt->num_channels,
 				fmt->sampling_freq, direction, NHLT_DEVICE_DMIC);
 		if (!ep_blob) {
-			dev_err(adev->dev, "no ep_blob found\n");
+			dev_err(adev->dev, "no DMIC ep_blob found\n");
 			return -ENOENT;
 		}
 
@@ -305,12 +306,10 @@ static int avs_copier_create(struct avs_dev *adev, struct avs_path_module *mod)
 		break;
 	}
 
-	cfg_size = sizeof(*cfg);
-	if (data_size) {
-		/* Gateway attributes are path of every config-BLOB. */
+	cfg_size = sizeof(*cfg) + data_size;
+	/* Every config-BLOB contains gateway attributes. */
+	if (data_size)
 		cfg_size -= sizeof(cfg->gtw_cfg.config.attrs);
-		cfg_size += data_size;
-	}
 
 	cfg = kzalloc(cfg_size, GFP_KERNEL);
 	if (!cfg)
@@ -325,11 +324,10 @@ static int avs_copier_create(struct avs_dev *adev, struct avs_path_module *mod)
 	cfg->feature_mask = t->cfg_ext->copier.feature_mask;
 	cfg->gtw_cfg.node_id = node_id;
 	cfg->gtw_cfg.dma_buffer_size = t->cfg_ext->copier.dma_buffer_size;
-	if (data) {
-		/* config_length in DWORDs */
+	/* config_length in DWORDs */
+	cfg->gtw_cfg.config_length = DIV_ROUND_UP(data_size, 4);
+	if (data)
 		memcpy(&cfg->gtw_cfg.config, data, data_size);
-		cfg->gtw_cfg.config_length = data_size / 4;
-	}
 
 	mod->gtw_attrs = cfg->gtw_cfg.config.attrs;
 
@@ -354,7 +352,7 @@ static int avs_peakvol_create(struct avs_dev *adev, struct avs_path_module *mod)
 
 	cfg = kzalloc(sizeof(*cfg) + data_size, GFP_KERNEL);
 	if (!cfg) {
-		avs_kcontrol_volume_module_deinit(mod);
+		avs_kcontrol_module_deinit(mod);
 		kfree(vols);
 		return -ENOMEM;
 	}
@@ -371,7 +369,7 @@ static int avs_peakvol_create(struct avs_dev *adev, struct avs_path_module *mod)
 				  t->core_id, t->domain, cfg,
 				  sizeof(*cfg) + data_size, &mod->instance_id);
 	if (ret)
-		avs_kcontrol_volume_module_deinit(mod);
+		avs_kcontrol_module_deinit(mod);
 
 	kfree(cfg);
 	kfree(vols);
@@ -459,7 +457,7 @@ static int avs_aec_create(struct avs_dev *adev, struct avs_path_module *mod)
 static int avs_mux_create(struct avs_dev *adev, struct avs_path_module *mod)
 {
 	struct avs_tplg_module *t = mod->template;
-	struct avs_aec_cfg cfg;
+	struct avs_mux_cfg cfg;
 
 	cfg.base.cpc = t->cfg_base->cpc;
 	cfg.base.ibs = t->cfg_base->ibs;
@@ -561,6 +559,10 @@ static int avs_modext_create(struct avs_dev *adev, struct avs_path_module *mod)
 				  t->core_id, t->domain, cfg, cfg_size,
 				  &mod->instance_id);
 	kfree(cfg);
+	if (ret)
+		return ret;
+
+	ret = avs_kcontrol_tlv_module_init(mod);
 	return ret;
 }
 
@@ -598,11 +600,6 @@ static int avs_path_module_type_create(struct avs_dev *adev, struct avs_path_mod
 	}
 
 	return avs_modext_create(adev, mod);
-}
-
-static void avs_path_module_free(struct avs_dev *adev, struct avs_path_module *mod)
-{
-	kobject_put(&mod->kobj);
 }
 
 static void avs_path_module_release(struct kobject *kobj)
@@ -646,6 +643,11 @@ static struct kobj_type avs_path_module_ktype = {
 	.sysfs_ops = &kobj_sysfs_ops,
 };
 
+static void avs_path_module_free(struct avs_dev *adev, struct avs_path_module *mod)
+{
+	kobject_put(&mod->kobj);
+}
+
 static struct avs_path_module *
 avs_path_module_create(struct avs_dev *adev,
 		       struct avs_path_pipeline *owner,
@@ -676,7 +678,7 @@ avs_path_module_create(struct avs_dev *adev,
 	ret = kobject_init_and_add(&mod->kobj, &avs_path_module_ktype,
 				   &owner->kobj, "%d", template->id);
 	if (ret) {
-		avs_kcontrol_volume_module_deinit(mod);
+		avs_kcontrol_module_deinit(mod);
 		goto err;
 	}
 
@@ -685,28 +687,6 @@ avs_path_module_create(struct avs_dev *adev,
 err:
 	kfree(mod);
 	return ERR_PTR(ret);
-}
-
-static void avs_path_binding_free(struct avs_dev *adev, struct avs_path_binding *binding)
-{
-	kfree(binding);
-}
-
-static struct avs_path_binding *avs_path_binding_create(struct avs_dev *adev,
-							struct avs_path_pipeline *owner,
-							struct avs_tplg_binding *t)
-{
-	struct avs_path_binding *binding;
-
-	binding = kzalloc(sizeof(*binding), GFP_KERNEL);
-	if (!binding)
-		return ERR_PTR(-ENOMEM);
-
-	binding->template = t;
-	binding->owner = owner;
-	INIT_LIST_HEAD(&binding->node);
-
-	return binding;
 }
 
 static int avs_path_binding_arm(struct avs_dev *adev, struct avs_path_binding *binding)
@@ -761,65 +741,26 @@ static int avs_path_binding_arm(struct avs_dev *adev, struct avs_path_binding *b
 	return 0;
 }
 
-static void avs_path_pipeline_free(struct avs_dev *adev,
-				   struct avs_path_pipeline *ppl)
+static void avs_path_binding_free(struct avs_dev *adev, struct avs_path_binding *binding)
 {
-	struct avs_path_binding *binding, *bsave;
-	struct avs_path_module *mod, *save;
-
-	/* unlink kcontrols from active modules, before we start deleting pipelines */
-	list_for_each_entry(mod, &ppl->mod_list, node)
-		avs_kcontrol_volume_module_deinit(mod);
-
-	list_for_each_entry_safe(binding, bsave, &ppl->binding_list, node) {
-		list_del(&binding->node);
-		avs_path_binding_free(adev, binding);
-	}
-
-	avs_dsp_delete_pipeline(adev, ppl->instance_id);
-
-	/* Unload resources occupied by owned modules */
-	list_for_each_entry_safe(mod, save, &ppl->mod_list, node) {
-		avs_dsp_delete_module(adev, mod->module_id, mod->instance_id,
-				      mod->owner->instance_id,
-				      mod->template->core_id);
-		avs_path_module_free(adev, mod);
-	}
-
-	list_del(&ppl->node);
-	kobject_put(&ppl->kobj);
+	kfree(binding);
 }
 
-static int avs_path_pipeline_arm(struct avs_dev *adev,
-				 struct avs_path_pipeline *ppl)
+static struct avs_path_binding *avs_path_binding_create(struct avs_dev *adev,
+							struct avs_path_pipeline *owner,
+							struct avs_tplg_binding *t)
 {
-	struct avs_path_module *mod;
+	struct avs_path_binding *binding;
 
-	list_for_each_entry(mod, &ppl->mod_list, node) {
-		struct avs_path_module *source, *sink;
-		int ret;
+	binding = kzalloc(sizeof(*binding), GFP_KERNEL);
+	if (!binding)
+		return ERR_PTR(-ENOMEM);
 
-		/*
-		 * Only one module (so it's implicitly last) or it is the last
-		 * one, either way we don't have next module to bind it to.
-		 */
-		if (mod == list_last_entry(&ppl->mod_list,
-					   struct avs_path_module, node))
-			break;
+	binding->template = t;
+	binding->owner = owner;
+	INIT_LIST_HEAD(&binding->node);
 
-		/* bind current module to next module on list */
-		source = mod;
-		sink = list_next_entry(mod, node);
-		if (!source || !sink)
-			return -EINVAL;
-
-		ret = avs_ipc_bind(adev, source->module_id, source->instance_id,
-				   sink->module_id, sink->instance_id, 0, 0);
-		if (ret)
-			return AVS_IPC_RET(ret);
-	}
-
-	return 0;
+	return binding;
 }
 
 static void avs_path_pipeline_release(struct kobject *kobj)
@@ -908,9 +849,69 @@ static struct kobj_type avs_path_pipeline_ktype = {
 	.sysfs_ops = &kobj_sysfs_ops,
 };
 
+static int avs_path_pipeline_arm(struct avs_dev *adev,
+				 struct avs_path_pipeline *ppl)
+{
+	struct avs_path_module *mod;
+
+	list_for_each_entry(mod, &ppl->mod_list, node) {
+		struct avs_path_module *source, *sink;
+		int ret;
+
+		/*
+		 * Only one module (so it's implicitly last) or it is the last
+		 * one, either way we don't have next module to bind it to.
+		 */
+		if (mod == list_last_entry(&ppl->mod_list,
+					   struct avs_path_module, node))
+			break;
+
+		/* bind current module to next module on list */
+		source = mod;
+		sink = list_next_entry(mod, node);
+		if (!source || !sink)
+			return -EINVAL;
+
+		ret = avs_ipc_bind(adev, source->module_id, source->instance_id,
+				   sink->module_id, sink->instance_id, 0, 0);
+		if (ret)
+			return AVS_IPC_RET(ret);
+	}
+
+	return 0;
+}
+
+static void avs_path_pipeline_free(struct avs_dev *adev,
+				   struct avs_path_pipeline *ppl)
+{
+	struct avs_path_binding *binding, *bsave;
+	struct avs_path_module *mod, *save;
+
+	/* unlink kcontrols from active modules, before we start deleting pipelines */
+	list_for_each_entry(mod, &ppl->mod_list, node)
+		avs_kcontrol_module_deinit(mod);
+
+	list_for_each_entry_safe(binding, bsave, &ppl->binding_list, node) {
+		list_del(&binding->node);
+		avs_path_binding_free(adev, binding);
+	}
+
+	avs_dsp_delete_pipeline(adev, ppl->instance_id);
+
+	/* Unload resources occupied by owned modules */
+	list_for_each_entry_safe(mod, save, &ppl->mod_list, node) {
+		avs_dsp_delete_module(adev, mod->module_id, mod->instance_id,
+				      mod->owner->instance_id,
+				      mod->template->core_id);
+		avs_path_module_free(adev, mod);
+	}
+
+	list_del(&ppl->node);
+	kobject_put(&ppl->kobj);
+}
+
 static struct avs_path_pipeline *
-avs_path_pipeline_create(struct avs_dev *adev,
-			 struct avs_path *owner,
+avs_path_pipeline_create(struct avs_dev *adev, struct avs_path *owner,
 			 struct avs_tplg_pipeline *template)
 {
 	struct avs_path_pipeline *ppl;
@@ -1123,7 +1124,7 @@ static struct avs_path *avs_condpath_create(struct avs_dev *adev, u32 dma_id,
 	struct avs_path *path;
 	int ret;
 
-	/* condpath sysfs files must differ from standard paths. */
+	/* condpath sysfs files must differ from standard path ones. */
 	path = avs_path_create_unlocked(adev, dma_id, template, "c");
 	if (IS_ERR(path))
 		return path;
@@ -1254,38 +1255,6 @@ static int avs_condpath_walk_all(struct avs_dev *adev, struct avs_path *path)
 	return avs_condpath_walk(adev, path, 0);
 }
 
-struct avs_path *avs_path_create(struct avs_dev *adev, u32 dma_id,
-				 struct avs_tplg_path_template *template,
-				 struct snd_pcm_hw_params *fe_params,
-				 struct snd_pcm_hw_params *be_params)
-{
-	struct avs_tplg_path *variant;
-	struct avs_path *path;
-	int ret;
-
-	variant = avs_path_find_variant(adev, template, fe_params, be_params);
-	if (!variant) {
-		dev_err(adev->dev, "no matching variant found\n");
-		return ERR_PTR(-ENOENT);
-	}
-
-	mutex_lock(&adev->path_mutex);
-	path = avs_path_create_unlocked(adev, dma_id, variant, "");
-	if (IS_ERR(path))
-		goto exit;
-
-	ret = avs_condpath_walk_all(adev, path);
-	if (ret) {
-		avs_path_free_unlocked(path);
-		path = ERR_PTR(ret);
-	}
-
-exit:
-	mutex_unlock(&adev->path_mutex);
-
-	return path;
-}
-
 void avs_path_free(struct avs_path *path)
 {
 	struct avs_path *cpath, *csave;
@@ -1302,6 +1271,43 @@ void avs_path_free(struct avs_path *path)
 	avs_path_free_unlocked(path);
 
 	mutex_unlock(&adev->path_mutex);
+}
+
+struct avs_path *avs_path_create(struct avs_dev *adev, u32 dma_id,
+				 struct avs_tplg_path_template *template,
+				 struct snd_pcm_hw_params *fe_params,
+				 struct snd_pcm_hw_params *be_params)
+{
+	struct avs_tplg_path *variant;
+	struct avs_path *path;
+	int ret;
+
+	variant = avs_path_find_variant(adev, template, fe_params, be_params);
+	if (!variant) {
+		dev_err(adev->dev, "no matching variant found\n");
+		return ERR_PTR(-ENOENT);
+	}
+
+	/* Serialize path and its components creation. */
+	mutex_lock(&adev->path_mutex);
+	/* Satisfy needs of avs_path_find_tplg(). */
+	mutex_lock(&adev->comp_list_mutex);
+
+	path = avs_path_create_unlocked(adev, dma_id, variant, "");
+	if (IS_ERR(path))
+		goto exit;
+
+	ret = avs_condpath_walk_all(adev, path);
+	if (ret) {
+		avs_path_free_unlocked(path);
+		path = ERR_PTR(ret);
+	}
+
+exit:
+	mutex_unlock(&adev->comp_list_mutex);
+	mutex_unlock(&adev->path_mutex);
+
+	return path;
 }
 
 static int avs_path_bind_prepare(struct avs_dev *adev,

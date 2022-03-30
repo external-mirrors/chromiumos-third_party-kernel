@@ -36,7 +36,11 @@ TRACE_EVENT(avs_dsp_core_op,
 #ifndef __TRACE_INTEL_AVS_TRACE_HELPER
 #define __TRACE_INTEL_AVS_TRACE_HELPER
 
+#ifdef CONFIG_FTRACE
 void trace_avs_msg_payload(const void *data, size_t size);
+#else
+static inline void trace_avs_msg_payload(const void *data, size_t size) {};
+#endif
 
 #define trace_avs_request(msg, fwregs) \
 ({ \
@@ -118,7 +122,7 @@ TRACE_EVENT_CONDITION(avs_ipc_msg_payload,
 		__entry->total = total;
 	),
 
-	TP_printk("range %lu-%lu out of %lu bytes%s",
+	TP_printk("range %zu-%zu out of %zu bytes%s",
 		  __entry->offset, __entry->pos, __entry->total,
 		  __print_hex_dump("", DUMP_PREFIX_NONE, 16, 4,
 				   __get_dynamic_array(buf),

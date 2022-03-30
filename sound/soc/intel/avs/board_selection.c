@@ -7,7 +7,6 @@
 //
 
 #include <linux/acpi.h>
-#include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/dmi.h>
 #include <linux/pci.h>
@@ -70,25 +69,25 @@ static struct snd_soc_acpi_mach avs_skl_i2s_machines[] = {
 		.id = "INT343A",
 		.drv_name = "avs_rt286",
 		.link_mask = AVS_SSP(0),
-		.fw_filename = "skl-rt286-tplg.bin",
+		.tplg_filename = "skl-rt286-tplg.bin",
 	},
 	{
 		.id = "10508825",
 		.drv_name = "avs_nau8825",
 		.link_mask = AVS_SSP(1),
-		.fw_filename = "skl-nau8825-tplg.bin",
+		.tplg_filename = "skl-nau8825-tplg.bin",
 	},
 	{
 		.id = "INT343B",
 		.drv_name = "avs_ssm4567",
 		.link_mask = AVS_SSP(0),
-		.fw_filename = "skl-ssm4567-tplg.bin",
+		.tplg_filename = "skl-ssm4567-tplg.bin",
 	},
 	{
 		.id = "MX98357A",
 		.drv_name = "avs_max98357a",
 		.link_mask = AVS_SSP(0),
-		.fw_filename = "skl-max98357a-tplg.bin",
+		.tplg_filename = "skl-max98357a-tplg.bin",
 	},
 	{},
 };
@@ -100,7 +99,7 @@ static struct snd_soc_acpi_mach avs_kbl_i2s_machines[] = {
 		.link_mask = AVS_SSP(0),
 		.quirk_data = &kbl_dmi_table,
 		.machine_quirk = dmi_match_quirk,
-		.fw_filename = "kbl-rt286-tplg.bin",
+		.tplg_filename = "kbl-rt286-tplg.bin",
 	},
 	{
 		.id = "INT343A",
@@ -108,8 +107,21 @@ static struct snd_soc_acpi_mach avs_kbl_i2s_machines[] = {
 		.link_mask = AVS_SSP(0),
 		.quirk_data = &kbl_r_dmi_table,
 		.machine_quirk = dmi_match_quirk,
-		.fw_filename = "kblr-rt298-tplg.bin",
+		.tplg_filename = "kblr-rt298-tplg.bin",
 	},
+	{
+		.id = "MX98373",
+		.drv_name = "avs_max98373",
+		.link_mask = AVS_SSP(0),
+		.tplg_filename = "kbl-max98373-tplg.bin",
+	},
+	{
+		.id = "DLGS7219",
+		.drv_name = "avs_da7219",
+		.link_mask = AVS_SSP(1),
+		.tplg_filename = "apl-da7219-tplg.bin",
+	},
+
 	{},
 };
 
@@ -118,26 +130,26 @@ static struct snd_soc_acpi_mach avs_apl_i2s_machines[] = {
 		.id = "INT343A",
 		.drv_name = "avs_rt298",
 		.link_mask = AVS_SSP(5),
-		.fw_filename = "apl-rt298-tplg.bin",
+		.tplg_filename = "apl-rt298-tplg.bin",
 	},
 	{
 		.id = "INT34C3",
 		.drv_name = "avs_tdf8532",
 		.link_mask = AVS_SSP_RANGE(0, 5),
 		.pdata = (unsigned long[]){ 0, 0, 0x14, 0, 0, 0 }, /* SSP2 TDMs */
-		.fw_filename = "apl-tdf8532-tplg.bin",
+		.tplg_filename = "apl-tdf8532-tplg.bin",
 	},
 	{
 		.id = "MX98357A",
 		.drv_name = "avs_max98357a",
 		.link_mask = AVS_SSP(5),
-		.fw_filename = "apl-max98357a-tplg.bin",
+		.tplg_filename = "apl-max98357a-tplg.bin",
 	},
 	{
 		.id = "DLGS7219",
 		.drv_name = "avs_da7219",
 		.link_mask = AVS_SSP(1),
-		.fw_filename = "apl-da7219-tplg.bin",
+		.tplg_filename = "apl-da7219-tplg.bin",
 	},
 	{},
 };
@@ -147,41 +159,41 @@ static struct snd_soc_acpi_mach avs_gml_i2s_machines[] = {
 		.id = "INT343A",
 		.drv_name = "avs_rt298",
 		.link_mask = AVS_SSP(2),
-		.fw_filename = "gml-rt298-tplg.bin",
+		.tplg_filename = "gml-rt298-tplg.bin",
 	},
 	{},
 };
 
 static struct snd_soc_acpi_mach avs_test_i2s_machines[] = {
 	{
-		.drv_name = "avs_ssp_loopback",
+		.drv_name = "avs_ssp_test",
 		.link_mask = AVS_SSP(0),
-		.fw_filename = "avs_ssp0_loopback.bin",
+		.tplg_filename = "avs_ssp_test.bin",
 	},
 	{
-		.drv_name = "avs_ssp_loopback",
+		.drv_name = "avs_ssp_test",
 		.link_mask = AVS_SSP(1),
-		.fw_filename = "avs_ssp1_loopback.bin",
+		.tplg_filename = "avs_ssp_test.bin",
 	},
 	{
-		.drv_name = "avs_ssp_loopback",
+		.drv_name = "avs_ssp_test",
 		.link_mask = AVS_SSP(2),
-		.fw_filename = "avs_ssp2_loopback.bin",
+		.tplg_filename = "avs_ssp_test.bin",
 	},
 	{
-		.drv_name = "avs_ssp_loopback",
+		.drv_name = "avs_ssp_test",
 		.link_mask = AVS_SSP(3),
-		.fw_filename = "avs_ssp3_loopback.bin",
+		.tplg_filename = "avs_ssp_test.bin",
 	},
 	{
-		.drv_name = "avs_ssp_loopback",
+		.drv_name = "avs_ssp_test",
 		.link_mask = AVS_SSP(4),
-		.fw_filename = "avs_ssp4_loopback.bin",
+		.tplg_filename = "avs_ssp_test.bin",
 	},
 	{
-		.drv_name = "avs_ssp_loopback",
+		.drv_name = "avs_ssp_test",
 		.link_mask = AVS_SSP(5),
-		.fw_filename = "avs_ssp5_loopback.bin",
+		.tplg_filename = "avs_ssp_test.bin",
 	},
 	/* no NULL terminator, as we depend on ARRAY SIZE due to .id == NULL */
 };
@@ -207,7 +219,7 @@ static const struct avs_acpi_boards *avs_get_i2s_boards(struct avs_dev *adev)
 {
 	int id, i;
 
-	id = adev->bus.pci->device;
+	id = adev->base.pci->device;
 	for (i = 0; i < ARRAY_SIZE(i2s_boards); i++)
 		if (i2s_boards[i].id == id)
 			return &i2s_boards[i];
@@ -220,22 +232,10 @@ static void board_pdev_unregister(void *data)
 	platform_device_unregister(data);
 }
 
-static const struct dmi_system_id dmic_dmi_table[] = {
-	{
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Example vendor"),
-			DMI_MATCH(DMI_BOARD_NAME, "Example RandomLake"),
-		},
-		.driver_data = "example-tplg.bin",
-	},
-	{}
-};
-
 static int avs_register_dmic_board(struct avs_dev *adev)
 {
 	struct platform_device *codec, *board;
-	struct snd_soc_acpi_mach mach = {0};
-	const struct dmi_system_id *dmi_id;
+	struct snd_soc_acpi_mach mach = {{0}};
 	int ret;
 
 	if (!adev->nhlt ||
@@ -261,11 +261,7 @@ static int avs_register_dmic_board(struct avs_dev *adev)
 	if (ret < 0)
 		return ret;
 
-	dmi_id = dmi_first_match(dmic_dmi_table);
-	if (dmi_id)
-		mach.fw_filename = dmi_id->driver_data;
-	else
-		mach.fw_filename = "dmic-tplg.bin";
+	mach.tplg_filename = "dmic-tplg.bin";
 	mach.mach_params.platform = "dmic-platform";
 
 	board = platform_device_register_data(NULL, "avs_dmic",
@@ -383,7 +379,7 @@ static int avs_register_i2s_boards(struct avs_dev *adev)
 
 static int avs_register_hda_board(struct avs_dev *adev, struct hda_codec *codec)
 {
-	struct snd_soc_acpi_mach mach = {0};
+	struct snd_soc_acpi_mach mach = {{0}};
 	struct platform_device *board;
 	struct hdac_device *hdev = &codec->core;
 	char *pname;
@@ -400,12 +396,12 @@ static int avs_register_hda_board(struct avs_dev *adev, struct hda_codec *codec)
 
 	mach.pdata = codec;
 	mach.mach_params.platform = pname;
-	mach.fw_filename = devm_kasprintf(adev->dev, GFP_KERNEL,
+	mach.tplg_filename = devm_kasprintf(adev->dev, GFP_KERNEL,
 					  "hda-%08x-tplg.bin", hdev->vendor_id);
-	if (!mach.fw_filename)
+	if (!mach.tplg_filename)
 		return -ENOMEM;
 
-	id = adev->bus.core.idx * HDA_MAX_CODECS + hdev->addr;
+	id = adev->base.core.idx * HDA_MAX_CODECS + hdev->addr;
 	board = platform_device_register_data(NULL, "avs_hdaudio", id,
 					(const void *)&mach, sizeof(mach));
 	if (IS_ERR(board)) {
@@ -424,8 +420,8 @@ static int avs_register_hda_board(struct avs_dev *adev, struct hda_codec *codec)
 
 static int avs_register_hda_boards(struct avs_dev *adev)
 {
-	struct hdac_bus *bus = &adev->bus.core;
-	struct hdac_device *hdev, *save;
+	struct hdac_bus *bus = &adev->base.core;
+	struct hdac_device *hdev;
 	int ret;
 
 	if (!bus->num_codecs) {
@@ -433,7 +429,7 @@ static int avs_register_hda_boards(struct avs_dev *adev)
 		return 0;
 	}
 
-	list_for_each_entry_safe(hdev, save, &bus->codec_list, list) {
+	list_for_each_entry(hdev, &bus->codec_list, list) {
 		struct hda_codec *codec;
 
 		codec = dev_to_hda_codec(&hdev->dev);

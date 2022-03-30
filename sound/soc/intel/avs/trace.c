@@ -25,7 +25,7 @@ void trace_avs_msg_payload(const void *data, size_t size)
 	while (remaining > 0) {
 		u32 chunk;
 
-		chunk = min(remaining, MAX_CHUNK_SIZE);
+		chunk = min(remaining, (size_t)MAX_CHUNK_SIZE);
 		trace_avs_ipc_msg_payload(data, chunk, offset, size);
 
 		remaining -= chunk;
