@@ -324,10 +324,12 @@ static void cros_ec_lpc_acpi_notify(acpi_handle device, u32 value, void *data)
 		do {
 			ret = cros_ec_get_next_event(ec_dev, NULL,
 						     &ec_has_more_events);
-			if (ret > 0)
+			if (ret > 0) {
+				dev_err(ec_dev->dev, "%s: some event happened\n", __func__);
 				blocking_notifier_call_chain(
 						&ec_dev->event_notifier, 0,
 						ec_dev);
+			}
 		} while (ec_has_more_events);
 
 	if (value == ACPI_NOTIFY_DEVICE_WAKE)

@@ -67,9 +67,11 @@ bool cros_ec_handle_event(struct cros_ec_device *ec_dev)
 	if (wake_event && device_may_wakeup(ec_dev->dev))
 		pm_wakeup_event(ec_dev->dev, 0);
 
-	if (ret > 0)
+	if (ret > 0) {
+		dev_err(ec_dev->dev, "%s: some event happened\n", __func__);
 		blocking_notifier_call_chain(&ec_dev->event_notifier,
 					     0, ec_dev);
+	}
 
 	return ec_has_more_events;
 }
@@ -82,6 +84,7 @@ static irqreturn_t ec_irq_thread(int irq, void *data)
 
 	do {
 		ec_has_more_events = cros_ec_handle_event(ec_dev);
+		dev_err(ec_dev->dev, "%s: irq=%u, ec_has_more_events=%u\n", __func__, irq, ec_has_more_events);
 	} while (ec_has_more_events);
 
 	return IRQ_HANDLED;
@@ -329,9 +332,11 @@ EXPORT_SYMBOL(cros_ec_suspend);
 static void cros_ec_report_events_during_suspend(struct cros_ec_device *ec_dev)
 {
 	while (ec_dev->mkbp_event_supported &&
-	       cros_ec_get_next_event(ec_dev, NULL, NULL) > 0)
+	       cros_ec_get_next_event(ec_dev, NULL, NULL) > 0) {
+		dev_err(ec_dev->dev, "%s: some event happened\n", __func__);
 		blocking_notifier_call_chain(&ec_dev->event_notifier,
 					     1, ec_dev);
+	}
 }
 
 /**

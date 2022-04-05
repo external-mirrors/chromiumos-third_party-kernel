@@ -269,6 +269,7 @@ static int cros_ec_keyb_work(struct notifier_block *nb,
 	u32 val;
 	unsigned int ev_type;
 
+	dev_err(ckdev->dev, "%s: RAJAT received MKBP event: %u\n", __func__, ckdev->ec->event_data.event_type);
 	/*
 	 * If not wake enabled, discard key state changes during
 	 * suspend. Switches will be re-checked in
@@ -303,6 +304,7 @@ static int cros_ec_keyb_work(struct notifier_block *nb,
 	case EC_MKBP_EVENT_BUTTON:
 	case EC_MKBP_EVENT_SWITCH:
 		pm_wakeup_event(ckdev->dev, 0);
+		dev_err(ckdev->dev, "%s: RAJAT received MKBP Button/Switch event\n", __func__);
 
 		if (ckdev->ec->event_data.event_type == EC_MKBP_EVENT_BUTTON) {
 			val = get_unaligned_le32(
