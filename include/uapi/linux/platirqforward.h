@@ -40,8 +40,20 @@ struct plat_irq_forward_set {
 	__u8	eventfd[];
 };
 
+/**
+ * Set IRQ for waking up the host from system suspend.
+ */
+struct plat_irq_wake_set {
+	__u32	argsz;
+	__u32	action_flags;
+#define PLAT_IRQ_WAKE_ENABLE	(1 << 0)
+#define PLAT_IRQ_WAKE_DISABLE	(1 << 1)
+	__u32	irq_number_host;
+};
+
 /* ---- IOCTLs for Platform IRQ Forwarding fd (/dev/plat-irq-forward) ---- */
 #define PLAT_IRQ_FORWARD_SET _IO(PLAT_IRQ_FORWARD_TYPE, PLAT_IRQ_FORWARD_BASE)
+#define PLAT_IRQ_WAKE_SET    _IO(PLAT_IRQ_FORWARD_TYPE, PLAT_IRQ_FORWARD_BASE + 1)
 
 /**
  *

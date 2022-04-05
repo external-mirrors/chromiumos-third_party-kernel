@@ -292,6 +292,25 @@ int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 	return 0;
 }
 
+static int plat_irq_wake_ioctl(void *device_data, unsigned long arg)
+{
+	struct plat_irq_wake_set hdr;
+
+	if (copy_from_user(&hdr, (void __user *)arg, sizeof(hdr)))
+		return -EFAULT;
+
+	switch (hdr.action_flags) {
+	case PLAT_IRQ_WAKE_ENABLE:
+		return enable_irq_wake(hdr.irq_number_host);
+	case PLAT_IRQ_WAKE_DISABLE:
+		return disable_irq_wake(hdr.irq_number_host);
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static u32 gpe_forward_handler_level(acpi_handle dev, u32 gpe, void *data)
 {
 	struct gpe_fwd *gf = data;
@@ -437,6 +456,9 @@ static long plat_irq_forward_fops_unl_ioctl(struct file *filep,
 	switch (cmd) {
 	case PLAT_IRQ_FORWARD_SET:
 		ret = (long) plat_irq_forward_ioctl(filep, arg);
+		break;
+	case PLAT_IRQ_WAKE_SET:
+		ret = plat_irq_wake_ioctl(filep, arg);
 		break;
 	case ACPI_GPE_FORWARD_SET:
 		ret = gpe_forward_ioctl(filep, arg);
