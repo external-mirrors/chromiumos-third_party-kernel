@@ -87,9 +87,11 @@ static int plat_irq_forward_request(struct plat_irq_forward *irq)
 	irq_handler_t handler = is_level ? plat_irq_forward_handler_level :
 					   plat_irq_forward_handler_edge;
 	int trigger = is_level ? ACPI_LEVEL_SENSITIVE : ACPI_EDGE_SENSITIVE;
+	int flags = is_level ? IRQF_NO_AUTOEN : 0;
+
 	int ret;
 
-	ret = request_irq(irq->irq_num, handler, IRQF_SHARED, irq->name, irq);
+	ret = request_irq(irq->irq_num, handler, flags, irq->name, irq);
 	if (ret == -EINVAL) {
 		/* TODO: Retrieve polarity */
 		ret = acpi_register_gsi(NULL, irq->irq_num, trigger,
@@ -97,7 +99,7 @@ static int plat_irq_forward_request(struct plat_irq_forward *irq)
 		if (ret < 0)
 			goto out;
 
-		ret = request_irq(irq->irq_num, handler, IRQF_SHARED, irq->name,
+		ret = request_irq(irq->irq_num, handler, flags, irq->name,
 				  irq);
 	}
 
@@ -230,6 +232,14 @@ int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data)
 	error = plat_irq_forward_irqfd_enable(
 				plat_irq_forward_unmask_handler_level,
 				irq, &irq->unmask, fd);
+
+	/*
+	 * TODO: Investigate whether we can postphone enabling
+	 * until guest requests it.
+	 */
+	enable_irq(irq->irq_num);
+	pr_info("%s: %d is enabled.\n", __func__, irq->irq_num);
+
 err:
 	mutex_unlock(&plat_fwd_irq_mutex);
 	return error;
