@@ -213,7 +213,8 @@ err:
 	return error;
 }
 
-int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data)
+int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data,
+					 uint32_t flags)
 {
 	int32_t fd = *(int32_t *)data;
 	struct plat_irq_forward *irq;
@@ -233,12 +234,14 @@ int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data)
 				plat_irq_forward_unmask_handler_level,
 				irq, &irq->unmask, fd);
 
-	/*
-	 * TODO: Investigate whether we can postphone enabling
-	 * until guest requests it.
-	 */
-	enable_irq(irq->irq_num);
-	pr_info("%s: %d is enabled.\n", __func__, irq->irq_num);
+	if (!(flags & PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_UNMASK_EVENTFD)) {
+		/*
+		 * TODO: Investigate whether we can postphone enabling
+		 * until guest requests it.
+		 */
+		enable_irq(irq->irq_num);
+		pr_info("%s: %d is enabled.\n", __func__, irq->irq_num);
+	}
 
 err:
 	mutex_unlock(&plat_fwd_irq_mutex);
@@ -272,7 +275,8 @@ int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 				hdr.action_flags);
 	case PLAT_IRQ_FORWARD_SET_LEVEL_UNMASK_EVENTFD:
 		return platform_set_irqs_ioctl_level_unmask(
-				hdr.irq_number_host, data);
+				hdr.irq_number_host, data,
+				hdr.action_flags);
 	case PLAT_IRQ_FORWARD_SET_EDGE_TRIGGER:
 		return platform_set_irqs_ioctl_trigger(
 				hdr.irq_number_host, data,
@@ -283,7 +287,8 @@ int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 				hdr.action_flags);
 	case PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_UNMASK_EVENTFD:
 		return platform_set_irqs_ioctl_level_unmask(
-				acpi_gbl_FADT.sci_interrupt, data);
+				acpi_gbl_FADT.sci_interrupt, data,
+				hdr.action_flags);
 	default:
 		return -EINVAL;
 	}
