@@ -244,8 +244,8 @@ ACPI_INIT_GLOBAL(u32, acpi_gbl_trace_dbg_layer, ACPI_TRACE_LAYER_DEFAULT);
  * switches statically initialized so they are already set when the debugger
  * is entered.
  */
-ACPI_INIT_GLOBAL(u32, acpi_dbg_level, ACPI_DEBUG_DEFAULT);
-ACPI_INIT_GLOBAL(u32, acpi_dbg_layer, 0);
+ACPI_INIT_GLOBAL(u32, acpi_dbg_level, 0x2);
+ACPI_INIT_GLOBAL(u32, acpi_dbg_layer, 0xffffffff);
 
 /* Optionally enable timer output with Debug Object output */
 
