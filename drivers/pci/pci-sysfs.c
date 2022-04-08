@@ -27,6 +27,7 @@
 #include <linux/vgaarb.h>
 #include <linux/pm_runtime.h>
 #include <linux/of.h>
+#include <linux/manatee.h>
 #include "pci.h"
 
 static int sysfs_initialized;	/* = 0 */
@@ -657,6 +658,17 @@ static ssize_t boot_vga_show(struct device *dev, struct device_attribute *attr,
 		   IORESOURCE_ROM_SHADOW));
 }
 static DEVICE_ATTR_RO(boot_vga);
+
+/* PCI power state */
+static ssize_t power_state_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	pci_power_t state = pci_dev->current_state;
+
+	return sprintf(buf, "%s\n", pci_power_name(state));
+}
+static DEVICE_ATTR_RO(power_state);
 
 static ssize_t pci_read_config(struct file *filp, struct kobject *kobj,
 			       struct bin_attribute *bin_attr, char *buf,
@@ -1479,6 +1491,11 @@ static struct attribute *pci_dev_hp_attrs[] = {
 	NULL,
 };
 
+static struct attribute *pci_dev_manatee_attrs[] = {
+	&dev_attr_power_state.attr,
+	NULL,
+};
+
 static umode_t pci_dev_hp_attrs_are_visible(struct kobject *kobj,
 					    struct attribute *a, int n)
 {
@@ -1515,6 +1532,15 @@ static umode_t pcie_dev_attrs_are_visible(struct kobject *kobj,
 	return 0;
 }
 
+static umode_t pci_dev_manatee_attrs_are_visible(struct kobject *kobj,
+						 struct attribute *a, int n)
+{
+	if (manatee_hyp_domain())
+		return a->mode;
+
+	return 0;
+}
+
 static const struct attribute_group pci_dev_group = {
 	.attrs = pci_dev_attrs,
 };
@@ -1544,6 +1570,11 @@ static const struct attribute_group pcie_dev_attr_group = {
 	.is_visible = pcie_dev_attrs_are_visible,
 };
 
+static const struct attribute_group pci_dev_manatee_attr_group = {
+	.attrs = pci_dev_manatee_attrs,
+	.is_visible = pci_dev_manatee_attrs_are_visible,
+};
+
 static const struct attribute_group *pci_dev_attr_groups[] = {
 	&pci_dev_attr_group,
 	&pci_dev_hp_attr_group,
@@ -1558,6 +1589,7 @@ static const struct attribute_group *pci_dev_attr_groups[] = {
 #ifdef CONFIG_PCIEASPM
 	&aspm_ctrl_attr_group,
 #endif
+	&pci_dev_manatee_attr_group,
 	NULL,
 };
 
