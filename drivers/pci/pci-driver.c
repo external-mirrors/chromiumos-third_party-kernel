@@ -654,10 +654,29 @@ static bool pci_has_legacy_pm_support(struct pci_dev *pci_dev)
 
 /* New power management framework */
 
+int pci_enter_coordinated_pm(struct pci_dev *pdev)
+{
+	/* block PM suspend, driver probe, etc. */
+	device_lock(&pdev->dev);
+	pdev->coordinated_pm = 1;
+	device_unlock(&pdev->dev);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_enter_coordinated_pm);
+
+int pci_exit_coordinated_pm(struct pci_dev *pdev)
+{
+	/* block PM suspend, driver probe, etc. */
+	device_lock(&pdev->dev);
+	pdev->coordinated_pm = 0;
+	device_unlock(&pdev->dev);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_exit_coordinated_pm);
+
 static bool skip_pci_pm(struct pci_dev *pdev)
 {
-	/* XXX this is just a placeholder */
-	return false;
+	return pdev->coordinated_pm;
 }
 
 #define PM_OP_CALL_PREPARE		0

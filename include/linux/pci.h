@@ -369,6 +369,7 @@ struct pci_dev {
 						   powered on/off by the
 						   corresponding bridge */
 	unsigned int	skip_bus_pm:1;	/* Internal: Skip bus-level PM */
+	unsigned int	coordinated_pm:1;	/* Internal: Use coordinated PM */
 	unsigned int	ignore_hotplug:1;	/* Ignore hotplug events */
 	unsigned int	hotplug_user_indicators:1; /* SlotCtl indicators
 						      controlled exclusively by
@@ -1680,6 +1681,8 @@ pci_release_mem_regions(struct pci_dev *pdev)
 			    pci_select_bars(pdev, IORESOURCE_MEM));
 }
 
+int pci_enter_coordinated_pm(struct pci_dev *pdev);
+int pci_exit_coordinated_pm(struct pci_dev *pdev);
 int pci_pm_op_call(struct pci_dev *pdev, u8 id);
 
 #else /* CONFIG_PCI is not enabled */
