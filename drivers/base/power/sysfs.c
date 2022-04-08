@@ -643,6 +643,19 @@ static ssize_t coordinated_store(struct device *dev,
 
 static DEVICE_ATTR_RW(coordinated);
 
+static ssize_t op_call_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t n)
+{
+	int ret = -EINVAL;
+
+	if (dev_is_pci(dev))
+		ret = pci_pm_op_call(to_pci_dev(dev), buf[0]);
+
+	return ret < 0 ? (ssize_t)ret : n;
+}
+
+static DEVICE_ATTR_WO(op_call);
+
 static struct attribute *power_attrs[] = {
 #ifdef CONFIG_PM_ADVANCED_DEBUG
 #ifdef CONFIG_PM_SLEEP
@@ -726,6 +739,7 @@ static const struct attribute_group pm_qos_flags_attr_group = {
 
 static struct attribute *manatee_attrs[] = {
 	&dev_attr_coordinated.attr,
+	&dev_attr_op_call.attr,
 	NULL,
 };
 static const struct attribute_group pm_manatee_attr_group = {
