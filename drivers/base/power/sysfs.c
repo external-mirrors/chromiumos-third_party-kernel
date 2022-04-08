@@ -9,6 +9,8 @@
 #include <linux/pm_wakeup.h>
 #include <linux/atomic.h>
 #include <linux/jiffies.h>
+#include <linux/pci.h>
+#include <linux/manatee.h>
 #include "power.h"
 
 /*
@@ -610,6 +612,37 @@ static DEVICE_ATTR_RW(async);
 #endif /* CONFIG_PM_SLEEP */
 #endif /* CONFIG_PM_ADVANCED_DEBUG */
 
+static ssize_t coordinated_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	int ret = -EINVAL;
+
+	if (dev_is_pci(dev))
+		ret = sysfs_emit(buf, "%u\n", to_pci_dev(dev)->coordinated_pm);
+
+	return ret;
+}
+
+static ssize_t coordinated_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t n)
+{
+	int ret = -EINVAL;
+
+	if (sysfs_streq(buf, "enter")) {
+		if (dev_is_pci(dev))
+			ret = pci_enter_coordinated_pm(to_pci_dev(dev));
+	} else if (sysfs_streq(buf, "exit")) {
+		if (dev_is_pci(dev))
+			ret = pci_exit_coordinated_pm(to_pci_dev(dev));
+	}
+
+	return ret < 0 ? (ssize_t)ret : n;
+}
+
+static DEVICE_ATTR_RW(coordinated);
+
 static struct attribute *power_attrs[] = {
 #ifdef CONFIG_PM_ADVANCED_DEBUG
 #ifdef CONFIG_PM_SLEEP
@@ -691,6 +724,15 @@ static const struct attribute_group pm_qos_flags_attr_group = {
 	.attrs	= pm_qos_flags_attrs,
 };
 
+static struct attribute *manatee_attrs[] = {
+	&dev_attr_coordinated.attr,
+	NULL,
+};
+static const struct attribute_group pm_manatee_attr_group = {
+	.name	= power_group_name,
+	.attrs	= manatee_attrs,
+};
+
 int dpm_sysfs_add(struct device *dev)
 {
 	int rc;
@@ -719,11 +761,18 @@ int dpm_sysfs_add(struct device *dev)
 		if (rc)
 			goto err_wakeup;
 	}
+	if (manatee_hyp_domain()) {
+		rc = sysfs_merge_group(&dev->kobj, &pm_manatee_attr_group);
+		if (rc)
+			goto err_latency;
+	}
 	rc = pm_wakeup_source_sysfs_add(dev);
 	if (rc)
-		goto err_latency;
+		goto err_manatee;
 	return 0;
 
+ err_manatee:
+	sysfs_unmerge_group(&dev->kobj, &pm_manatee_attr_group);
  err_latency:
 	sysfs_unmerge_group(&dev->kobj, &pm_qos_latency_tolerance_attr_group);
  err_wakeup:
