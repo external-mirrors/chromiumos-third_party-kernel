@@ -16,6 +16,7 @@
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/suspend.h>
+#include <linux/manatee.h>
 
 #include "cros_ec.h"
 
@@ -169,6 +170,16 @@ static int cros_ec_sleep_event(struct cros_ec_device *ec_dev, u8 sleep_event)
 		ec_dev->last_resume_result =
 			buf.u.resp1.resume_response.sleep_transitions;
 
+		/*
+		 * At the time CrOS wakes up from idle suspend and if this bit
+		 * is set, powerd daemon determines that AP was waken up due to
+		 * failure of s0ix transition, and wants to suspend the system
+		 * again.  Thus, before AP is able to reliably enter s0ix in
+		 * ManaTEE s2idle, we don't want this bit be visible to powerd.
+		 */
+		if (manatee_chromeos_domain())
+			ec_dev->last_resume_result &= ~EC_HOST_RESUME_SLEEP_TIMEOUT;
+
 		WARN_ONCE(buf.u.resp1.resume_response.sleep_transitions &
 			  EC_HOST_RESUME_SLEEP_TIMEOUT,
 			  "EC detected sleep transition timeout. Total slp_s0 transitions: %d",
@@ -233,10 +244,12 @@ int cros_ec_register(struct cros_ec_device *ec_dev)
 		return err;
 	}
 
-	err = cros_ec_fixup_s0ixwake_mask(ec_dev);
-	if (err < 0) {
-		dev_err(dev, "Cannot send EC_CMD_HOST_EVENT to EC: error %d\n", err);
-		return err;
+	if (manatee_chromeos_domain()) {
+		err = cros_ec_fixup_s0ixwake_mask(ec_dev);
+		if (err < 0) {
+			dev_err(dev, "Cannot send EC_CMD_HOST_EVENT to EC: error %d\n", err);
+			return err;
+		}
 	}
 
 	if (ec_dev->irq > 0) {
