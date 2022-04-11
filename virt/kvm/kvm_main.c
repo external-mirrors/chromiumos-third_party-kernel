@@ -931,7 +931,7 @@ static int kvm_init_mmu_notifier(struct kvm *kvm)
 static int kvm_suspend_notifier(struct kvm *kvm)
 {
 	struct kvm_vcpu *vcpu;
-	int i;
+	unsigned long i;
 
 	if (!virt_suspend_time_enabled(kvm))
 		return NOTIFY_DONE;
@@ -947,7 +947,7 @@ static int kvm_suspend_notifier(struct kvm *kvm)
 static int kvm_resume_notifier(struct kvm *kvm)
 {
 	struct kvm_vcpu *vcpu;
-	int i;
+	unsigned long i;
 
 	if (!virt_suspend_time_enabled(kvm))
 		return NOTIFY_DONE;
