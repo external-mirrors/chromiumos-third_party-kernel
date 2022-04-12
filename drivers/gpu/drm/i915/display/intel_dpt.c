@@ -121,16 +121,12 @@ struct i915_vma *intel_dpt_pin(struct i915_address_space *vm)
 	intel_wakeref_t wakeref;
 	struct i915_vma *vma;
 	void __iomem *iomem;
-	u64 pin_flags = 0;
-
-	if (i915_gem_object_is_stolen(dpt->obj))
-		pin_flags |= PIN_MAPPABLE; /* for i915_vma_pin_iomap(stolen) */
 
 	wakeref = intel_runtime_pm_get(&i915->runtime_pm);
 	atomic_inc(&i915->gpu_error.pending_fb_pin);
 
 	vma = i915_gem_object_ggtt_pin(dpt->obj, NULL, 0, 4096,
-				       pin_flags);
+				       HAS_LMEM(i915) ? 0 : PIN_MAPPABLE);
 	if (IS_ERR(vma))
 		goto err;
 
@@ -179,15 +175,10 @@ intel_dpt_create(struct intel_framebuffer *fb)
 
 	size = round_up(size * sizeof(gen8_pte_t), I915_GTT_PAGE_SIZE);
 
-	dpt_obj = i915_gem_object_create_lmem(i915, size, 0);
-	if (IS_ERR(dpt_obj) && i915_ggtt_has_aperture(&i915->ggtt))
+	if (HAS_LMEM(i915))
+		dpt_obj = i915_gem_object_create_lmem(i915, size, 0);
+	else
 		dpt_obj = i915_gem_object_create_stolen(i915, size);
-	if (IS_ERR(dpt_obj) && !HAS_LMEM(i915)) {
-		drm_dbg_kms(&i915->drm, "fb: [FB:%d] Allocating dpt from smem\n",
-			    fb->base.base.id);
-
-		dpt_obj = i915_gem_object_create_internal(i915, size);
-	}
 	if (IS_ERR(dpt_obj))
 		return ERR_CAST(dpt_obj);
 
