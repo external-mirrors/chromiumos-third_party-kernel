@@ -75,7 +75,9 @@ static struct v4l2_subdev_internal_ops csi2_sd_internal_ops = {
 
 int ipu_isys_csi2_get_link_freq(struct ipu_isys_csi2 *csi2, s64 *link_freq)
 {
-	struct ipu_isys_pipeline *pipe = container_of(csi2->asd.sd.entity.pipe,
+	struct media_pipeline *mp =
+				media_entity_pipeline(&csi2->asd.sd.entity);
+	struct ipu_isys_pipeline *pipe = container_of(mp,
 						      struct ipu_isys_pipeline,
 						      pipe);
 	struct v4l2_subdev *ext_sd =
@@ -203,7 +205,8 @@ ipu_isys_csi2_calc_timing(struct ipu_isys_csi2 *csi2,
 static int set_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct ipu_isys_csi2 *csi2 = to_ipu_isys_csi2(sd);
-	struct ipu_isys_pipeline *ip = container_of(sd->entity.pipe,
+	struct media_pipeline *mp = media_entity_pipeline(&sd->entity);
+	struct ipu_isys_pipeline *ip = container_of(mp,
 						    struct ipu_isys_pipeline,
 						    pipe);
 	struct ipu_isys_csi2_config *cfg;
@@ -263,18 +266,19 @@ static int csi2_link_validate(struct media_link *link)
 {
 	struct ipu_isys_csi2 *csi2;
 	struct ipu_isys_pipeline *ip;
+	struct media_pipeline *mp;
 	int rval;
 
+	mp = media_entity_pipeline(link->sink->entity);
 	if (!link->sink->entity ||
-	    !link->sink->entity->pipe || !link->source->entity)
+	    !mp || !link->source->entity)
 		return -EINVAL;
 	csi2 =
 	    to_ipu_isys_csi2(media_entity_to_v4l2_subdev(link->sink->entity));
-	ip = to_ipu_isys_pipeline(link->sink->entity->pipe);
+	ip = to_ipu_isys_pipeline(mp);
 	csi2->receiver_errors = 0;
 	ip->csi2 = csi2;
-	ipu_isys_video_add_capture_done(to_ipu_isys_pipeline
-					(link->sink->entity->pipe),
+	ipu_isys_video_add_capture_done(to_ipu_isys_pipeline(mp),
 					csi2_capture_done);
 
 	rval = v4l2_subdev_link_validate(link);
@@ -283,7 +287,7 @@ static int csi2_link_validate(struct media_link *link)
 
 	if (!v4l2_ctrl_g_ctrl(csi2->store_csi2_header)) {
 		struct media_pad *remote_pad =
-		    media_entity_remote_pad(&csi2->asd.pad[CSI2_PAD_SOURCE]);
+		    media_pad_remote_pad_first(&csi2->asd.pad[CSI2_PAD_SOURCE]);
 
 		if (remote_pad &&
 		    is_media_entity_v4l2_subdev(remote_pad->entity)) {
@@ -319,7 +323,8 @@ static int __subdev_link_validate(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_format *source_fmt,
 				  struct v4l2_subdev_format *sink_fmt)
 {
-	struct ipu_isys_pipeline *ip = container_of(sd->entity.pipe,
+	struct media_pipeline *mp = media_entity_pipeline(&sd->entity);
+	struct ipu_isys_pipeline *ip = container_of(mp,
 						    struct ipu_isys_pipeline,
 						    pipe);
 
