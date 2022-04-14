@@ -73,7 +73,8 @@ static int __subdev_link_validate(struct v4l2_subdev *sd,
 				  struct v4l2_subdev_format *source_fmt,
 				  struct v4l2_subdev_format *sink_fmt)
 {
-	struct ipu_isys_pipeline *ip = container_of(sd->entity.pipe,
+	struct media_pipeline *mp = media_entity_pipeline(&sd->entity);
+	struct ipu_isys_pipeline *ip = container_of(mp,
 						    struct ipu_isys_pipeline,
 						    pipe);
 
