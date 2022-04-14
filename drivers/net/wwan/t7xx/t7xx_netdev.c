@@ -12,6 +12,8 @@
 
 #include <net/ipv6.h>
 
+#include <uapi/linux/if_arp.h>
+
 #include "t7xx_hif_dpmaif_rx.h"
 #include "t7xx_hif_dpmaif_tx.h"
 #include "t7xx_netdev.h"
@@ -427,7 +429,7 @@ static void ccmni_recv_skb(struct mtk_pci_dev *mtk_dev, int netif_id, struct sk_
 
 	skb_len = skb->len;
 
-	netif_rx_any_context(skb);
+	netif_rx(skb);
 	dev->stats.rx_packets++;
 	dev->stats.rx_bytes += skb_len;
 }
