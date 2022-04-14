@@ -363,6 +363,7 @@ int kbase_dma_fence_wait(struct kbase_jd_atom *katom,
 			dev_err(katom->kctx->kbdev->dev,
 				"Error %d adding reservation to callback.\n", err);
 			goto end;
+		}
 		
 		if (!test_bit(i, info->dma_fence_excl_bitmap)) {
 #if (KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE)
