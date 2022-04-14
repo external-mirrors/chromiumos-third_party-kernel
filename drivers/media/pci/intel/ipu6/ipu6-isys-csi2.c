@@ -452,7 +452,8 @@ int ipu_isys_csi2_set_stream(struct v4l2_subdev *sd,
 {
 	struct ipu_isys_csi2 *csi2 = to_ipu_isys_csi2(sd);
 	struct ipu_isys *isys = csi2->isys;
-	struct ipu_isys_pipeline *ip = container_of(sd->entity.pipe,
+	struct media_pipeline *mp = media_entity_pipeline(&sd->entity);
+	struct ipu_isys_pipeline *ip = container_of(mp,
 						    struct ipu_isys_pipeline,
 						    pipe);
 	struct ipu_isys_csi2_config *cfg =
