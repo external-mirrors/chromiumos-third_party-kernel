@@ -30,6 +30,7 @@
 #define KVM_HC_SEND_IPI		10
 #define KVM_HC_SCHED_YIELD		11
 #define KVM_HC_SYSTEM_S2IDLE		12
+#define KVM_HC_SYSTEM_WAKE_IRQ		13
 
 /*
  * hypercalls use architecture specific
