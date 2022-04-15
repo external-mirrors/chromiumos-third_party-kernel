@@ -5,7 +5,7 @@
 #include <linux/manatee.h>
 #include <asm/hypervisor.h>
 
-enum manatee_domain_type __ro_after_init manatee_domain_type = MANATEE_NATIVE;
+enum manatee_domain_type manatee_domain_type = MANATEE_NATIVE;
 
 static int __init manatee_detect_mode(void)
 {
