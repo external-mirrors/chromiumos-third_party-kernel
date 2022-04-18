@@ -1614,10 +1614,10 @@ static inline void kvm_mod_used_mmu_pages(struct kvm *kvm, long nr)
 	percpu_counter_add(&kvm_total_used_mmu_pages, nr);
 }
 
-static void kvm_mmu_free_page_rcu(struct rcu_head *rcu_head)
+static void kvm_mmu_free_page_rcu(struct rcu_head *mglru_rcu_head)
 {
-	struct kvm_mmu_page *sp = container_of(rcu_head, struct kvm_mmu_page,
-					       rcu_head);
+	struct kvm_mmu_page *sp = container_of(mglru_rcu_head, struct kvm_mmu_page,
+					       mglru_rcu_head);
 
 	free_page((unsigned long)sp->spt);
 	if (!sp->role.direct)
@@ -1634,7 +1634,7 @@ static void kvm_mmu_put_page(struct kvm *kvm, struct kvm_mmu_page *sp)
 	list_del_rcu(&sp->mmu_page_list);
 	spin_unlock(&kvm->arch.mmu_page_list_lock);
 
-	call_rcu(&sp->rcu_head, kvm_mmu_free_page_rcu);
+	call_rcu(&sp->mglru_rcu_head, kvm_mmu_free_page_rcu);
 }
 
 static void kvm_mmu_free_page(struct kvm *kvm, struct kvm_mmu_page *sp)

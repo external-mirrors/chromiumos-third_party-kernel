@@ -992,6 +992,9 @@ struct kvm_arch {
 	bool guest_can_read_msr_platform_info;
 	bool exception_payload_enabled;
 
+	spinlock_t mmu_page_list_lock;
+	struct list_head mmu_page_list;
+
 	bool bus_lock_detection_enabled;
 
 	/* Deflect RDMSR and WRMSR to user space when they trigger a #GP */
@@ -1015,9 +1018,6 @@ struct kvm_arch {
 	struct list_head tdp_mmu_roots;
 	/* List of struct tdp_mmu_pages not being used as roots */
 	struct list_head tdp_mmu_pages;
-
-	spinlock_t mmu_page_list_lock;
-	struct list_head mmu_page_list;
 };
 
 struct kvm_vm_stat {
