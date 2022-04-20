@@ -479,9 +479,9 @@ static void pci_device_shutdown(struct device *dev)
 #endif
 }
 
-#ifdef CONFIG_PM
+#ifdef CONFIG_PM_SLEEP
 
-/* Auxiliary functions used for system resume and run-time resume. */
+/* Auxiliary functions used for system resume */
 
 /**
  * pci_restore_standard_config - restore standard config registers of PCI device
@@ -500,10 +500,19 @@ static int pci_restore_standard_config(struct pci_dev *pci_dev)
 	pci_restore_state(pci_dev);
 	return 0;
 }
+#endif /* CONFIG_PM_SLEEP */
 
-#endif
+#ifdef CONFIG_PM
 
-#ifdef CONFIG_PM_SLEEP
+/* Auxiliary functions used for system resume and run-time resume */
+
+static void pci_pm_default_resume(struct pci_dev *pci_dev)
+{
+	pci_fixup_device(pci_fixup_resume, pci_dev);
+
+	if (!pci_has_subordinate(pci_dev))
+		pci_enable_wake(pci_dev, PCI_D0, false);
+}
 
 static void pci_pm_default_resume_early(struct pci_dev *pci_dev)
 {
@@ -511,6 +520,10 @@ static void pci_pm_default_resume_early(struct pci_dev *pci_dev)
 	pci_restore_state(pci_dev);
 	pci_fixup_device(pci_fixup_resume_early, pci_dev);
 }
+
+#endif /* CONFIG_PM */
+
+#ifdef CONFIG_PM_SLEEP
 
 /*
  * Default "suspend" method for devices that have no driver provided suspend,
@@ -628,14 +641,6 @@ static int pci_legacy_resume(struct device *dev)
 }
 
 /* Auxiliary functions used by the new power management framework */
-
-static void pci_pm_default_resume(struct pci_dev *pci_dev)
-{
-	pci_fixup_device(pci_fixup_resume, pci_dev);
-
-	if (!pci_has_subordinate(pci_dev))
-		pci_enable_wake(pci_dev, PCI_D0, false);
-}
 
 static void pci_pm_default_suspend(struct pci_dev *pci_dev)
 {
