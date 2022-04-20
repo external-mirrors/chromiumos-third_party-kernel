@@ -657,20 +657,22 @@ static bool pci_has_legacy_pm_support(struct pci_dev *pci_dev)
 
 /* New power management framework */
 
+/* Return 0 on successful, -EBUSY on contention */
 int pci_enter_coordinated_pm(struct pci_dev *pdev)
 {
-	/* block PM suspend, driver probe, etc. */
-	device_lock(&pdev->dev);
+	if (device_trylock(&pdev->dev) == 0)
+		return -EBUSY;
 	pdev->coordinated_pm = 1;
 	device_unlock(&pdev->dev);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pci_enter_coordinated_pm);
 
+/* Return 0 on successful, -EBUSY on contention */
 int pci_exit_coordinated_pm(struct pci_dev *pdev)
 {
-	/* block PM suspend, driver probe, etc. */
-	device_lock(&pdev->dev);
+	if (device_trylock(&pdev->dev) == 0)
+		return -EBUSY;
 	pdev->coordinated_pm = 0;
 	device_unlock(&pdev->dev);
 	return 0;
