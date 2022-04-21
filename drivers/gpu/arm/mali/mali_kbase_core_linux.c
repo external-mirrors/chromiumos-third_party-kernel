@@ -4494,7 +4494,7 @@ int power_control_init(struct kbase_device *kbdev)
 	defined(CONFIG_REGULATOR))
 	if (kbdev->nr_regulators > 0) {
 		kbdev->opp_token = dev_pm_opp_set_regulators(kbdev->dev,
-							     regulator_name);
+							     regulator_names);
 	}
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 	err = dev_pm_opp_of_add_table(kbdev->dev);
