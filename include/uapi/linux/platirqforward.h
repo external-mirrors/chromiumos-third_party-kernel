@@ -19,7 +19,7 @@
 
 #define PLAT_IRQ_FORWARD_TYPE       (';')
 #define PLAT_IRQ_FORWARD_BASE       100
-#define GPE_FORWARD_BASE	    130
+#define ACPI_EVT_FORWARD_BASE       130
 
 /**
  *
@@ -33,8 +33,8 @@ struct plat_irq_forward_set {
 #define PLAT_IRQ_FORWARD_SET_LEVEL_TRIGGER_EVENTFD	(1 << 0)
 #define PLAT_IRQ_FORWARD_SET_LEVEL_UNMASK_EVENTFD	(1 << 1)
 #define PLAT_IRQ_FORWARD_SET_EDGE_TRIGGER		(1 << 2)
-#define PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_TRIGGER_EVENTFD	(1 << 3)
-#define PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_UNMASK_EVENTFD	(1 << 4)
+#define PLAT_IRQ_FORWARD_SET_LEVEL_ACPI_SCI_TRIGGER_EVENTFD	(1 << 3)
+#define PLAT_IRQ_FORWARD_SET_LEVEL_ACPI_SCI_UNMASK_EVENTFD	(1 << 4)
 	__u32	irq_number_host;
 	__u32	count;
 	__u8	eventfd[];
@@ -45,18 +45,23 @@ struct plat_irq_forward_set {
 
 /**
  *
- * Register GPE and combine with SCI.
+ * Register ACPI event and combine with SCI.
  *
  */
-struct gpe_forward_set {
+struct acpi_evt_forward_set {
 	__u32	argsz;
 	__u32	action_flags;
-#define ACPI_GPE_FORWARD_SET_TRIGGER		(1 << 0)
-#define ACPI_GPE_FORWARD_CLEAR_TRIGGER		(1 << 1)
-	__u32	gpe_host_nr;
+#define ACPI_EVT_FORWARD_SET_GPE_TRIGGER		(1 << 0)
+#define ACPI_EVT_FORWARD_CLEAR_GPE_TRIGGER		(1 << 1)
+#define ACPI_EVT_FORWARD_SET_FIXED_EVENT_TRIGGER	(1 << 2)
+#define ACPI_EVT_FORWARD_CLEAR_FIXED_EVENT_TRIGGER	(1 << 3)
+	union {
+		__u32	gpe_host_nr;
+		__u32	fixed_evt_nr;
+	};
 };
 
-/* ---- IOCTLs for GPE Forwarding ---- */
-#define ACPI_GPE_FORWARD_SET _IO(PLAT_IRQ_FORWARD_TYPE, GPE_FORWARD_BASE)
+/* ---- IOCTLs for ACPI Events Forwarding ---- */
+#define ACPI_EVT_FORWARD_SET		_IO(PLAT_IRQ_FORWARD_TYPE, ACPI_EVT_FORWARD_BASE)
 
 #endif /* _UAPI_LINUX_PLATIRQFORWARD_H */
