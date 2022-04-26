@@ -533,6 +533,7 @@ struct acpi_fixed_event_info {
 	u8 enable_register_id;
 	u16 status_bit_mask;
 	u16 enable_bit_mask;
+	u8 flags;
 };
 
 /* Information used during field processing */

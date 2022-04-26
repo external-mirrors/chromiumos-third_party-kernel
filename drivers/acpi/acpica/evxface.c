@@ -567,26 +567,28 @@ ACPI_EXPORT_SYMBOL(acpi_install_global_event_handler)
 
 /*******************************************************************************
  *
- * FUNCTION:    acpi_install_fixed_event_handler
+ * FUNCTION:    acpi_ev_install_fixed_event_handler
  *
  * PARAMETERS:  event           - Event type to enable.
+ *              is_raw_handler  - Whether this event should be handled using
+ *                                the special event handler mode.
  *              handler         - Pointer to the handler function for the
  *                                event
- *              context         - Value passed to the handler on each GPE
+ *              context         - Value passed to the handler on each event
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Saves the pointer to the handler function and then enables the
- *              event.
+ * DESCRIPTION: Internal function to install a handler for a Fixed Event.
  *
  ******************************************************************************/
-acpi_status
-acpi_install_fixed_event_handler(u32 event,
-				 acpi_event_handler handler, void *context)
+static acpi_status
+acpi_ev_install_fixed_event_handler(u32 event,
+				    u8 is_raw_handler,
+				    acpi_event_handler handler, void *context)
 {
 	acpi_status status;
 
-	ACPI_FUNCTION_TRACE(acpi_install_fixed_event_handler);
+	ACPI_FUNCTION_TRACE(ev_install_fixed_event_handler);
 
 	/* Parameter validation */
 
@@ -611,23 +613,33 @@ acpi_install_fixed_event_handler(u32 event,
 	acpi_gbl_fixed_event_handlers[event].handler = handler;
 	acpi_gbl_fixed_event_handlers[event].context = context;
 
+	if (is_raw_handler)
+		acpi_gbl_fixed_event_info[event].flags |= ACPI_EVENT_DISPATCH_RAW_HANDLER;
+
 	status = acpi_clear_event(event);
-	if (ACPI_SUCCESS(status))
-		status = acpi_enable_event(event, 0);
 	if (ACPI_FAILURE(status)) {
 		ACPI_WARNING((AE_INFO,
-			      "Could not enable fixed event - %s (%u)",
+			      "Could not clear fixed event - %s (%u)",
 			      acpi_ut_get_event_name(event), event));
+	} else if (!is_raw_handler) {
+		status = acpi_enable_event(event, 0);
+		if (ACPI_FAILURE(status)) {
+			ACPI_WARNING((AE_INFO,
+				      "Could not enable fixed event - %s (%u)",
+				      acpi_ut_get_event_name(event), event));
 
-		/* Remove the handler */
+			/* Remove the handler */
 
-		acpi_gbl_fixed_event_handlers[event].handler = NULL;
-		acpi_gbl_fixed_event_handlers[event].context = NULL;
-	} else {
-		ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-				  "Enabled fixed event %s (%X), Handler=%p\n",
-				  acpi_ut_get_event_name(event), event,
-				  handler));
+			acpi_gbl_fixed_event_handlers[event].handler = NULL;
+			acpi_gbl_fixed_event_handlers[event].context = NULL;
+
+			acpi_gbl_fixed_event_info[event].flags = 0;
+		} else {
+			ACPI_DEBUG_PRINT((ACPI_DB_INFO,
+					  "Enabled fixed event %s (%X), Handler=%p\n",
+					  acpi_ut_get_event_name(event), event,
+					  handler));
+		}
 	}
 
 cleanup:
@@ -635,7 +647,65 @@ cleanup:
 	return_ACPI_STATUS(status);
 }
 
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_install_fixed_event_handler
+ *
+ * PARAMETERS:  event           - Event type to enable.
+ *              handler         - Pointer to the handler function for the
+ *                                event
+ *              context         - Value passed to the handler on each event
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Saves the pointer to the handler function and then enables the
+ *              event.
+ *
+ ******************************************************************************/
+acpi_status
+acpi_install_fixed_event_handler(u32 event,
+				 acpi_event_handler handler, void *context)
+{
+	acpi_status status;
+
+	ACPI_FUNCTION_TRACE(acpi_install_fixed_event_handler);
+
+	status = acpi_ev_install_fixed_event_handler(event, FALSE, handler, context);
+
+	return_ACPI_STATUS(status);
+}
+
 ACPI_EXPORT_SYMBOL(acpi_install_fixed_event_handler)
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    acpi_install_fixed_event_raw_handler
+ *
+ * PARAMETERS:  event           - Event type to enable.
+ *              handler         - Pointer to the handler function for the
+ *                                event
+ *              context         - Value passed to the handler on each event
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Saves the pointer to the handler function and then enables the
+ *              event.
+ *
+ ******************************************************************************/
+acpi_status
+acpi_install_fixed_event_raw_handler(u32 event,
+				     acpi_event_handler handler, void *context)
+{
+	acpi_status status;
+
+	ACPI_FUNCTION_TRACE(acpi_install_fixed_event_raw_handler);
+
+	status = acpi_ev_install_fixed_event_handler(event, TRUE, handler, context);
+
+	return_ACPI_STATUS(status);
+}
+ACPI_EXPORT_SYMBOL(acpi_install_fixed_event_raw_handler)
 
 /*******************************************************************************
  *
@@ -675,6 +745,8 @@ acpi_remove_fixed_event_handler(u32 event, acpi_event_handler handler)
 
 	acpi_gbl_fixed_event_handlers[event].handler = NULL;
 	acpi_gbl_fixed_event_handlers[event].context = NULL;
+
+	acpi_gbl_fixed_event_info[event].flags = 0;
 
 	if (ACPI_FAILURE(status)) {
 		ACPI_WARNING((AE_INFO,
