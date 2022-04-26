@@ -238,10 +238,12 @@ static u32 acpi_ev_fixed_event_dispatch(u32 event)
 
 	ACPI_FUNCTION_ENTRY();
 
-	/* Clear the status bit */
-
-	(void)acpi_write_bit_register(acpi_gbl_fixed_event_info[event].
-				      status_register_id, ACPI_CLEAR_STATUS);
+	if (!(acpi_gbl_fixed_event_info[event].flags & ACPI_EVENT_DISPATCH_RAW_HANDLER)) {
+		/* Clear the status bit */
+		(void)acpi_write_bit_register(
+				acpi_gbl_fixed_event_info[event].status_register_id,
+				ACPI_CLEAR_STATUS);
+	}
 
 	/*
 	 * Make sure that a handler exists. If not, report an error

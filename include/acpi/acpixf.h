@@ -607,6 +607,13 @@ ACPI_HW_DEPENDENT_RETURN_STATUS(acpi_status
 								  void
 								  *context))
 ACPI_HW_DEPENDENT_RETURN_STATUS(acpi_status
+				 acpi_install_fixed_event_raw_handler(u32
+								      acpi_event,
+								      acpi_event_handler
+								      handler,
+								      void
+								      *context))
+ACPI_HW_DEPENDENT_RETURN_STATUS(acpi_status
 				 acpi_remove_fixed_event_handler(u32 acpi_event,
 								 acpi_event_handler
 								 handler))
