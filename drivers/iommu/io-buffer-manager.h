@@ -36,17 +36,22 @@ struct io_buffer_pool {
 	struct io_buffer_slot *slots;
 };
 
-#define NUM_POOLS 8
+#define NUM_POOLS 6
+
+struct io_buffer_pools {
+	unsigned int num_slots;
+	struct io_buffer_pool pools[NUM_POOLS];
+	dma_addr_t iova;
+	size_t iova_size;
+};
 
 struct io_buffer_manager {
 	struct workqueue_struct *evict_wq;
 	struct delayed_work evict_work;
-	unsigned int num_slots;
-	spinlock_t fallback_lock;
-	struct rb_root fallback_buffers;
-	struct io_buffer_pool pools[NUM_POOLS];
-	dma_addr_t iova;
-	size_t iova_size;
+	struct io_buffer_pools pools;
+	spinlock_t buffers_lock;
+	struct rb_root active_buffers;
+	struct rb_root cached_buffers;
 };
 
 struct io_bounce_buffer_info {
@@ -57,13 +62,12 @@ struct io_bounce_buffer_info {
 
 bool io_buffer_manager_alloc_buffer(struct io_buffer_manager *manager,
 				    struct device *dev, void *orig_buffer,
-				    size_t size, int prot, bool use_fallback,
-				    unsigned int nid,
+				    size_t size, int prot, unsigned int nid,
 				    struct io_bounce_buffer_info *info,
 				    bool *new_buffer);
 
 bool io_buffer_manager_find_buffer(struct io_buffer_manager *manager,
-				   dma_addr_t handle, bool may_use_fallback,
+				   dma_addr_t handle,
 				   struct io_bounce_buffer_info *info,
 				   void **orig_buffer, int *prot);
 
@@ -73,12 +77,10 @@ typedef void (*prerelease_cb)(struct io_bounce_buffer_info *info, int prot,
 bool io_buffer_manager_release_buffer(struct io_buffer_manager *manager,
 				      struct iommu_domain *domain,
 				      dma_addr_t handle, bool inited,
-				      bool may_use_fallback, prerelease_cb cb,
-				      void *ctx);
+				      prerelease_cb cb, void *ctx);
 
 int io_buffer_manager_init(struct io_buffer_manager *manager,
-			   struct device *dev, struct iova_domain *iovad,
-			   unsigned int num_slots);
+			   struct device *dev, struct iova_domain *iovad);
 
 bool io_buffer_manager_reinit_check(struct io_buffer_manager *manager,
 				    struct device *dev,
@@ -89,6 +91,7 @@ void io_buffer_manager_destroy(struct io_buffer_manager *manager,
 			       struct iommu_domain *domain);
 
 bool io_bounce_buffers_release_buffer_cb(struct io_buffer_manager *manager,
-					 dma_addr_t iova, size_t size);
+					 dma_addr_t iova, size_t size,
+					 bool free_iova);
 
 #endif /* _LINUX_IO_BUFFER_MANAGER_H */
