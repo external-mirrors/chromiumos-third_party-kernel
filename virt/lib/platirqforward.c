@@ -213,7 +213,7 @@ err:
 	return error;
 }
 
-int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data,
+static int platform_set_irqs_ioctl_level_unmask(uint32_t irq_number_host, void *data,
 					 uint32_t flags)
 {
 	int32_t fd = *(int32_t *)data;
@@ -261,7 +261,7 @@ int plat_irq_forward_set_irq_wake(uint32_t irq_number_host, bool on)
 }
 EXPORT_SYMBOL(plat_irq_forward_set_irq_wake);
 
-int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
+static int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 {
 	u8 *data;
 	unsigned long minsz;
@@ -421,14 +421,11 @@ static void gpe_clear_ioctl_trigger(uint32_t gpe)
 	mutex_unlock(&plat_fwd_irq_mutex);
 }
 
-int gpe_forward_ioctl(void *device_data, unsigned long arg)
+static int gpe_forward_ioctl(void *device_data, unsigned long arg)
 {
 	struct gpe_forward_set hdr;
-	unsigned long minsz;
 
-	minsz = offsetofend(struct gpe_forward_set, gpe_host_nr);
-
-	if (copy_from_user(&hdr, (void __user *)arg, minsz))
+	if (copy_from_user(&hdr, (void __user *)arg, sizeof(hdr)))
 		return -EFAULT;
 
 	switch (hdr.action_flags) {
@@ -454,7 +451,7 @@ static long plat_irq_forward_fops_unl_ioctl(struct file *filep,
 
 	switch (cmd) {
 	case PLAT_IRQ_FORWARD_SET:
-		ret = (long) plat_irq_forward_ioctl(filep, arg);
+		ret = plat_irq_forward_ioctl(filep, arg);
 		break;
 	case ACPI_GPE_FORWARD_SET:
 		ret = gpe_forward_ioctl(filep, arg);
