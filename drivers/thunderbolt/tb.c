@@ -637,8 +637,7 @@ static void tb_scan_port(struct tb_port *port)
 	 * At the moment Thunderbolt 2 and beyond (devices with LC) we
 	 * can support runtime PM.
 	 */
-	// TODO(214485026): Reenable when low power mode on TBT resume works
-	//sw->rpm = sw->generation > 1;
+	sw->rpm = sw->generation > 1;
 
 	if (tb_switch_add(sw)) {
 		tb_switch_put(sw);
