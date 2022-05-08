@@ -5794,7 +5794,7 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 
 	/* TODO: Do we need to enable ANI? */
 
-	ath11k_reg_update_chan_list(ar);
+	ath11k_reg_update_chan_list(ar, false);
 
 	ar->num_started_vdevs = 0;
 	ar->num_created_vdevs = 0;
@@ -5860,6 +5860,11 @@ static void ath11k_mac_op_stop(struct ieee80211_hw *hw)
 	cancel_work_sync(&ar->regd_update_work);
 	cancel_work_sync(&ar->ab->update_11d_work);
 	cancel_work_sync(&ar->ab->rfkill_work);
+
+	if (ar->state_11d == ATH11K_11D_PREPARING) {
+		ar->state_11d = ATH11K_11D_IDLE;
+		complete(&ar->completed_11d_scan);
+	}
 
 	spin_lock_bh(&ar->data_lock);
 	list_for_each_entry_safe(ppdu_stats, tmp, &ar->ppdu_stats_info, list) {
@@ -6067,7 +6072,6 @@ void ath11k_mac_11d_scan_start(struct ath11k *ar, u32 vdev_id)
 		ar->vdev_id_11d_scan = vdev_id;
 		if (ar->state_11d == ATH11K_11D_PREPARING)
 			ar->state_11d = ATH11K_11D_RUNNING;
-		goto ret;
 	}
 
 fin:
@@ -6075,7 +6079,7 @@ fin:
 		ar->state_11d = ATH11K_11D_IDLE;
 		complete(&ar->completed_11d_scan);
 	}
-ret:
+
 	mutex_unlock(&ar->ab->vdev_id_11d_lock);
 }
 
@@ -6301,8 +6305,11 @@ static int ath11k_mac_op_add_interface(struct ieee80211_hw *hw,
 				    arvif->vdev_id, ret);
 			goto err_peer_del;
 		}
-		reinit_completion(&ar->completed_11d_scan);
-		ar->state_11d = ATH11K_11D_PREPARING;
+
+		if (test_bit(WMI_TLV_SERVICE_11D_OFFLOAD, ab->wmi_ab.svc_map)) {
+			reinit_completion(&ar->completed_11d_scan);
+			ar->state_11d = ATH11K_11D_PREPARING;
+		}
 		break;
 	case WMI_VDEV_TYPE_MONITOR:
 		set_bit(ATH11K_FLAG_MONITOR_VDEV_CREATED, &ar->monitor_flags);
