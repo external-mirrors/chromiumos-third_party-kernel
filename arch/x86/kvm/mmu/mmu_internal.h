@@ -40,7 +40,11 @@ struct kvm_mmu_page {
 	u64 *spt;
 	/* hold the gfn of each spte inside spt */
 	gfn_t *gfns;
-	int root_count;          /* Currently serving as active root */
+	/* Currently serving as active root */
+	union {
+		int root_count;
+		refcount_t tdp_mmu_root_count;
+	};
 	unsigned int unsync_children;
 	struct kvm_rmap_head parent_ptes; /* rmap pointers to parent sptes */
 	DECLARE_BITMAP(unsync_child_bitmap, 512);
@@ -53,14 +57,19 @@ struct kvm_mmu_page {
 	int clear_spte_count;
 #endif
 
+	atomic_t ref_count;
+	struct rcu_head mglru_rcu_head;
+	struct list_head mmu_page_list;
+
 	/* Number of writes since the last time traversal visited this page.  */
 	atomic_t write_flooding_count;
 
+#ifdef CONFIG_X86_64
 	bool tdp_mmu_page;
 
-	atomic_t ref_count;
+	/* Used for freeing the page asyncronously if it is a TDP MMU page. */
 	struct rcu_head rcu_head;
-	struct list_head mmu_page_list;
+#endif
 };
 
 extern struct kmem_cache *mmu_page_header_cache;
@@ -75,6 +84,16 @@ static inline struct kvm_mmu_page *to_shadow_page(hpa_t shadow_page)
 static inline struct kvm_mmu_page *sptep_to_sp(u64 *sptep)
 {
 	return to_shadow_page(__pa(sptep));
+}
+
+static inline int kvm_mmu_role_as_id(union kvm_mmu_page_role role)
+{
+	return role.smm ? 1 : 0;
+}
+
+static inline int kvm_mmu_page_as_id(struct kvm_mmu_page *sp)
+{
+	return kvm_mmu_role_as_id(sp->role);
 }
 
 static inline bool kvm_vcpu_ad_need_write_protect(struct kvm_vcpu *vcpu)
@@ -99,22 +118,6 @@ bool kvm_mmu_slot_gfn_write_protect(struct kvm *kvm,
 void kvm_flush_remote_tlbs_with_address(struct kvm *kvm,
 					u64 start_gfn, u64 pages);
 
-static inline void kvm_mmu_get_root(struct kvm *kvm, struct kvm_mmu_page *sp)
-{
-	BUG_ON(!sp->root_count);
-	lockdep_assert_held(&kvm->mmu_lock);
-
-	++sp->root_count;
-}
-
-static inline bool kvm_mmu_put_root(struct kvm *kvm, struct kvm_mmu_page *sp)
-{
-	lockdep_assert_held(&kvm->mmu_lock);
-	--sp->root_count;
-
-	return !sp->root_count;
-}
-
 /*
  * Return values of handle_mmio_page_fault, mmu.page_fault, and fast_page_fault().
  *
@@ -137,6 +140,9 @@ enum {
 #define SET_SPTE_NEED_REMOTE_TLB_FLUSH	BIT(1)
 #define SET_SPTE_SPURIOUS		BIT(2)
 
+int kvm_mmu_max_mapping_level(struct kvm *kvm,
+			      const struct kvm_memory_slot *slot, gfn_t gfn,
+			      kvm_pfn_t pfn, int max_level);
 int kvm_mmu_hugepage_adjust(struct kvm_vcpu *vcpu, gfn_t gfn,
 			    int max_level, kvm_pfn_t *pfnp,
 			    struct page *page, bool huge_page_disallowed,
