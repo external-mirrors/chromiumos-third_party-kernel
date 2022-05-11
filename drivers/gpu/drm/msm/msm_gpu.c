@@ -17,6 +17,150 @@
 #include <linux/sched/task.h>
 
 /*
+ * gpu-boost, get notified of input events to get a head start on booting
+ * up the GPU
+ */
+
+static bool gpuboost = true;
+MODULE_PARM_DESC(gpuboost, "Enable GPU boost");
+module_param(gpuboost, bool, 0600);
+
+static void boost_worker(struct kthread_work *work)
+{
+	struct msm_gpu *gpu = container_of(work, struct msm_gpu, boost_work);
+
+	pm_runtime_get_sync(&gpu->pdev->dev);
+	pm_runtime_mark_last_busy(&gpu->pdev->dev);
+	pm_runtime_put_autosuspend(&gpu->pdev->dev);
+}
+
+static void msm_gpuboost_input_event(struct input_handle *handle,
+					unsigned int type, unsigned int code,
+					int value)
+{
+	struct input_handler *handler = handle->handler;
+	struct msm_gpu *gpu = container_of(handler, struct msm_gpu, boost_handler);
+	int ret;
+
+	if (!gpuboost)
+		return;
+
+	/* This is something we can do from irq context, to avoid scheduling
+	 * a worker if the GPU is already ticking
+	 */
+	ret = pm_runtime_get_if_in_use(&gpu->pdev->dev);
+	if (ret == 0) {
+		trace_msm_gpu_boost(type, code, value);
+		kthread_queue_work(gpu->worker, &gpu->boost_work);
+		return;
+	}
+
+	pm_runtime_mark_last_busy(&gpu->pdev->dev);
+	pm_runtime_put_autosuspend(&gpu->pdev->dev);
+}
+
+static int msm_gpuboost_input_connect(struct input_handler *handler,
+					struct input_dev *dev,
+					const struct input_device_id *id)
+{
+	struct input_handle *handle;
+	int error;
+
+	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->name = "msm-gpu-boost";
+
+	error = input_register_handle(handle);
+	if (error)
+		goto err2;
+
+	error = input_open_device(handle);
+	if (error)
+		goto err1;
+
+	return 0;
+
+err1:
+	input_unregister_handle(handle);
+err2:
+	kfree(handle);
+	return error;
+}
+
+static void msm_gpuboost_input_disconnect(struct input_handle *handle)
+{
+	input_close_device(handle);
+	input_unregister_handle(handle);
+	kfree(handle);
+}
+
+static const struct input_device_id msm_gpuboost_ids[] = {
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+			 INPUT_DEVICE_ID_MATCH_ABSBIT,
+		.evbit = { BIT_MASK(EV_ABS) },
+		.absbit = { [BIT_WORD(ABS_MT_POSITION_X)] =
+			    BIT_MASK(ABS_MT_POSITION_X) |
+			    BIT_MASK(ABS_MT_POSITION_Y) },
+	}, /* multi-touch touchscreen */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_ABS) },
+		.absbit = { [BIT_WORD(ABS_X)] = BIT_MASK(ABS_X) }
+
+	}, /* stylus or joystick device */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(BTN_LEFT)] = BIT_MASK(BTN_LEFT) },
+	}, /* pointer (e.g. trackpad, mouse) */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(KEY_ESC)] = BIT_MASK(KEY_ESC) },
+	}, /* keyboard */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+				INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = {[BIT_WORD(BTN_JOYSTICK)] = BIT_MASK(BTN_JOYSTICK) },
+	}, /* joysticks not caught by ABS_X above */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+				INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(BTN_GAMEPAD)] = BIT_MASK(BTN_GAMEPAD) },
+	}, /* gamepad */
+	{ },
+};
+
+static void msm_gpuboost_init(struct msm_gpu *gpu)
+{
+	struct input_handler *handler = &gpu->boost_handler;
+	int ret;
+
+	handler->event      = msm_gpuboost_input_event;
+	handler->connect    = msm_gpuboost_input_connect;
+	handler->disconnect = msm_gpuboost_input_disconnect;
+	handler->name       = "msm-gpu-boost";
+	handler->id_table   = msm_gpuboost_ids;
+
+	ret = input_register_handler(handler);
+	if (ret) {
+		DRM_DEV_ERROR(gpu->dev->dev, "failed to register input handler: %d\n", ret);
+	}
+}
+
+static void msm_gpuboost_cleanup(struct msm_gpu *gpu)
+{
+	input_unregister_handler(&gpu->boost_handler);
+}
+
+/*
  * Power Management:
  */
 
@@ -284,6 +428,16 @@ static void msm_gpu_crashstate_capture(struct msm_gpu *gpu,
 	if (submit) {
 		int i, nr = 0;
 
+		if (state->fault_info.smmu_info.ttbr0) {
+			struct msm_gpu_fault_info *info = &state->fault_info;
+			struct msm_mmu *mmu = submit->aspace->mmu;
+
+			msm_iommu_pagetable_params(mmu, &info->pgtbl_ttbr0,
+						   &info->asid);
+			msm_iommu_pagetable_walk(mmu, info->iova, info->ptes,
+						 ARRAY_SIZE(info->ptes));
+		}
+
 		/* count # of buffers to dump: */
 		for (i = 0; i < submit->nr_bos; i++)
 			if (should_dump(submit, i))
@@ -351,6 +505,28 @@ find_submit(struct msm_ringbuffer *ring, uint32_t fence)
 
 static void retire_submits(struct msm_gpu *gpu);
 
+static void get_comm_cmdline(struct msm_gem_submit *submit, char **comm, char **cmd)
+{
+	struct msm_file_private *ctx = submit->queue->ctx;
+	struct task_struct *task;
+
+	/* Note that kstrdup will return NULL if argument is NULL: */
+	*comm = kstrdup(ctx->comm, GFP_KERNEL);
+	*cmd  = kstrdup(ctx->cmdline, GFP_KERNEL);
+
+	task = get_pid_task(submit->pid, PIDTYPE_PID);
+	if (!task)
+		return;
+
+	if (!*comm)
+		*comm = kstrdup(task->comm, GFP_KERNEL);
+
+	if (!*cmd)
+		*cmd = kstrdup_quotable_cmdline(task, GFP_KERNEL);
+
+	put_task_struct(task);
+}
+
 static void recover_worker(struct kthread_work *work)
 {
 	struct msm_gpu *gpu = container_of(work, struct msm_gpu, recover_work);
@@ -367,18 +543,11 @@ static void recover_worker(struct kthread_work *work)
 
 	submit = find_submit(cur_ring, cur_ring->memptrs->fence + 1);
 	if (submit) {
-		struct task_struct *task;
-
 		/* Increment the fault counts */
 		submit->queue->faults++;
 		submit->aspace->faults++;
 
-		task = get_pid_task(submit->pid, PIDTYPE_PID);
-		if (task) {
-			comm = kstrdup(task->comm, GFP_KERNEL);
-			cmd = kstrdup_quotable_cmdline(task, GFP_KERNEL);
-			put_task_struct(task);
-		}
+		get_comm_cmdline(submit, &comm, &cmd);
 
 		if (comm && cmd) {
 			DRM_DEV_ERROR(dev->dev, "%s: offending task: %s (%s)\n",
@@ -467,14 +636,7 @@ static void fault_worker(struct kthread_work *work)
 		goto resume_smmu;
 
 	if (submit) {
-		struct task_struct *task;
-
-		task = get_pid_task(submit->pid, PIDTYPE_PID);
-		if (task) {
-			comm = kstrdup(task->comm, GFP_KERNEL);
-			cmd = kstrdup_quotable_cmdline(task, GFP_KERNEL);
-			put_task_struct(task);
-		}
+		get_comm_cmdline(submit, &comm, &cmd);
 
 		/*
 		 * When we get GPU iova faults, we can get 1000s of them,
@@ -515,7 +677,7 @@ static void hangcheck_handler(struct timer_list *t)
 	if (fence != ring->hangcheck_fence) {
 		/* some progress has been made.. ya! */
 		ring->hangcheck_fence = fence;
-	} else if (fence_before(fence, ring->seqno)) {
+	} else if (fence_before(fence, ring->fctx->last_fence)) {
 		/* no progress and not done.. hung! */
 		ring->hangcheck_fence = fence;
 		DRM_DEV_ERROR(dev->dev, "%s: hangcheck detected gpu lockup rb %d!\n",
@@ -523,13 +685,13 @@ static void hangcheck_handler(struct timer_list *t)
 		DRM_DEV_ERROR(dev->dev, "%s:     completed fence: %u\n",
 				gpu->name, fence);
 		DRM_DEV_ERROR(dev->dev, "%s:     submitted fence: %u\n",
-				gpu->name, ring->seqno);
+				gpu->name, ring->fctx->last_fence);
 
 		kthread_queue_work(gpu->worker, &gpu->recover_work);
 	}
 
 	/* if still more pending work, reset the hangcheck timer: */
-	if (fence_after(ring->seqno, ring->hangcheck_fence))
+	if (fence_after(ring->fctx->last_fence, ring->hangcheck_fence))
 		hangcheck_timer_reset(gpu);
 
 	/* workaround for missing irq: */
@@ -746,7 +908,7 @@ void msm_gpu_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 
 	msm_gpu_hw_init(gpu);
 
-	submit->seqno = ++ring->seqno;
+	submit->seqno = submit->hw_fence->seqno;
 
 	msm_rd_dump_submit(priv->rd, submit, NULL);
 
@@ -857,6 +1019,7 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 	mutex_init(&gpu->active_lock);
 	mutex_init(&gpu->lock);
 	init_waitqueue_head(&gpu->retire_event);
+	kthread_init_work(&gpu->boost_work, boost_worker);
 	kthread_init_work(&gpu->retire_work, retire_worker);
 	kthread_init_work(&gpu->recover_work, recover_worker);
 	kthread_init_work(&gpu->fault_work, fault_worker);
@@ -961,6 +1124,8 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 
 	refcount_set(&gpu->sysprof_active, 1);
 
+	msm_gpuboost_init(gpu);
+
 	return 0;
 
 fail:
@@ -982,6 +1147,8 @@ void msm_gpu_cleanup(struct msm_gpu *gpu)
 	DBG("%s", gpu->name);
 
 	WARN_ON(!list_empty(&gpu->active_list));
+
+	msm_gpuboost_cleanup(gpu);
 
 	for (i = 0; i < ARRAY_SIZE(gpu->rb); i++) {
 		msm_ringbuffer_destroy(gpu->rb[i]);

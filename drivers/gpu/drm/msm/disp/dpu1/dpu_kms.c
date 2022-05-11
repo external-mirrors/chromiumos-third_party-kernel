@@ -380,9 +380,13 @@ static int dpu_kms_parse_data_bus_icc_path(struct dpu_kms *dpu_kms)
 	struct icc_path *path0;
 	struct icc_path *path1;
 	struct drm_device *dev = dpu_kms->dev;
+	struct device *dpu_dev = dev->dev;
+	struct device *mdss_dev = dpu_dev->parent;
 
-	path0 = of_icc_get(dev->dev, "mdp0-mem");
-	path1 = of_icc_get(dev->dev, "mdp1-mem");
+	/* Interconnects are a part of MDSS device tree binding, not the
+	 * MDP/DPU device. */
+	path0 = of_icc_get(mdss_dev, "mdp0-mem");
+	path1 = of_icc_get(mdss_dev, "mdp1-mem");
 
 	if (IS_ERR_OR_NULL(path0))
 		return PTR_ERR_OR_ZERO(path0);
@@ -565,8 +569,6 @@ static int _dpu_kms_initialize_dsi(struct drm_device *dev,
 			return PTR_ERR(encoder);
 		}
 
-		priv->encoders[priv->num_encoders++] = encoder;
-
 		memset(&info, 0, sizeof(info));
 		info.intf_type = encoder->encoder_type;
 
@@ -629,8 +631,6 @@ static int _dpu_kms_initialize_displayport(struct drm_device *dev,
 			return rc;
 		}
 
-		priv->encoders[priv->num_encoders++] = encoder;
-
 		info.num_of_h_tiles = 1;
 		info.h_tile_instance[0] = i;
 		info.capabilities = MSM_DISPLAY_CAP_VID_MODE;
@@ -675,36 +675,18 @@ static int _dpu_kms_setup_displays(struct drm_device *dev,
 	return rc;
 }
 
-static void _dpu_kms_drm_obj_destroy(struct dpu_kms *dpu_kms)
-{
-	struct msm_drm_private *priv;
-	int i;
-
-	priv = dpu_kms->dev->dev_private;
-
-	for (i = 0; i < priv->num_crtcs; i++)
-		priv->crtcs[i]->funcs->destroy(priv->crtcs[i]);
-	priv->num_crtcs = 0;
-
-	for (i = 0; i < priv->num_planes; i++)
-		priv->planes[i]->funcs->destroy(priv->planes[i]);
-	priv->num_planes = 0;
-
-	for (i = 0; i < priv->num_connectors; i++)
-		priv->connectors[i]->funcs->destroy(priv->connectors[i]);
-	priv->num_connectors = 0;
-
-	for (i = 0; i < priv->num_encoders; i++)
-		priv->encoders[i]->funcs->destroy(priv->encoders[i]);
-	priv->num_encoders = 0;
-}
-
+#define MAX_PLANES 20
 static int _dpu_kms_drm_obj_init(struct dpu_kms *dpu_kms)
 {
 	struct drm_device *dev;
 	struct drm_plane *primary_planes[MAX_PLANES], *plane;
 	struct drm_plane *cursor_planes[MAX_PLANES] = { NULL };
 	struct drm_crtc *crtc;
+	struct drm_encoder *encoder;
+	unsigned int num_encoders;
+	unsigned cursor_idx = 0;
+	unsigned primary_idx = 0;
+	bool pin_overlays;
 
 	struct msm_drm_private *priv;
 	struct dpu_mdss_cfg *catalog;
@@ -715,40 +697,55 @@ static int _dpu_kms_drm_obj_init(struct dpu_kms *dpu_kms)
 	priv = dev->dev_private;
 	catalog = dpu_kms->catalog;
 
+	pin_overlays = !of_property_read_bool(dpu_kms->pdev->dev.of_node, "chromium-enable-overlays");
+
 	/*
 	 * Create encoder and query display drivers to create
 	 * bridges and connectors
 	 */
 	ret = _dpu_kms_setup_displays(dev, priv, dpu_kms);
 	if (ret)
-		goto fail;
+		return ret;
 
-	max_crtc_count = min(catalog->mixer_count, priv->num_encoders);
+	num_encoders = 0;
+	drm_for_each_encoder(encoder, dev)
+		num_encoders++;
+
+	max_crtc_count = min(catalog->mixer_count, num_encoders);
 
 	/* Create the planes, keeping track of one primary/cursor per crtc */
 	for (i = 0; i < catalog->sspp_count; i++) {
 		enum drm_plane_type type;
+		unsigned possible_crtcs;
 
 		if ((catalog->sspp[i].features & BIT(DPU_SSPP_CURSOR))
-			&& cursor_planes_idx < max_crtc_count)
+			&& cursor_planes_idx < max_crtc_count) {
 			type = DRM_PLANE_TYPE_CURSOR;
-		else if (primary_planes_idx < max_crtc_count)
+			possible_crtcs = BIT(cursor_idx);
+			cursor_idx++;
+		} else if (primary_planes_idx < max_crtc_count) {
 			type = DRM_PLANE_TYPE_PRIMARY;
-		else
+			possible_crtcs = BIT(primary_idx);
+			primary_idx++;
+		} else {
 			type = DRM_PLANE_TYPE_OVERLAY;
+			possible_crtcs = (1UL << max_crtc_count) - 1;
+		}
 
 		DPU_DEBUG("Create plane type %d with features %lx (cur %lx)\n",
 			  type, catalog->sspp[i].features,
 			  catalog->sspp[i].features & BIT(DPU_SSPP_CURSOR));
 
+		if (!pin_overlays)
+			possible_crtcs = (1UL << max_crtc_count) - 1;
+
 		plane = dpu_plane_init(dev, catalog->sspp[i].id, type,
-				       (1UL << max_crtc_count) - 1, 0);
+				       possible_crtcs, 0);
 		if (IS_ERR(plane)) {
 			DPU_ERROR("dpu_plane_init failed\n");
 			ret = PTR_ERR(plane);
-			goto fail;
+			return ret;
 		}
-		priv->planes[priv->num_planes++] = plane;
 
 		if (type == DRM_PLANE_TYPE_CURSOR)
 			cursor_planes[cursor_planes_idx++] = plane;
@@ -763,19 +760,16 @@ static int _dpu_kms_drm_obj_init(struct dpu_kms *dpu_kms)
 		crtc = dpu_crtc_init(dev, primary_planes[i], cursor_planes[i]);
 		if (IS_ERR(crtc)) {
 			ret = PTR_ERR(crtc);
-			goto fail;
+			return ret;
 		}
 		priv->crtcs[priv->num_crtcs++] = crtc;
 	}
 
 	/* All CRTCs are compatible with all encoders */
-	for (i = 0; i < priv->num_encoders; i++)
-		priv->encoders[i]->possible_crtcs = (1 << priv->num_crtcs) - 1;
+	drm_for_each_encoder(encoder, dev)
+		encoder->possible_crtcs = (1 << priv->num_crtcs) - 1;
 
 	return 0;
-fail:
-	_dpu_kms_drm_obj_destroy(dpu_kms);
-	return ret;
 }
 
 static void _dpu_kms_hw_destroy(struct dpu_kms *dpu_kms)
@@ -837,6 +831,9 @@ static void dpu_kms_destroy(struct msm_kms *kms)
 	_dpu_kms_hw_destroy(dpu_kms);
 
 	msm_kms_destroy(&dpu_kms->base);
+
+	if (dpu_kms->rpm_enabled)
+		pm_runtime_disable(&dpu_kms->pdev->dev);
 }
 
 static irqreturn_t dpu_irq(struct msm_kms *kms)
@@ -973,12 +970,16 @@ static int _dpu_kms_mmu_init(struct dpu_kms *dpu_kms)
 	struct iommu_domain *domain;
 	struct msm_gem_address_space *aspace;
 	struct msm_mmu *mmu;
+	struct device *dpu_dev = dpu_kms->dev->dev;
+	struct device *mdss_dev = dpu_dev->parent;
 
 	domain = iommu_domain_alloc(&platform_bus_type);
 	if (!domain)
 		return 0;
 
-	mmu = msm_iommu_new(dpu_kms->dev->dev, domain);
+	/* IOMMUs are a part of MDSS device tree binding, not the
+	 * MDP/DPU device. */
+	mmu = msm_iommu_new(mdss_dev, domain);
 	if (IS_ERR(mmu)) {
 		iommu_domain_free(domain);
 		return PTR_ERR(mmu);
@@ -1172,37 +1173,16 @@ error:
 	return rc;
 }
 
-struct msm_kms *dpu_kms_init(struct drm_device *dev)
+static int dpu_kms_init(struct drm_device *ddev)
 {
-	struct msm_drm_private *priv;
+	struct msm_drm_private *priv = ddev->dev_private;
+	struct device *dev = ddev->dev;
+	struct platform_device *pdev = to_platform_device(dev);
 	struct dpu_kms *dpu_kms;
 	int irq;
-
-	if (!dev) {
-		DPU_ERROR("drm device node invalid\n");
-		return ERR_PTR(-EINVAL);
-	}
-
-	priv = dev->dev_private;
-	dpu_kms = to_dpu_kms(priv->kms);
-
-	irq = irq_of_parse_and_map(dpu_kms->pdev->dev.of_node, 0);
-	if (irq < 0) {
-		DPU_ERROR("failed to get irq: %d\n", irq);
-		return ERR_PTR(irq);
-	}
-	dpu_kms->base.irq = irq;
-
-	return &dpu_kms->base;
-}
-
-static int dpu_bind(struct device *dev, struct device *master, void *data)
-{
-	struct msm_drm_private *priv = dev_get_drvdata(master);
-	struct platform_device *pdev = to_platform_device(dev);
-	struct drm_device *ddev = priv->dev;
-	struct dpu_kms *dpu_kms;
+	struct dev_pm_opp *opp;
 	int ret = 0;
+	unsigned long max_freq = ULONG_MAX;
 
 	dpu_kms = devm_kzalloc(&pdev->dev, sizeof(*dpu_kms), GFP_KERNEL);
 	if (!dpu_kms)
@@ -1225,7 +1205,11 @@ static int dpu_bind(struct device *dev, struct device *master, void *data)
 	}
 	dpu_kms->num_clocks = ret;
 
-	platform_set_drvdata(pdev, dpu_kms);
+	opp = dev_pm_opp_find_freq_floor(dev, &max_freq);
+	if (!IS_ERR(opp))
+		dev_pm_opp_put(opp);
+
+	dev_pm_opp_set_rate(dev, max_freq);
 
 	ret = msm_kms_init(&dpu_kms->base, &kms_funcs);
 	if (ret) {
@@ -1240,31 +1224,25 @@ static int dpu_bind(struct device *dev, struct device *master, void *data)
 
 	priv->kms = &dpu_kms->base;
 
-	return ret;
+	irq = irq_of_parse_and_map(dpu_kms->pdev->dev.of_node, 0);
+	if (irq < 0) {
+		DPU_ERROR("failed to get irq: %d\n", irq);
+		return irq;
+	}
+	dpu_kms->base.irq = irq;
+
+	return 0;
 }
-
-static void dpu_unbind(struct device *dev, struct device *master, void *data)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct dpu_kms *dpu_kms = platform_get_drvdata(pdev);
-
-	if (dpu_kms->rpm_enabled)
-		pm_runtime_disable(&pdev->dev);
-}
-
-static const struct component_ops dpu_ops = {
-	.bind   = dpu_bind,
-	.unbind = dpu_unbind,
-};
 
 static int dpu_dev_probe(struct platform_device *pdev)
 {
-	return component_add(&pdev->dev, &dpu_ops);
+	return msm_drv_probe(&pdev->dev, dpu_kms_init);
 }
 
 static int dpu_dev_remove(struct platform_device *pdev)
 {
-	component_del(&pdev->dev, &dpu_ops);
+	component_master_del(&pdev->dev, &msm_drm_ops);
+
 	return 0;
 }
 
@@ -1272,7 +1250,8 @@ static int __maybe_unused dpu_runtime_suspend(struct device *dev)
 {
 	int i;
 	struct platform_device *pdev = to_platform_device(dev);
-	struct dpu_kms *dpu_kms = platform_get_drvdata(pdev);
+	struct msm_drm_private *priv = platform_get_drvdata(pdev);
+	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
 
 	/* Drop the performance state vote */
 	dev_pm_opp_set_rate(dev, 0);
@@ -1288,7 +1267,8 @@ static int __maybe_unused dpu_runtime_resume(struct device *dev)
 {
 	int rc = -1;
 	struct platform_device *pdev = to_platform_device(dev);
-	struct dpu_kms *dpu_kms = platform_get_drvdata(pdev);
+	struct msm_drm_private *priv = platform_get_drvdata(pdev);
+	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
 	struct drm_encoder *encoder;
 	struct drm_device *ddev;
 	int i;
@@ -1318,9 +1298,11 @@ static const struct dev_pm_ops dpu_pm_ops = {
 	SET_RUNTIME_PM_OPS(dpu_runtime_suspend, dpu_runtime_resume, NULL)
 	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
 				pm_runtime_force_resume)
+	.prepare = msm_pm_prepare,
+	.complete = msm_pm_complete,
 };
 
-const struct of_device_id dpu_dt_match[] = {
+static const struct of_device_id dpu_dt_match[] = {
 	{ .compatible = "qcom,msm8998-dpu", },
 	{ .compatible = "qcom,qcm2290-dpu", },
 	{ .compatible = "qcom,sdm845-dpu", },
@@ -1336,6 +1318,7 @@ MODULE_DEVICE_TABLE(of, dpu_dt_match);
 static struct platform_driver dpu_driver = {
 	.probe = dpu_dev_probe,
 	.remove = dpu_dev_remove,
+	.shutdown = msm_drv_shutdown,
 	.driver = {
 		.name = "msm_dpu",
 		.of_match_table = dpu_dt_match,
