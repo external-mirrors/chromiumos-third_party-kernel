@@ -36,6 +36,7 @@
 #include <linux/cpuset.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/random.h>
+#include <uapi/linux/sched/types.h>
 
 #include <trace/events/power.h>
 #define CREATE_TRACE_POINTS
