@@ -636,6 +636,11 @@ static void lid_work_handler(struct work_struct *work)
 
 	mutex_lock(&td->mode_mutex);
 	mt_set_modes(hdev, HID_LATENCY_NORMAL, false, false);
+	/* Elan's touchpad VID 323B needs this delay to handle both switch
+	 * surface off and switch surface on and trigger recalibration
+	 * properly.
+	 */
+	msleep(50);
 	mt_set_modes(hdev, HID_LATENCY_NORMAL, true, true);
 	mutex_unlock(&td->mode_mutex);
 }
@@ -663,7 +668,7 @@ static int mt_create_lid_handler(void)
 	if (!dmi_check_system(mt_lid_handler_dmi_table))
 		return 0;
 
-	mt_mode_wq = create_singlethread_workqueue("hid-mt-lid");
+	mt_mode_wq = alloc_ordered_workqueue("hid-mt-lid", WQ_FREEZABLE);
 	if (mt_mode_wq == NULL)
 		return -ENOMEM;
 
@@ -683,7 +688,7 @@ static void mt_configure_lid_handler(struct mt_device *td)
 {
 	struct hid_device *hdev = td->hdev;
 
-	if (!hid_is_using_ll_driver(hdev, &i2c_hid_ll_driver))
+	if (hdev->bus != BUS_I2C)
 		return;
 
 	td->lid_switch = true;
@@ -1993,7 +1998,7 @@ static int mt_suspend(struct hid_device *hdev, pm_message_t state)
 	mutex_unlock(&td->mode_mutex);
 
 	if (td->is_haptic_touchpad)
-		hid_haptic_resume(hdev, haptic);
+		hid_haptic_suspend(hdev, haptic);
 
 	return 0;
 }
@@ -2031,7 +2036,7 @@ static int mt_resume(struct hid_device *hdev)
 	mutex_unlock(&td->mode_mutex);
 
 	if (td->is_haptic_touchpad)
-		hid_haptic_suspend(hdev, haptic);
+		hid_haptic_resume(hdev, haptic);
 
 	return 0;
 }
