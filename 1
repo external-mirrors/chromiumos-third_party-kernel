@@ -1,0 +1,1000 @@
+ 1175  git gr START
+ 1176  git gr START|grep printk
+ 1177  find . -iname "*.h"|xargs touch
+ 1178  git diff master merge_back
+ 1179  git diff --name-status master..merge_back
+ 1180  git diff --name-status master merge_back
+ 1181  git diff master/include/net/mac80211.h merge_back/include/net/mac80211.h
+ 1182  git diff master merge_back -- include/net/mac80211.h
+ 1183  git branch
+ 1184  git co merge_back
+ 1185  git annotate include/net/mac80211.h
+ 1186  gs 35845271457
+ 1187  git diff master merge_back -- include/net/mac80211.h
+ 1188  git log
+ 1189  git format-patch -1 d201d09aa405220f0feb03795a50e6b5372319b1
+ 1190  patch -p1 < 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1191  git branch
+ 1192  git diff
+ 1193  patch -R -p1 < 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1194  git diff
+ 1195  patch -R < 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1196  git diff
+ 1197  vi 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1198  ll
+ 1199  rm 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1200  git log 
+ 1201  gs d201d09aa405220f0feb03795a50e6b5372319b1
+ 1202  git log 
+ 1203  vi 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1204  patch -R -p1 < 0001-mac80211-Add-support-to-trigger-sta-disconnect-on-ha.patch
+ 1205  git diff
+ 1206  git branch
+ 1207  git status
+ 1208  git branch
+ 1209  git reset --hard HEAD
+ 1210  vi
+ 1211  git branch
+ 1212  fg
+ 1213  git status
+ 1214  git add drivers/net/wireless/intel/iwlwifi/mvm/mac80211.c net/mac80211/main.c net/mac80211/mlme.c net/mac80211/util.c
+ 1215  git commit --amend
+ 1216  git format-patch -1
+ 1217  git co master
+ 1218  gll
+ 1219  git reset --hard HEAD~1
+ 1220  ls -ltr
+ 1221  git am -3 0001-debug-logs.patch
+ 1222  vi net/mac80211/util.c
+ 1223  git am -abort
+ 1224  git am --abort
+ 1225  vi net/mac80211/util.c +2727
+ 1226  gll
+ 1227  vi net/mac80211/util.c +2727
+ 1228  git am -3 0001-debug-logs.patch
+ 1229  vi net/mac80211/util.c +2727
+ 1230  git am --abort
+ 1231  vi net/mac80211/util.c +2727
+ 1232  git am -3 0001-debug-logs.patch
+ 1233  vi net/mac80211/util.c +2727
+ 1234  vi net/mac80211/util.c
+ 1235  vi net/mac80211/mlme.c
+ 1236  git add net/mac80211/mlme.c
+ 1237  git add net/mac80211/util.c
+ 1238  git am --continue
+ 1239  git branch
+ 1240  git gr nothing 
+ 1241  gs
+ 1242  vi 
+ 1243  git co merge_back
+ 1244  find . -iname "*.h"|xargs touch
+ 1245  vi
+ 1246  git gr "sdata->flags |= "
+ 1247  fg
+ 1248  git gr -i itxq
+ 1249  fg
+ 1250  git gr mvmtxq|grep list
+ 1251  git gr "list_add_tail(&mvmtxq->list"
+ 1252  fg
+ 1253  git gr STA_MMPDU_TXQ
+ 1254  fg
+ 1255  git gr eferred_tx_frames
+ 1256  git log -p drivers/net/wireless/intel/iwlwifi/mvm/sta.h
+ 1257  gs 83026c2b90f3850bc1f913ae67a3eccd77305a9c
+ 1258  fg
+ 1259  git annotate drivers/net/wireless/intel/iwlwifi/mvm/tx.c
+ 1260  gs 75f3b8eb70c
+ 1261  fg
+ 1262  . /home/ggreenma/.nix-profile/etc/profile.d/nix.sh
+ 1263  make tests
+ 1264  ./fw/nix/prepare 
+ 1265  make tests
+ 1266  yes ""|make tests
+ 1267  cd fw/fw/tests/softwareTesting/projects/usim/fullSimLinux
+ 1268  ll
+ 1269  ll ../../../frwk/
+ 1270  cd ../.././../../
+ 1271  cd ../
+ 1272  ll
+ 1273  find . -name core.mak
+ 1274  cd ..
+ 1275  find . -iname "core.mak"
+ 1276  find . -iname "wifi-common-utest.mak"
+ 1277  git remote -v
+ 1278  cd -
+ 1279  cd tests/softwareTesting/projects/usim/fullSimLinux
+ 1280  git remote -v
+ 1281  cd ../../..
+ 1282  cd ../..
+ 1283  git submodule init
+ 1284  git submodule update --recursive
+ 1285  find . -iname "core.mak"
+ 1286  cd ../..
+ 1287  yes ""|make tests
+ 1288  vi Makefile 
+ 1289  yes ""|make tests
+ 1290  git submodule update --recursive
+ 1291  find . -iname "core.mak"
+ 1292  vi Makefile 
+ 1293  yes ""|make tests
+ 1294  find . -iname mac80211
+ 1295  yes ""|make tests
+ 1296  dmesg 
+ 1297  yes ""|make tests
+ 1298  VLAB_ARGS=--dbg ./examples/recover.sh 
+ 1299  yes ""|make tests
+ 1300  VLAB_ARGS=--dbg ./examples/recover.sh 
+ 1301  yes ""|make tests
+ 1302  VLAB_ARGS=--dbg ./examples/recover.sh 
+ 1303  make && ./examples/recover.sh
+ 1304  h
+ 1305  make && ./examples/recover.sh
+ 1306  h
+ 1307  VLAB_ARGS=--dbg ./examples/recover.sh 
+ 1308  make && ./examples/recover.sh
+ 1309  top
+ 1310  vi Documents/machines
+ 1311  ssh tester@10.12.217.156
+ 1312  vi Documents/machines
+ 1313  ssh tester@10.12.177.148
+ 1314  cd work/iwlwifi/iwlwifi-stack-dev/
+ 1315  git gr usleep_range
+ 1316  vi drivers/net/wireless/intel/iwlwifi/mvm/mac80211.c
+ 1317  make clean
+ 1318  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j4
+ 1319  make clean
+ 1320  fg
+ 1321  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j4
+ 1322  git gr attribute
+ 1323  git gr attribute|grep unused
+ 1324  git gr __always_unused
+ 1325  git gr unused
+ 1326  git gr "attribute(unused"
+ 1327  git gr "attribute\(unused"
+ 1328  git gr "attribute"|grep unused
+ 1329  git gr _unused
+ 1330  vi drivers/net/wireless/intel/iwlwifi/mvm/sta.c
+ 1331  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/60/260/8 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1332  ll 1.patch 
+ 1333  rm 1.patch 
+ 1334  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/60/260/8 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1335  git am -3 1.patch 
+ 1336  git am --abort
+ 1337  git diff
+ 1338  git reset --hard HEAD
+ 1339  git am -3 1.patch 
+ 1340  git am --abort
+ 1341  gll
+ 1342  git branch
+ 1343  git co origin/master
+ 1344  gll
+ 1345  git branch
+ 1346  git am -3 1.patch 
+ 1347  git am --abort
+ 1348  gll
+ 1349  git fetch
+ 1350  git am -3 1.patch 
+ 1351  git diff
+ 1352  git am --abort
+ 1353  gll
+ 1354  git co origin/master
+ 1355  gll
+ 1356  git am -3 1.patch 
+ 1357  git am --abort
+ 1358  h
+ 1359  c
+ 1360  ifconfig
+ 1361  ping  134.191.232.125
+ 1362  ifconfig
+ 1363  ifconfig 
+ 1364  sudo iw wlp0s20f3 scan
+ 1365  sudo iw wlp0s20f3 scan|grep SSID
+ 1366  ll
+ 1367  ll compat/
+ 1368  git log compat/backport-5.5.c 
+ 1369  cd compat/
+ 1370  ll
+ 1371  ll *.C
+ 1372  ll *.c
+ 1373  vi main.c
+ 1374  git log -- lib-asn1_decoder.c
+ 1375  cd ../..
+ 1376  cd iwlwifi-backports/
+ 1377  find . -iname lib-asn1_decoder.c
+ 1378  cd -
+ 1379  cd iwlwifi-stack-dev/
+ 1380  ll
+ 1381  ll backport-include/
+ 1382  ll backport-include/linux/
+ 1383  vi backport-include/linux/phy.h 
+ 1384  git log backport-include/linux/phy.h 
+ 1385  gs 60195c10f573437c7369c945e01547f8d74a0ffd
+ 1386  cd ../iwlwifi-backports/
+ 1387  git gr leds-disabled.h
+ 1388  find . -iname leds-disabled.h
+ 1389  ll
+ 1390  ll backport/
+ 1391  ll backport/compat/
+ 1392  vi  backport/compat/backport-4.10.c 
+ 1393  ll compat
+ 1394  ll
+ 1395  ll devel
+ 1396  ll devel/doc/
+ 1397  ll
+ 1398  ll patches/
+ 1399  vi patches/0083-timer_list.patch
+ 1400  vi patches/0107-net-forward-path.cocci
+ 1401  cd
+ 1402  cd Downloads/
+ 1403  ll
+ 1404  cd cert3
+ 1405  ll
+ 1406  openssl rsa -aes256 -in private.key -out private.encr.key
+ 1407  cd work/iwlwifi/iwlwifi-stack-dev/
+ 1408  git gr ethtool_convert_link_mode_to_legacy_u32
+ 1409  ll
+ 1410  ifconfig 
+ 1411  ping vpn.intel.com
+ 1412  ping vpn-idc.intel.com
+ 1413  ifconfig 
+ 1414  0;175;31M0;175;31m
+ 1415  ifconfig 
+ 1416  sudo dhclient
+ 1417  kill %1
+ 1418  ifconfig 
+ 1419  ping vpn-idc.intel.com
+ 1420  ping 10.13.20.202
+ 1421  0;53;39M0;53;39m
+ 1422  ifconfig 
+ 1423  it gr ieee80211_do_stop
+ 1424  git gr ieee80211_do_stop
+ 1425  vi net/mac80211/iface.c +368
+ 1426  gitlog
+ 1427  gl
+ 1428  git branch
+ 1429  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/60/260/9 && git format-patch -1 --stdout FETCH_HEAD > 1.path
+ 1430  git am 1.patch
+ 1431  git am --abort
+ 1432  git am -3 1.patch
+ 1433  vi
+ 1434  git gr iwl_link_ctx_modify_flags
+ 1435  vi drivers/net/wireless/intel/iwlwifi/fw/api/mac-cfg.h +300
+ 1436  git gr iwl_link_ctx_modify_flags
+ 1437  sudo reboot
+ 1438  hamidor92&cl
+ 1439  sudo reboot
+ 1440  cd work/iwlwifi/iwlwifi-kernel/
+ 1441  git branch
+ 1442  git log
+ 1443  git remote -v
+ 1444  git branch -r
+ 1445  git log
+ 1446  git co -b v5.17
+ 1447  git log
+ 1448  git branch
+ 1449  git reset -hard v5.17
+ 1450  git reset --hard v5.17
+ 1451  gll
+ 1452  git log
+ 1453  make clean
+ 1454  .. .config
+ 1455  ll .config
+ 1456  make -j8
+ 1457  make oldconfig
+ 1458  yes ""|make oldconfig
+ 1459  make -j8
+ 1460  ll drivers/net/wireless/intel/iwlwifi/fw/dbg.c
+ 1461  vi drivers/net/wireless/intel/iwlwifi/fw/dbg.c
+ 1462  python
+ 1463  git gr usleep_range
+ 1464  d Downloads/
+ 1465  cd Downloads/
+ 1466  ll
+ 1467  cd linux-pki-2022-02-21-46a4015
+ 1468  ll
+ 1469  ./intelize.py --help
+ 1470  nmcli conn show "Intel AnyConnect VPN"
+ 1471  nmcli conn show
+ 1472  nmcli conn show "Intel AnyConnect"
+ 1473  journalctl -b0 -u NetworkManager
+ 1474  journalctl -b0 -u NetworkManager > nm.log
+ 1475  vi nm.log 
+ 1476  cd work/iwlwifi/iwlwifi-stack-dev/
+ 1477  git branch
+ 1478  git log
+ 1479  bison --version
+ 1480  make defconfig-iwlwifi
+ 1481  make clean
+ 1482  make defconfig-iwlwifi
+ 1483  c -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer   -c -o conf.o conf.c
+ 1484  cc -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer   -c -o conf.o conf.c
+ 1485  find . -name conf.c
+ 1486  cd kconf/
+ 1487  cc -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer   -c -o conf.o conf.c
+ 1488  ll
+ 1489  lex -ozconf.lex.c -L zconf.l
+ 1490  yacc -ozconf.tab.c -t -l zconf.y
+ 1491  ifconfig 
+ 1492  scp -r ../kconf/ tester@10.12.177.148:~/devel/iwlwifi-stack-dev
+ 1493  h
+ 1494  scp -r ../kconf/ tester@10.12.177.148:~/devel/iwlwifi-stack-dev
+ 1495  sudo dnf remove bison-devel.x86_64
+ 1496  yacc -ozconf.tab.c -t -l zconf.y
+ 1497  sudo dnf remove yacc
+ 1498  sudo dnf remove flex-devel
+ 1499  yacc
+ 1500  yacc -V
+ 1501  sudo dnf remove bison-devel
+ 1502  sudo dnf remove byacc
+ 1503  which yacc
+ 1504  yacc
+ 1505  h|grep dnf
+ 1506  sudo df-install bison flex
+ 1507  sudo dnf install bison flex
+ 1508  yacc
+ 1509  bison --version
+ 1510  flex --version
+ 1511  yacc
+ 1512  sudo dnf install bison-devel
+ 1513  yacc
+ 1514  sudo dnf install flex bison
+ 1515  sudo dnf install flex-devel bison-devel
+ 1516  yac
+ 1517  yacc
+ 1518  make defconfig-iwlwifi
+ 1519  cd ..
+ 1520  make defconfig-iwlwifi
+ 1521  sudo dnf install flex-devel
+ 1522  cd kconf/
+ 1523  h
+ 1524  bison -ozconf.tab.c -t -l zconf.y
+ 1525  ll
+ 1526  vi Makefile 
+ 1527  git gr yacc
+ 1528  which yacc
+ 1529  which bison
+ 1530  sudo ln -s /usr/bin/bison /usr/bin/yacc
+ 1531  ll /usr/bin/
+ 1532  cd ..
+ 1533  make clean
+ 1534  make defconfig-iwlwifi
+ 1535  make -j4
+ 1536  make clean
+ 1537  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j4
+ 1538  vi drivers/net/wireless/intel/iwlwifi/mvm/ftm-initiator.c +310
+ 1539  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j4
+ 1540  vi drivers/net/wireless/intel/iwlwifi/mvm/ftm-initiator.c +310
+ 1541  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j4
+ 1542  make clean
+ 1543  find . -iname "*.o"
+ 1544  find . -iname "*.c"|xargs touch
+ 1545  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j8
+ 1546  make clean
+ 1547  find . -iname "*.c"|xargs touch
+ 1548  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j8
+ 1549  make clean
+ 1550  git branch
+ 1551  git co master
+ 1552  gll
+ 1553  git remote -v|grep ggreenma|grep merge
+ 1554  git fetch
+ 1555  git branch -r|grep ggreenma|grep merge
+ 1556  git co -b merge origin/sandbox/ggreenma/merge_v5.18-try2
+ 1557  gll
+ 1558  KLIB_BUILD=~/work/iwlwifi/iwlwifi-kernel/ make -j8
+ 1559  gs 22011510f2a504edca8a312fce4732eeb8858c9a
+ 1560  git branch
+ 1561  git co master
+ 1562  git log
+ 1563  cd ../iwlwifi-kernel/
+ 1564  git log -p
+ 1565  git log
+ 1566  git log -p
+ 1567  vi Documentation/timers/timers-howto.rst
+ 1568  vi
+ 1569  ssh tester@10.12.177.148
+ 1570  c
+ 1571  ssh tester@10.12.177.148
+ 1572  vi ~/.bash_aliases 
+ 1573  cdw
+ 1574  cd iwlwifi/
+ 1575  ll
+ 1576  cd iwlwifi-stack-auto/
+ 1577  git branch
+ 1578  git pull -r
+ 1579  gll
+ 1580  git remote -v
+ 1581  cd ../iwlwifi-kernel/
+ 1582  git log 
+ 1583  git remote -v
+ 1584  git pull -r
+ 1585  git branch
+ 1586  git co master
+ 1587  git log
+ 1588  ga drivers/net/wireless/mac80211_hwsim.c
+ 1589  gs 3856f1b31f6c8
+ 1590  ga net/mac80211/mlme.c
+ 1591  gs 1f2c104448477
+ 1592  ga net/mac80211/mlme.c
+ 1593  gs 5dca295dd7675
+ 1594  git log
+ 1595  gs 7d352ccf1e9935b5222ca84e8baeb07a0c8f94b9
+ 1596  ga net/mac80211/airtime.c
+ 1597  gs 022143d0c52b6
+ 1598  ga net/mac80211/cfg.c
+ 1599  ga 2b3171c6fe0af
+ 1600  gs 2b3171c6fe0af
+ 1601  ga net/mac80211/cfg.c
+ 1602  ga net/mac80211/mlme.c
+ 1603  gs 1f2c104448477
+ 1604  vi net/mac80211/mlme.c
+ 1605  git diff net/mac80211/mlme.c
+ 1606  ga net/mac80211/mlme.c
+ 1607  gs 3fa5a0f5b0d69
+ 1608  git gr NL80211_FILS_DISCOVERY_ATTR_TMPL
+ 1609  ga net/wireless/nl80211.c
+ 1610  gs 272cd0e8d4a63
+ 1611  ga net/wireless/nl80211.c
+ 1612  gs 024fcf5efda73
+ 1613  gll
+ 1614  git remote -v
+ 1615  git fetch linux
+ 1616  gll
+ 1617  git remote -v
+ 1618  gi tlog linux/master
+ 1619  git log linux/master
+ 1620  git co -n lin_master linux/master
+ 1621  git co -b lin_master linux/master
+ 1622  vi MAINTAINERS 
+ 1623  gll
+ 1624  git co master
+ 1625  ga net/wireless/nl80211.c 
+ 1626  vi net/wireless/ibss.c
+ 1627  ga net/wireless/ibss.c
+ 1628  gs 1dc00b9d26257c5509a82aa06ca6b9aa58f932af
+ 1629  git branch
+ 1630  git pull -r
+ 1631  git log
+ 1632  gs 1dc00b9d26257c5509a82aa06ca6b9aa58f932af
+ 1633  gs 70c874bac18a9b9372ce925796b25b3c0e332462
+ 1634  cd ../iwlwifi-stack-dev/
+ 1635  vi compat/backport-5.11.c 
+ 1636  ga compat/backport-5.11.c 
+ 1637  gs 1f0f1e1afcb
+ 1638  ll compat/
+ 1639  ga compat/backport-4.8.c
+ 1640  gs 090e1489141
+ 1641  cd ../iwlwifi-backports/
+ 1642  ll
+ 1643  ll backport/
+ 1644  find . -iname backport-4.8.c
+ 1645  vi ./backport/compat/backport-4.8.c
+ 1646  ga ./backport/compat/backport-4.8.c
+ 1647  ga ./backport/compat/backport-5.11.c 
+ 1648  ga ./backport/compat/backport-5.10.c 
+ 1649  ga ./backport/compat/backport-5.13.c 
+ 1650  ga ./backport/compat/backport-4.10.c 
+ 1651  ga ./backport/compat/backport-5.5.c 
+ 1652  ga ./backport/compat/backport-genetlink.c 
+ 1653  gs ff6746638
+ 1654  cd -
+ 1655  ga compat/backport-genetlink.c
+ 1656  gs 51d3de7d1dd
+ 1657  ga compat/Makefile 
+ 1658  gs 1f0f1e1afcb
+ 1659  cd -
+ 1660  ll backport/
+ 1661  ll backport/compat/
+ 1662  vi  backport/compat/Makefile 
+ 1663  vi  backport/compat/backport-5.10.c 
+ 1664  git gr dev_fetch_sw_netstats
+ 1665  cd ..
+ 1666  git clone ssh://ggreenma@git-amr-10.devtools.intel.com:29418/titan-pytm-tests && scp -p -P 29418 ggreenma@git-amr-10.devtools.intel.com:hooks/commit-msg titan-pytm-tests/.git/hooks/
+ 1667  vi ~/.ssh/config 
+ 1668  vi ~/.ssh/id_rsa.pub 
+ 1669  cat ~/.ssh/id_rsa.pub 
+ 1670  c
+ 1671  vi test.c
+ 1672  gcc test.c -o t
+ 1673  ./t
+ 1674  fg
+ 1675  rm test.c 
+ 1676  cd work/iwlwifi/iwlwifi-stack-dev/
+ 1677  git am --abort
+ 1678  git log
+ 1679  git remote -v
+ 1680  git branch
+ 1681  vi 
+ 1682  make -j4
+ 1683  make defconfig-iwlwifi
+ 1684  make -j4
+ 1685  vi
+ 1686  make -j4
+ 1687  make clean
+ 1688  make defconfig-iwlwifi
+ 1689  make -j4
+ 1690  git reset -hard
+ 1691  git reset --hard HEAD
+ 1692  git co master
+ 1693  git branch
+ 1694  git log
+ 1695  cd ..
+ 1696  ll
+ 1697  cd -
+ 1698  cd ..
+ 1699  cd -
+ 1700  git fetch
+ 1701  git branch
+ 1702  git branch -r|grep core69
+ 1703  git co -b core69 origin/release/core69
+ 1704  git co -b core70 origin/release/core70
+ 1705  git log core69
+ 1706  git fetch
+ 1707  git log  origin/release/core70
+ 1708  git branch
+ 1709  git co master
+ 1710  gll
+ 1711  git reset --hard c486a15ebb
+ 1712  git pull -r
+ 1713  gll
+ 1714  ps -ef|grep teams
+ 1715  sudo killall teams
+ 1716  c
+ 1717  cd ../iwlwifi-kernel/
+ 1718  git fetch
+ 1719  git log 
+ 1720  git log origin/master
+ 1721  cd ..
+ 1722  cd iwlwifi-stack-auto/
+ 1723  git fetch
+ 1724  git log origin/master
+ 1725  vi drivers/net/wireless/intel/iwlwifi/fw/uefi.c
+ 1726  cdw
+ 1727  cd iwlwifi/iwlwifi-kernel/
+ 1728  find . -iname "time-event.h"
+ 1729  cdw
+ 1730  cd iwlwifi/iwlwifi-stack-dev/
+ 1731  git gr -i ppag
+ 1732  vi drivers/net/wireless/intel/iwlwifi/fw/acpi.c
+ 1733  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/10/2810/6 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1734  git am 1.patch
+ 1735  fg
+ 1736  git reset --hard HEAD~1
+ 1737  git pull -r
+ 1738  find . -iname api
+ 1739  ll ./drivers/net/wireless/intel/iwlwifi/fw/api
+ 1740  vi ./drivers/net/wireless/intel/iwlwifi/fw/api/debug.h 
+ 1741  vi ./drivers/net/wireless/intel/iwlwifi/fw/api/dbg-tlv.h 
+ 1742  git gr yoyo
+ 1743  git gr bool
+ 1744  git gr bool -- *.c
+ 1745  cd ..
+ 1746  ll
+ 1747  git clone "ssh://git-amr-10/titan-pytm-tests"
+ 1748  sudo dnf install wireshark
+ 1749  git clone "ssh://ggreenma@gerritwcs.ir.intel.com:29418/titan-pytm-tests" && scp -p -P 29418 ggreenma@gerritwcs.ir.intel.com:hooks/commit-msg "titan-pytm-tests/.git/hooks/"
+ 1750  cd titan-pytm-tests/
+ 1751  git submodule init
+ 1752  git submodule update --recursive
+ 1753  scp 10.12.217.156:~/gregory/titan-pytm-tests/dbg.patch .
+ 1754  scp tester@10.12.217.156:~/gregory/titan-pytm-tests/dbg.patch .
+ 1755  ./run_tests.sh run -p wifi_tests/linux/tva/soft_ap/interface -f test_soft_ap_max_throughput_vht_4
+ 1756  git pull -r
+ 1757  git submodule update --recursive
+ 1758  ll .pytm_framework/dist/pytm_linux_rootfs
+ 1759  cd .pytm_framework/dist/pytm_linux_rootfs
+ 1760  git pull -r
+ 1761  git remote -v
+ 1762  git branch
+ 1763  cd ../..
+ 1764  cd ..
+ 1765  git branch
+ 1766  gll
+ 1767  ll
+ 1768  cd dist/
+ 1769  ll
+ 1770  cd pytm_linux_
+ 1771  cd pytm_linux_rootfs/
+ 1772  ll
+ 1773  scp -r tester@10.12.217.156:~/gregory/titan-pytm-tests/.pytm_framework/dist/pytm_linux_rootfs/* .
+ 1774  cdw
+ 1775  cd iwlwifi/titan-pytm-tests/
+ 1776  ./run_tests.sh run -p wifi_tests/linux/tva/soft_ap/interface -f test_soft_ap_max_throughput_vht_4
+ 1777  ll pytm_framework/dist/pytm_linux_rootfs/
+ 1778  ll .pytm_framework/dist/pytm_linux_rootfs/
+ 1779  git submodule update --recursive
+ 1780  cd .pytm_framework/
+ 1781  git remote -v
+ 1782  git pull -r
+ 1783  git co master
+ 1784  git pull -r
+ 1785  ll dist/
+ 1786  ll dist/pytm_linux_rootfs/
+ 1787  cdw
+ 1788  scp ~/devices.yaml tester@10.12.217.156:~/
+ 1789  cdw
+ 1790  cd iwlwifi/iwlwifi-kernel/
+ 1791  cd ..
+ 1792  cd iwlwifi-stack-dev/
+ 1793  gll
+ 1794  git gr vzalloc
+ 1795  vi
+ 1796  vi 1.patch
+ 1797  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/40/240/6 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1798  git am -3 1.patch
+ 1799  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/68/3768/3 && git format-patch -1 --stdout FETCH_HEAD > 2.patch
+ 1800  git am -3 2.patch
+ 1801  vi
+ 1802  cd Documents/
+ 1803  ll
+ 1804  mkdir maintainer
+ 1805  vi merge-back.txt
+ 1806  rm merge-back.txt 
+ 1807  vi merge-back.txt
+ 1808  cd maintainer/
+ 1809  vi merge-back.txt
+ 1810  dos2unix merge-back.txt 
+ 1811  vi merge-back.txt
+ 1812  cdw
+ 1813  cd ../tmp/bugs/
+ 1814  ll
+ 1815  tar -xvzf pytm_file_ko_files.tar.gz 
+ 1816  rm *
+ 1817  vi ~/Downloads/messages
+ 1818  mv ~/Downloads/messages ~/work/tmp/bugs/
+ 1819  cd ~/work/tmp/bugs/
+ 1820  ll
+ 1821  vi net.log
+ 1822  rm net.log
+ 1823  ll
+ 1824  vi messages 
+ 1825  sudo dnf info wireshark
+ 1826  sudo dnf upgrade
+ 1827  wget https://download-ib01.fedoraproject.org/pub/fedora/linux/releases/35/Everything/x86_64/os/Packages/w/wireshark-3.4.8-2.fc35.x86_64.rpm
+ 1828  rpm -ivh wireshark-3.4.8-2.fc35.x86_64.rpm 
+ 1829  sudo dnf update
+ 1830  dnf clean all
+ 1831  sudo dnf update
+ 1832  vi /etc/dnf/dnf.conf
+ 1833  sudo vi /etc/dnf/dnf.conf
+ 1834  sudo dnf clean all; sudo dnf makecache --refresh -v
+ 1835  sudo dnf clean all
+ 1836  sudo dnf update
+ 1837  sudo dnf info wireshark
+ 1838  sudo dnf install wireshark
+ 1839  wireshark &
+ 1840  cdw
+ 1841  cd iwlwifi-stack-dev/
+ 1842  git gr ppag_flags
+ 1843  vi
+ 1844  cdw
+ 1845  cd iwlwifi-stack-dev/
+ 1846  git gr ieee80211_do_stop
+ 1847  vi intc-scripts/chromeOS/mac80211.patch +421
+ 1848  vi net/mac80211/iface.c +368
+ 1849  dnf info wireshark
+ 1850  sudo dnf install wireshark
+ 1851  sudo yum install wireshark
+ 1852  sudo dnf install wireshark-qt
+ 1853  cdw
+ 1854  ll
+ 1855  cd iwlwifi-chrome-kernel/
+ 1856  ll
+ 1857  vi kernel/workqueue.c +2940
+ 1858  ssh 10.12.186.210
+ 1859  ssh tester@10.12.186.210
+ 1860  cd ../iwlwifi-stack-dev/
+ 1861  git pull -r
+ 1862  git log --decorate=all
+ 1863  git log --decorate
+ 1864  git log --decorate=full
+ 1865  git log --decorate=full --oneline
+ 1866  gs 6d78583593
+ 1867  gs 6d785835933075049d30d5d703d86e0dca3f7fe8
+ 1868  git log --decorate=full --oneline
+ 1869  gs 0d9a448858
+ 1870  git log --decorate=full --oneline
+ 1871  gs 6d785835933075049d30d5d703d86e0dca3f7fe8
+ 1872  git log --decorate=full --oneline
+ 1873  gitk
+ 1874  sudo dnf -y install gitk
+ 1875  cdw
+ 1876  cd iwlwifi-stack-dev/
+ 1877  gll
+ 1878  git pull -r
+ 1879  gitk&
+ 1880  vi
+ 1881  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/37/237/7 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1882  git am 1.patch
+ 1883  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/45/245/8 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1884  git am 1.patch
+ 1885  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/60/260/11 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1886  git am 1.patch
+ 1887  make defconfig-iwlwifi
+ 1888  make -j4
+ 1889  make clean
+ 1890  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac.c
+ 1891  make clean
+ 1892  make defconfig-iwlwifi
+ 1893  make -j8
+ 1894  make clean
+ 1895  fg
+ 1896  make clean
+ 1897  make defconfig-iwlwifi
+ 1898  make -j8
+ 1899  fg
+ 1900  make -j8
+ 1901  fg
+ 1902  make -j8
+ 1903  fg
+ 1904  make clean
+ 1905  make defconfig-iwlwifi
+ 1906  make -j8
+ 1907  fg
+ 1908  git reset --hard HEAD
+ 1909  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/29/3629/2 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1910  git am 1.patch
+ 1911  vi drivers/net/wireless/intel/iwlwifi/mvm/link.c
+ 1912  make clean
+ 1913  make defconfig-iwlwifi
+ 1914  make -j8
+ 1915  make clean
+ 1916  fg
+ 1917  make clean
+ 1918  make defconfig-iwlwifi
+ 1919  make -j8
+ 1920  fg
+ 1921  make clean
+ 1922  make -j8
+ 1923  fg
+ 1924  make -j8
+ 1925  make clean
+ 1926  make -j8
+ 1927  fg
+ 1928  git gr const
+ 1929  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/43/3643/1 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1930  git reset --hard HEAD
+ 1931  git am 1.patch
+ 1932  make clean
+ 1933  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-sta.c
+ 1934  make clean
+ 1935  make defconfig-iwlwifi
+ 1936  make -j8
+ 1937  fg
+ 1938  make -j8
+ 1939  fg
+ 1940  make -j8
+ 1941  make clean
+ 1942  make defconfig-iwlwifi
+ 1943  make -j8
+ 1944  fg
+ 1945  git reset --hard HEAD
+ 1946  git fetch ssh://ggreenma@gerritwcs.ir.intel.com:29418/iwlwifi-stack-dev refs/changes/44/3644/1 && git format-patch -1 --stdout FETCH_HEAD > 1.patch
+ 1947  git am -3 1.patch
+ 1948  make clean
+ 1949  vi drivers/net/wireless/intel/iwlwifi/mvm/mld-mac80211.c
+ 1950  make clean
+ 1951  make defconfig-iwlwifi
+ 1952  make -j8
+ 1953  gll
+ 1954  git reset --hard 802b40a10e
+ 1955  gll
+ 1956  fg
+ 1957  vi
+ 1958  cdw
+ 1959  cd ..
+ 1960  ll
+ 1961  scp devices.yaml 10.12.217.156:~/
+ 1962  scp devices.yaml tester@10.12.217.156:~/
+ 1963  mkdir bugs
+ 1964  cd bugs/
+ 1965  scp 10.12.217.156:~/gregory/titan-pytm-tests/logs/current/000TVASoftApInterface.test_soft_ap_max_throughput_vht_40/dut_1tGmqYG8/trace* .
+ 1966  scp tester@10.12.217.156:~/gregory/titan-pytm-tests/logs/current/000TVASoftApInterface.test_soft_ap_max_throughput_vht_40/dut_1tGmqYG8/trace* .
+ 1967  rm trace_dut_1tGmqYG8_1.dat.tar.gz
+ 1968  pwd
+ 1969  ll
+ 1970  unzip 283114_trace_dut_1tGmqYG8_1.zip 
+ 1971  ll
+ 1972  mv 283114_trace_dut_1tGmqYG8_1.log trace.log
+ 1973  vi trace.log 
+ 1974  ssh tester@10.12.177.148
+ 1975  h|grep ssh
+ 1976  ssh tester@10.12.217.156
+ 1977  ssh tester@10.12.177.148
+ 1978  scp ./Downloads/devices.yaml tester@10.12.217.156:~/
+ 1979  ps -ef|grep teams
+ 1980  sudo killall teams
+ 1981  cdw
+ 1982  cd iwlwifi-stack-dev/
+ 1983  git gr tlv
+ 1984  git gr SAR_TABLE_VER
+ 1985  vi 
+ 1986  cd ../../bugs/
+ 1987  ll
+ 1988  mkdir WIFI-215246
+ 1989  cd WIFI-215246/
+ 1990  scp tester@10.12.217.156:~/gregory/titan-pytm-tests/logs/current/000TVASoftApInterface.test_soft_ap_max_throughput_lb_ht_20/dut_fdovNmSN/snif.pcap .
+ 1991  ll
+ 1992  wireshark snif.pcap &
+ 1993  scp tester@10.12.217.156:~/gregory/titan-pytm-tests/logs/current/000TVASoftApInterface.test_soft_ap_max_throughput_lb_ht_20/dut_fdovNmSN/trace_dut_fdovNmSN_1.dat tr.dat
+ 1994  c
+ 1995  git gr ieee80211_do_stop
+ 1996  cdw
+ 1997  cd iwlwifi-stack-dev/
+ 1998  git gr ieee80211_do_stop
+ 1999  vi net/mac80211/iface.c +368
+ 2000  sudo bash
+ 2001  ssh 10.12.186.114
+ 2002  ssh tester10.12.186.114
+ 2003  ssh tester@10.12.186.114
+ 2004  cdw
+ 2005  cd iwlwifi-chrome-kernel/
+ 2006  ll
+ 2007  git remote -v
+ 2008  git fetch origin
+ 2009  h|grep KLIB
+ 2010  ./chromeos/scripts/prepareconfig chromiumos-i386
+ 2011  echo CONFIG_IWL7000=m >> .config
+ 2012  yes '' | make oldconfig
+ 2013  vi .config
+ 2014  make -j8
+ 2015  make CC="ccache clang"
+ 2016  sudo dnf install clang
+ 2017  make CC="ccache clang"
+ 2018  sudo dnf install clang-extra
+ 2019  sudo dnf install clang-tools-extra
+ 2020  make CC="ccache clang"
+ 2021  make CC="clang"
+ 2022  make
+ 2023  git branch 
+ 2024  git branch -r|grep 15
+ 2025  git co -b origin/chromeos-5.15__master
+ 2026  make clean
+ 2027  make oldconfig
+ 2028  make
+ 2029  make CC="clang"
+ 2030  make
+ 2031  make CC="clang"
+ 2032  make -j8 drivers/net/wireless$WIFIVERSION/iwl7000/
+ 2033  make CC=clang -j8 drivers/net/wireless$WIFIVERSION/iwl7000/
+ 2034  make
+ 2035  vi include/linux/compiler-gcc.h +100
+ 2036  gcc --version
+ 2037  sudo yum group install "Development Tools"
+ 2038  sudo dnf install ncurses-devel bison flex elfutils-libelf-devel openssl-devel
+ 2039  make 
+ 2040  vi Makefile 
+ 2041  gcc --version
+ 2042  which gcc
+ 2043  make CC="ccache"
+ 2044  make CC="gcc-4'
+ 2045  make CC="gcc-4"
+ 2046  make olddefconfig
+ 2047  make
+ 2048  make menuconfig
+ 2049  make -j4
+ 2050  make CC="ccache clang"
+ 2051  clang --version
+ 2052  uname -a
+ 2053  cdw
+ 2054  cd iwlwifi-stack-dev/
+ 2055  pwd
+ 2056  #/home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/intc-scripts/chromeOS/copy.sh /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev 
+ 2057  cd ../iwlwifi-chrome-kernel/
+ 2058  /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/intc-scripts/chromeOS/copy.sh /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev `pwd` master
+ 2059  sudo dnf install unifdef
+ 2060  /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/intc-scripts/chromeOS/copy.sh /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev `pwd` master
+ 2061  sudo dnf install spatch
+ 2062  which spatch
+ 2063  sudo dnf -y install coccinelle
+ 2064  /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev/intc-scripts/chromeOS/copy.sh /home/ggreenma/work/iwlwifi/iwlwifi-stack-dev `pwd` master
+ 2065  cd drivers/net/wireless/iwl7000/
+ 2066  cd mac80211/
+ 2067  grep do_stop *.c
+ 2068  vimdiff iface.c ~/work/iwlwifi/iwlwifi-stack-dev/net/mac80211/iface.c
+ 2069  cd ..
+ 2070  vi
+ 2071  git gr dynamic_ps_timer
+ 2072  cd mac80211/
+ 2073  fg
+ 2074  vi
+ 2075  vi /home/ggreenma/tools/cscope_utils.sh
+ 2076  fg
+ 2077  vi
+ 2078  cd ..
+ 2079  vi
+ 2080  fg
+ 2081  cd ../../..
+ 2082  cd ..
+ 2083  ./chromeos/scripts/prepareconfig chromiumos-i386
+ 2084  make
+ 2085  h|grep 7000
+ 2086  echo CONFIG_IWL7000=m >> .config
+ 2087  make oldconfig
+ 2088  yes '' | make oldconfig
+ 2089  grep IWL7000 .config
+ 2090  make
+ 2091  vi include/linux/compiler-gcc.h
+ 2092  git gr _gcc_header
+ 2093  git gr gcc_header
+ 2094  vi include/linux/compiler-gcc.h
+ 2095  git gr __GNUC__
+ 2096  gcc
+ 2097  gcc --versio
+ 2098  gcc --version
+ 2099  make
+ 2100  ll ./linux
+ 2101  ll linux
+ 2102  find . -name linux
+ 2103  ll ./include/linux
+ 2104  make
+ 2105  find . -name "compiler-gcc*"
+ 2106  vi include/linux/compiler-gcc.h +100
+ 2107  make
+ 2108  vi include/linux/compiler-gcc.h +100
+ 2109  make
+ 2110  cd ..
+ 2111  meld iwlwifi-chrome-kernel/drivers/net/wireless/iwl7000/mac80211/ iwlwifi-stack-dev/net/mac80211/
+ 2112  cd iwlwifi-chrome-kernel/
+ 2113  make -j8 drivers/net/wireless$WIFIVERSION/iwl7000/
+ 2114  ll linux/compiler-gcc*
+ 2115  ll include/linux/compiler-gcc*
+ 2116  dnf install compat-gcc-35
+ 2117  sudo dnf install compat-gcc-35
+ 2118  sudo dnf install compat-gcc-34
+ 2119  h
+ 2120  git branch -r|grep public/chromeos-4.4__release/core69-51
+ 2121  git branch -r|grep core69-51
+ 2122  git branch -r|grep core69
+ 2123  git co -b core69 origin/chromeos-4.19__release/core69
+ 2124  git reset --hard HEAD
+ 2125  git co -b core69 origin/chromeos-4.19__release/core69
+ 2126  git status 
+ 2127  git co -b core69 origin/chromeos-4.19__release/core69
+ 2128  git co -bf core69 origin/chromeos-4.19__release/core69
+ 2129  rm -rf drivers/net/wireless/iwl7000/
+ 2130  git co -b core69 origin/chromeos-4.19__release/core69
+ 2131  h
+ 2132  ./chromeos/scripts/prepareconfig chromiumos-i386
+ 2133  ./chromeos/scripts/prepareconfig chromiumos-x86_64
+ 2134  echo CONFIG_IWL7000=m >> .config
+ 2135  yes '' | make oldconfig
+ 2136  make -j4
+ 2137  vi drivers/net/wireless/iwl7000/mac80211/util.c
+ 2138  make -j4
+ 2139  make -j8
+ 2140  vi drivers/gpu/drm/i915/intel_dp.c +4350
+ 2141  make -j8
+ 2142  find . -name vmlinux
+ 2143  sudo dnf install qemu
+ 2144  find . -name "ieee80211_radiotap.h"
+ 2145  ll ./drivers/net/wireless/iwl7000/hdrs
+ 2146  diff ./include/net/ieee80211_radiotap.h ./drivers/net/wireless/iwl7000/hdrs/net/ieee80211_radiotap.h
+ 2147  git gr ieee80211_radiotap_lsig_data1
+ 2148  find . -name iwl7000
+ 2149  cd ./drivers/net/wireless/iwl7000
+ 2150  ll
+ 2151  ll hdrs/
+ 2152  ll hdrs/net/
+ 2153  vi hdrs/net/ieee80211_radiotap.h
+ 2154  git grep KERNEL_VERSION
+ 2155  cd ../../..
+ 2156  cd ..
+ 2157  find . -iname bzimage
+ 2158  qemu-system-x86_64 -kernel ./arch/x86_64/boot/bzImage
+ 2159  qemu-system-x86_64 -kernel ./arch/x86_64/boot/bzImage -nographic
+ 2160  mkinitramfs -o ramdisk.img
+ 2161  sudo dnf install mkinitramfs
+ 2162  htop
+ 2163  sudo dnf install htop
+ 2164  htop
+ 2165  ll ./arch/x86_64/boot/bzImage
+ 2166  ll ../../x86/boot/bzImage
+ 2167  find . -iname bzimage
+ 2168  ll ./arch/x86/boot/bzImage
+ 2169  ll /mount
+ 2170  ll /media
+ 2171  find . -iname iwl-dbg-cfg.h
+ 2172  vi ./drivers/net/wireless/iwl7000/iwlwifi/iwl-dbg-cfg.h
+ 2173  history |grep VLAB
+ 2174  h > 1
