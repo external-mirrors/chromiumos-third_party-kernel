@@ -495,6 +495,8 @@ struct ath10k_sta {
 	u32 pkt_status[HTT_TX_COMPL_STATES_MAX];
 	u32 tx_retry_count;
 	enum ath10k_peer_stats_version version;
+	u8 sta_kickout;
+	unsigned long sta_kickout_timeout;
 };
 
 #define ATH10K_VDEV_SETUP_TIMEOUT_HZ (5*HZ)
