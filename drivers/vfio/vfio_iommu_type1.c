@@ -3338,7 +3338,7 @@ static int vfio_iommu_type13_do_unmap(struct vfio_iommu *iommu,
 			    VFIO_DMA_UNMAP_FLAG_GET_DIRTY_BITMAP))
 		return -EOPNOTSUPP;
 
-	if (unmap->flags & VFIO_UNMAP_ALL)
+	if (unmap->flags & VFIO_DMA_UNMAP_FLAG_ALL)
 		*unmapped = unmap_pages(iommu, 0, U64_MAX);
 	else
 		*unmapped = unmap_pages(iommu, unmap->iova,
