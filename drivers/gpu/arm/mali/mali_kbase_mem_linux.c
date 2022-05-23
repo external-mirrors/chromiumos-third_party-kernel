@@ -738,7 +738,7 @@ int kbase_mem_evictable_init(struct kbase_context *kctx)
 	 * struct shrinker does not define batch
 	 */
 	kctx->reclaim.batch = 0;
-	register_shrinker(&kctx->reclaim);
+	register_shrinker(&kctx->reclaim, "mali_kbase_mem_linux");
 	return 0;
 }
 
