@@ -951,7 +951,7 @@ struct kbase_device {
 	struct regulator *regulators[BASE_MAX_NR_CLOCKS_REGULATORS];
 	unsigned int nr_regulators;
 #if (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
-	struct opp_table *opp_table;
+	int opp_token;
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 #endif /* CONFIG_REGULATOR */
 	char devname[DEVNAME_SIZE];
