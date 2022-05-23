@@ -364,6 +364,45 @@ int kbase_dma_fence_wait(struct kbase_jd_atom *katom,
 				"Error %d adding reservation to callback.\n", err);
 			goto end;
 		}
+		
+		if (!test_bit(i, info->dma_fence_excl_bitmap)) {
+#if (KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE)
+			err = reservation_object_reserve_shared(obj);
+#else
+			err = dma_resv_reserve_fences(obj, 0);
+#endif
+			if (err) {
+				dev_err(katom->kctx->kbdev->dev,
+					"Error %d reserving space for shared fence.\n", err);
+				goto end;
+			}
+
+			err = kbase_dma_fence_add_reservation_callback(katom, obj, false);
+			if (err) {
+				dev_err(katom->kctx->kbdev->dev,
+					"Error %d adding reservation to callback.\n", err);
+				goto end;
+			}
+
+#if (KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE)
+			reservation_object_add_shared_fence(obj, fence);
+#else
+			dma_resv_add_fence(obj, fence, DMA_RESV_USAGE_READ);
+#endif
+		} else {
+			err = kbase_dma_fence_add_reservation_callback(katom, obj, true);
+			if (err) {
+				dev_err(katom->kctx->kbdev->dev,
+					"Error %d adding reservation to callback.\n", err);
+				goto end;
+			}
+
+#if (KERNEL_VERSION(5, 4, 0) > LINUX_VERSION_CODE)
+			reservation_object_add_excl_fence(obj, fence);
+#else
+			dma_resv_add_fence(obj, fence, DMA_RESV_USAGE_WRITE);
+#endif
+		}
 		dma_resv_add_fence(obj, fence, test_bit(i, info->dma_fence_excl_bitmap)
 				? DMA_RESV_USAGE_WRITE : DMA_RESV_USAGE_READ);
 	}
