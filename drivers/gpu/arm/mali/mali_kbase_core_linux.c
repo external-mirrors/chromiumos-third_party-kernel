@@ -4397,7 +4397,7 @@ int power_control_init(struct kbase_device *kbdev)
 	int err = 0;
 	unsigned int i;
 #if defined(CONFIG_REGULATOR)
-	const char *regulator_names[BASE_MAX_NR_CLOCKS_REGULATORS];
+	const char *regulator_names[BASE_MAX_NR_CLOCKS_REGULATORS+1] = { NULL };
 #endif /* CONFIG_REGULATOR */
 
 	if (!kbdev)
@@ -4493,8 +4493,8 @@ int power_control_init(struct kbase_device *kbdev)
 #if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
 	if (kbdev->nr_regulators > 0) {
-		kbdev->opp_table = dev_pm_opp_set_regulators(kbdev->dev,
-			regulator_names, BASE_MAX_NR_CLOCKS_REGULATORS);
+		kbdev->opp_token = dev_pm_opp_set_regulators(kbdev->dev,
+							     regulator_name);
 	}
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 	err = dev_pm_opp_of_add_table(kbdev->dev);
@@ -4513,8 +4513,7 @@ void power_control_term(struct kbase_device *kbdev)
 	dev_pm_opp_of_remove_table(kbdev->dev);
 #if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
-	if (!IS_ERR_OR_NULL(kbdev->opp_table))
-		dev_pm_opp_put_regulators(kbdev->opp_table);
+	dev_pm_opp_put_regulators(kbdev->opp_token);
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 #endif /* CONFIG_PM_OPP */
 
