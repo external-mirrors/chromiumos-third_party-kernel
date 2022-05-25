@@ -554,10 +554,12 @@ static int ramoops_init_przs(const char *name,
 			goto fail;
 		}
 		*paddr += zone_sz;
+		mem_sz -= zone_sz;
 		prz_ar[i]->type = pstore_name_to_type(name);
 	}
 
 	*przs = prz_ar;
+	*paddr += mem_sz;
 	return 0;
 
 fail:
