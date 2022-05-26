@@ -363,7 +363,7 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_adl_machines[] = {
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &adl_max98360a_amp,
 		.sof_fw_filename = "sof-adl.ri",
-		.sof_tplg_filename = "sof-adl-mx98360a-nau8825.tplg",
+		.sof_tplg_filename = "sof-adl-max98360a-nau8825.tplg",
 	},
 	{
 		.id = "10508825",
