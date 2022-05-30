@@ -479,9 +479,6 @@ static void cam_drain_op_callback(struct cam_obj *nsobj,
 {
 	struct cam_obj_op *op;
 
-	if (!(nsobj->type & CAM_OBJ_TYPE_OPERATION))
-		return;
-
 	op = nsobj_to_cam_op(nsobj);
 	if (WARN_ON(!op))
 		return;
@@ -1327,10 +1324,10 @@ static void cam_ns_walk_callback(struct cam_obj *nsobj,
 	unsigned long flags;
 	bool valid;
 
-	if (!(nsobj->type & CAM_OBJ_TYPE_OPERATION))
+	op = nsobj_to_cam_op(nsobj);
+	if (!op)
 		return;
 
-	op = nsobj_to_cam_op(nsobj);
 	/* This is racy but what can we do */
 	read_lock_irqsave(&op->notify_lock, flags);
 	valid = (op->state & ctl->flags);
