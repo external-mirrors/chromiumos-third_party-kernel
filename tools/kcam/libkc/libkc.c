@@ -73,11 +73,11 @@ struct libkc *libkc_open(const char *dev)
 	return cam;
 
 error:
-	if (cam->udmabuf_fd >= 0)
+	if (cam->udmabuf_fd > 0)
 		close(cam->udmabuf_fd);
-	if (cam->mem_fd >= 0)
+	if (cam->mem_fd > 0)
 		close(cam->mem_fd);
-	if (cam->fd >= 0)
+	if (cam->fd > 0)
 		close(cam->fd);
 	free(cam);
 	return NULL;
