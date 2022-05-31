@@ -51,6 +51,9 @@ struct cam_device {
 	/** @pipeline: Operation execution pipeline */
 	struct cam_pipeline pipeline;
 
+	/** @context_lock: DMA fence context lock */
+	spinlock_t context_lock;
+
 	/** @fence_context: Fence context index */
 	u64 fence_context;
 

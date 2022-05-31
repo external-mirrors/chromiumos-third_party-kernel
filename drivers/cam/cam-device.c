@@ -72,6 +72,7 @@ static int cam_device_init(struct cam_device *cam)
 
 	cam->release = cam_device_release_free;
 
+	spin_lock_init(&cam->context_lock);
 	cam->fence_context = dma_fence_context_alloc(1);
 	atomic64_set(&cam->fence_seqno, 0);
 	atomic_set(&cam->num_users, 0);

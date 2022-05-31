@@ -213,12 +213,6 @@ static struct dma_fence_ops cam_out_fence_ops = {
 	.get_timeline_name      = cam_timeline_name,
 };
 
-/*
- * FIXME: dma fence lock that is never freed. Need to figure out something
- * better than a gloabl lock though.
- */
-static DEFINE_SPINLOCK(cam_out_fence_lock);
-
 __printf(2, 3)
 struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 						   const char *namefmt,
@@ -250,7 +244,7 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 
 	dma_fence_init(sf->out.fence,
 		       &cam_out_fence_ops,
-		       &cam_out_fence_lock,
+		       &cam->context_lock,
 		       cam->fence_context,
 		       atomic64_inc_return(&cam->fence_seqno));
 
