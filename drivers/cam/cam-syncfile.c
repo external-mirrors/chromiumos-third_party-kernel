@@ -146,6 +146,9 @@ bool cam_in_syncfile_activate_signal(struct cam_op_signal *sig)
 	if (WARN_ON(!sf))
 		return false;
 
+	if (dma_fence_is_signaled(sf->in.fence))
+		return false;
+
 	/*
 	 * notify_active_chain is accessed from the IRQ context,
 	 * so we need to disable local IRQs.
