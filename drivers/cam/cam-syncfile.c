@@ -84,6 +84,7 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	char name[CAM_SYNCFILE_NAME_SZ];
 	struct cam_obj_syncfile *sf;
 	va_list args;
+	int ret;
 
 	sf = kzalloc(sizeof(*sf), GFP_KERNEL);
 	if (!sf)
@@ -105,10 +106,13 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	if (!sf->in.fence)
 		goto error;
 
-	if (dma_fence_add_callback(sf->in.fence,
+	ret = dma_fence_add_callback(sf->in.fence,
 				   &sf->in.cb,
-				   cam_syncfile_fence_cb))
+				   cam_syncfile_fence_cb);
+	/* -ENOENT is returned when fence is already signaled */
+	if (ret && ret != -ENOENT) {
 		goto error;
+	}
 
 	if (cam_graph_node_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
 		goto error;
