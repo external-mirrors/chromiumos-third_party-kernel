@@ -371,6 +371,13 @@ static int cam_op_activate_pending_signal(struct cam_obj_op *op)
 		 * the source.
 		 */
 		release_signal(sig);
+		/*
+		 * We failed to activate pending signal, something is not
+		 * right with the signal source: e.g. source OP is in
+		 * executed/deleted state. Decrement ->num_blockers, because
+		 * this signal will not be raised.
+		 */
+		atomic_dec(&op->num_blockers);
 		return CAM_OP_PENDING_SIGNAL_FAILURE;
 	}
 	return CAM_OP_PENDING_SIGNAL_ACTIVATED;
@@ -412,14 +419,7 @@ static bool cam_op_notify(struct cam_op_signal *sig)
 		if (ret == CAM_OP_PENDING_SIGNAL_ACTIVATED)
 			break;
 
-		/*
-		 * We failed to activate pending signal, something is not
-		 * right with the signal source: e.g. source OP is in
-		 * executed/deleted state. Decrement ->num_blockers, because
-		 * this signal will not be raised, and see if we need to
-		 * queue this operation for execution.
-		 */
-		execute = atomic_dec_and_test(&op->num_blockers);
+		execute = (atomic_read(&op->num_blockers) == 0);
 	} while (ret == CAM_OP_PENDING_SIGNAL_FAILURE);
 
 	if (execute)
