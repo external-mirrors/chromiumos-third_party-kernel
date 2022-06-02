@@ -3714,9 +3714,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	hci_sock_dev_event(hdev, HCI_DEV_REG);
 	hci_dev_hold(hdev);
 
-	hdev->suspend_notifier.notifier_call = hci_suspend_notifier;
-	error = register_pm_notifier(&hdev->suspend_notifier);
-	if (error)
+	if (hci_register_suspend_notifier(hdev))
 		goto err_wqueue;
 
 	queue_work(hdev->req_workqueue, &hdev->power_on);
@@ -3750,9 +3748,7 @@ void hci_unregister_dev(struct hci_dev *hdev)
 
 	cancel_work_sync(&hdev->power_on);
 
-	unregister_pm_notifier(&hdev->suspend_notifier);
-	hci_suspend_clear_tasks(hdev);
-	cancel_work_sync(&hdev->suspend_prepare);
+	hci_unregister_suspend_notifier(hdev);
 
 	msft_unregister(hdev);
 
@@ -3810,6 +3806,27 @@ void hci_cleanup_dev(struct hci_dev *hdev)
 	hci_dev_unlock(hdev);
 
 	ida_simple_remove(&hci_index_ida, hdev->id);
+}
+
+int hci_register_suspend_notifier(struct hci_dev *hdev)
+{
+	int ret = 0;
+
+	hdev->suspend_notifier.notifier_call = hci_suspend_notifier;
+	ret = register_pm_notifier(&hdev->suspend_notifier);
+
+	return ret;
+}
+
+int hci_unregister_suspend_notifier(struct hci_dev *hdev)
+{
+	int ret = 0;
+
+	ret = unregister_pm_notifier(&hdev->suspend_notifier);
+	hci_suspend_clear_tasks(hdev);
+	cancel_work_sync(&hdev->suspend_prepare);
+
+	return ret;
 }
 
 /* Suspend HCI device */
