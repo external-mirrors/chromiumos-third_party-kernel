@@ -2785,7 +2785,7 @@ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 			p->bdev = NULL;
 			return error;
 		}
-		bdevname(p->bdev, name);
+		snprintf(name, sizeof(name), "%pg", p->bdev);
 		if (strncmp(name, "zram", strlen("zram"))) {
 			iput(p->bdev->bd_inode);
 			p->bdev = NULL;
