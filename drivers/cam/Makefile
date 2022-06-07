@@ -20,5 +20,7 @@ obj-$(CONFIG_CAM)		+= cam.o
 
 cam-ioctl-test-objs		+= cam-ioctl.o
 cam-namespace-test-objs		+= cam-namespace.o
+cam-graph-test-objs		+= cam-graph.o
 obj-$(CONFIG_CAM_KUNIT_TESTS)	+= cam-ioctl-test.o \
-					cam-namespace-test.o
+					cam-namespace-test.o \
+					cam-graph-test.o

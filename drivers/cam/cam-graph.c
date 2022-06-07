@@ -310,3 +310,7 @@ out:
 	cam_graph_stack_free(&st);
 	return ret;
 }
+
+#ifdef CONFIG_CAM_KUNIT_TESTS
+#include "cam-graph-test.c"
+#endif
