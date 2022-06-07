@@ -121,6 +121,17 @@ static int cros_ec_fixup_s0ixwake_mask(struct cros_ec_device *ec_dev)
 	buf.u.param.mask_type = EC_HOST_EVENT_LAZY_WAKE_MASK_S0IX;
 
 	ret = cros_ec_cmd_xfer_status(ec_dev, &buf.msg);
+	if (ret == -EINVAL) {
+		/*
+		 * If this EC instance is not configured to control S0IX
+		 * (i.e. this is secondary EC for fingerprint sensor
+		 * connection, etc), then exit indicating success.
+		 */
+		dev_dbg(ec_dev->dev,
+			"%s: EC instance is not configured to control S0IX\n",
+			__func__);
+		return 0;
+	}
 
 	/* remove EC_HOST_EVENT_HANG_DETECT if it is set. */
 	if (ret > 0 && (buf.u.resp.value &
