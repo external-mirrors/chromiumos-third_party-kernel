@@ -106,3 +106,7 @@ int cam_ringbuffer_init(struct cam_ringbuffer *rb,
 	spin_lock_init(&rb->lock);
 	return 0;
 }
+
+#ifdef CONFIG_CAM_KUNIT_TESTS
+#include "cam-ringbuffer-test.c"
+#endif
