@@ -88,7 +88,7 @@ int cam_ringbuffer_init(struct cam_ringbuffer *rb,
 			size_t entry_size,
 			size_t buffer_size)
 {
-	if (!is_power_of_2(buffer_size))
+	if (!is_power_of_2(buffer_size) || !is_power_of_2(entry_size))
 		return -EINVAL;
 	if (!entry_size || buffer_size / entry_size <= 1)
 		return -EINVAL;

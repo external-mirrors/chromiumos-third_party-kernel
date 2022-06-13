@@ -19,6 +19,10 @@ static void ringbuffer_alloc(struct kunit *test)
 	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion), PAGE_SIZE - 1);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
+	/* Entry size is not a power of 2 */
+	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion) - 1, PAGE_SIZE);
+	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+
 	/* Buffer size is too small */
 	ret = cam_ringbuffer_init(rb, PAGE_SIZE, PAGE_SIZE);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
