@@ -219,7 +219,7 @@ struct wtbl_hdr_trans {
 	__le16 len;
 	u8 to_ds;
 	u8 from_ds;
-	u8 disable_rx_trans;
+	u8 no_rx_trans;
 	u8 rsv;
 } __packed;
 
@@ -542,6 +542,7 @@ enum {
 	MCU_UNI_CMD_SUSPEND = MCU_UNI_PREFIX | 0x05,
 	MCU_UNI_CMD_OFFLOAD = MCU_UNI_PREFIX | 0x06,
 	MCU_UNI_CMD_HIF_CTRL = MCU_UNI_PREFIX | 0x07,
+	MCU_UNI_CMD_SNIFFER = MCU_UNI_PREFIX | 0x24,
 };
 
 enum {
@@ -1040,6 +1041,13 @@ void mt76_connac_mcu_wtbl_generic_tlv(struct mt76_dev *dev, struct sk_buff *skb,
 				      struct ieee80211_vif *vif,
 				      struct ieee80211_sta *sta, void *sta_wtbl,
 				      void *wtbl_tlv);
+void mt76_connac_mcu_wtbl_hdr_trans_tlv(struct sk_buff *skb,
+					struct ieee80211_vif *vif,
+					struct mt76_wcid *wcid,
+					void *sta_wtbl, void *wtbl_tlv);
+int mt76_connac_mcu_sta_update_hdr_trans(struct mt76_dev *dev,
+					 struct ieee80211_vif *vif,
+					 struct mt76_wcid *wcid, int cmd);
 void mt76_connac_mcu_sta_tlv(struct mt76_phy *mphy, struct sk_buff *skb,
 			     struct ieee80211_sta *sta,
 			     struct ieee80211_vif *vif,

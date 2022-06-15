@@ -999,7 +999,7 @@ crtc_needs_disable(struct drm_crtc_state *old_state,
 	 * self-refresh and changing CRTCs at the same time, because the
 	 * bridge tracks self-refresh status via CRTC state.
 	 */
-	if (old_state->self_refresh_active && new_state->enable &&
+	if (old_state->self_refresh_active &&
 	    old_state->crtc != new_state->crtc)
 		return true;
 
@@ -1010,7 +1010,7 @@ crtc_needs_disable(struct drm_crtc_state *old_state,
 	 * disabled.
 	 */
 	return old_state->active ||
-	       (old_state->self_refresh_active && !new_state->enable) ||
+	       (old_state->self_refresh_active && !new_state->active) ||
 	       new_state->self_refresh_active;
 }
 
