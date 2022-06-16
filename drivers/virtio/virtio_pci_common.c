@@ -14,6 +14,8 @@
  *  Michael S. Tsirkin <mst@redhat.com>
  */
 
+#include <linux/virtio_ids.h>
+
 #include "virtio_pci_common.h"
 
 static bool force_legacy = false;
@@ -513,6 +515,15 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 {
 	struct virtio_pci_device *vp_dev, *reg_dev = NULL;
 	int rc;
+
+	/*
+	 * Ignore Virtio Vhost-User devices on Chrome OS as we will
+	 * be driving them via vfio-pci.
+	 */
+	if (pci_dev->vendor == PCI_VENDOR_ID_REDHAT_QUMRANET &&
+	    pci_dev->device == VIRTIO_PCI_DEVICE_ID(VIRTIO_ID_VHOST_USER)) {
+		return -ENODEV;
+	}
 
 	/* allocate our structure and fill it out */
 	vp_dev = kzalloc(sizeof(struct virtio_pci_device), GFP_KERNEL);
