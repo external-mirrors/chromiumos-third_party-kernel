@@ -955,6 +955,10 @@ static int __init init_pci_cap_exp_perm(struct perm_bits *perm)
 	       PCI_EXP_DEVCTL_BCR_FLR | PCI_EXP_DEVCTL_PAYLOAD |
 	       PCI_EXP_DEVCTL_READRQ, ~PCI_EXP_DEVCTL_PHANTOM);
 	p_setw(perm, PCI_EXP_DEVCTL2, NO_VIRT, ~PCI_EXP_DEVCTL2_ARI);
+
+	if (manatee_hyp_domain())
+		p_setw(perm, PCI_EXP_LNKCTL, NO_VIRT, PCI_EXP_LNKCTL_ASPMC);
+
 	return 0;
 }
 
