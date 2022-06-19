@@ -1266,6 +1266,11 @@ static int imgu_v4l2_node_setup(struct imgu_device *imgu, unsigned int pipe,
 		r = media_entity_create_link(&vdev->entity, 0, &sd->entity,
 					     node_num, flags);
 	} else {
+		if (node->id == IMGU_NODE_OUT) {
+			flags |= MEDIA_LNK_FL_ENABLED | MEDIA_LNK_FL_IMMUTABLE;
+			node->enabled = true;
+		}
+
 		r = media_entity_create_link(&sd->entity, node_num, &vdev->entity,
 					     0, flags);
 	}
