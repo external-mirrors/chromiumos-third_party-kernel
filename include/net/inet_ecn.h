@@ -3,6 +3,7 @@
 #define _INET_ECN_H_
 
 #include <linux/ip.h>
+#include <linux/if_vlan.h>
 #include <linux/skbuff.h>
 
 #include <net/inet_sock.h>
