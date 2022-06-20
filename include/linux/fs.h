@@ -1305,6 +1305,8 @@ struct mm_struct;
 #define SB_I_NOEXEC	0x00000002	/* Ignore executables on this fs */
 #define SB_I_MULTIROOT	0x00000008	/* Multiple roots to the dentry tree */
 
+#define SB_I_RETIRED	0x00000800	/* superblock shouldn't be reused */
+
 /* Possible states of 'frozen' field */
 enum {
 	SB_UNFROZEN = 0,		/* FS is unfrozen */
