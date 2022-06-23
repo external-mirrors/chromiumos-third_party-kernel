@@ -9,41 +9,34 @@
 
 static void ringbuffer_alloc(struct kunit *test)
 {
-	struct cam_ringbuffer *rb;
+	struct cam_ringbuffer rb;
 	int ret;
 
-	rb = kzalloc(sizeof(*rb), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, rb);
-
 	/* Buffer size is not a power of 2 */
-	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion), PAGE_SIZE - 1);
+	ret = cam_ringbuffer_init(&rb, sizeof(struct cam_completion), PAGE_SIZE - 1);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
 	/* Entry size is not a power of 2 */
-	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion) - 1, PAGE_SIZE);
+	ret = cam_ringbuffer_init(&rb, sizeof(struct cam_completion) - 1, PAGE_SIZE);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
 	/* Buffer size is too small */
-	ret = cam_ringbuffer_init(rb, PAGE_SIZE, PAGE_SIZE);
+	ret = cam_ringbuffer_init(&rb, PAGE_SIZE, PAGE_SIZE);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
-	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion), PAGE_SIZE);
+	ret = cam_ringbuffer_init(&rb, sizeof(struct cam_completion), PAGE_SIZE);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
-	cam_ringbuffer_release(rb);
-	kfree(rb);
+	cam_ringbuffer_release(&rb);
 }
 
 static void ringbuffer_write(struct kunit *test)
 {
-	struct cam_ringbuffer *rb;
+	struct cam_ringbuffer rb;
 	struct cam_completion objs[ENTRY_CNT];
 	int i, ret;
 
-	rb = kzalloc(sizeof(*rb), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, rb);
-
-	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion),
+	ret = cam_ringbuffer_init(&rb, sizeof(struct cam_completion),
 				  sizeof(struct cam_completion) * ENTRY_CNT);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
@@ -55,34 +48,30 @@ static void ringbuffer_write(struct kunit *test)
 	for (i = 0; i < ENTRY_CNT - 1; i++) {
 		objs[i].id = i;
 		objs[i].type = CAM_COMPLETION_TYPE_EXECUTED;
-		ret = cam_ringbuffer_write(rb, &objs[i]);
+		ret = cam_ringbuffer_write(&rb, &objs[i]);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 	}
 
 	 /* Now the buffer is full */
-	ret = cam_ringbuffer_write(rb, &objs[0]);
+	ret = cam_ringbuffer_write(&rb, &objs[0]);
 	KUNIT_EXPECT_EQ(test, ret, -ENOSPC);
 
-	cam_ringbuffer_release(rb);
-	kfree(rb);
+	cam_ringbuffer_release(&rb);
 }
 
 static void ringbuffer_read(struct kunit *test)
 {
-	struct cam_ringbuffer *rb;
+	struct cam_ringbuffer rb;
 	struct cam_completion objs[ENTRY_CNT * 2];
 	struct cam_completion readback;
 	int i, ret;
 
-	rb = kzalloc(sizeof(*rb), GFP_KERNEL);
-	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, rb);
-
-	ret = cam_ringbuffer_init(rb, sizeof(struct cam_completion),
+	ret = cam_ringbuffer_init(&rb, sizeof(struct cam_completion),
 				  sizeof(struct cam_completion) * ENTRY_CNT);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
 	/* No objects in the buffer */
-	ret = cam_ringbuffer_read(rb, &readback, IOCB_NOWAIT);
+	ret = cam_ringbuffer_read(&rb, &readback, IOCB_NOWAIT);
 	KUNIT_EXPECT_EQ(test, ret, -EAGAIN);
 
 	/*
@@ -92,21 +81,20 @@ static void ringbuffer_read(struct kunit *test)
 	for (i = 0; i < ENTRY_CNT * 2; i++) {
 		objs[i].id = i;
 		objs[i].type = CAM_COMPLETION_TYPE_EXECUTED;
-		ret = cam_ringbuffer_write(rb, &objs[i]);
+		ret = cam_ringbuffer_write(&rb, &objs[i]);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 
-		ret = cam_ringbuffer_read(rb, &readback, IOCB_NOWAIT);
+		ret = cam_ringbuffer_read(&rb, &readback, IOCB_NOWAIT);
 		KUNIT_EXPECT_EQ(test, ret, 0);
 		KUNIT_EXPECT_EQ(test, objs[i].id, readback.id);
 		KUNIT_EXPECT_EQ(test, objs[i].type, readback.type);
 	}
 
 	/* Again, no objects in the buffer */
-	ret = cam_ringbuffer_read(rb, &readback, IOCB_NOWAIT);
+	ret = cam_ringbuffer_read(&rb, &readback, IOCB_NOWAIT);
 	KUNIT_EXPECT_EQ(test, ret, -EAGAIN);
 
-	cam_ringbuffer_release(rb);
-	kfree(rb);
+	cam_ringbuffer_release(&rb);
 }
 
 static struct kunit_case cam_ringbuffer_test_cases[] = {
