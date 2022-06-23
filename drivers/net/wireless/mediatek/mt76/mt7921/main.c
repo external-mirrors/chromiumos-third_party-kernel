@@ -315,7 +315,7 @@ static int mt7921_add_interface(struct ieee80211_hw *hw,
 	rcu_assign_pointer(dev->mt76.wcid[idx], &mvif->sta.wcid);
 	if (vif->txq) {
 		mtxq = (struct mt76_txq *)vif->txq->drv_priv;
-		mtxq->wcid = &mvif->sta.wcid;
+		mtxq->wcid = idx;
 	}
 
 out:
@@ -460,6 +460,24 @@ mt7921_pm_interface_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
 	mt7921_mcu_set_beacon_filter(dev, vif, dev->pm.enable);
 }
 
+static void
+mt7921_sniffer_interface_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
+{
+	struct mt7921_dev *dev = priv;
+	struct ieee80211_hw *hw = mt76_hw(dev);
+	struct mt76_connac_pm *pm = &dev->pm;
+	bool monitor = !!(hw->conf.flags & IEEE80211_CONF_MONITOR);
+
+	mt7921_mcu_set_sniffer(dev, vif, monitor);
+	pm->enable = pm->enable_user && !monitor;
+	pm->ds_enable = pm->ds_enable_user && !monitor;
+
+	mt76_connac_mcu_set_deep_sleep(&dev->mt76, pm->ds_enable);
+
+	if (monitor)
+		mt7921_mcu_set_beacon_filter(dev, vif, false);
+}
+
 void mt7921_set_runtime_pm(struct mt7921_dev *dev)
 {
 	struct ieee80211_hw *hw = dev->mphy.hw;
@@ -494,17 +512,10 @@ static int mt7921_config(struct ieee80211_hw *hw, u32 changed)
 		mt76_connac_mcu_set_rate_txpower(phy->mt76);
 
 	if (changed & IEEE80211_CONF_CHANGE_MONITOR) {
-		bool enabled = !!(hw->conf.flags & IEEE80211_CONF_MONITOR);
-
-		if (!enabled)
-			phy->rxfilter |= MT_WF_RFCR_DROP_OTHER_UC;
-		else
-			phy->rxfilter &= ~MT_WF_RFCR_DROP_OTHER_UC;
-
-		mt76_rmw_field(dev, MT_DMA_DCR0(0), MT_DMA_DCR0_RXD_G5_EN,
-			       enabled);
-		mt76_wr(dev, MT_WF_RFCR(0), phy->rxfilter);
-		mt7921_set_runtime_pm(dev);
+		ieee80211_iterate_active_interfaces(hw,
+						    IEEE80211_IFACE_ITER_RESUME_ALL,
+						    mt7921_sniffer_interface_iter, dev);
+		dev->mt76.rxfilter = mt76_rr(dev, MT_WF_RFCR(0));
 	}
 
 	mt7921_mutex_release(dev);
@@ -532,7 +543,6 @@ static void mt7921_configure_filter(struct ieee80211_hw *hw,
 				    u64 multicast)
 {
 	struct mt7921_dev *dev = mt7921_hw_dev(hw);
-	struct mt7921_phy *phy = mt7921_hw_phy(hw);
 	u32 ctl_flags = MT_WF_RFCR1_DROP_ACK |
 			MT_WF_RFCR1_DROP_BF_POLL |
 			MT_WF_RFCR1_DROP_BA |
@@ -542,23 +552,23 @@ static void mt7921_configure_filter(struct ieee80211_hw *hw,
 
 #define MT76_FILTER(_flag, _hw) do {					\
 		flags |= *total_flags & FIF_##_flag;			\
-		phy->rxfilter &= ~(_hw);				\
-		phy->rxfilter |= !(flags & FIF_##_flag) * (_hw);	\
+		dev->mt76.rxfilter &= ~(_hw);				\
+		dev->mt76.rxfilter |= !(flags & FIF_##_flag) * (_hw);	\
 	} while (0)
 
 	mt7921_mutex_acquire(dev);
 
-	phy->rxfilter &= ~(MT_WF_RFCR_DROP_OTHER_BSS |
-			   MT_WF_RFCR_DROP_OTHER_BEACON |
-			   MT_WF_RFCR_DROP_FRAME_REPORT |
-			   MT_WF_RFCR_DROP_PROBEREQ |
-			   MT_WF_RFCR_DROP_MCAST_FILTERED |
-			   MT_WF_RFCR_DROP_MCAST |
-			   MT_WF_RFCR_DROP_BCAST |
-			   MT_WF_RFCR_DROP_DUPLICATE |
-			   MT_WF_RFCR_DROP_A2_BSSID |
-			   MT_WF_RFCR_DROP_UNWANTED_CTL |
-			   MT_WF_RFCR_DROP_STBC_MULTI);
+	dev->mt76.rxfilter &= ~(MT_WF_RFCR_DROP_OTHER_BSS |
+				MT_WF_RFCR_DROP_OTHER_BEACON |
+				MT_WF_RFCR_DROP_FRAME_REPORT |
+				MT_WF_RFCR_DROP_PROBEREQ |
+				MT_WF_RFCR_DROP_MCAST_FILTERED |
+				MT_WF_RFCR_DROP_MCAST |
+				MT_WF_RFCR_DROP_BCAST |
+				MT_WF_RFCR_DROP_DUPLICATE |
+				MT_WF_RFCR_DROP_A2_BSSID |
+				MT_WF_RFCR_DROP_UNWANTED_CTL |
+				MT_WF_RFCR_DROP_STBC_MULTI);
 
 	MT76_FILTER(OTHER_BSS, MT_WF_RFCR_DROP_OTHER_TIM |
 			       MT_WF_RFCR_DROP_A3_MAC |
@@ -572,7 +582,7 @@ static void mt7921_configure_filter(struct ieee80211_hw *hw,
 			     MT_WF_RFCR_DROP_NDPA);
 
 	*total_flags = flags;
-	mt76_wr(dev, MT_WF_RFCR(0), phy->rxfilter);
+	mt76_wr(dev, MT_WF_RFCR(0), dev->mt76.rxfilter);
 
 	if (*total_flags & FIF_CONTROL)
 		mt76_clear(dev, MT_WF_RFCR1(0), ctl_flags);
@@ -1163,6 +1173,23 @@ static void mt7921_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			   HZ / 2);
 }
 
+static void mt7921_sta_set_decap_offload(struct ieee80211_hw *hw,
+					 struct ieee80211_vif *vif,
+					 struct ieee80211_sta *sta,
+					 bool enabled)
+{
+	struct mt7921_sta *msta = (struct mt7921_sta *)sta->drv_priv;
+	struct mt7921_dev *dev = mt7921_hw_dev(hw);
+
+	if (enabled)
+		set_bit(MT_WCID_FLAG_HDR_TRANS, &msta->wcid.flags);
+	else
+		clear_bit(MT_WCID_FLAG_HDR_TRANS, &msta->wcid.flags);
+
+	mt76_connac_mcu_sta_update_hdr_trans(&dev->mt76, vif, &msta->wcid,
+					     MCU_UNI_CMD_STA_REC_UPDATE);
+}
+
 static int mt7921_set_sar_specs(struct ieee80211_hw *hw,
 				const struct cfg80211_sar_specs *sar)
 {
@@ -1213,6 +1240,7 @@ const struct ieee80211_ops mt7921_ops = {
 	.sta_state = mt7921_sta_state,
 	.sta_pre_rcu_remove = mt76_sta_pre_rcu_remove,
 	.set_key = mt7921_set_key,
+	.sta_set_decap_offload = mt7921_sta_set_decap_offload,
 	.ampdu_action = mt7921_ampdu_action,
 	.set_rts_threshold = mt7921_set_rts_threshold,
 	.wake_tx_queue = mt76_wake_tx_queue,
