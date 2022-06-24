@@ -434,11 +434,13 @@ static void vfio_pci_disable(struct vfio_pci_device *vdev)
 
 	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
 		bar = i + PCI_STD_RESOURCES;
-		if (!vdev->barmap[bar])
+		if (!vdev->barmap[bar] && !vdev->requested_skipped_barmap[bar])
 			continue;
-		pci_iounmap(pdev, vdev->barmap[bar]);
+		if (vdev->barmap[bar])
+			pci_iounmap(pdev, vdev->barmap[bar]);
 		pci_release_selected_regions(pdev, 1 << bar);
 		vdev->barmap[bar] = NULL;
+		vdev->requested_skipped_barmap[bar] = false;
 	}
 
 	list_for_each_entry_safe(dummy_res, tmp,
@@ -1688,21 +1690,32 @@ static int vfio_pci_mmap(struct vfio_device *core_vdev, struct vm_area_struct *v
 	 * Even though we don't make use of the barmap for the mmap,
 	 * we need to request the region and the barmap tracks that.
 	 */
-	if (!vdev->barmap[index]) {
+	if (!manatee_chromeos_domain() && !vdev->barmap[index]) {
 		ret = pci_request_selected_regions(pdev,
 						   1 << index, "vfio-pci");
 		if (ret)
 			return ret;
 
-		vdev->barmap[index] = pci_iomap(pdev, index, 0);
-		if (!vdev->barmap[index]) {
-			pci_release_selected_regions(pdev, 1 << index);
-			return -ENOMEM;
+		// MANATEE: ManaTEE guest only uses this for virtio-vhost-user
+		// mappings, which aren't MMIO/PIO. Skip setting up the barmap
+		// so that sibling memory can be mapped write-back instead of
+		// uncached-minus.
+		if (!manatee_chromeos_domain()) {
+			vdev->barmap[index] = pci_iomap(pdev, index, 0);
+			if (!vdev->barmap[index]) {
+				pci_release_selected_regions(pdev, 1 << index);
+				return -ENOMEM;
+			}
+		} else {
+			vdev->requested_skipped_barmap[index] = true;
 		}
 	}
 
 	vma->vm_private_data = vdev;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	// MANATEE: ManaTEE guest only uses vfio for virtio-vhost-user devices,
+	// whose mappings should be cached.
+	if (!manatee_chromeos_domain())
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	vma->vm_pgoff = (pci_resource_start(pdev, index) >> PAGE_SHIFT) + pgoff;
 
 	/*
