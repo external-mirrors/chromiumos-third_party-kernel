@@ -298,8 +298,21 @@ static void ser_reset_vif(struct rtw89_dev *rtwdev, struct rtw89_vif *rtwvif)
 	rtwvif->trigger = false;
 }
 
+static void ser_sta_deinit_addr_cam_iter(void *data, struct ieee80211_sta *sta)
+{
+	struct rtw89_dev *rtwdev = (struct rtw89_dev *)data;
+	struct rtw89_sta *rtwsta = (struct rtw89_sta *)sta->drv_priv;
+
+	rtw89_cam_deinit_addr_cam(rtwdev, &rtwsta->addr_cam);
+}
+
 static void ser_deinit_cam(struct rtw89_dev *rtwdev, struct rtw89_vif *rtwvif)
 {
+	if (rtwvif->net_type == RTW89_NET_TYPE_AP_MODE)
+		ieee80211_iterate_stations_atomic(rtwdev->hw,
+						  ser_sta_deinit_addr_cam_iter,
+						  rtwdev);
+
 	rtw89_cam_deinit(rtwdev, rtwvif);
 }
 
@@ -619,7 +632,7 @@ static void ser_l2_reset_st_hdl(struct rtw89_ser *ser, u8 evt)
 	}
 }
 
-static struct event_ent ser_ev_tbl[] = {
+static const struct event_ent ser_ev_tbl[] = {
 	{SER_EV_NONE, "SER_EV_NONE"},
 	{SER_EV_STATE_IN, "SER_EV_STATE_IN"},
 	{SER_EV_STATE_OUT, "SER_EV_STATE_OUT"},
@@ -635,7 +648,7 @@ static struct event_ent ser_ev_tbl[] = {
 	{SER_EV_MAXX, "SER_EV_MAX"}
 };
 
-static struct state_ent ser_st_tbl[] = {
+static const struct state_ent ser_st_tbl[] = {
 	{SER_IDLE_ST, "SER_IDLE_ST", ser_idle_st_hdl},
 	{SER_RESET_TRX_ST, "SER_RESET_TRX_ST", ser_reset_trx_st_hdl},
 	{SER_DO_HCI_ST, "SER_DO_HCI_ST", ser_do_hci_st_hdl},

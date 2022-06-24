@@ -353,15 +353,19 @@ static unsigned int leak_balloon_locked(struct virtio_balloon *vb,
 	s64 diff;
 	LIST_HEAD(pages);
 
-	if (reason == LEAK_REASON_REMOVE) {
+	switch (reason) {
+	case LEAK_REASON_REMOVE:
 		num = vb->num_pages;
-	} else if (reason == LEAK_REASON_FORCED_OOM) {
+		break;
+	case LEAK_REASON_FORCED_OOM:
 		num =  VIRTIO_BALLOON_OOM_NR_PAGES;
-	} else {
+		break;
+	case LEAK_REASON_DEFLATE:
 		diff = towards_target(vb);
 		if (diff >= 0)
 			return 0;
 		num = -diff;
+		break;
 	}
 
 	/* We can only do one array worth at a time. */
@@ -939,6 +943,8 @@ static unsigned long handle_pressure(struct virtio_balloon *vb)
 
 	tell_host_pressure_event(vb);
 
+	// The device may deflate the balloon before acking the event, in
+	// which case pages can be freed synchronously for the shrinker.
 	while (leak_balloon_locked(vb, LEAK_REASON_DEFLATE))
 		continue;
 
@@ -1242,7 +1248,11 @@ static int virtballoon_restore(struct virtio_device *vdev)
 
 	if (towards_target(vb))
 		virtballoon_changed(vdev);
+
+	mutex_lock(&vb->balloon_lock);
 	update_balloon_size(vb);
+	mutex_unlock(&vb->balloon_lock);
+
 	return 0;
 }
 #endif

@@ -1297,6 +1297,43 @@ void dcn10_init_pipes(struct dc *dc, struct dc_state *context)
 
 		tg->funcs->tg_init(tg);
 	}
+
+	/* Power gate DSCs */
+	if (hws->funcs.dsc_pg_control != NULL) {
+		uint32_t num_opps = 0;
+		uint32_t opp_id_src0 = OPP_ID_INVALID;
+		uint32_t opp_id_src1 = OPP_ID_INVALID;
+
+		// Step 1: To find out which OPTC is running & OPTC DSC is ON
+		for (i = 0; i < dc->res_pool->res_cap->num_timing_generator; i++) {
+			uint32_t optc_dsc_state = 0;
+			struct timing_generator *tg = dc->res_pool->timing_generators[i];
+
+			if (tg->funcs->is_tg_enabled(tg)) {
+				if (tg->funcs->get_dsc_status)
+					tg->funcs->get_dsc_status(tg, &optc_dsc_state);
+				// Only one OPTC with DSC is ON, so if we got one result, we would exit this block.
+				// non-zero value is DSC enabled
+				if (optc_dsc_state != 0) {
+					tg->funcs->get_optc_source(tg, &num_opps, &opp_id_src0, &opp_id_src1);
+					break;
+				}
+			}
+		}
+
+		// Step 2: To power down DSC but skip DSC  of running OPTC
+		for (i = 0; i < dc->res_pool->res_cap->num_dsc; i++) {
+			struct dcn_dsc_state s  = {0};
+
+			dc->res_pool->dscs[i]->funcs->dsc_read_state(dc->res_pool->dscs[i], &s);
+
+			if ((s.dsc_opp_source == opp_id_src0 || s.dsc_opp_source == opp_id_src1) &&
+				s.dsc_clock_en && s.dsc_fw_en)
+				continue;
+
+			hws->funcs.dsc_pg_control(hws, dc->res_pool->dscs[i]->inst, false);
+		}
+	}
 }
 
 void dcn10_init_hw(struct dc *dc)
@@ -1385,13 +1422,6 @@ void dcn10_init_hw(struct dc *dc)
 			link->link_status.link_active = true;
 	}
 
-	/* Power gate DSCs */
-	if (!is_optimized_init_done) {
-		for (i = 0; i < res_pool->res_cap->num_dsc; i++)
-			if (hws->funcs.dsc_pg_control != NULL)
-				hws->funcs.dsc_pg_control(hws, res_pool->dscs[i]->inst, false);
-	}
-
 	/* Enable outbox notification feature of dmub */
 	if (dc->debug.enable_dmub_aux_for_legacy_ddc)
 		dmub_enable_outbox_notification(dc);
@@ -1434,6 +1464,9 @@ void dcn10_init_hw(struct dc *dc)
 			}
 		}
 	}
+
+	if (hws->funcs.enable_power_gating_plane)
+		hws->funcs.enable_power_gating_plane(dc->hwseq, true);
 
 	/* If taking control over from VBIOS, we may want to optimize our first
 	 * mode set, so we need to skip powering down pipes until we know which
@@ -1487,8 +1520,6 @@ void dcn10_init_hw(struct dc *dc)
 
 		REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
 	}
-	if (hws->funcs.enable_power_gating_plane)
-		hws->funcs.enable_power_gating_plane(dc->hwseq, true);
 
 	if (dc->clk_mgr->funcs->notify_wm_ranges)
 		dc->clk_mgr->funcs->notify_wm_ranges(dc->clk_mgr);
@@ -1569,7 +1600,7 @@ void dcn10_reset_hw_ctx_wrap(
 
 			dcn10_reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
 			if (hws->funcs.enable_stream_gating)
-				hws->funcs.enable_stream_gating(dc, pipe_ctx);
+				hws->funcs.enable_stream_gating(dc, pipe_ctx_old);
 			if (old_clk)
 				old_clk->funcs->cs_power_down(old_clk);
 		}
