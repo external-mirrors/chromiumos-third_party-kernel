@@ -70,6 +70,7 @@ steps:
         set -ve
         cat > test.sh <<EOF
         set -ve
+        dmesg -C
         modprobe vcam
         rmmod vcam
         modprobe vcam
@@ -78,10 +79,13 @@ steps:
         /workspace/tools/kcam/vcam-test/vcamtest --exit_at test_add_valid_rw_operations
         /workspace/tools/kcam/vcam-test/vcamtest --exit_at test_export_import_operations
         /workspace/tools/kcam/vcam-test/vcamtest
+        dmesg
         EOF
         chmod a+x test.sh
         cat test.sh
         virtme-run --rodir $(pwd) --kdir . --mods=auto --script-exec $(pwd)/test.sh --show-boot-console 2>&1 < /dev/zero | tee /tmp/virtme.out
+        grep -qz "BUG: " /tmp/virtme.out && exit 1
+        grep -qz "WARNING: " /tmp/virtme.out && exit 1
         grep "virtme-init: script returned 0" /tmp/virtme.out
 - name: 'gcr.io/${PROJECT_ID}/kernel-virtme'
   entrypoint: 'bash'
