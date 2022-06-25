@@ -92,9 +92,7 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int length,
 		return -EINVAL;
 
 	query = arg + sizeof(struct cam_header);
-	cam_output_init(hdr, &output);
-
-	if (cam_output_clear(&output, hdr->output.size))
+	if (cam_output_init(hdr, &output))
 		return -EFAULT;
 
 	for (num_query = 0; num_query < hdr->num_queries; num_query++) {
@@ -149,9 +147,7 @@ cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int length, void *arg)
 		return -EINVAL;
 
 	op = arg + sizeof(struct cam_header);
-	cam_output_init(hdr, &output);
-
-	if (cam_output_clear(&output, hdr->output.size))
+	if (cam_output_init(hdr, &output))
 		return -EFAULT;
 
 	for (num_op = 0; num_op < hdr->num_queries; num_op++) {

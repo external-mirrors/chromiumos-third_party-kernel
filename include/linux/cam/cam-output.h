@@ -31,8 +31,7 @@ struct cam_koutput {
 
 struct cam_header;
 
-void cam_output_init(struct cam_header *hdr, struct cam_koutput *output);
-int cam_output_clear(struct cam_koutput *output, size_t sz);
+int cam_output_init(struct cam_header *hdr, struct cam_koutput *output);
 
 void *__cam_output_next_entry(struct cam_koutput *output, size_t sz);
 
