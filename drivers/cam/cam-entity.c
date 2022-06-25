@@ -422,12 +422,12 @@ static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	struct cam_koutput *output;
 
 	output = ctl->data;
-	cam_output_next_entry(output, qent);
 
 	/* User just want the size, not the data. */
 	if (!output->origin)
 		return true;
 
+	cam_output_next_entry(output, qent);
 	if (!qent)
 		return false;
 
@@ -464,12 +464,12 @@ static bool enum_event(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	struct cam_koutput *output;
 
 	output = ctl->data;
-	cam_output_next_entry(output, qent);
 
 	/* User just want the size, not the data. */
 	if (!output->origin)
 		return true;
 
+	cam_output_next_entry(output, qent);
 	if (!qent)
 		return false;
 
