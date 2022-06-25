@@ -12,6 +12,14 @@
 #include <linux/cam/cam-output.h>
 #include <linux/uaccess.h>
 
+#include <uapi/linux/cam.h>
+
+void cam_output_init(struct cam_header *hdr, struct cam_koutput *output)
+{
+	output->origin = output->base = u64_to_user_ptr(hdr->output.address);
+	output->end = output->origin + hdr->output.size;
+}
+
 void *__cam_output_next_entry(struct cam_koutput *output, size_t sz)
 {
 	void *ptr;

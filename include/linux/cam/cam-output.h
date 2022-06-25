@@ -29,6 +29,9 @@ struct cam_koutput {
 	__u32		num_entries;
 };
 
+struct cam_header;
+
+void cam_output_init(struct cam_header *hdr, struct cam_koutput *output);
 int cam_output_clear(struct cam_koutput *output, size_t sz);
 
 void *__cam_output_next_entry(struct cam_koutput *output, size_t sz);
