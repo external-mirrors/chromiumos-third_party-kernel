@@ -384,7 +384,6 @@ static int vcam_probe(struct platform_device *pdev)
 	vcam->timer_start_ts = jiffies;
 	hrtimer_start(&vcam->event_timer_fast, 0, HRTIMER_MODE_REL);
 	hrtimer_start(&vcam->event_timer_slow, 0, HRTIMER_MODE_REL);
-	platform_set_drvdata(pdev, vcam);
 
 	dev_info(vcam->dev, "%s: done\n", __func__);
 	return 0;
