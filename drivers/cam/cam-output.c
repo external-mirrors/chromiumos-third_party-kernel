@@ -42,3 +42,8 @@ void *__cam_output_next_entry(struct cam_koutput *output, size_t sz)
 	return ptr;
 }
 ALLOW_ERROR_INJECTION(__cam_output_next_entry, NULL);
+
+bool cam_output_has_buffer(struct cam_koutput *output)
+{
+	return output->origin;
+}

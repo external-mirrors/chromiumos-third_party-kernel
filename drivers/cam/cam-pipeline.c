@@ -1289,7 +1289,7 @@ static bool cam_op_enum(struct cam_obj_op *op, struct cam_koutput *output)
 	struct cam_query_operation_entry *qent;
 
 	/* User just want the size, not the data. */
-	if (!output->origin)
+	if (!cam_output_has_buffer(output))
 		return true;
 
 	cam_output_next_entry(output, qent);
