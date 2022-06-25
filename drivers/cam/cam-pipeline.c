@@ -1290,7 +1290,7 @@ static bool cam_op_enum(struct cam_obj_op *op, struct cam_koutput *output)
 
 	/* User just want the size, not the data. */
 	if (!cam_output_has_buffer(output))
-		return true;
+		goto out;
 
 	cam_output_next_entry(output, qent);
 	if (!qent)
@@ -1303,6 +1303,7 @@ static bool cam_op_enum(struct cam_obj_op *op, struct cam_koutput *output)
 	if (__put_user(op->state, &qent->state))
 		return false;
 
+out:
 	output->num_entries++;
 	return true;
 }

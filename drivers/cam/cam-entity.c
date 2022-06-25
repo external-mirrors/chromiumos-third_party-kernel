@@ -425,7 +425,7 @@ static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 
 	/* User just want the size, not the data. */
 	if (!cam_output_has_buffer(output))
-		return true;
+		goto out;
 
 	cam_output_next_entry(output, qent);
 	if (!qent)
@@ -441,6 +441,7 @@ static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	if (put_user(cam_graph_node_link_id(nsobj), &qent->parent))
 		return false;
 
+out:
 	output->num_entries++;
 	return true;
 }
@@ -467,7 +468,7 @@ static bool enum_event(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 
 	/* User just want the size, not the data. */
 	if (!cam_output_has_buffer(output))
-		return true;
+		goto out;
 
 	cam_output_next_entry(output, qent);
 	if (!qent)
@@ -480,6 +481,7 @@ static bool enum_event(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	if (copy_to_user(&qent->name, event->name, strlen(event->name)))
 		return false;
 
+out:
 	output->num_entries++;
 	return true;
 }
