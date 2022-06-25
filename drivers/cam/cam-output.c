@@ -19,6 +19,9 @@ int cam_output_init(struct cam_header *hdr, struct cam_koutput *output)
 	output->origin = output->base = u64_to_user_ptr(hdr->output.address);
 	output->end = output->origin + hdr->output.size;
 
+	if (!output->origin)
+		return 0;
+
 	if (!access_ok(output->base, hdr->output.size))
 		return -EFAULT;
 
