@@ -34,7 +34,6 @@ static void ringbuffer_alloc(struct kunit *test)
 	kfree(rb);
 }
 
-
 static void ringbuffer_write(struct kunit *test)
 {
 	struct cam_ringbuffer *rb;
