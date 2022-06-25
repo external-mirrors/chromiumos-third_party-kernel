@@ -1281,6 +1281,9 @@ error:
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_enqueue, ERRNO);
 
+/*
+ * This function is called under RCU, so it cannot sleep.
+ */
 static bool cam_op_enum(struct cam_obj_op *op, struct cam_koutput *output)
 {
 	struct cam_query_operation_entry *qent;
