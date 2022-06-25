@@ -411,6 +411,8 @@ ALLOW_ERROR_INJECTION(cam_event_register, NULL);
  * This callback increases the entry counter of the output and, if necessary,
  * copy the entity name to the user space.
  *
+ * This function may sleep.
+ *
  * Return: True on success or false otherwise.
  */
 static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
@@ -429,14 +431,14 @@ static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	if (!qent)
 		return false;
 
-	if (__put_user(cam_obj_id(nsobj), &qent->id))
+	if (put_user(cam_obj_id(nsobj), &qent->id))
 		return false;
 
 	entity = nsobj_to_cam_entity(nsobj);
 	if (copy_to_user(&qent->name, entity->name, strlen(entity->name)))
 		return false;
 
-	if (__put_user(cam_graph_node_link_id(nsobj), &qent->parent))
+	if (put_user(cam_graph_node_link_id(nsobj), &qent->parent))
 		return false;
 
 	output->num_entries++;
@@ -450,6 +452,8 @@ static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
  *
  * This callback increases the entry counter of the output and, if necessary,
  * copy the event name to the user space.
+ *
+ * This function may sleep.
  *
  * Return: True on success or false otherwise.
  */
@@ -469,7 +473,7 @@ static bool enum_event(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	if (!qent)
 		return false;
 
-	if (__put_user(cam_obj_id(nsobj), &qent->id))
+	if (put_user(cam_obj_id(nsobj), &qent->id))
 		return false;
 
 	event = nsobj_to_cam_event(nsobj);
