@@ -328,23 +328,17 @@ static int test_query_entities_count(struct libkc *cam,
 
 	ret = libkc_query_ioctl(cam, lcq);
 	if (ret)
-		goto out;
+		return ret;
 
 	q = libkc_query_at(lcq, 0);
-	if (!q) {
-		pr_err("Unable to get query\n");
+	if (q->query_entities.num_entities != VCAM_ENTITIES_COUNT) {
+		pr_err("Unexpected number of entities: %d expected: %d\n",
+		       q->query_entities.num_entities,
+		       VCAM_ENTITIES_COUNT);
 		return -EINVAL;
 	}
 
-	pr_info("Entities count: %d, expected: %d\n",
-		q->query_entities.num_entities,
-		VCAM_ENTITIES_COUNT);
-	if (q->query_entities.num_entities == VCAM_ENTITIES_COUNT)
-		ret = 0;
-	else
-		ret = -EINVAL;
-out:
-	return ret;
+	return 0;
 }
 
 static int test_query_exact_entity(struct libkc *cam,
