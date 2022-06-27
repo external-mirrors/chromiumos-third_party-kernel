@@ -84,5 +84,10 @@
 /* Chrome OS-specific devices */
 #define VIRTIO_ID_WL           63 /* virtio wayland */
 #define VIRTIO_ID_TPM          62 /* virtio tpm */
+#define VIRTIO_ID_VHOST_USER   61 /* virtio vhost-user */
+
+/* Derive PCI device ID from Virtio ID */
+#define VIRTIO_PCI_MODERN_RANGE		0x1040
+#define VIRTIO_PCI_DEVICE_ID(id)	(VIRTIO_PCI_MODERN_RANGE + (id))
 
 #endif /* _LINUX_VIRTIO_IDS_H */
