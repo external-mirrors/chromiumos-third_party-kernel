@@ -1370,6 +1370,8 @@ int cam_pipeline_query(struct cam_pipeline *pipeline,
 	int state;
 	int ret;
 
+	query->num_ops = 0;
+
 	/*
 	 * We have two different mechanisms here: the former one starts at
 	 * a given pipeline work item and walks the dependency graph (think
