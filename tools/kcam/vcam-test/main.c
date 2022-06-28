@@ -310,21 +310,61 @@ out:
 }
 
 #define VCAM_ENTITIES_COUNT	5
+#define VCAM_EVENTS_COUNT	2
 
-static int test_query_entities_count(struct libkc *cam,
+static int test_compound_query_count(struct libkc *cam,
 				     struct libkc_query *lcq)
 {
+	struct obj_entity *entity;
 	struct cam_query *q;
 	int ret;
 	int i;
 
-	pr_info("Test test_query_entities_count()\n");
+	pr_info("Test test_compound_query_count()\n");
 
-	for_each_cam_query(lcq, i, q) {
-		q->query_type			= CAM_QUERY_TYPE_ENTITIES;
-		q->query_entities.id		= CAM_OBJ_ID_ROOT;
-		q->query_entities.maxdepth	= CAM_QUERY_ALL_OBJECTS;
+	q = libkc_query_at(lcq, 0);
+	if (!q) {
+		pr_err("Unable to get query\n");
+		return -EINVAL;
 	}
+
+	q->query_type			= CAM_QUERY_TYPE_ENTITIES;
+	q->query_entities.id		= CAM_OBJ_ID_ROOT;
+	q->query_entities.maxdepth	= CAM_QUERY_ALL_OBJECTS;
+
+	entity = entity_lookup_by_name(VCAM_FAST_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup %s entity\n",
+		       VCAM_FAST_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	q = libkc_query_at(lcq, 1);
+	if (!q) {
+		pr_err("Unable to get query\n");
+		return -EINVAL;
+	}
+
+	q->query_type			= CAM_QUERY_TYPE_EVENTS;
+	q->query_events.entity		= entity->id;
+	q->query_events.id		= CAM_QUERY_ALL_OBJECTS;
+
+	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup %s entity\n",
+		       VCAM_SLOW_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	q = libkc_query_at(lcq, 2);
+	if (!q) {
+		pr_err("Unable to get query\n");
+		return -EINVAL;
+	}
+
+	q->query_type			= CAM_QUERY_TYPE_EVENTS;
+	q->query_events.entity		= entity->id;
+	q->query_events.id		= CAM_QUERY_ALL_OBJECTS;
 
 	ret = libkc_query_ioctl(cam, lcq);
 	if (ret)
@@ -335,6 +375,22 @@ static int test_query_entities_count(struct libkc *cam,
 		pr_err("Unexpected number of entities: %d expected: %d\n",
 		       q->query_entities.num_entities,
 		       VCAM_ENTITIES_COUNT);
+		return -EINVAL;
+	}
+
+	q = libkc_query_at(lcq, 1);
+	if (q->query_events.num_events != VCAM_EVENTS_COUNT) {
+		pr_err("Unexpected number of events: %d expected: %d\n",
+		       q->query_events.num_events,
+		       VCAM_EVENTS_COUNT);
+		return -EINVAL;
+	}
+
+	q = libkc_query_at(lcq, 2);
+	if (q->query_events.num_events != VCAM_EVENTS_COUNT) {
+		pr_err("Unexpected number of events: %d expected: %d\n",
+		       q->query_events.num_events,
+		       VCAM_EVENTS_COUNT);
 		return -EINVAL;
 	}
 
@@ -402,17 +458,6 @@ static int test_query_entities(struct libkc *cam)
 	struct libkc_query *lcq;
 	int ret;
 
-	lcq = libkc_query_get(1, 0);
-	if (!lcq)
-		return -EINVAL;
-
-	ret = test_query_entities_count(cam, lcq);
-	if (ret) {
-		pr_err("FAIL: test_query_entities_count() failed\n");
-		goto out;
-	}
-
-	libkc_query_put(lcq);
 	lcq = libkc_query_get(1, CAM_DEFAULT_OUT_SZ);
 	if (!lcq)
 		return -EINVAL;
@@ -441,6 +486,18 @@ static int test_query_entities(struct libkc *cam)
 		pr_err("FAIL: test_query_exact_entity()\n");
 		goto out;
 	}
+
+	libkc_query_put(lcq);
+	lcq = libkc_query_get(3, 0);
+	if (!lcq)
+		return -EINVAL;
+
+	ret = test_compound_query_count(cam, lcq);
+	if (ret) {
+		pr_err("FAIL: test_compound_query_count() failed\n");
+		goto out;
+	}
+
 out:
 	libkc_query_put(lcq);
 	return ret;
