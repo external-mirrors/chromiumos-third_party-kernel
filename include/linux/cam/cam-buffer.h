@@ -23,8 +23,6 @@
 struct cam_obj_buffer {
 	/** @nsobj: namespace object */
 	struct cam_obj			nsobj;
-	/** @gnode: graph node of this object */
-	struct cam_graph_node		gnode;
 
 	/** @phys: the physical address of the buffer */
 	u64				phys;

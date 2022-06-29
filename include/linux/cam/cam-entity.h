@@ -43,8 +43,6 @@ struct cam_entity_ops {
 struct cam_obj_entity {
 	/** @nsobj: namespace object */
 	struct cam_obj		nsobj;
-	/** @gnode: graph node of this object */
-	struct cam_graph_node	gnode;
 	/** @ops: Read/Write execution callbacks */
 	struct cam_entity_ops	*ops;
 	/** @driver_data: Driver specific data */
@@ -61,8 +59,6 @@ struct cam_obj_entity {
 struct cam_obj_event {
 	/** @nsobj: namespace object */
 	struct cam_obj		nsobj;
-	/** @gnode: graph node of this object */
-	struct cam_graph_node	gnode;
 	/** @notify_lock: protects list of signals i.e. @notify_active_chain */
 	rwlock_t		notify_lock;
 	/** @notify_chain: list of pipeline objects that are blocked on us */
