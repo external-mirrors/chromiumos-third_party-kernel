@@ -29,7 +29,7 @@ DECLARE_EVENT_CLASS(cam_operation_class,
 		__entry->id = op->nsobj.id;
 		__entry->state = op->state;
 		__entry->delay_ns = op->delay_ns;
-		atomic_read(&op->num_blockers);
+		__entry->num_blockers = atomic_read(&op->num_blockers);
 	),
 
 	TP_printk("id = %lu, state = %d, delay_ns = %llu, num_blockers = %d",
