@@ -40,7 +40,7 @@ struct libkc *libkc_open(const char *dev)
 	struct libkc *cam;
 	int ret;
 
-	cam = malloc(sizeof(struct libkc));
+	cam = calloc(1, sizeof(struct libkc));
 	if (!cam) {
 		pr_err("OOM\n");
 		return NULL;
