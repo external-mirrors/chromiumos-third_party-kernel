@@ -1590,7 +1590,7 @@ static int test_export_import_operations(struct libkc *cam)
 		goto out;
 	}
 
-	pr_info("Export syncilfe fd: %d\n", op->operation_add.fence_out);
+	pr_info("Export syncfile fd: %d\n", op->operation_add.fence_out);
 	fence_out = op->operation_add.fence_out;
 
 	libkc_operation_put(lco);
