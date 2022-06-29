@@ -397,6 +397,96 @@ static int test_compound_query_count(struct libkc *cam,
 	return 0;
 }
 
+static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
+{
+	struct libkc_iterator iter;
+	struct obj_entity *entity;
+	struct cam_query *q;
+	int ret;
+	int i;
+
+	pr_info("Test test_compound_query()\n");
+
+	q = libkc_query_at(lcq, 0);
+	if (!q) {
+		pr_err("Unable to get query\n");
+		return -EINVAL;
+	}
+
+	q->query_type			= CAM_QUERY_TYPE_ENTITIES;
+	q->query_entities.id		= CAM_OBJ_ID_ROOT;
+	q->query_entities.maxdepth	= CAM_QUERY_ALL_OBJECTS;
+
+	entity = entity_lookup_by_name(VCAM_FAST_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup %s entity\n",
+		       VCAM_FAST_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	q = libkc_query_at(lcq, 1);
+	if (!q) {
+		pr_err("Unable to get query\n");
+		return -EINVAL;
+	}
+
+	q->query_type			= CAM_QUERY_TYPE_EVENTS;
+	q->query_events.entity		= entity->id;
+	q->query_events.id		= CAM_QUERY_ALL_OBJECTS;
+
+	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup %s entity\n",
+		       VCAM_SLOW_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	q = libkc_query_at(lcq, 2);
+	if (!q) {
+		pr_err("Unable to get query\n");
+		return -EINVAL;
+	}
+
+	q->query_type			= CAM_QUERY_TYPE_EVENTS;
+	q->query_events.entity		= entity->id;
+	q->query_events.id		= CAM_QUERY_ALL_OBJECTS;
+
+	ret = libkc_query_ioctl(cam, lcq);
+	if (ret)
+		return ret;
+
+	libkc_iterator_init(&lcq->hdr, &iter);
+	for_each_cam_query(lcq, i, q) {
+		if (q->query_type == CAM_QUERY_TYPE_ENTITIES) {
+			struct cam_query_entity_entry *entry;
+
+			for_each_query_entity(q, &iter, entry) {
+				pr_info("Entity ID: %d, Name: %s, Parent: %d\n",
+					entry->id,
+					entry->name,
+					entry->parent);
+			}
+			continue;
+		}
+
+		if (q->query_type == CAM_QUERY_TYPE_EVENTS) {
+			struct cam_query_event_entry *entry;
+
+			for_each_query_event(q, &iter, entry) {
+				pr_info("Event ID: %d, Name: %s\n",
+					entry->id,
+					entry->name);
+			}
+			continue;
+		}
+
+		pr_err("[UNEXPECTED] type of query: %d\n", q->query_type);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int test_query_exact_entity(struct libkc *cam,
 				   struct libkc_query *lcq)
 {
@@ -495,6 +585,17 @@ static int test_query_entities(struct libkc *cam)
 	ret = test_compound_query_count(cam, lcq);
 	if (ret) {
 		pr_err("FAIL: test_compound_query_count() failed\n");
+		goto out;
+	}
+
+	libkc_query_put(lcq);
+	lcq = libkc_query_get(3, CAM_DEFAULT_OUT_SZ);
+	if (!lcq)
+		return -EINVAL;
+
+	ret = test_compound_query(cam, lcq);
+	if (ret) {
+		pr_err("FAIL: test_compound_query() failed\n");
 		goto out;
 	}
 
