@@ -44,11 +44,6 @@ u32 libkc_query_num_events(struct cam_query *q);
 	     (i)->offt < libkc_query_num_events((q));			\
 	     (i)->offt++, (i)->base += sizeof(*e), (e) = (i)->base)
 
-#define for_each_query_syncfile(q,i,e)					\
-	for ((i)->offt = 0, (e) = (i)->base;				\
-	     (i)->offt < (q)->query_syncfiles.num_syncfiles;		\
-	     (i)->offt++, (i)->base += sizeof(*e), (e) = (i)->base)
-
 u32 libkc_query_num_ops(struct cam_query *q);
 
 #define for_each_query_operation(q,i,e)					\
