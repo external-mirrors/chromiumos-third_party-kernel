@@ -460,6 +460,12 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 		if (q->query_type == CAM_QUERY_TYPE_ENTITIES) {
 			struct cam_query_entity_entry *entry;
 
+			if (libkc_query_num_entities(q) != VCAM_ENTITIES_COUNT) {
+				pr_err("Invalid number of entities: %d\n",
+				       libkc_query_num_entities(q));
+				return -EINVAL;
+			}
+
 			for_each_query_entity(q, &iter, entry) {
 				pr_info("Entity ID: %d, Name: %s, Parent: %d\n",
 					entry->id,
@@ -471,6 +477,12 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 
 		if (q->query_type == CAM_QUERY_TYPE_EVENTS) {
 			struct cam_query_event_entry *entry;
+
+			if (libkc_query_num_events(q) != VCAM_EVENTS_COUNT) {
+				pr_err("Invalid number of events: %d\n",
+				       libkc_query_num_events(q));
+				return -EINVAL;
+			}
 
 			for_each_query_event(q, &iter, entry) {
 				pr_info("Event ID: %d, Name: %s\n",
