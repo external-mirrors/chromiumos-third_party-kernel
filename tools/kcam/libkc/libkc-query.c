@@ -7,6 +7,42 @@
 
 #include <libkc/libkc.h>
 
+static u32 query_num_entries(struct cam_query *q, u32 query_type)
+{
+	if (q->query_type != query_type) {
+		pr_err("Mismatch. Query type: %d expected: %d\n",
+		       q->query_type,
+		       query_type);
+		return 0;
+	}
+
+	switch (query_type) {
+	case CAM_QUERY_TYPE_ENTITIES:
+		return q->query_entities.num_entities;
+	case CAM_QUERY_TYPE_EVENTS:
+		return q->query_events.num_events;
+	case CAM_QUERY_TYPE_OPERATIONS:
+		return q->query_operations.num_ops;
+	}
+
+	return 0;
+}
+
+u32 libkc_query_num_entities(struct cam_query *q)
+{
+	return query_num_entries(q, CAM_QUERY_TYPE_ENTITIES);
+}
+
+u32 libkc_query_num_events(struct cam_query *q)
+{
+	return query_num_entries(q, CAM_QUERY_TYPE_EVENTS);
+}
+
+u32 libkc_query_num_ops(struct cam_query *q)
+{
+	return query_num_entries(q, CAM_QUERY_TYPE_OPERATIONS);
+}
+
 struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx)
 {
 	if (lcq->hdr.num_queries == 0)

@@ -371,7 +371,7 @@ static int test_compound_query_count(struct libkc *cam,
 		return ret;
 
 	q = libkc_query_at(lcq, 0);
-	if (q->query_entities.num_entities != VCAM_ENTITIES_COUNT) {
+	if (libkc_query_num_entities(q) != VCAM_ENTITIES_COUNT) {
 		pr_err("Unexpected number of entities: %d expected: %d\n",
 		       q->query_entities.num_entities,
 		       VCAM_ENTITIES_COUNT);
@@ -379,7 +379,7 @@ static int test_compound_query_count(struct libkc *cam,
 	}
 
 	q = libkc_query_at(lcq, 1);
-	if (q->query_events.num_events != VCAM_EVENTS_COUNT) {
+	if (libkc_query_num_events(q) != VCAM_EVENTS_COUNT) {
 		pr_err("Unexpected number of events: %d expected: %d\n",
 		       q->query_events.num_events,
 		       VCAM_EVENTS_COUNT);
@@ -387,7 +387,7 @@ static int test_compound_query_count(struct libkc *cam,
 	}
 
 	q = libkc_query_at(lcq, 2);
-	if (q->query_events.num_events != VCAM_EVENTS_COUNT) {
+	if (libkc_query_num_events(q) != VCAM_EVENTS_COUNT) {
 		pr_err("Unexpected number of events: %d expected: %d\n",
 		       q->query_events.num_events,
 		       VCAM_EVENTS_COUNT);
