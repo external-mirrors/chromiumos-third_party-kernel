@@ -130,6 +130,7 @@ struct mtk_dpi_yc_limit {
  * @edge_sel_en: Enable of edge selection.
  * @output_fmts: Array of supported output formats.
  * @num_output_fmts: Quantity of supported output formats.
+ * @swap_input_support: Support input swap function.
  */
 struct mtk_dpi_conf {
 	unsigned int (*cal_factor)(int clock);
@@ -141,7 +142,6 @@ struct mtk_dpi_conf {
 	bool is_ck_de_pol;
 	bool is_dpintf;
 	bool csc_support;
-	bool swap_input_support;
 	// Mask used for HWIDTH, HPORCH, VSYNC_WIDTH and VSYNC_PORCH (no shift)
 	u32 dimension_mask;
 	// Mask used for HSIZE and VSIZE (no shift)
@@ -150,6 +150,7 @@ struct mtk_dpi_conf {
 	u32 yuv422_en_bit;
 	u32 csc_enable_bit;
 	const struct mtk_dpi_yc_limit *limit;
+	bool swap_input_support;
 };
 
 static void mtk_dpi_mask(struct mtk_dpi *dpi, u32 offset, u32 val, u32 mask)
@@ -404,7 +405,8 @@ static void mtk_dpi_config_color_format(struct mtk_dpi *dpi,
 	/* only support RGB888 */
 	mtk_dpi_config_yuv422_enable(dpi, false);
 	mtk_dpi_config_csc_enable(dpi, false);
-	mtk_dpi_config_swap_input(dpi, false);
+	if (dpi->conf->swap_input_support)
+		mtk_dpi_config_swap_input(dpi, false);
 	mtk_dpi_config_channel_swap(dpi, MTK_DPI_OUT_CHANNEL_SWAP_RGB);
 }
 
@@ -882,13 +884,13 @@ static const struct mtk_dpi_conf mt8173_conf = {
 	.num_output_fmts = ARRAY_SIZE(mt8173_output_fmts),
 	.is_ck_de_pol = true,
 	.csc_support = true,
-	.swap_input_support = true,
 	.dimension_mask = HPW_MASK,
 	.hvsize_mask = HSIZE_MASK,
 	.channel_swap_shift = CH_SWAP,
 	.yuv422_en_bit = YUV422_EN,
 	.csc_enable_bit = CSC_ENABLE,
 	.limit = &mtk_dpi_limit,
+	.swap_input_support = true,
 };
 
 static const struct mtk_dpi_conf mt2701_conf = {
@@ -900,13 +902,13 @@ static const struct mtk_dpi_conf mt2701_conf = {
 	.num_output_fmts = ARRAY_SIZE(mt8173_output_fmts),
 	.is_ck_de_pol = true,
 	.csc_support = true,
-	.swap_input_support = true,
 	.dimension_mask = HPW_MASK,
 	.hvsize_mask = HSIZE_MASK,
 	.channel_swap_shift = CH_SWAP,
 	.yuv422_en_bit = YUV422_EN,
 	.csc_enable_bit = CSC_ENABLE,
 	.limit = &mtk_dpi_limit,
+	.swap_input_support = true,
 };
 
 static const struct mtk_dpi_conf mt8183_conf = {
@@ -917,13 +919,13 @@ static const struct mtk_dpi_conf mt8183_conf = {
 	.num_output_fmts = ARRAY_SIZE(mt8183_output_fmts),
 	.is_ck_de_pol = true,
 	.csc_support = true,
-	.swap_input_support = true,
 	.dimension_mask = HPW_MASK,
 	.hvsize_mask = HSIZE_MASK,
 	.channel_swap_shift = CH_SWAP,
 	.yuv422_en_bit = YUV422_EN,
 	.csc_enable_bit = CSC_ENABLE,
 	.limit = &mtk_dpi_limit,
+	.swap_input_support = true,
 };
 
 static const struct mtk_dpi_conf mt8192_conf = {
@@ -934,13 +936,13 @@ static const struct mtk_dpi_conf mt8192_conf = {
 	.num_output_fmts = ARRAY_SIZE(mt8173_output_fmts),
 	.is_ck_de_pol = true,
 	.csc_support = true,
-	.swap_input_support = true,
 	.dimension_mask = HPW_MASK,
 	.hvsize_mask = HSIZE_MASK,
 	.channel_swap_shift = CH_SWAP,
 	.yuv422_en_bit = YUV422_EN,
 	.csc_enable_bit = CSC_ENABLE,
 	.limit = &mtk_dpi_limit,
+	.swap_input_support = true,
 };
 
 static const struct mtk_dpi_conf mt8195_dpintf_conf = {
