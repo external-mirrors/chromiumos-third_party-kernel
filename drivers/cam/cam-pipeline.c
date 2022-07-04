@@ -974,7 +974,7 @@ error:
 }
 
 /**
- * cam_activate_strict_depency_mode() - Activate signal in STRICT mode
+ * cam_activate_strict_dependency_mode() - Activate signal in STRICT mode
  * @op: pointer to CAM operation to activate the signal from
  *
  * This activates the pending signal of an operation in STRICT mode i.e.
@@ -982,7 +982,7 @@ error:
  *
  * Return: True on successful signal activation or false otherwise.
  */
-static bool cam_activate_strict_depency_mode(struct cam_obj_op *op)
+static bool cam_activate_strict_dependency_mode(struct cam_obj_op *op)
 {
 	bool activated = false;
 	int ret;
@@ -1016,7 +1016,7 @@ static bool cam_activate_strict_depency_mode(struct cam_obj_op *op)
 }
 
 /**
- * cam_activate_weak_depency_mode() - Activate signal in WEAK mode
+ * cam_activate_weak_dependency_mode() - Activate signal in WEAK mode
  * @op: pointer to CAM operation that signal is activated from
  *
  * This activates the pending signal of an operation in weak mode i.e.
@@ -1024,7 +1024,7 @@ static bool cam_activate_strict_depency_mode(struct cam_obj_op *op)
  *
  * Return: True on any successful signal activation or false otherwise.
  */
-static bool cam_activate_weak_depency_mode(struct cam_obj_op *op)
+static bool cam_activate_weak_dependency_mode(struct cam_obj_op *op)
 {
 	bool activated = false;
 	int ret;
@@ -1243,10 +1243,10 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 	 * this operation into immediate and queue it for execution.
 	 */
 	if (req->mode == CAM_DEPENDENCY_STRICT_ORDER) {
-		if (!cam_activate_strict_depency_mode(op))
+		if (!cam_activate_strict_dependency_mode(op))
 			execute = true;
 	} else {
-		if (!cam_activate_weak_depency_mode(op))
+		if (!cam_activate_weak_dependency_mode(op))
 			execute = true;
 	}
 
