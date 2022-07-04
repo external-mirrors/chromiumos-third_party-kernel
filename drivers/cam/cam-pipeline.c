@@ -1037,15 +1037,12 @@ static bool cam_activate_weak_dependency_mode(struct cam_obj_op *op)
 	do {
 		ret = cam_op_activate_pending_signal(op);
 
-		if (ret == CAM_OP_PENDING_SIGNAL_NONE)
-			break;
 		if (ret == CAM_OP_PENDING_SIGNAL_ACTIVATED)
 			activated = true;
 		/*
-		 * Carry on until we either have a successfully
-		 * activated signal or no remaining pending signals.
+		 * Carry on until there is no remaining pending signals.
 		 */
-	} while (ret == CAM_OP_PENDING_SIGNAL_FAILURE);
+	} while (ret != CAM_OP_PENDING_SIGNAL_NONE);
 
 	/*
 	 * Ditto. We did not activate any of the pending signals (if there
