@@ -122,7 +122,6 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int length,
 		}
 
 		output.num_entries = 0;
-		length -= sizeof(struct cam_query);
 		query++;
 	}
 
@@ -167,7 +166,6 @@ cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int length, void *arg)
 			return ret;
 		}
 
-		length -= sizeof(struct cam_operation);
 		op++;
 	}
 
