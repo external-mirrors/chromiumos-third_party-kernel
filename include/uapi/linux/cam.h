@@ -171,7 +171,7 @@ enum query_type {
 };
 
 /**
- * struct cam_query - Objects qery ioctl
+ * struct cam_query - Objects query ioctl
  *
  * @query_type:		Type of objects to query
  * @query_entities:	Used when query type is CAM_QUERY_TYPE_ENTITIES
