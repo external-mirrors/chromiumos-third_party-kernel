@@ -137,7 +137,6 @@ ALLOW_ERROR_INJECTION(cam_ioctl_parse_query, ERRNO);
 static int
 cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int length, void *arg)
 {
-	struct cam_koutput output = {0, };
 	struct cam_operation *op;
 	struct cam_header *hdr;
 	u32 num_op;
@@ -148,8 +147,6 @@ cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int length, void *arg)
 		return -EINVAL;
 
 	op = arg + sizeof(struct cam_header);
-	if (cam_output_init(hdr, &output))
-		return -EFAULT;
 
 	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
 		switch (op->operation_type) {
@@ -173,10 +170,6 @@ cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int length, void *arg)
 		length -= sizeof(struct cam_operation);
 		op++;
 	}
-
-	hdr->output.length = output.length;
-	if (output.length > hdr->output.size)
-		return -ENOMEM;
 
 	return ret;
 }
