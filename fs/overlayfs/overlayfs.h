@@ -211,11 +211,11 @@ static inline int ovl_do_symlink(struct ovl_fs *ofs,
 static inline ssize_t ovl_do_getxattr(const struct path *path, const char *name,
 				      void *value, size_t size)
 {
+	struct inode *ip = d_inode(path->dentry);
 	int err, len;
 
 	WARN_ON(path->dentry->d_sb != path->mnt->mnt_sb);
 
-	struct inode *ip = d_inode(path->dentry);
 	err = __vfs_getxattr(&init_user_ns, path->dentry, ip, name, value, size, XATTR_NOSECURITY);
 	len = (value && err > 0) ? err : 0;
 
