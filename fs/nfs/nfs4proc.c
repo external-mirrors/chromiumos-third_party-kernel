@@ -7720,7 +7720,8 @@ static int nfs4_xattr_set_nfs4_dacl(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_dacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
-				    const char *key, void *buf, size_t buflen)
+				    const char *key, void *buf, size_t buflen,
+				    int flags)
 {
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_DACL);
 }
@@ -7743,7 +7744,8 @@ static int nfs4_xattr_set_nfs4_sacl(const struct xattr_handler *handler,
 
 static int nfs4_xattr_get_nfs4_sacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
-				    const char *key, void *buf, size_t buflen)
+				    const char *key, void *buf, size_t buflen,
+				    int flags)
 {
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_SACL);
 }
