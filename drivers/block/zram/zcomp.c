@@ -68,15 +68,12 @@ static struct zcomp_strm *zcomp_strm_alloc(struct zcomp *comp)
 
 bool zcomp_available_algorithm(const char *comp)
 {
-<<<<<<< HEAD   (15fda2 UPSTREAM: Bluetooth: hci_event: Rework hci_inquiry_result_wi)
 	int i;
 
 	i = sysfs_match_string(backends, comp);
 	if (i >= 0)
 		return true;
 
-=======
->>>>>>> CHANGE (74f268 FROMLIST: zram: do not lookup algorithm in backends table)
 	/*
 	 * Crypto does not ignore a trailing new line symbol,
 	 * so make sure you don't supply a string containing
@@ -228,11 +225,6 @@ struct zcomp *zcomp_create(const char *compress)
 	struct zcomp *comp;
 	int error;
 
-	/*
-	 * Crypto API will execute /sbin/modprobe if the compression module
-	 * is not loaded yet. We must do it here, otherwise we are about to
-	 * call /sbin/modprobe under CPU hot-plug lock.
-	 */
 	if (!zcomp_available_algorithm(compress))
 		return ERR_PTR(-EINVAL);
 
