@@ -118,15 +118,17 @@ static void obj_get(struct kunit *test)
 	KUNIT_EXPECT_PTR_EQ(test, obj, cam_obj_get(obj));
 	cam_obj_put(obj);
 
-	release_flag = false;
 	//Put a refcount=1
+	release_flag = false;
 	cam_obj_put(obj);
 	KUNIT_EXPECT_PTR_EQ(test, (struct cam_obj *)NULL, cam_obj_get(obj));
+	KUNIT_EXPECT_TRUE(test, release_flag);
 
-	//Deinit a refcount=0
+	//Check double free
+	release_flag = false;
 	cam_obj_deinit(obj);
 	KUNIT_EXPECT_PTR_EQ(test, (struct cam_obj *)NULL, cam_obj_get(obj));
-	KUNIT_EXPECT_TRUE(test, release_flag);
+	KUNIT_EXPECT_FALSE(test, release_flag);
 
 	/* Do not do it this way - obj_release() should kfree() objects */
 	kfree(obj);
@@ -150,12 +152,12 @@ static void obj_put(struct kunit *test)
 	//Check put
 	release_flag = false;
 	cam_obj_deinit(obj);
-	KUNIT_EXPECT_EQ(test, (bool)true, release_flag);
+	KUNIT_EXPECT_TRUE(test, release_flag);
 
 	//Check double free
 	release_flag = false;
 	cam_obj_put(obj);
-	KUNIT_EXPECT_EQ(test, (bool)false, release_flag);
+	KUNIT_EXPECT_FALSE(test, release_flag);
 
 	/* Do not do it this way - obj_release() should kfree() objects */
 	kfree(obj);
