@@ -28,6 +28,7 @@
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
 #include <linux/manatee.h>
+#include "../drivers/mfd/intel-lpss.h"
 
 #include "vfio_pci_private.h"
 
@@ -64,6 +65,8 @@ MODULE_PARM_DESC(enable_sriov, "Enable support for SR-IOV configuration.  Enabli
 static bool disable_denylist;
 module_param(disable_denylist, bool, 0444);
 MODULE_PARM_DESC(disable_denylist, "Disable use of device denylist. Disabling the denylist allows binding to devices with known errata that may lead to exploitable stability or security issues when accessed by untrusted users.");
+
+static DEFINE_IDA(vfio_pci_devid_ida);
 
 static inline bool vfio_vga_disabled(void)
 {
@@ -312,6 +315,7 @@ int vfio_pci_set_power_state(struct vfio_pci_device *vdev, pci_power_t state)
 static int vfio_pci_enable(struct vfio_pci_device *vdev)
 {
 	struct pci_dev *pdev = vdev->pdev;
+	struct mfd_cell *mfd = NULL;
 	int ret;
 	u16 cmd;
 	u8 msix_pos;
@@ -390,9 +394,36 @@ static int vfio_pci_enable(struct vfio_pci_device *vdev)
 
 	vfio_pci_probe_mmaps(vdev);
 
+	mfd = intel_lpss_pci_find_mfd(pdev);
+	if (mfd) {
+		vdev->mfd_devid = ida_simple_get(&vfio_pci_devid_ida, 0, 0,
+						 GFP_KERNEL);
+		if (vdev->mfd_devid < 0) {
+			ret = vdev->mfd_devid;
+			goto disable_exit;
+		}
+
+		/* do not let mfd request for any resource */
+		mfd->num_resources = 0;
+		ret = mfd_add_devices(&pdev->dev, vdev->mfd_devid, mfd, 1,
+				      NULL, 0, NULL);
+		if (ret) {
+			dev_warn(&pdev->dev, "Failed to add mfd %s\n",
+				 mfd->name);
+			goto disable_exit;
+		}
+		devm_kfree(&pdev->dev, mfd);
+	}
+
 	return 0;
 
 disable_exit:
+	if (vdev->mfd_devid >= 0) {
+		ida_simple_remove(&vfio_pci_devid_ida, vdev->mfd_devid);
+		vdev->mfd_devid = -1;
+	}
+	if (mfd)
+		devm_kfree(&pdev->dev, mfd);
 	vfio_pci_disable(vdev);
 	return ret;
 }
@@ -406,6 +437,12 @@ static void vfio_pci_disable(struct vfio_pci_device *vdev)
 
 	/* Stop the device from further DMA */
 	pci_clear_master(pdev);
+
+	if (vdev->mfd_devid >= 0) {
+		mfd_remove_devices(&pdev->dev);
+		ida_simple_remove(&vfio_pci_devid_ida, vdev->mfd_devid);
+		vdev->mfd_devid = -1;
+	}
 
 	vfio_pci_set_irqs_ioctl(vdev, VFIO_IRQ_SET_DATA_NONE |
 				VFIO_IRQ_SET_ACTION_TRIGGER,
@@ -2033,6 +2070,7 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto out_group_put;
 	}
 
+	vdev->mfd_devid = -1;
 	vfio_init_group_dev(&vdev->vdev, &pdev->dev, &vfio_pci_ops);
 	vdev->pdev = pdev;
 	vdev->irq_type = VFIO_PCI_NUM_IRQS;
