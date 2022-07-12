@@ -12,6 +12,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/manatee.h>
 
 #include "i2c-core.h"
 
@@ -227,7 +228,8 @@ static void i2c_acpi_register_device(struct i2c_adapter *adapter,
 	adev->power.flags.ignore_parent = true;
 	acpi_device_set_enumerated(adev);
 
-	if (!acpi_dev_get_property(adev, "linux,probed", ACPI_TYPE_ANY, NULL)) {
+	if (!manatee_hyp_domain() &&
+	    !acpi_dev_get_property(adev, "linux,probed", ACPI_TYPE_ANY, NULL)) {
 		unsigned short addrs[] = { info->addr, I2C_CLIENT_END };
 
 		client = i2c_new_scanned_device(adapter, info, addrs, NULL);
