@@ -1120,6 +1120,8 @@ static int i2c_hid_core_suspend(struct device *dev)
 		i2c_hid_core_power_down(ihid);
 	}
 
+	i2c_pm_suspend(dev);
+
 	return 0;
 }
 
@@ -1130,6 +1132,8 @@ static int i2c_hid_core_resume(struct device *dev)
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 	struct hid_device *hid = ihid->hid;
 	int wake_status;
+
+	i2c_pm_resume(dev);
 
 	if (!device_may_wakeup(&client->dev)) {
 		i2c_hid_core_power_up(ihid);
@@ -1171,6 +1175,15 @@ static int i2c_hid_core_resume(struct device *dev)
 
 const struct dev_pm_ops i2c_hid_core_pm = {
 	SET_SYSTEM_SLEEP_PM_OPS(i2c_hid_core_suspend, i2c_hid_core_resume)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
+	.runtime_suspend = i2c_pm_runtime_suspend,
+	.runtime_resume = i2c_pm_runtime_resume,
+	.runtime_idle = i2c_pm_runtime_idle,
 };
 EXPORT_SYMBOL_GPL(i2c_hid_core_pm);
 
