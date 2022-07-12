@@ -8,4 +8,15 @@ config MANATEE_HYP
 	help
 	  Select to indicate the kernel is running as ManaTEE hypervisor.
 
+config MANATEE_I2C_ADAPTER
+	tristate "ManaTEE I2C adapter support"
+	depends on MANATEE_HYP && I2C && !I2C_DESIGNWARE_PLATFORM
+	help
+	  This adds shadow driver for I2C adapters.
+	  This driver is solely for the purpose of representing an I2C adapter in
+	  the hypervisor and thus has no practical functionality (e.g. data
+	  transfers, interrupt handling, etc).
+
+	  If you say Y here, you get support for shadow I2C adapters in ManaTEE.
+
 endmenu
