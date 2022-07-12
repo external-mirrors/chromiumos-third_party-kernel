@@ -881,6 +881,8 @@ static int __maybe_unused hi556_suspend(struct device *dev)
 
 	mutex_unlock(&hi556->mutex);
 
+	i2c_pm_suspend(dev);
+
 	return 0;
 }
 
@@ -890,6 +892,8 @@ static int __maybe_unused hi556_resume(struct device *dev)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct hi556 *hi556 = to_hi556(sd);
 	int ret;
+
+	i2c_pm_resume(dev);
 
 	mutex_lock(&hi556->mutex);
 	if (hi556->streaming) {
@@ -1191,6 +1195,15 @@ probe_error_v4l2_ctrl_handler_free:
 
 static const struct dev_pm_ops hi556_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(hi556_suspend, hi556_resume)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
+	.runtime_suspend = i2c_pm_runtime_suspend,
+	.runtime_resume = i2c_pm_runtime_resume,
+	.runtime_idle = i2c_pm_runtime_idle,
 };
 
 #ifdef CONFIG_ACPI
