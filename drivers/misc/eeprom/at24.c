@@ -816,26 +816,57 @@ static int at24_remove(struct i2c_client *client)
 	return 0;
 }
 
-static int __maybe_unused at24_suspend(struct device *dev)
+static int __maybe_unused at24_runtime_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct at24_data *at24 = i2c_get_clientdata(client);
+	int ret;
 
-	return regulator_disable(at24->vcc_reg);
+	ret = regulator_disable(at24->vcc_reg);
+	if (ret)
+		return ret;
+
+	return i2c_pm_runtime_suspend(dev);
 }
 
-static int __maybe_unused at24_resume(struct device *dev)
+static int __maybe_unused at24_runtime_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct at24_data *at24 = i2c_get_clientdata(client);
+
+	i2c_pm_runtime_resume(dev);
 
 	return regulator_enable(at24->vcc_reg);
 }
 
+static int __maybe_unused at24_suspend(struct device *dev)
+{
+	int ret;
+
+	ret = pm_runtime_force_suspend(dev);
+	if (ret)
+		return ret;
+
+	return i2c_pm_suspend(dev);
+}
+
+static int __maybe_unused at24_resume(struct device *dev)
+{
+	i2c_pm_resume(dev);
+
+	return pm_runtime_force_resume(dev);
+}
+
 static const struct dev_pm_ops at24_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
-	SET_RUNTIME_PM_OPS(at24_suspend, at24_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(at24_suspend, at24_resume)
+	SET_RUNTIME_PM_OPS(at24_runtime_suspend, at24_runtime_resume,
+			   i2c_pm_runtime_idle)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
 };
 
 static struct i2c_driver at24_driver = {
