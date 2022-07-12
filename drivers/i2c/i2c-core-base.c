@@ -40,6 +40,7 @@
 #include <linux/property.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
+#include <linux/manatee.h>
 
 #include "i2c-core.h"
 
@@ -2564,6 +2565,174 @@ void i2c_put_dma_safe_msg_buf(u8 *buf, struct i2c_msg *msg, bool xferred)
 	kfree(buf);
 }
 EXPORT_SYMBOL_GPL(i2c_put_dma_safe_msg_buf);
+
+static int i2c_pm_op_hyp_call(struct i2c_client *client, u8 id)
+{
+	struct i2c_adapter *adap = client->adapter;
+
+	if (!adap || !adap->algo)
+		return -EINVAL;
+
+	if (!adap->algo->pm_op_hyp_call) {
+		dev_err(&adap->dev, "PM op calls not supported\n");
+		return -EOPNOTSUPP;
+	}
+
+	id |= device_can_wakeup(&client->dev) << 7;
+	id |= device_may_wakeup(&client->dev) << 6;
+	adap->algo->pm_op_hyp_call(adap, client, id);
+
+	return 0;
+}
+
+int i2c_pm_prepare(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_PREPARE);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_prepare);
+
+void i2c_pm_complete(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (manatee_chromeos_domain() && client)
+		i2c_pm_op_hyp_call(client, PM_OP_CALL_COMPLETE);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_complete);
+
+int i2c_pm_suspend(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_SUSPEND);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_suspend);
+
+int i2c_pm_resume(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_RESUME);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_resume);
+
+int i2c_pm_suspend_late(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_SUSPEND_LATE);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_suspend_late);
+
+int i2c_pm_resume_early(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_RESUME_EARLY);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_resume_early);
+
+int i2c_pm_suspend_noirq(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_SUSPEND_NOIRQ);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_suspend_noirq);
+
+int i2c_pm_resume_noirq(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_RESUME_NOIRQ);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_resume_noirq);
+
+int i2c_pm_runtime_suspend(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_RPM_SUSPEND);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_runtime_suspend);
+
+int i2c_pm_runtime_resume(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_RPM_RESUME);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_runtime_resume);
+
+int i2c_pm_runtime_idle(struct device *dev)
+{
+	struct i2c_client *client = i2c_verify_client(dev);
+
+	if (!client)
+		return -EINVAL;
+
+	if (!manatee_chromeos_domain())
+		return 0;
+
+	return i2c_pm_op_hyp_call(client, PM_OP_CALL_RPM_IDLE);
+}
+EXPORT_SYMBOL_GPL(i2c_pm_runtime_idle);
 
 MODULE_AUTHOR("Simon G. Vogl <simon@tk.uni-linz.ac.at>");
 MODULE_DESCRIPTION("I2C-Bus main module");

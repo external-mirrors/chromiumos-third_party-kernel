@@ -554,6 +554,9 @@ struct i2c_algorithm {
 	/* To determine what the adapter supports */
 	u32 (*functionality)(struct i2c_adapter *adap);
 
+	/* ManaTEE PM */
+	void (*pm_op_hyp_call)(struct i2c_adapter *adap, struct i2c_client *client, u8 id);
+
 #if IS_ENABLED(CONFIG_I2C_SLAVE)
 	int (*reg_slave)(struct i2c_client *client);
 	int (*unreg_slave)(struct i2c_client *client);
@@ -951,6 +954,17 @@ int i2c_handle_smbus_host_notify(struct i2c_adapter *adap, unsigned short addr);
 #define builtin_i2c_driver(__i2c_driver) \
 	builtin_driver(__i2c_driver, i2c_add_driver)
 
+int i2c_pm_prepare(struct device *dev);
+void i2c_pm_complete(struct device *dev);
+int i2c_pm_suspend(struct device *dev);
+int i2c_pm_resume(struct device *dev);
+int i2c_pm_suspend_late(struct device *dev);
+int i2c_pm_resume_early(struct device *dev);
+int i2c_pm_suspend_noirq(struct device *dev);
+int i2c_pm_resume_noirq(struct device *dev);
+int i2c_pm_runtime_suspend(struct device *dev);
+int i2c_pm_runtime_resume(struct device *dev);
+int i2c_pm_runtime_idle(struct device *dev);
 #endif /* I2C */
 
 #if IS_ENABLED(CONFIG_OF)
