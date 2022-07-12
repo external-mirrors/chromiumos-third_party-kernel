@@ -20,6 +20,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/manatee.h>
+#include <linux/platform_device.h>
 
 #include "i2c-designware-core.h"
 
@@ -543,9 +545,25 @@ done_nolock:
 	return ret;
 }
 
+static void i2c_dw_pm_op(struct i2c_adapter *adap, struct i2c_client *client,
+			 u8 id)
+{
+	struct dw_i2c_dev *dev = i2c_get_adapdata(adap);
+	u64 opval;
+
+	opval = ((u64)id << 32) | (u64)client->addr;
+	writeq(opval, dev->hyp_base);
+}
+
 static const struct i2c_algorithm i2c_dw_algo = {
 	.master_xfer = i2c_dw_xfer,
 	.functionality = i2c_dw_func,
+};
+
+static const struct i2c_algorithm i2c_dw_algo_pm = {
+	.master_xfer = i2c_dw_xfer,
+	.functionality = i2c_dw_func,
+	.pm_op_hyp_call = i2c_dw_pm_op,
 };
 
 static const struct i2c_adapter_quirks i2c_dw_quirks = {
@@ -742,6 +760,7 @@ static int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev)
 int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 {
 	struct i2c_adapter *adap = &dev->adapter;
+	struct resource *res;
 	unsigned long irq_flags;
 	int ret;
 
@@ -773,6 +792,18 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 	adap->algo = &i2c_dw_algo;
 	adap->quirks = &i2c_dw_quirks;
 	adap->dev.parent = dev->dev;
+
+	if (manatee_chromeos_domain()) {
+		res = platform_get_resource_byname(to_platform_device(dev->dev),
+				IORESOURCE_MEM, "lpss_manatee");
+		if (res) {
+			dev->hyp_base = devm_ioremap_resource(dev->dev, res);
+			if (!dev->hyp_base)
+				return -ENOMEM;
+			adap->algo = &i2c_dw_algo_pm;
+		}
+	}
+
 	i2c_set_adapdata(adap, dev);
 
 	if (dev->flags & ACCESS_NO_IRQ_SUSPEND) {
