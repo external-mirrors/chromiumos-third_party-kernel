@@ -953,6 +953,51 @@ int acpi_dev_resume(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(acpi_dev_resume);
 
+static int acpi_enter_exit_coordinated_pm(struct device *dev, bool enter)
+{
+	struct acpi_device *adev;
+	int ret = -EOPNOTSUPP;
+
+	device_lock(dev);
+
+	adev = ACPI_COMPANION(dev);
+	if (adev) {
+		adev->coordinated_pm = enter;
+		ret = 0;
+	}
+
+	device_unlock(dev);
+	return ret;
+}
+
+int acpi_enter_coordinated_pm(struct device *dev)
+{
+	return acpi_enter_exit_coordinated_pm(dev, true);
+}
+EXPORT_SYMBOL_GPL(acpi_enter_coordinated_pm);
+
+int acpi_exit_coordinated_pm(struct device *dev)
+{
+	return acpi_enter_exit_coordinated_pm(dev, false);
+}
+EXPORT_SYMBOL_GPL(acpi_exit_coordinated_pm);
+
+static bool skip_acpi_pm(struct acpi_device *adev)
+{
+	return !adev || adev->coordinated_pm;
+}
+
+static int __acpi_subsys_runtime_suspend(struct device *dev, bool may_skip)
+{
+	int ret;
+
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		panic("%s: skip unexpected\n", __func__);
+
+	ret = pm_generic_runtime_suspend(dev);
+	return ret ? ret : acpi_dev_suspend(dev, true);
+}
+
 /**
  * acpi_subsys_runtime_suspend - Suspend device using ACPI.
  * @dev: Device to suspend.
@@ -962,10 +1007,25 @@ EXPORT_SYMBOL_GPL(acpi_dev_resume);
  */
 int acpi_subsys_runtime_suspend(struct device *dev)
 {
-	int ret = pm_generic_runtime_suspend(dev);
-	return ret ? ret : acpi_dev_suspend(dev, true);
+	return __acpi_subsys_runtime_suspend(dev, true);
 }
 EXPORT_SYMBOL_GPL(acpi_subsys_runtime_suspend);
+
+static int acpi_subsys_runtime_suspend_noskip(struct device *dev)
+{
+	return __acpi_subsys_runtime_suspend(dev, false);
+}
+
+static int __acpi_subsys_runtime_resume(struct device *dev, bool may_skip)
+{
+	int ret;
+
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		panic("%s: skip unexpected\n", __func__);
+
+	ret = acpi_dev_resume(dev);
+	return ret ? ret : pm_generic_runtime_resume(dev);
+}
 
 /**
  * acpi_subsys_runtime_resume - Resume device using ACPI.
@@ -976,10 +1036,14 @@ EXPORT_SYMBOL_GPL(acpi_subsys_runtime_suspend);
  */
 int acpi_subsys_runtime_resume(struct device *dev)
 {
-	int ret = acpi_dev_resume(dev);
-	return ret ? ret : pm_generic_runtime_resume(dev);
+	return __acpi_subsys_runtime_resume(dev, true);
 }
 EXPORT_SYMBOL_GPL(acpi_subsys_runtime_resume);
+
+static int acpi_subsys_runtime_resume_noskip(struct device *dev)
+{
+	return __acpi_subsys_runtime_resume(dev, false);
+}
 
 #ifdef CONFIG_PM_SLEEP
 static bool acpi_dev_needs_resume(struct device *dev, struct acpi_device *adev)
@@ -1004,13 +1068,12 @@ static bool acpi_dev_needs_resume(struct device *dev, struct acpi_device *adev)
 	return state != adev->power.state;
 }
 
-/**
- * acpi_subsys_prepare - Prepare device for system transition to a sleep state.
- * @dev: Device to prepare.
- */
-int acpi_subsys_prepare(struct device *dev)
+static int __acpi_subsys_prepare(struct device *dev, bool may_skip)
 {
 	struct acpi_device *adev = ACPI_COMPANION(dev);
+
+	if (may_skip && skip_acpi_pm(adev))
+		return 0;
 
 	if (dev->driver && dev->driver->pm && dev->driver->pm->prepare) {
 		int ret = dev->driver->pm->prepare(dev);
@@ -1024,14 +1087,27 @@ int acpi_subsys_prepare(struct device *dev)
 
 	return !acpi_dev_needs_resume(dev, adev);
 }
-EXPORT_SYMBOL_GPL(acpi_subsys_prepare);
 
 /**
- * acpi_subsys_complete - Finalize device's resume during system resume.
- * @dev: Device to handle.
+ * acpi_subsys_prepare - Prepare device for system transition to a sleep state.
+ * @dev: Device to prepare.
  */
-void acpi_subsys_complete(struct device *dev)
+int acpi_subsys_prepare(struct device *dev)
 {
+	return __acpi_subsys_prepare(dev, true);
+}
+EXPORT_SYMBOL_GPL(acpi_subsys_prepare);
+
+static int acpi_subsys_prepare_noskip(struct device *dev)
+{
+	return __acpi_subsys_prepare(dev, false);
+}
+
+static void __acpi_subsys_complete(struct device *dev, bool may_skip)
+{
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		return;
+
 	pm_generic_complete(dev);
 	/*
 	 * If the device had been runtime-suspended before the system went into
@@ -1041,7 +1117,33 @@ void acpi_subsys_complete(struct device *dev)
 	if (pm_runtime_suspended(dev) && pm_resume_via_firmware())
 		pm_request_resume(dev);
 }
+
+/**
+ * acpi_subsys_complete - Finalize device's resume during system resume.
+ * @dev: Device to handle.
+ */
+void acpi_subsys_complete(struct device *dev)
+{
+	__acpi_subsys_complete(dev, true);
+}
 EXPORT_SYMBOL_GPL(acpi_subsys_complete);
+
+static void acpi_subsys_complete_noskip(struct device *dev)
+{
+	__acpi_subsys_complete(dev, false);
+}
+
+static int __acpi_subsys_suspend(struct device *dev, bool may_skip)
+{
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		return 0;
+
+	if (!dev_pm_test_driver_flags(dev, DPM_FLAG_SMART_SUSPEND) ||
+	    acpi_dev_needs_resume(dev, ACPI_COMPANION(dev)))
+		pm_runtime_resume(dev);
+
+	return pm_generic_suspend(dev);
+}
 
 /**
  * acpi_subsys_suspend - Run the device driver's suspend callback.
@@ -1054,13 +1156,28 @@ EXPORT_SYMBOL_GPL(acpi_subsys_complete);
  */
 int acpi_subsys_suspend(struct device *dev)
 {
-	if (!dev_pm_test_driver_flags(dev, DPM_FLAG_SMART_SUSPEND) ||
-	    acpi_dev_needs_resume(dev, ACPI_COMPANION(dev)))
-		pm_runtime_resume(dev);
-
-	return pm_generic_suspend(dev);
+	return __acpi_subsys_suspend(dev, true);
 }
 EXPORT_SYMBOL_GPL(acpi_subsys_suspend);
+
+static int acpi_subsys_suspend_noskip(struct device *dev)
+{
+	return __acpi_subsys_suspend(dev, false);
+}
+
+static int __acpi_subsys_suspend_late(struct device *dev, bool may_skip)
+{
+	int ret;
+
+	if (dev_pm_skip_suspend(dev))
+		return 0;
+
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		return 0;
+
+	ret = pm_generic_suspend_late(dev);
+	return ret ? ret : acpi_dev_suspend(dev, device_may_wakeup(dev));
+}
 
 /**
  * acpi_subsys_suspend_late - Suspend device using ACPI.
@@ -1071,25 +1188,23 @@ EXPORT_SYMBOL_GPL(acpi_subsys_suspend);
  */
 int acpi_subsys_suspend_late(struct device *dev)
 {
+	return __acpi_subsys_suspend_late(dev, true);
+}
+EXPORT_SYMBOL_GPL(acpi_subsys_suspend_late);
+
+static int acpi_subsys_suspend_late_noskip(struct device *dev)
+{
+	return __acpi_subsys_suspend_late(dev, false);
+}
+
+static int __acpi_subsys_suspend_noirq(struct device *dev, bool may_skip)
+{
 	int ret;
 
 	if (dev_pm_skip_suspend(dev))
 		return 0;
 
-	ret = pm_generic_suspend_late(dev);
-	return ret ? ret : acpi_dev_suspend(dev, device_may_wakeup(dev));
-}
-EXPORT_SYMBOL_GPL(acpi_subsys_suspend_late);
-
-/**
- * acpi_subsys_suspend_noirq - Run the device driver's "noirq" suspend callback.
- * @dev: Device to suspend.
- */
-int acpi_subsys_suspend_noirq(struct device *dev)
-{
-	int ret;
-
-	if (dev_pm_skip_suspend(dev))
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
 		return 0;
 
 	ret = pm_generic_suspend_noirq(dev);
@@ -1108,7 +1223,32 @@ int acpi_subsys_suspend_noirq(struct device *dev)
 
 	return 0;
 }
+
+/**
+ * acpi_subsys_suspend_noirq - Run the device driver's "noirq" suspend callback.
+ * @dev: Device to suspend.
+ */
+int acpi_subsys_suspend_noirq(struct device *dev)
+{
+	return __acpi_subsys_suspend_noirq(dev, true);
+}
 EXPORT_SYMBOL_GPL(acpi_subsys_suspend_noirq);
+
+static int acpi_subsys_suspend_noirq_noskip(struct device *dev)
+{
+	return __acpi_subsys_suspend_noirq(dev, false);
+}
+
+static int __acpi_subsys_resume_noirq(struct device *dev, bool may_skip)
+{
+	if (dev_pm_skip_resume(dev))
+		return 0;
+
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		return 0;
+
+	return pm_generic_resume_noirq(dev);
+}
 
 /**
  * acpi_subsys_resume_noirq - Run the device driver's "noirq" resume callback.
@@ -1116,10 +1256,32 @@ EXPORT_SYMBOL_GPL(acpi_subsys_suspend_noirq);
  */
 static int acpi_subsys_resume_noirq(struct device *dev)
 {
+	return __acpi_subsys_resume_noirq(dev, true);
+}
+
+static int acpi_subsys_resume_noirq_noskip(struct device *dev)
+{
+	return __acpi_subsys_resume_noirq(dev, false);
+}
+
+static int __acpi_subsys_resume_early(struct device *dev, bool may_skip)
+{
+	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+	int ret;
+
 	if (dev_pm_skip_resume(dev))
 		return 0;
 
-	return pm_generic_resume_noirq(dev);
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
+		return 0;
+
+	if (pm && !pm->resume_early) {
+		dev_dbg(dev, "postponing D0 transition to normal resume stage\n");
+		return 0;
+	}
+
+	ret = acpi_dev_resume(dev);
+	return ret ? ret : pm_generic_resume_early(dev);
 }
 
 /**
@@ -1134,19 +1296,28 @@ static int acpi_subsys_resume_noirq(struct device *dev)
  */
 static int acpi_subsys_resume_early(struct device *dev)
 {
+	return __acpi_subsys_resume_early(dev, true);
+}
+
+static int acpi_subsys_resume_early_noskip(struct device *dev)
+{
+	return __acpi_subsys_resume_early(dev, false);
+}
+
+static int __acpi_subsys_resume(struct device *dev, bool may_skip)
+{
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	int ret;
+	int ret = 0;
 
-	if (dev_pm_skip_resume(dev))
+	if (may_skip && skip_acpi_pm(ACPI_COMPANION(dev)))
 		return 0;
 
-	if (pm && !pm->resume_early) {
-		dev_dbg(dev, "postponing D0 transition to normal resume stage\n");
-		return 0;
+	if (!dev_pm_skip_resume(dev) && pm && !pm->resume_early) {
+		dev_dbg(dev, "executing postponed D0 transition\n");
+		ret = acpi_dev_resume(dev);
 	}
 
-	ret = acpi_dev_resume(dev);
-	return ret ? ret : pm_generic_resume_early(dev);
+	return ret ? ret : pm_generic_resume(dev);
 }
 
 /**
@@ -1159,15 +1330,12 @@ static int acpi_subsys_resume_early(struct device *dev)
  */
 static int acpi_subsys_resume(struct device *dev)
 {
-	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	int ret = 0;
+	return __acpi_subsys_resume(dev, true);
+}
 
-	if (!dev_pm_skip_resume(dev) && pm && !pm->resume_early) {
-		dev_dbg(dev, "executing postponed D0 transition\n");
-		ret = acpi_dev_resume(dev);
-	}
-
-	return ret ? ret : pm_generic_resume(dev);
+static int acpi_subsys_resume_noskip(struct device *dev)
+{
+	return __acpi_subsys_resume(dev, false);
 }
 
 /**
@@ -1252,6 +1420,82 @@ static int acpi_subsys_poweroff_noirq(struct device *dev)
 
 	return pm_generic_poweroff_noirq(dev);
 }
+
+int acpi_subsys_pm_op_call(struct device *dev, u8 id)
+{
+	struct acpi_device *adev = ACPI_COMPANION(dev);
+	bool can_wakeup = !!(id & (1 << 7));
+	bool may_wakeup = !!(id & (1 << 6));
+	int ret = 0;
+
+	/*
+	 * op calls are only allowed for devices that are skipped
+	 * during normal PM.
+	 */
+	if (!adev || !skip_acpi_pm(adev))
+		return -EINVAL;
+
+	id &= 0x3f;
+
+	device_lock(dev);
+
+	if (can_wakeup) {
+		if (!device_can_wakeup(dev))
+			device_set_wakeup_capable(dev, true);
+		if (may_wakeup && !device_may_wakeup(dev))
+			device_wakeup_enable(dev);
+		else if (!may_wakeup && device_may_wakeup(dev))
+			device_wakeup_disable(dev);
+	} else {
+		if (device_may_wakeup(dev))
+			device_wakeup_disable(dev);
+		if (device_can_wakeup(dev))
+			device_set_wakeup_capable(dev, false);
+	}
+
+	switch (id) {
+	case PM_OP_CALL_PREPARE:
+		ret = acpi_subsys_prepare_noskip(dev);
+		break;
+	case PM_OP_CALL_SUSPEND:
+		ret = acpi_subsys_suspend_noskip(dev);
+		break;
+	case PM_OP_CALL_SUSPEND_LATE:
+		ret = acpi_subsys_suspend_late_noskip(dev);
+		break;
+	case PM_OP_CALL_SUSPEND_NOIRQ:
+		ret = acpi_subsys_suspend_noirq_noskip(dev);
+		break;
+	case PM_OP_CALL_RESUME:
+		ret = acpi_subsys_resume_noskip(dev);
+		break;
+	case PM_OP_CALL_RESUME_EARLY:
+		ret = acpi_subsys_resume_early_noskip(dev);
+		break;
+	case PM_OP_CALL_RESUME_NOIRQ:
+		ret = acpi_subsys_resume_noirq_noskip(dev);
+		break;
+	case PM_OP_CALL_COMPLETE:
+		acpi_subsys_complete_noskip(dev);
+		break;
+	case PM_OP_CALL_RPM_SUSPEND:
+		ret = acpi_subsys_runtime_suspend_noskip(dev);
+		break;
+	case PM_OP_CALL_RPM_RESUME:
+		ret = acpi_subsys_runtime_resume_noskip(dev);
+		break;
+	case PM_OP_CALL_RPM_IDLE:
+		/* Not implemented */
+		break;
+	default:
+		ret = -EINVAL;
+		dev_err(dev, "%s: unknown id %u\n", __func__, id);
+	}
+
+	device_unlock(dev);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(acpi_subsys_pm_op_call);
 #endif /* CONFIG_PM_SLEEP */
 
 static struct dev_pm_domain acpi_general_pm_domain = {

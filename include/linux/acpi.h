@@ -1015,6 +1015,9 @@ int acpi_dev_suspend(struct device *dev, bool wakeup);
 int acpi_dev_resume(struct device *dev);
 int acpi_subsys_runtime_suspend(struct device *dev);
 int acpi_subsys_runtime_resume(struct device *dev);
+int acpi_enter_coordinated_pm(struct device *dev);
+int acpi_exit_coordinated_pm(struct device *dev);
+int acpi_subsys_pm_op_call(struct device *dev, u8 id);
 int acpi_dev_pm_attach(struct device *dev, bool power_on);
 bool acpi_dev_state_d0(struct device *dev);
 #else

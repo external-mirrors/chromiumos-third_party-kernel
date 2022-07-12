@@ -698,18 +698,6 @@ pci_power_t pci_pm_hyp_current_state(struct pci_dev *pci_dev)
 	return (pci_power_t)state;
 }
 
-#define PM_OP_CALL_PREPARE		0
-#define PM_OP_CALL_SUSPEND		1
-#define PM_OP_CALL_SUSPEND_LATE		2
-#define PM_OP_CALL_SUSPEND_NOIRQ	3
-#define PM_OP_CALL_RESUME		4
-#define PM_OP_CALL_RESUME_EARLY		5
-#define PM_OP_CALL_RESUME_NOIRQ		6
-#define PM_OP_CALL_COMPLETE		7
-#define PM_OP_CALL_RPM_SUSPEND		8
-#define PM_OP_CALL_RPM_RESUME		9
-#define PM_OP_CALL_RPM_IDLE		10
-
 /*
  * Bit 0 - 5 are reserved for PM op call ID
  * Bit 6 is reserved for device_may_wakeup

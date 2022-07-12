@@ -384,6 +384,7 @@ struct acpi_device {
 	unsigned int dep_unmet;
 	struct list_head physical_node_list;
 	struct mutex physical_node_lock;
+	bool coordinated_pm;		/* use coordinated PM */
 	void (*remove)(struct acpi_device *);
 };
 
