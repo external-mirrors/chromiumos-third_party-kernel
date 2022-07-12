@@ -1380,6 +1380,10 @@ static int __maybe_unused elan_suspend(struct device *dev)
 
 err:
 	mutex_unlock(&data->sysfs_mutex);
+
+	if (!ret)
+		i2c_pm_suspend(dev);
+
 	return ret;
 }
 
@@ -1388,6 +1392,8 @@ static int __maybe_unused elan_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct elan_tp_data *data = i2c_get_clientdata(client);
 	int error;
+
+	i2c_pm_resume(dev);
 
 	if (!device_may_wakeup(dev)) {
 		error = regulator_enable(data->vcc);
@@ -1415,7 +1421,18 @@ err:
 	return error;
 }
 
-static SIMPLE_DEV_PM_OPS(elan_pm_ops, elan_suspend, elan_resume);
+static const struct dev_pm_ops __maybe_unused elan_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(elan_suspend, elan_resume)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
+	.runtime_suspend = i2c_pm_runtime_suspend,
+	.runtime_resume = i2c_pm_runtime_resume,
+	.runtime_idle = i2c_pm_runtime_idle,
+};
 
 static const struct i2c_device_id elan_id[] = {
 	{ DRIVER_NAME, 0 },
