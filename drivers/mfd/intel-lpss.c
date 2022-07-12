@@ -39,6 +39,9 @@
 #define LPSS_IDMA64_OFFSET	0x800
 #define LPSS_IDMA64_SIZE	0x800
 
+#define LPSS_MANATEE_OFFSET	0x400
+#define LPSS_MANATEE_SIZE	0x400
+
 /* Offsets from lpss->priv */
 #define LPSS_PRIV_RESETS		0x04
 #define LPSS_PRIV_RESETS_IDMA		BIT(2)
@@ -90,6 +93,7 @@ static const struct resource intel_lpss_dev_resources[] = {
 	DEFINE_RES_MEM_NAMED(LPSS_DEV_OFFSET, LPSS_DEV_SIZE, "lpss_dev"),
 	DEFINE_RES_MEM_NAMED(LPSS_PRIV_OFFSET, LPSS_PRIV_SIZE, "lpss_priv"),
 	DEFINE_RES_IRQ(0),
+	DEFINE_RES_MEM_NAMED(LPSS_MANATEE_OFFSET, LPSS_MANATEE_SIZE, "lpss_manatee"),
 };
 
 static const struct resource intel_lpss_idma64_resources[] = {
