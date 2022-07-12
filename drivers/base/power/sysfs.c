@@ -9,6 +9,8 @@
 #include <linux/pm_wakeup.h>
 #include <linux/atomic.h>
 #include <linux/jiffies.h>
+#include <linux/acpi.h>
+#include <linux/i2c.h>
 #include <linux/pci.h>
 #include <linux/manatee.h>
 #include "power.h"
@@ -620,6 +622,10 @@ static ssize_t coordinated_show(struct device *dev,
 
 	if (dev_is_pci(dev))
 		ret = sysfs_emit(buf, "%u\n", to_pci_dev(dev)->coordinated_pm);
+	else if (i2c_verify_client(dev))
+		ret = sysfs_emit(buf, "%u\n",
+				 ACPI_COMPANION(dev) ?
+				 ACPI_COMPANION(dev)->coordinated_pm : 0);
 
 	return ret;
 }
@@ -633,9 +639,13 @@ static ssize_t coordinated_store(struct device *dev,
 	if (sysfs_streq(buf, "enter")) {
 		if (dev_is_pci(dev))
 			ret = pci_enter_coordinated_pm(to_pci_dev(dev));
+		else if (i2c_verify_client(dev))
+			ret = acpi_enter_coordinated_pm(dev);
 	} else if (sysfs_streq(buf, "exit")) {
 		if (dev_is_pci(dev))
 			ret = pci_exit_coordinated_pm(to_pci_dev(dev));
+		else if (i2c_verify_client(dev))
+			ret = acpi_exit_coordinated_pm(dev);
 	}
 
 	return ret < 0 ? (ssize_t)ret : n;
@@ -650,6 +660,8 @@ static ssize_t op_call_store(struct device *dev, struct device_attribute *attr,
 
 	if (dev_is_pci(dev))
 		ret = pci_pm_op_call(to_pci_dev(dev), buf[0]);
+	else if (i2c_verify_client(dev))
+		ret = acpi_subsys_pm_op_call(dev, buf[0]);
 
 	return ret < 0 ? (ssize_t)ret : n;
 }
