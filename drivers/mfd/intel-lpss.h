@@ -11,6 +11,8 @@
 #ifndef __MFD_INTEL_LPSS_H
 #define __MFD_INTEL_LPSS_H
 
+#include <linux/mfd/core.h>
+#include <linux/pci.h>
 #include <linux/pm.h>
 
 struct device;
@@ -28,6 +30,10 @@ struct intel_lpss_platform_info {
 int intel_lpss_probe(struct device *dev,
 		     const struct intel_lpss_platform_info *info);
 void intel_lpss_remove(struct device *dev);
+int intel_lpss_assign_cell(struct device *dev,
+			   struct intel_lpss_platform_info *info,
+			   struct mfd_cell **cell);
+struct mfd_cell *intel_lpss_pci_find_mfd(struct pci_dev *pdev);
 
 #ifdef CONFIG_PM
 int intel_lpss_prepare(struct device *dev);

@@ -448,6 +448,48 @@ err_clk_register:
 }
 EXPORT_SYMBOL_GPL(intel_lpss_probe);
 
+int intel_lpss_assign_cell(struct device *dev,
+			   struct intel_lpss_platform_info *info,
+			   struct mfd_cell **cell)
+{
+	struct intel_lpss *lpss;
+	int ret;
+
+	if (!info || !info->mem || !cell)
+		return -EINVAL;
+
+	lpss = kzalloc(sizeof(*lpss), GFP_KERNEL);
+	if (!lpss)
+		return -ENOMEM;
+
+	lpss->priv = ioremap_uc(info->mem->start + LPSS_PRIV_OFFSET,
+				LPSS_PRIV_SIZE);
+	if (!lpss->priv) {
+		dev_err(dev, "devm_ioremap_uc failed\n");
+		ret = -ENOMEM;
+		goto out_free;
+	}
+
+	lpss->dev = dev;
+	lpss->caps = readl(lpss->priv + LPSS_PRIV_CAPS);
+
+	ret = intel_lpss_assign_devs(lpss);
+	if (ret) {
+		dev_err(dev, "intel_lpss_assign_devs failed: %d\n", ret);
+		goto out;
+	}
+
+	lpss->cell->properties = info->properties;
+	*cell = lpss->cell;
+
+out:
+	iounmap(lpss->priv);
+out_free:
+	kfree(lpss);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(intel_lpss_assign_cell);
+
 void intel_lpss_remove(struct device *dev)
 {
 	struct intel_lpss *lpss = dev_get_drvdata(dev);

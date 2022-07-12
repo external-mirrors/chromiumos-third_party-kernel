@@ -432,6 +432,33 @@ static const struct pci_device_id intel_lpss_pci_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, intel_lpss_pci_ids);
 
+struct mfd_cell *intel_lpss_pci_find_mfd(struct pci_dev *pdev)
+{
+	const struct pci_device_id *id;
+	struct intel_lpss_platform_info *info;
+	struct mfd_cell *cell = NULL;
+	int ret;
+
+	id = pci_match_id(intel_lpss_pci_ids, pdev);
+	if (!id)
+		return NULL;
+
+	info = kmemdup((void *)id->driver_data, sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return NULL;
+
+	info->mem = &pdev->resource[0];
+	ret = intel_lpss_assign_cell(&pdev->dev, info, &cell);
+
+	if (ret)
+		pci_err(pdev, "%s failed: %d\n", __func__, ret);
+
+	kfree(info);
+
+	return cell;
+}
+EXPORT_SYMBOL(intel_lpss_pci_find_mfd);
+
 static struct pci_driver intel_lpss_pci_driver = {
 	.name = "intel-lpss",
 	.id_table = intel_lpss_pci_ids,
