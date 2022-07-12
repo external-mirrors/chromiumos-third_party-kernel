@@ -696,6 +696,13 @@ name_show(struct device *dev, struct device_attribute *attr, char *buf)
 static DEVICE_ATTR_RO(name);
 
 static ssize_t
+address_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", to_i2c_client(dev)->addr);
+}
+static DEVICE_ATTR_RO(address);
+
+static ssize_t
 modalias_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -715,6 +722,7 @@ static DEVICE_ATTR_RO(modalias);
 
 static struct attribute *i2c_dev_attrs[] = {
 	&dev_attr_name.attr,
+	&dev_attr_address.attr,
 	/* modalias helps coldplug:  modprobe $(cat .../modalias) */
 	&dev_attr_modalias.attr,
 	NULL
