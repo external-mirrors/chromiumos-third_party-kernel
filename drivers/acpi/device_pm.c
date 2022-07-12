@@ -1627,6 +1627,9 @@ bool acpi_dev_state_d0(struct device *dev)
 	if (!adev)
 		return true;
 
+	if (manatee_chromeos_domain())
+		return false;
+
 	return adev->power.state == ACPI_STATE_D0;
 }
 EXPORT_SYMBOL_GPL(acpi_dev_state_d0);
