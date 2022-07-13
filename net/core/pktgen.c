@@ -3536,7 +3536,9 @@ out:
 	local_bh_enable();
 
 	/* If pkt_dev->count is zero, then run forever */
-	if ((pkt_dev->count != 0) && (pkt_dev->sofar >= pkt_dev->count)) {
+	if (pkt_dev->count != 0 &&
+	    (pkt_dev->sofar >= (pkt_dev->clone_skb == 0 ?
+	    pkt_dev->count : (pkt_dev->count * pkt_dev->clone_skb)))) {
 		pktgen_wait_for_skb(pkt_dev);
 
 		/* Done with this */
