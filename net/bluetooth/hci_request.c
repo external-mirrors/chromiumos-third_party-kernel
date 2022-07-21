@@ -1972,7 +1972,7 @@ static void __hci_req_le_scan_enable(struct hci_request *req)
 	memset(&cp, 0, sizeof(cp));
 	cp.enable = LE_SCAN_ENABLE;
 	cp.filter_dup = hci_is_adv_monitoring(hdev) ?
-			LE_SCAN_FILTER_DUP_ENABLE : LE_SCAN_FILTER_DUP_DISABLE;
+			LE_SCAN_FILTER_DUP_DISABLE : LE_SCAN_FILTER_DUP_ENABLE;
 	hci_req_add(req, HCI_OP_LE_SET_SCAN_ENABLE, sizeof(cp), &cp);
 }
 
