@@ -3770,6 +3770,9 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	hdev->advmon_no_filter_duration = 500;
 	hdev->enable_advmon_interleave_scan = 0x00;	/* Default to disable */
 
+	hdev->advmon_allowlist_duration = 300;
+	hdev->advmon_no_filter_duration = 500;
+
 	hdev->sniff_max_interval = 800;
 	hdev->sniff_min_interval = 80;
 
