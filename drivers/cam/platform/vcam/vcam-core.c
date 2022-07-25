@@ -55,7 +55,7 @@ struct vcam_device {
 static int entity_read(struct cam_obj_entity *entity,
 		       struct cam_read_instruction *rw)
 {
-	char dummy_buffer[32] = {0, };
+	char dummy_buffer[32] = {};
 	u64 len;
 
 	pr_info("VCAM: execute entity register %u read\n", rw->reg);
@@ -78,7 +78,7 @@ static int entity_read(struct cam_obj_entity *entity,
 static int entity_write(struct cam_obj_entity *entity,
 			struct cam_write_instruction *rw)
 {
-	char dummy_buffer[32] = {0, };
+	char dummy_buffer[32] = {};
 
 	pr_info("VCAM: execute entity register %u write\n", rw->reg);
 

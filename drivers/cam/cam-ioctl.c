@@ -107,7 +107,7 @@ static int cam_ioctl_query_result_copy(struct cam_query __user *payload,
 static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 				 struct cam_header *hdr, void __user *uarg)
 {
-	struct cam_koutput output = {0, };
+	struct cam_koutput output = {};
 	struct cam_query __user *payload;
 	u32 num_query;
 	int ret = 0;

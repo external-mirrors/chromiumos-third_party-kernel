@@ -184,7 +184,7 @@ static void cam_drain_in_syncfile_callback(struct cam_obj *nsobj,
 
 int cam_drain_in_syncfiles(struct cam_device *cam)
 {
-	struct cam_ns_walk_control ctl = {0, };
+	struct cam_ns_walk_control ctl = {};
 
 	ctl.cb		= cam_drain_in_syncfile_callback;
 	cam_ns_for_each(&cam->ns, &ctl);

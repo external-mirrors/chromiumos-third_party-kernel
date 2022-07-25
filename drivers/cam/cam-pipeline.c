@@ -505,7 +505,7 @@ static void cam_drain_op_callback(struct cam_obj *nsobj,
  */
 static void cam_drain_ops(struct cam_pipeline *pipeline)
 {
-	struct cam_ns_walk_control ctl = {0, };
+	struct cam_ns_walk_control ctl = {};
 
 	ctl.cb		= cam_drain_op_callback;
 	cam_ns_for_each(&pipeline->ns, &ctl);
