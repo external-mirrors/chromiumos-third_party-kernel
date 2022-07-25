@@ -1108,10 +1108,12 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 
 	if (req->rd_wr_list != CAM_NO_RD_WR) {
 		struct cam_rw_instruction_list rw;
+		struct cam_rw_instruction insn;
 		uintptr_t __user *addr;
 		size_t size;
 
 		addr = u64_to_user_ptr(req->rd_wr_list);
+		op->exec_rw_list_addr = addr;
 		size = sizeof(rw);
 		if (copy_from_user(&rw, addr, size))
 			goto error;
@@ -1123,7 +1125,15 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 		if (!access_ok(addr, size))
 			goto error;
 
-		op->exec_rw_list_addr = addr;
+		/*
+		 * This will attempt to access the last RW instruction in
+		 * the buffer. This check is not very reliable. User-space
+		 * maps whole pages, so we will fail here only when the
+		 * number of instructions points past allocated buffer pages.
+		 */
+		addr += size - sizeof(struct cam_rw_instruction);
+		if (copy_from_user(&insn, addr, sizeof(insn)))
+			goto error;
 	}
 
 	if (req->entity != CAM_NO_ENTITY) {
