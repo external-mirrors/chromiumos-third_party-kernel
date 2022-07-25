@@ -29,6 +29,8 @@ void libkc_operation_put(struct libkc_operation *lco)
 	for_each_cam_operation(lco, i, op) {
 		if (op->operation_type != CAM_OPERATION_TYPE_ADD)
 			break;
+		if (op->operation_add.rd_wr_list == CAM_NO_RD_WR)
+			continue;
 		libkc_rw_list_put((void *)op->operation_add.rd_wr_list);
 	}
 
