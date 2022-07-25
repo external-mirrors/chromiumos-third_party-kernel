@@ -135,8 +135,6 @@ static void cam_op_release(struct cam_obj *nsobj)
 
 	if (op->exec_entity)
 		cam_entity_put(op->exec_entity);
-	if (op->exec_rw_list)
-		kvfree(op->exec_rw_list);
 	kfree(op);
 }
 
@@ -622,6 +620,65 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 	cam_ringbuffer_write(&pipeline->event_buffer, &completion);
 }
 
+static void cam_op_run_rw_instructions(struct cam_obj_op *op)
+{
+	struct cam_rw_instruction_list rw_list;
+	struct cam_rw_instruction __user *payload;
+	struct cam_obj_entity *entity;
+	int i;
+
+	/* No execution payload, this probably was a SYNC operation */
+	if (op->exec_rw_list_addr == CAM_NO_RD_WR)
+		return;
+
+	/*
+	 * @FIXME: entity_ops may be updated soon, but at this point we
+	 * execute OPs only on entities
+	 */
+	if (!op->exec_entity)
+		return;
+
+	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
+		pr_err("Unable to access opeeration RW instructions list\n");
+		return;
+	}
+
+	entity = op->exec_entity;
+	payload = op->exec_rw_list_addr +
+		offsetof(struct cam_rw_instruction_list, instructions);
+
+	for (i = 0; i < rw_list.num_entries; i++) {
+		struct cam_rw_instruction insn;
+		int ret;
+
+		if (copy_from_user(&insn, payload, sizeof(insn))) {
+			pr_err("Ubable to access RW instruction\n");
+			break;
+		}
+
+		switch (insn.type) {
+		case CAM_READ_INSTRUCTION:
+			ret = entity->ops->read(entity, &insn.rd);
+			break;
+		case CAM_WRITE_INSTRUCTION:
+			ret = entity->ops->write(entity, &insn.wr);
+			break;
+		default:
+			pr_err("Invalid operation instruction type: %d\n",
+			       insn.type);
+			ret = -EINVAL;
+			break;
+		}
+
+		if (ret) {
+			pr_err("Operation execution error, aborting\n");
+			break;
+		}
+
+		payload++;
+	}
+}
+
 /**
  * cam_op_run() - Execute the target operation
  * @op: pointer to CAM operation to be executed
@@ -639,7 +696,6 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 static void cam_op_run(struct cam_obj_op *op)
 {
 	struct cam_pipeline *pipeline = op->pipeline;
-	int i = 0;
 
 	/*
 	 * After this the only valid next state is CAM_OPERATION_STATE_EXECUTED.
@@ -658,43 +714,8 @@ static void cam_op_run(struct cam_obj_op *op)
 	if (op->delay_ns)
 		ndelay(op->delay_ns);
 
-	/* No execution payload, this probably was a SYNC operation */
-	if (!op->exec_rw_list)
-		goto done;
+	cam_op_run_rw_instructions(op);
 
-	/*
-	 * @FIXME: entity_ops may be updated soon, but at this point we
-	 * execute OPs only on entities
-	 */
-	if (!op->exec_entity)
-		goto done;
-
-	for (i = 0; i < op->exec_rw_list->num_entries; i++) {
-		struct cam_rw_instruction *insn;
-		struct cam_obj_entity *entity;
-		int ret = 0;
-
-		insn = &op->exec_rw_list->instructions[i];
-		entity = op->exec_entity;
-
-		switch (insn->type) {
-		case CAM_READ_INSTRUCTION:
-			ret = entity->ops->read(entity, &insn->rd);
-			break;
-		case CAM_WRITE_INSTRUCTION:
-			ret = entity->ops->write(entity, &insn->wr);
-			break;
-		default:
-			pr_err("Invalid operation instruction type: %d\n",
-			       insn->type);
-			goto done;
-		}
-
-		if (ret) {
-			pr_err("Operation execution error, aborting\n");
-			goto done;
-		}
-	}
 done:
 	/* New signals cannot be registered after this line */
 	cam_op_set_state(op, CAM_OPERATION_STATE_EXECUTED);
@@ -1078,7 +1099,7 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 				  struct cam_obj_op *op)
 {
 	op->delay_ns		= req->delay_ns;
-	op->exec_rw_list	= NULL;
+	op->exec_rw_list_addr	= CAM_NO_RD_WR;
 	op->exec_entity		= NULL;
 	req->fence_out		= CAM_NO_FENCE;
 
@@ -1093,18 +1114,16 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 		addr = u64_to_user_ptr(req->rd_wr_list);
 		size = sizeof(rw);
 		if (copy_from_user(&rw, addr, size))
-			return -EINVAL;
+			goto error;
 
 		if (rw.num_entries == 0)
-			return -EINVAL;
+			goto error;
 
 		size += rw.num_entries * sizeof(struct cam_rw_instruction);
-		op->exec_rw_list = kvmalloc(size, GFP_KERNEL);
-		if (!op->exec_rw_list)
-			return -ENOMEM;
-
-		if (copy_from_user(op->exec_rw_list, addr, size))
+		if (!access_ok(addr, size))
 			goto error;
+
+		op->exec_rw_list_addr = addr;
 	}
 
 	if (req->entity != CAM_NO_ENTITY) {
