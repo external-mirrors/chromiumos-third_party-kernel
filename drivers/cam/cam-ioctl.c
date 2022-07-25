@@ -79,6 +79,31 @@ static bool is_valid_ioctlcmd_size(unsigned int cmd, struct cam_header *hdr,
 	return length == need_bytes;
 }
 
+static int cam_ioctl_query_result_copy(struct cam_query __user *payload,
+				       struct cam_query *query)
+{
+	int ret;
+
+	switch (query->query_type) {
+	case CAM_QUERY_TYPE_ENTITIES:
+		ret = put_user(query->query_entities.num_entities,
+			       &payload->query_entities.num_entities);
+		break;
+	case CAM_QUERY_TYPE_EVENTS:
+		ret = put_user(query->query_events.num_events,
+			       &payload->query_events.num_events);
+		break;
+	case CAM_QUERY_TYPE_OPERATIONS:
+		ret = put_user(query->query_operations.num_ops,
+			       &payload->query_operations.num_ops);
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 				 struct cam_header *hdr, void __user *uarg)
 {
@@ -122,8 +147,7 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 			ret = -EINVAL;
 		}
 
-		/* FIXME: do more reasonable copy-out */
-		if (ret || copy_to_user(payload, &query, sizeof(query))) {
+		if (ret || cam_ioctl_query_result_copy(payload, &query)) {
 			hdr->error = num_query;
 			return ret;
 		}
@@ -139,6 +163,26 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 	return ret;
 }
 ALLOW_ERROR_INJECTION(cam_ioctl_parse_query, ERRNO);
+
+static int cam_ioctl_operation_result_copy(struct cam_operation __user *payload,
+					   struct cam_operation *op)
+{
+	int ret;
+
+	switch (op->operation_type) {
+	case CAM_OPERATION_TYPE_ADD:
+		ret = put_user(op->operation_add.fence_out,
+			       &payload->operation_add.fence_out);
+		break;
+	case CAM_OPERATION_TYPE_REMOVE:
+		ret = 0;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
 
 static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 				     struct cam_header *hdr, void __user *uarg)
@@ -173,8 +217,7 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 			ret = -EINVAL;
 		}
 
-		/* FIXME: do more reasonable copy-out */
-		if (ret || copy_to_user(payload, &op, sizeof(op))) {
+		if (ret || cam_ioctl_operation_result_copy(payload, &op)) {
 			hdr->error = num_op;
 			return ret;
 		}
