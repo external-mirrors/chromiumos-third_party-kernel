@@ -66,9 +66,10 @@ static int cam_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static bool is_valid_ioctlcmd_size(unsigned int length, struct cam_header *hdr,
+static bool is_valid_ioctlcmd_size(unsigned int cmd, struct cam_header *hdr,
 				   size_t req_size)
 {
+	unsigned int length = _IOC_SIZE(cmd);
 	size_t need_bytes;
 
 	if (length < sizeof(struct cam_header))
@@ -78,51 +79,57 @@ static bool is_valid_ioctlcmd_size(unsigned int length, struct cam_header *hdr,
 	return length == need_bytes;
 }
 
-static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int length,
-				 void *arg)
+static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
+				 struct cam_header *hdr, void __user *uarg)
 {
 	struct cam_koutput output = {0, };
-	struct cam_header *hdr;
-	struct cam_query *query;
+	struct cam_query __user *payload;
 	u32 num_query;
 	int ret = 0;
 
-	hdr = arg;
-	if (!is_valid_ioctlcmd_size(length, hdr, sizeof(struct cam_query)))
+	if (!is_valid_ioctlcmd_size(cmd, hdr, sizeof(struct cam_query)))
 		return -EINVAL;
 
-	query = arg + sizeof(struct cam_header);
+	payload = uarg + sizeof(struct cam_header);
 	if (cam_output_init(hdr, &output))
 		return -EFAULT;
 
 	for (num_query = 0; num_query < hdr->num_queries; num_query++) {
-		switch (query->query_type) {
+		struct cam_query query;
+
+		if (copy_from_user(&query, payload, sizeof(query))) {
+			hdr->error = num_query;
+			return -EFAULT;
+		}
+
+		switch (query.query_type) {
 		case CAM_QUERY_TYPE_ENTITIES:
 			ret = cam_enum_entities(fh->cam,
-						&query->query_entities,
+						&query.query_entities,
 						&output);
 			break;
 		case CAM_QUERY_TYPE_EVENTS:
 			ret = cam_enum_events(fh->cam,
-					      &query->query_events,
+					      &query.query_events,
 					      &output);
 			break;
 		case CAM_QUERY_TYPE_OPERATIONS:
 			ret = cam_pipeline_query(&fh->cam->pipeline,
-						 &query->query_operations,
+						 &query.query_operations,
 						 &output);
 			break;
 		default:
 			ret = -EINVAL;
 		}
 
-		if (ret) {
+		/* FIXME: do more reasonable copy-out */
+		if (ret || copy_to_user(payload, &query, sizeof(query))) {
 			hdr->error = num_query;
 			return ret;
 		}
 
 		output.num_entries = 0;
-		query++;
+		payload++;
 	}
 
 	hdr->output.length = output.length;
@@ -133,55 +140,60 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int length,
 }
 ALLOW_ERROR_INJECTION(cam_ioctl_parse_query, ERRNO);
 
-static int
-cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int length, void *arg)
+static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
+				     struct cam_header *hdr, void __user *uarg)
 {
-	struct cam_operation *op;
-	struct cam_header *hdr;
+	struct cam_operation __user *payload;
 	u32 num_op;
 	int ret = 0;
 
-	hdr = arg;
-	if (!is_valid_ioctlcmd_size(length, hdr, sizeof(struct cam_operation)))
+	if (!is_valid_ioctlcmd_size(cmd, hdr, sizeof(struct cam_operation)))
 		return -EINVAL;
 
-	op = arg + sizeof(struct cam_header);
+	payload = uarg + sizeof(struct cam_header);
 
 	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
-		switch (op->operation_type) {
+		struct cam_operation op;
+
+		if (copy_from_user(&op, payload, sizeof(op))) {
+			hdr->error = num_op;
+			return -EFAULT;
+		}
+
+		switch (op.operation_type) {
 		case CAM_OPERATION_TYPE_ADD:
 			ret = cam_pipeline_enqueue(&fh->cam->pipeline,
-						   &op->operation_add);
+						   &op.operation_add);
 			break;
 		case CAM_OPERATION_TYPE_REMOVE:
 			ret = cam_pipeline_dequeue(&fh->cam->pipeline,
-						   &op->operation_remove);
+						   &op.operation_remove);
 			break;
 		default:
 			ret = -EINVAL;
 		}
 
-		if (ret) {
+		/* FIXME: do more reasonable copy-out */
+		if (ret || copy_to_user(payload, &op, sizeof(op))) {
 			hdr->error = num_op;
 			return ret;
 		}
 
-		op++;
+		payload++;
 	}
 
 	return ret;
 }
 ALLOW_ERROR_INJECTION(cam_ioctl_parse_operation, ERRNO);
 
-static int cam_ioctl_parse(struct cam_fh *fh, unsigned int cmd, void *arg)
+static int cam_ioctl_parse(struct cam_fh *fh, unsigned int cmd,
+			   struct cam_header *hdr, void __user *uarg)
 {
-	unsigned int size = _IOC_SIZE(cmd);
-
 	switch (cmd & ~(_IOC_SIZEMASK << _IOC_SIZESHIFT)) {
 	case CAM_IOC_QUERY(0):
-		return cam_ioctl_parse_query(fh, size, arg);
+		return cam_ioctl_parse_query(fh, cmd, hdr, uarg);
 	case CAM_IOC_OPERATION(0):
-		return cam_ioctl_parse_operation(fh, size, arg);
+		return cam_ioctl_parse_operation(fh, cmd, hdr, uarg);
 	}
 
 	return -ENOIOCTLCMD;
@@ -190,19 +202,17 @@ static int cam_ioctl_parse(struct cam_fh *fh, unsigned int cmd, void *arg)
 static long cam_ioctl(struct file *filp, unsigned int cmd, unsigned long __uarg)
 {
 	struct cam_fh *fh = filp->private_data;
-	unsigned int size = _IOC_SIZE(cmd);
-	unsigned int dir = _IOC_DIR(cmd);
 	void __user *uarg = (void __user *)__uarg;
-	void *arg;
+	unsigned int dir = _IOC_DIR(cmd);
+	struct cam_header hdr;
 	int ret;
 
 	ret = cam_device_uapi_call_enter(fh->cam);
 	if (ret < 0)
 		return ret;
 
-	arg = kvmalloc(size, GFP_KERNEL);
-	if (!arg) {
-		ret = -ENOMEM;
+	if (copy_from_user(&hdr, uarg, sizeof(hdr))) {
+		ret = -EFAULT;
 		goto done;
 	}
 
@@ -212,23 +222,15 @@ static long cam_ioctl(struct file *filp, unsigned int cmd, unsigned long __uarg)
 		goto done;
 	}
 
-	if (copy_from_user(arg, uarg, size)) {
-		ret = -EFAULT;
-		goto done;
-	}
+	ret = cam_ioctl_parse(fh, cmd, &hdr, uarg);
 
-	ret = cam_ioctl_parse(fh, cmd, arg);
-
-	if (dir & _IOC_READ && copy_to_user(uarg, arg, size)) {
+	if (copy_to_user(uarg, &hdr, sizeof(hdr))) {
 		ret = -EFAULT;
 		goto done;
 	}
 
 done:
-	kvfree(arg);
-
 	cam_device_uapi_call_exit(fh->cam);
-
 	return ret;
 }
 
