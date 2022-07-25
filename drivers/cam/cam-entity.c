@@ -243,7 +243,7 @@ static struct cam_obj_event *nsobj_to_cam_event(struct cam_obj *nsobj)
 /**
  * cam_event_lookup() - Lookup CAM event by ID
  * @cam: pointer to CAM device
- * @id: ID of CAM event
+ * @event_id: ID of CAM event
  *
  * Return: NULL on error or CAM event pointer otherwise. Returned object is
  * valid and has incremented ref-counter, call cam_event_put() to properly
