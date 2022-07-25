@@ -1121,16 +1121,13 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 		if (rw.num_entries == 0)
 			goto error;
 
-		size += rw.num_entries * sizeof(struct cam_rw_instruction);
-		if (!access_ok(addr, size))
-			goto error;
-
 		/*
 		 * This will attempt to access the last RW instruction in
 		 * the buffer. This check is not very reliable. User-space
 		 * maps whole pages, so we will fail here only when the
 		 * number of instructions points past allocated buffer pages.
 		 */
+		size += rw.num_entries * sizeof(struct cam_rw_instruction);
 		addr += size - sizeof(struct cam_rw_instruction);
 		if (copy_from_user(&insn, addr, sizeof(insn)))
 			goto error;
