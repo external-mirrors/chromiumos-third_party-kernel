@@ -130,7 +130,8 @@ EXPORT_SYMBOL_GPL(cam_entity_unregister);
  * entity
  * @cam: pointer to CAM device
  * @parent_id: ID of parent entity object
- * @cam_entity_ops: entity operations
+ * @driver_data: Pointer to driver data associated with this entity
+ * @ops: entity operations
  * @namefmt: entity name format string
  *
  * Return: NULL on error or CAM entity pointer otherwise.
