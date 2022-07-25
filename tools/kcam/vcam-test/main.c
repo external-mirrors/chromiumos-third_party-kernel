@@ -1418,6 +1418,72 @@ out:
 	return ret;
 }
 
+static int test_add_invalid_rw_num_entries(struct libkc *cam,
+					   const char *entity_name)
+{
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct libkc_operation *lco;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	struct obj_event *event;
+	int op_idx, rw_idx;
+	char *read_buffer;
+	int ret;
+
+	pr_info("Test test_add_invalid_rw_num_entries() entity: %s\n",
+		entity_name);
+
+	entity = entity_lookup_by_name(entity_name);
+	if (!entity) {
+		pr_err("Entity lookup has failed\n");
+		return -EINVAL;
+	}
+
+	event = entity_first_event(entity);
+	if (!event) {
+		pr_err("Unable to find event\n");
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco)
+		return -EINVAL;
+
+	for_each_cam_operation(lco, op_idx, op) {
+		op->operation_type		= CAM_OPERATION_TYPE_ADD;
+		op->operation_add.id		= op_idx;
+		op->operation_add.fence_out	= 0;
+		op->operation_add.flags		= 0;
+		op->operation_add.delay_ns	= 0;
+		op->operation_add.entity	= entity->id;
+		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+		rw_list = libkc_rw_list_get(1);
+		if (!rw_list) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	}
+
+	rw_list->num_ents = 0;
+	ret = libkc_operation_ioctl(cam, lco);
+	rw_list->num_ents = 1;
+
+	if (ret) {
+		ret = 0;
+	} else {
+		pr_err("RW-list with zero num_entries should fail\n");
+		ret = -EINVAL;
+	}
+
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_query_operations(struct libkc *cam, u32 id, u32 mode)
 {
 	struct libkc_query *lcq;
@@ -1598,6 +1664,12 @@ static int test_operations(struct libkc *cam)
 	if (ret != TEST_NUM_OPERATIONS) {
 		pr_err("FATAL: read_operations_completion_events() failed\n");
 		return -EINVAL;
+	}
+
+	ret = test_add_invalid_rw_num_entries(cam, VCAM_FAST_IRQ_ENTITY_NAME);
+	if (ret) {
+		pr_err("FATAL: failure test_add_invalid_rw_num_entries()\n");
+		return ret;
 	}
 
 	ret = test_add_valid_rw_operations(cam, VCAM_FAST_IRQ_ENTITY_NAME,
