@@ -462,7 +462,7 @@ static void drain_notify_chain(struct list_head *notify_chain)
 
 /**
  * cam_drain_active_signals() - Drain all signals from an active notify chain
- * @notify_chain: operation notify chain with signals
+ * @notify_active_chain: operation notify chain with signals
  *
  * Unlike cam_fire_active_signals(), this simply removes and releases the
  * signals without running their callbacks.
