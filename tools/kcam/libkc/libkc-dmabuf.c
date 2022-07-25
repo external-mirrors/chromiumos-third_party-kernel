@@ -26,7 +26,7 @@ void libkc_dmabuf_put(struct libkc_dmabuf *buf)
 
 struct libkc_dmabuf *libkc_dmabuf_get(struct libkc *cam, u32 num_pages)
 {
-	struct udmabuf_create create = {0, };
+	struct udmabuf_create create = {};
 	struct libkc_dmabuf *buf;
 	size_t size;
 	int ret;
