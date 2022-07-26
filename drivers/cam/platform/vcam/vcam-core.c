@@ -88,7 +88,7 @@ static int entity_write(struct cam_obj_entity *entity,
 	}
 
 	if (copy_from_user(dummy_buffer, u64_to_user_ptr(rw->ptr), rw->size)) {
-		pr_err("VACM: cannot copy from user\n");
+		pr_err("VCAM: cannot copy from user\n");
 		return -EINVAL;
 	}
 
