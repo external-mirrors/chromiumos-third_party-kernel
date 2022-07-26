@@ -82,6 +82,11 @@ static int entity_write(struct cam_obj_entity *entity,
 
 	pr_info("VCAM: execute entity register %u write\n", rw->reg);
 
+	if (rw->size > sizeof(dummy_buffer)) {
+		pr_err("VCAM: write size is too large");
+		return -EINVAL;
+	}
+
 	if (copy_from_user(dummy_buffer, u64_to_user_ptr(rw->ptr), rw->size)) {
 		pr_err("VACM: cannot copy from user\n");
 		return -EINVAL;
