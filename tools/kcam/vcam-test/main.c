@@ -1450,23 +1450,27 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 	if (!lco)
 		return -EINVAL;
 
-	for_each_cam_operation(lco, op_idx, op) {
-		op->operation_type		= CAM_OPERATION_TYPE_ADD;
-		op->operation_add.id		= op_idx;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
-		op->operation_add.delay_ns	= 0;
-		op->operation_add.entity	= entity->id;
-		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
-
-		rw_list = libkc_rw_list_get(1);
-		if (!rw_list) {
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
 	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= op_idx;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= 0;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 
 	rw_list->num_ents = 0;
 	ret = libkc_operation_ioctl(cam, lco);
@@ -1516,23 +1520,27 @@ static int test_add_too_many_rw_instructions(struct libkc *cam,
 	if (!lco)
 		return -EINVAL;
 
-	for_each_cam_operation(lco, op_idx, op) {
-		op->operation_type		= CAM_OPERATION_TYPE_ADD;
-		op->operation_add.id		= op_idx;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
-		op->operation_add.delay_ns	= 0;
-		op->operation_add.entity	= entity->id;
-		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
-
-		rw_list = libkc_rw_list_get(1);
-		if (!rw_list) {
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
 	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= op_idx;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= 0;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 
 	rw_list->num_ents = 0xC0FFEE;
 	ret = libkc_operation_ioctl(cam, lco);
