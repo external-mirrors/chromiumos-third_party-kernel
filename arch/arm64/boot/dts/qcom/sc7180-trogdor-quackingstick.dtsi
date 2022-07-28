@@ -10,6 +10,7 @@
 #include "sc7180-trogdor.dtsi"
 #include "sc7180-trogdor-rt5682i-sku.dtsi"
 #include "sc7180-trogdor-detachable.dtsi"
+#include "sc7180-trogdor-mipi-camera.dtsi"
 
 / {
 	ppvar_lcd: ppvar-lcd-regulator {
@@ -34,6 +35,13 @@
 		pinctrl-0 = <&pp1800_disp_on>;
 
 		vin-supply = <&pp3300_a>;
+	};
+};
+
+&cam_cci0 {
+	eeprom_rear: qcom,eeprom@0 {
+		i2c-address = <0x50>;
+		memory-bytes = <8192>;
 	};
 };
 
