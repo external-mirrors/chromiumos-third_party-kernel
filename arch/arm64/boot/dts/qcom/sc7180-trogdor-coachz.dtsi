@@ -81,6 +81,10 @@
 };
 
 &cros_ec {
+	keyboard-controller {
+		compatible = "google,cros-ec-keyb-switches";
+	};
+
 	cros_ec_proximity: proximity {
 		compatible = "google,cros-ec-mkbp-proximity";
 		label = "proximity-wifi";
@@ -340,3 +344,5 @@ ap_ts_pen_1v8: &i2c4 {
 		};
 	};
 };
+
+#include "sc7180-trogdor-mipi-camera.dtsi"
