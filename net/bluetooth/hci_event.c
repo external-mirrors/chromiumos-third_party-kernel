@@ -3137,6 +3137,12 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!status) {
+		int mask = hdev->link_mode;
+		__u8 flags = 0;
+
+		mask |= hci_proto_connect_ind(hdev, &ev->bdaddr, ev->link_type,
+					      &flags);
+
 		conn->handle = __le16_to_cpu(ev->handle);
 		if (conn->handle > HCI_CONN_HANDLE_MAX) {
 			bt_dev_err(hdev, "Invalid handle: 0x%4.4x > 0x%4.4x",
@@ -3165,6 +3171,19 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 
 		if (test_bit(HCI_ENCRYPT, &hdev->flags))
 			set_bit(HCI_CONN_ENCRYPT, &conn->flags);
+
+		/* Attempt to remain in the central role if preferred */
+		if ((conn->mode == HCI_ROLE_MASTER && (mask & HCI_LM_MASTER)) &&
+		    (conn->link_policy & HCI_LP_RSWITCH)) {
+			struct hci_cp_write_link_policy cp;
+
+			conn->link_policy &= ~HCI_LP_RSWITCH;
+
+			cp.handle = ev->handle;
+			cp.policy = conn->link_policy;
+			hci_send_cmd(hdev, HCI_OP_WRITE_LINK_POLICY,
+				     sizeof(cp), &cp);
+		}
 
 		/* Get remote features */
 		if (conn->type == ACL_LINK) {
@@ -3368,7 +3387,7 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, void *data,
 				reason, mgmt_connected);
 
 	if (conn->type == ACL_LINK) {
-		if (test_bit(HCI_CONN_FLUSH_KEY, &conn->flags))
+		if (test_and_clear_bit(HCI_CONN_FLUSH_KEY, &conn->flags))
 			hci_remove_link_key(hdev, &conn->dst);
 
 		hci_req_update_scan(hdev);
@@ -5551,10 +5570,12 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 
 	hci_dev_lock(hdev);
 
-	/* All controllers implicitly stop advertising in the event of a
-	 * connection, so ensure that the state bit is cleared.
+	/* When entering a connection in the slave role, the controller will
+	 * disable advertising. To avoid a lapse in service, we restart any
+	 * previously active advertising instances.
 	 */
-	hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	if (role == HCI_ROLE_SLAVE)
+		hci_req_enable_paused_adv(hdev);
 
 	conn = hci_lookup_le_connect(hdev);
 	if (!conn) {

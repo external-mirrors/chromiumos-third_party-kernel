@@ -730,21 +730,21 @@ int hci_setup_ext_adv_instance_sync(struct hci_dev *hdev, u8 instance)
 
 	/* Updating parameters of an active instance will return a
 	 * Command Disallowed error, so we must first disable the
-	 * instance if it is active.
+	 * instance if it is active. This call may fail if the instance
+	 * has been removed from the controller.
 	 */
 	if (adv && !adv->pending) {
 		err = hci_disable_ext_adv_instance_sync(hdev, instance);
 		if (err)
-			return err;
+			bt_dev_dbg(hdev, "Error code %d while disabling \
+				   instance %d. Continue \
+				   re-registering the instance",
+				   err, instance);
 	}
 
 	flags = hci_adv_instance_flags(hdev, instance);
 
-	/* If the "connectable" instance flag was not set, then choose between
-	 * ADV_IND and ADV_NONCONN_IND based on the global connectable setting.
-	 */
-	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE) ||
-		      mgmt_get_connectable(hdev);
+	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE);
 
 	if (!is_advertising_allowed(hdev, connectable))
 		return -EPERM;
@@ -1000,11 +1000,7 @@ int hci_enable_advertising_sync(struct hci_dev *hdev)
 	flags = hci_adv_instance_flags(hdev, hdev->cur_adv_instance);
 	adv_instance = hci_find_adv_instance(hdev, hdev->cur_adv_instance);
 
-	/* If the "connectable" instance flag was not set, then choose between
-	 * ADV_IND and ADV_NONCONN_IND based on the global connectable setting.
-	 */
-	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE) ||
-		      mgmt_get_connectable(hdev);
+	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE);
 
 	if (!is_advertising_allowed(hdev, connectable))
 		return -EINVAL;
@@ -1612,6 +1608,9 @@ static int hci_le_add_resolve_list_sync(struct hci_dev *hdev,
 	bacpy(&cp.bdaddr, &params->addr);
 	memcpy(cp.peer_irk, irk->val, 16);
 
+	/* Default privacy mode is always Network */
+	params->privacy_mode = HCI_NETWORK_PRIVACY;
+
 done:
 	if (hci_dev_test_flag(hdev, HCI_PRIVACY))
 		memcpy(cp.local_irk, hdev->irk, 16);
@@ -1836,7 +1835,7 @@ struct sk_buff *hci_read_local_oob_data_sync(struct hci_dev *hdev,
  */
 static u8 hci_update_accept_list_sync(struct hci_dev *hdev)
 {
-	struct hci_conn_params *params;
+	struct hci_conn_params *params, *tmp;
 	struct bdaddr_list *b, *t;
 	u8 num_entries = 0;
 	bool pend_conn, pend_report;
@@ -1865,12 +1864,15 @@ static u8 hci_update_accept_list_sync(struct hci_dev *hdev)
 	}
 
 	/* Go through the current accept list programmed into the
-	 * controller one by one and check if that address is still
-	 * in the list of pending connections or list of devices to
+	 * controller one by one and check if that address is connected or is
+	 * still in the list of pending connections or list of devices to
 	 * report. If not present in either list, then remove it from
 	 * the controller.
 	 */
 	list_for_each_entry_safe(b, t, &hdev->le_accept_list, list) {
+		if (hci_conn_hash_lookup_le(hdev, &b->bdaddr, b->bdaddr_type))
+			continue;
+
 		pend_conn = hci_pend_le_action_lookup(&hdev->pend_le_conns,
 						      &b->bdaddr,
 						      b->bdaddr_type);
@@ -1900,7 +1902,7 @@ static u8 hci_update_accept_list_sync(struct hci_dev *hdev)
 	 * just abort and return filer policy value to not use the
 	 * accept list.
 	 */
-	list_for_each_entry(params, &hdev->pend_le_conns, action) {
+	list_for_each_entry_safe(params, tmp, &hdev->pend_le_conns, action) {
 		err = hci_le_add_accept_list_sync(hdev, params, &num_entries);
 		if (err)
 			goto done;
@@ -1910,7 +1912,7 @@ static u8 hci_update_accept_list_sync(struct hci_dev *hdev)
 	 * the list of pending reports and also add these to the
 	 * accept list if there is still space. Abort if space runs out.
 	 */
-	list_for_each_entry(params, &hdev->pend_le_reports, action) {
+	list_for_each_entry_safe(params, tmp, &hdev->pend_le_reports, action) {
 		err = hci_le_add_accept_list_sync(hdev, params, &num_entries);
 		if (err)
 			goto done;
@@ -2054,6 +2056,7 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 	u8 filter_policy;
 	u16 window, interval;
 	int err;
+	u8 filter_dup = LE_SCAN_FILTER_DUP_ENABLE;
 
 	if (hdev->scanning_paused) {
 		bt_dev_dbg(hdev, "Scanning is paused for suspend");
@@ -2110,6 +2113,20 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 	} else if (hci_is_adv_monitoring(hdev)) {
 		window = hdev->le_scan_window_adv_monitor;
 		interval = hdev->le_scan_int_adv_monitor;
+
+		/* Disable duplicates filter when scanning for advertisement
+		 * monitor for the following reasons.
+		 *
+		 * For HW pattern filtering (ex. MSFT), Realtek and Qualcomm
+		 * controllers ignore RSSI_Sampling_Period when the duplicates
+		 * filter is enabled.
+		 *
+		 * For SW pattern filtering, when we're not doing interleaved
+		 * scanning, it is necessary to disable duplicates filter,
+		 * otherwise hosts can only receive one advertisement and it's
+		 * impossible to know if a peer is still in range.
+		 */
+		filter_dup = LE_SCAN_FILTER_DUP_DISABLE;
 	} else {
 		window = hdev->le_scan_window;
 		interval = hdev->le_scan_interval;
@@ -2119,7 +2136,7 @@ static int hci_passive_scan_sync(struct hci_dev *hdev)
 
 	return hci_start_scan_sync(hdev, LE_SCAN_PASSIVE, interval, window,
 				   own_addr_type, filter_policy,
-				   LE_SCAN_FILTER_DUP_ENABLE);
+				   filter_dup);
 }
 
 /* This function controls the passive scanning based on hdev->pend_le_conns
@@ -3050,10 +3067,13 @@ static int hci_set_event_mask_sync(struct hci_dev *hdev)
 
 		/* Don't set Disconnect Complete when suspended as that
 		 * would wakeup the host when disconnecting due to
-		 * suspend.
+		 * suspend. Also unset Mode Change while suspending for the same
+		 * reason.
 		 */
-		if (hdev->suspended)
+		if (hdev->suspended) {
 			events[0] &= 0xef;
+			events[2] &= 0xf7;
+		}
 	} else {
 		/* Use a different default for LE-only devices */
 		memset(events, 0, sizeof(events));
@@ -3068,10 +3088,13 @@ static int hci_set_event_mask_sync(struct hci_dev *hdev)
 		if (hdev->commands[0] & 0x20) {
 			/* Don't set Disconnect Complete when suspended as that
 			 * would wakeup the host when disconnecting due to
-			 * suspend.
+			 * suspend. Also unset Mode Change while suspending for
+			 * the same reason.
 			 */
-			if (!hdev->suspended)
+			if (!hdev->suspended) {
 				events[0] |= 0x10; /* Disconnection Complete */
+				events[2] |= 0x08; /* Mode Change */
+			}
 			events[2] |= 0x04; /* Number of Completed Packets */
 			events[3] |= 0x02; /* Data Buffer Overflow */
 		}
@@ -4499,10 +4522,6 @@ static int hci_power_off_sync(struct hci_dev *hdev)
 			return err;
 	}
 
-	err = hci_clear_adv_sync(hdev, NULL, false);
-	if (err)
-		return err;
-
 	err = hci_stop_discovery_sync(hdev);
 	if (err)
 		return err;
@@ -5039,12 +5058,12 @@ static int hci_resume_scan_sync(struct hci_dev *hdev)
 	if (!hdev->scanning_paused)
 		return 0;
 
+	hdev->scanning_paused = false;
+
 	hci_update_scan_sync(hdev);
 
 	/* Reset passive scanning to normal */
 	hci_update_passive_scan_sync(hdev);
-
-	hdev->scanning_paused = false;
 
 	return 0;
 }
@@ -5064,7 +5083,6 @@ int hci_resume_sync(struct hci_dev *hdev)
 		return 0;
 
 	hdev->suspended = false;
-	hdev->scanning_paused = false;
 
 	/* Restore event mask */
 	hci_set_event_mask_sync(hdev);

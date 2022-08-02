@@ -835,6 +835,53 @@ void __hci_req_disable_advertising(struct hci_request *req)
 	}
 }
 
+static bool has_pending_adv(struct hci_dev *hdev)
+{
+	struct adv_info *adv_instance;
+
+	list_for_each_entry(adv_instance, &hdev->adv_instances, list) {
+		if (adv_instance->pending)
+			return true;
+	}
+
+	return false;
+}
+
+static void __hci_req_enable_paused_adv(struct hci_request *req)
+{
+	struct hci_dev *hdev = req->hdev;
+	struct adv_info *adv;
+	u8 enable = 0x01;
+
+	/* Determine if any of our advertising instances are in the middle of
+	 * registration. This is important, because we do not want to enable
+	 * advertising if an enable will be provided at the end of registration.
+	 * Such a double call may result in an HCI error on some platforms.
+	 */
+
+	if (ext_adv_capable(hdev)) {
+		/* Call for each tracked instance to be re-enabled */
+		list_for_each_entry(adv, &hdev->adv_instances, list) {
+			if (!adv->pending)
+				__hci_req_enable_ext_advertising(req,
+								 adv->instance);
+		}
+	} else if (!has_pending_adv(hdev)) {
+		hci_req_add(req, HCI_OP_LE_SET_ADV_ENABLE,
+			    sizeof(enable), &enable);
+	}
+}
+
+int hci_req_enable_paused_adv(struct hci_dev *hdev)
+{
+	struct hci_request req;
+
+	hci_req_init(&req, hdev);
+	__hci_req_enable_paused_adv(&req);
+
+	return hci_req_run(&req, NULL);
+}
+
 static bool adv_use_rpa(struct hci_dev *hdev, uint32_t flags)
 {
 	/* If privacy is not enabled don't use RPA */
@@ -909,11 +956,7 @@ void __hci_req_enable_advertising(struct hci_request *req)
 	flags = hci_adv_instance_flags(hdev, hdev->cur_adv_instance);
 	adv = hci_find_adv_instance(hdev, hdev->cur_adv_instance);
 
-	/* If the "connectable" instance flag was not set, then choose between
-	 * ADV_IND and ADV_NONCONN_IND based on the global connectable setting.
-	 */
-	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE) ||
-		      mgmt_get_connectable(hdev);
+	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE);
 
 	if (!is_advertising_allowed(hdev, connectable))
 		return;
@@ -1308,25 +1351,39 @@ void __hci_req_clear_ext_adv_sets(struct hci_request *req)
 static void set_random_addr(struct hci_request *req, bdaddr_t *rpa)
 {
 	struct hci_dev *hdev = req->hdev;
+	bool adv_enabled = hci_dev_test_flag(hdev, HCI_LE_ADV);
 
-	/* If we're advertising or initiating an LE connection we can't
-	 * go ahead and change the random address at this time. This is
-	 * because the eventual initiator address used for the
-	 * subsequently created connection will be undefined (some
-	 * controllers use the new address and others the one we had
-	 * when the operation started).
+	/* If we're initiating an LE connection or actively scanning, we can't
+	 * go ahead and change the random address at this time. This is because
+	 * the eventual initiator address used for the subsequently created
+	 * connection will be undefined (some controllers use the new address
+	 * and others the one we had when the operation started).
 	 *
-	 * In this kind of scenario skip the update and let the random
-	 * address be updated at the next cycle.
+	 * In this kind of scenario skip the update and let the random address
+	 * be updated at the next cycle.
 	 */
-	if (hci_dev_test_flag(hdev, HCI_LE_ADV) ||
-	    hci_lookup_le_connect(hdev)) {
+
+	if (hci_lookup_le_connect(hdev) ||
+	    (hci_dev_test_flag(hdev, HCI_LE_SCAN) &&
+			hdev->le_scan_type == LE_SCAN_ACTIVE)) {
 		bt_dev_dbg(hdev, "Deferring random address update");
 		hci_dev_set_flag(hdev, HCI_RPA_EXPIRED);
 		return;
 	}
 
+	/* Because any random address update will fail while advertising is in
+	 * progress, we pause any active instances to update the random address.
+	 */
+	if (adv_enabled) {
+		__hci_req_disable_advertising(req);
+		hci_dev_clear_flag(hdev, HCI_LE_ADV);
+	}
+
 	hci_req_add(req, HCI_OP_LE_SET_RANDOM_ADDR, 6, rpa);
+
+	/* Re-enable previously-active advertisements */
+	if (adv_enabled)
+		__hci_req_enable_paused_adv(req);
 }
 
 int __hci_req_setup_ext_adv_instance(struct hci_request *req, u8 instance)
@@ -1351,11 +1408,7 @@ int __hci_req_setup_ext_adv_instance(struct hci_request *req, u8 instance)
 
 	flags = hci_adv_instance_flags(hdev, instance);
 
-	/* If the "connectable" instance flag was not set, then choose between
-	 * ADV_IND and ADV_NONCONN_IND based on the global connectable setting.
-	 */
-	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE) ||
-		      mgmt_get_connectable(hdev);
+	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE);
 
 	if (!is_advertising_allowed(hdev, connectable))
 		return -EPERM;
@@ -2471,31 +2524,46 @@ static int stop_discovery(struct hci_request *req, unsigned long opt)
 	return 0;
 }
 
-static void discov_update(struct work_struct *work)
+static void start_discov_update(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev,
-					    discov_update);
+					    start_discov_update);
 	u8 status = 0;
 
-	switch (hdev->discovery.state) {
-	case DISCOVERY_STARTING:
+	BT_DBG("%s old state %u", hdev->name, hdev->discovery.state);
+
+	if (hci_discovery_active(hdev))
+		BT_DBG("discovery was already started");
+	else
 		start_discovery(hdev, &status);
-		mgmt_start_discovery_complete(hdev, status);
-		if (status)
-			hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
-		else
-			hci_discovery_set_state(hdev, DISCOVERY_FINDING);
-		break;
-	case DISCOVERY_STOPPING:
-		hci_req_sync(hdev, stop_discovery, 0, HCI_CMD_TIMEOUT, &status);
-		mgmt_stop_discovery_complete(hdev, status);
-		if (!status)
-			hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
-		break;
-	case DISCOVERY_STOPPED:
-	default:
-		return;
+
+	mgmt_start_discovery_complete(hdev, status);
+	if (status) {
+		hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
+		BT_ERR("Failed to start discovery: status 0x%02x", status);
+	} else {
+		hci_discovery_set_state(hdev, DISCOVERY_FINDING);
 	}
+}
+
+static void stop_discov_update(struct work_struct *work)
+{
+	struct hci_dev *hdev = container_of(work, struct hci_dev,
+					    stop_discov_update);
+	u8 status = 0;
+
+	BT_DBG("%s old state %u", hdev->name, hdev->discovery.state);
+
+	if (hdev->discovery.state == DISCOVERY_STOPPED)
+		BT_DBG("discovery was already stopped");
+	else
+		hci_req_sync(hdev, stop_discovery, 0, HCI_CMD_TIMEOUT, &status);
+
+	mgmt_stop_discovery_complete(hdev, status);
+	if (status)
+		BT_ERR("Failed to stop discovery: status 0x%02x", status);
+	else
+		hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
 }
 
 static void discov_off(struct work_struct *work)
@@ -2633,7 +2701,8 @@ int __hci_req_hci_power_on(struct hci_dev *hdev)
 
 void hci_request_setup(struct hci_dev *hdev)
 {
-	INIT_WORK(&hdev->discov_update, discov_update);
+	INIT_WORK(&hdev->start_discov_update, start_discov_update);
+	INIT_WORK(&hdev->stop_discov_update, stop_discov_update);
 	INIT_WORK(&hdev->scan_update, scan_update_work);
 	INIT_DELAYED_WORK(&hdev->discov_off, discov_off);
 	INIT_DELAYED_WORK(&hdev->le_scan_disable, le_scan_disable_work);
@@ -2646,7 +2715,8 @@ void hci_request_cancel_all(struct hci_dev *hdev)
 {
 	__hci_cmd_sync_cancel(hdev, ENODEV);
 
-	cancel_work_sync(&hdev->discov_update);
+	cancel_work_sync(&hdev->start_discov_update);
+	cancel_work_sync(&hdev->stop_discov_update);
 	cancel_work_sync(&hdev->scan_update);
 	cancel_delayed_work_sync(&hdev->discov_off);
 	cancel_delayed_work_sync(&hdev->le_scan_disable);

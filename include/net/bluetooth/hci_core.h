@@ -207,6 +207,7 @@ struct smp_irk {
 	struct list_head list;
 	struct rcu_head rcu;
 	bdaddr_t rpa;
+	__u32 rpa_timestamp;
 	bdaddr_t bdaddr;
 	u8 addr_type;
 	u8 val[16];
@@ -346,6 +347,7 @@ struct hci_dev {
 	__u8		dev_name[HCI_MAX_NAME_LENGTH];
 	__u8		short_name[HCI_MAX_SHORT_NAME_LENGTH];
 	__u8		eir[HCI_MAX_EIR_LENGTH];
+	__u16		eir_max_name_len;
 	__u16		appearance;
 	__u8		dev_class[3];
 	__u8		major_class;
@@ -470,6 +472,7 @@ struct hci_dev {
 	unsigned int	acl_pkts;
 	unsigned int	sco_pkts;
 	unsigned int	le_pkts;
+	unsigned int	wbs_pkt_len;
 
 	__u16		block_len;
 	__u16		block_mtu;
@@ -506,7 +509,9 @@ struct hci_dev {
 	struct work_struct	cmd_work;
 	struct work_struct	tx_work;
 
-	struct work_struct	discov_update;
+	struct work_struct	start_discov_update;
+	struct work_struct	stop_discov_update;
+
 	struct work_struct	scan_update;
 	struct delayed_work	le_scan_disable;
 	struct delayed_work	le_scan_restart;
@@ -1286,6 +1291,8 @@ void hci_free_dev(struct hci_dev *hdev);
 int hci_register_dev(struct hci_dev *hdev);
 void hci_unregister_dev(struct hci_dev *hdev);
 void hci_release_dev(struct hci_dev *hdev);
+int hci_register_suspend_notifier(struct hci_dev *hdev);
+int hci_unregister_suspend_notifier(struct hci_dev *hdev);
 int hci_suspend_dev(struct hci_dev *hdev);
 int hci_resume_dev(struct hci_dev *hdev);
 int hci_reset_dev(struct hci_dev *hdev);
@@ -1407,12 +1414,9 @@ bool hci_adv_instance_is_scannable(struct hci_dev *hdev, u8 instance);
 
 void hci_adv_monitors_clear(struct hci_dev *hdev);
 void hci_free_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor);
-int hci_add_adv_patterns_monitor_complete(struct hci_dev *hdev, u8 status);
-int hci_remove_adv_monitor_complete(struct hci_dev *hdev, u8 status);
-bool hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor,
-			int *err);
-bool hci_remove_single_adv_monitor(struct hci_dev *hdev, u16 handle, int *err);
-bool hci_remove_all_adv_monitor(struct hci_dev *hdev, int *err);
+int hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor);
+int hci_remove_single_adv_monitor(struct hci_dev *hdev, u16 handle);
+int hci_remove_all_adv_monitor(struct hci_dev *hdev);
 bool hci_is_adv_monitoring(struct hci_dev *hdev);
 int hci_get_adv_monitor_offload_ext(struct hci_dev *hdev);
 
@@ -1706,6 +1710,36 @@ static inline struct smp_irk *hci_get_irk(struct hci_dev *hdev,
 	return hci_find_irk_by_rpa(hdev, bdaddr);
 }
 
+/* Erratum 5412 which has been fixed in 4.2 changed the validation of
+ * connection parameters.  For backwards compatibility reasons, the old
+ * calculation must be tolerated.
+ * For further details :
+ * https://www.bluetooth.org/errata/errata_view.cfm?errata_id=5419
+ */
+static inline int hci_check_conn_params_legacy(u16 min, u16 max, u16 latency,
+					u16 to_multiplier)
+{
+	u16 max_latency;
+
+	if (min > max || min < 6 || max > 3200)
+		return -EINVAL;
+
+	if (to_multiplier < 10 || to_multiplier > 3200)
+		return -EINVAL;
+
+	if (max >= to_multiplier * 8)
+		return -EINVAL;
+
+	max_latency = (to_multiplier * 8 / max) - 1;
+	if (latency > 499 || latency > max_latency)
+		return -EINVAL;
+
+	return 0;
+}
+
+/* Connection Parameter Validation Helper.
+ * See Vol 6, Part B, section 4.5.1.
+ */
 static inline int hci_check_conn_params(u16 min, u16 max, u16 latency,
 					u16 to_multiplier)
 {
@@ -1758,6 +1792,7 @@ void hci_sock_dev_event(struct hci_dev *hdev, int event);
 #define HCI_MGMT_UNTRUSTED	BIT(2)
 #define HCI_MGMT_UNCONFIGURED	BIT(3)
 #define HCI_MGMT_HDEV_OPTIONAL	BIT(4)
+#define HCI_MGMT_USERCHANNEL	BIT(5)
 
 struct hci_mgmt_handler {
 	int (*func) (struct sock *sk, struct hci_dev *hdev, void *data,
@@ -1872,8 +1907,6 @@ void mgmt_advertising_removed(struct sock *sk, struct hci_dev *hdev,
 			      u8 instance);
 void mgmt_adv_monitor_removed(struct hci_dev *hdev, u16 handle);
 int mgmt_phy_configuration_changed(struct hci_dev *hdev, struct sock *skip);
-int mgmt_add_adv_patterns_monitor_complete(struct hci_dev *hdev, u8 status);
-int mgmt_remove_adv_monitor_complete(struct hci_dev *hdev, u8 status);
 void mgmt_adv_monitor_device_lost(struct hci_dev *hdev, u16 handle,
 				  bdaddr_t *bdaddr, u8 addr_type);
 
