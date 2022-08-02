@@ -5211,6 +5211,9 @@ int hci_stop_discovery_sync(struct hci_dev *hdev)
 	if (use_ll_privacy(hdev))
 		hci_resume_advertising_sync(hdev);
 
+	/* Sampling Period is disabled while active scanning, re-enable it */
+	msft_set_active_scan(hdev, false);
+
 	/* No further actions needed for LE-only discovery */
 	if (d->type == DISCOV_TYPE_LE)
 		return 0;
@@ -5791,6 +5794,9 @@ int hci_start_discovery_sync(struct hci_dev *hdev)
 
 	if (err)
 		return err;
+
+	/* Disable Sampling Period while active scanning */
+	msft_set_active_scan(hdev, true);
 
 	bt_dev_dbg(hdev, "timeout %u ms", jiffies_to_msecs(timeout));
 
