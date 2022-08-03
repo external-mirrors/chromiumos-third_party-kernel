@@ -359,7 +359,8 @@ static void fuse_umount_begin(struct super_block *sb)
 
 	sb->s_iflags |= SB_I_RETIRED;
 
-	if (fc->bdi_initialized) {
+	/* Only retire block-device-based superblocks. */
+	if (sb->s_bdev != NULL && fc->bdi_initialized) {
 		fc->bdi_initialized = 0;
 		bdi_destroy(&fc->bdi);
 	}
