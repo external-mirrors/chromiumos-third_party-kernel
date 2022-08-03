@@ -118,6 +118,9 @@ static void hci_conn_cleanup(struct hci_conn *conn)
 	if (test_bit(HCI_CONN_PARAM_REMOVAL_PEND, &conn->flags))
 		hci_conn_params_del(conn->hdev, &conn->dst, conn->dst_type);
 
+	if (test_and_clear_bit(HCI_CONN_FLUSH_KEY, &conn->flags))
+		hci_remove_link_key(hdev, &conn->dst);
+
 	hci_chan_list_flush(conn);
 
 	hci_conn_hash_del(hdev, conn);
@@ -1094,20 +1097,6 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 
-	/* If we don't have an Irk or that we have a recent rpa, skip the extra
-	 * scan and try to connect immediately.
-	 */
-	irk = hci_find_irk_by_addr(hdev, dst, dst_type);
-	if (!irk ||
-	    time_before(jiffies, irk->rpa_timestamp + msecs_to_jiffies(2000))) {
-		bt_dev_info(hdev, "Skipping le scan before connect");
-
-		return hci_connect_le(hdev, dst, dst_type,
-				sec_level,
-				HCI_LE_CONN_TIMEOUT,
-				HCI_ROLE_MASTER, NULL);
-	}
-
 	/* Some devices send ATT messages as soon as the physical link is
 	 * established. To be able to handle these ATT messages, the user-
 	 * space first establishes the connection and then starts the pairing
@@ -1122,6 +1111,20 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
 		if (conn->pending_sec_level < sec_level)
 			conn->pending_sec_level = sec_level;
 		goto done;
+	}
+
+	/* If we don't have an Irk or that we have a recent rpa, skip the extra
+	 * scan and try to connect immediately.
+	 */
+	irk = hci_find_irk_by_addr(hdev, dst, dst_type);
+	if (!irk ||
+	    time_before(jiffies, irk->rpa_timestamp + msecs_to_jiffies(2000))) {
+		bt_dev_info(hdev, "Skipping le scan before connect");
+
+		return hci_connect_le(hdev, dst, dst_type,
+				sec_level,
+				HCI_LE_CONN_TIMEOUT,
+				HCI_ROLE_MASTER, NULL);
 	}
 
 	BT_DBG("requesting refresh of dst_addr");
