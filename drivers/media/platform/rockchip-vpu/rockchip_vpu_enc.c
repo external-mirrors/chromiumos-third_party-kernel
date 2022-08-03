@@ -301,9 +301,8 @@ static struct rockchip_vpu_control controls[] = {
 	{
 		.id = V4L2_CID_MPEG_VIDEO_BITRATE_MODE,
 		.type = V4L2_CTRL_TYPE_MENU,
-		.minimum = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
 		.maximum = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
-		.step = 1,
+		.menu_skip_mask = ~(1 << V4L2_MPEG_VIDEO_BITRATE_MODE_CBR),
 		.default_value = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
 	},
 };
