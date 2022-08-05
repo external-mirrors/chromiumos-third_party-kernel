@@ -2180,6 +2180,8 @@ static int __maybe_unused ov8856_suspend(struct device *dev)
 	__ov8856_power_off(ov8856);
 	mutex_unlock(&ov8856->mutex);
 
+	i2c_pm_suspend(dev);
+
 	return 0;
 }
 
@@ -2189,6 +2191,8 @@ static int __maybe_unused ov8856_resume(struct device *dev)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct ov8856 *ov8856 = to_ov8856(sd);
 	int ret;
+
+	i2c_pm_resume(dev);
 
 	mutex_lock(&ov8856->mutex);
 
@@ -2546,6 +2550,15 @@ probe_power_off:
 
 static const struct dev_pm_ops ov8856_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(ov8856_suspend, ov8856_resume)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
+	.runtime_suspend = i2c_pm_runtime_suspend,
+	.runtime_resume = i2c_pm_runtime_resume,
+	.runtime_idle = i2c_pm_runtime_idle,
 };
 
 #ifdef CONFIG_ACPI
