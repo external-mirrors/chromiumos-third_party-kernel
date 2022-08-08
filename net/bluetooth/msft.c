@@ -99,8 +99,6 @@ struct msft_data {
 	__u8  evt_prefix_len;
 	__u8  *evt_prefix;
 	struct list_head handle_map;
-	__u16 pending_add_handle;
-	__u16 pending_remove_handle;
 	__u8 resuming;
 	__u8 suspending;
 	__u8 filter_enabled;
@@ -211,23 +209,15 @@ static int msft_monitor_device_del(struct hci_dev *hdev, __u16 mgmt_handle,
 }
 
 static int msft_le_monitor_advertisement_cb(struct hci_dev *hdev, u16 opcode,
+					    struct adv_monitor *monitor,
 					    struct sk_buff *skb)
 {
 	struct msft_rp_le_monitor_advertisement *rp;
-	struct adv_monitor *monitor;
 	struct msft_monitor_advertisement_handle_data *handle_data;
 	struct msft_data *msft = hdev->msft_data;
 	int status = 0;
 
 	hci_dev_lock(hdev);
-
-	monitor = idr_find(&hdev->adv_monitors_idr, msft->pending_add_handle);
-	if (!monitor) {
-		bt_dev_err(hdev, "msft add advmon: monitor %u is not found!",
-			   msft->pending_add_handle);
-		status = HCI_ERROR_UNSPECIFIED;
-		goto unlock;
-	}
 
 	rp = (struct msft_rp_le_monitor_advertisement *)skb->data;
 	if (skb->len < sizeof(*rp)) {
@@ -253,7 +243,7 @@ static int msft_le_monitor_advertisement_cb(struct hci_dev *hdev, u16 opcode,
 	monitor->state = ADV_MONITOR_STATE_OFFLOADED;
 
 unlock:
-	if (status && monitor)
+	if (status)
 		hci_free_adv_monitor(hdev, monitor);
 
 	hci_dev_unlock(hdev);
@@ -263,11 +253,10 @@ unlock:
 
 static int msft_le_cancel_monitor_advertisement_cb(struct hci_dev *hdev,
 						   u16 opcode,
+						   struct adv_monitor *monitor,
 						   struct sk_buff *skb)
 {
-	struct msft_cp_le_cancel_monitor_advertisement *cp;
 	struct msft_rp_le_cancel_monitor_advertisement *rp;
-	struct adv_monitor *monitor;
 	struct msft_monitor_advertisement_handle_data *handle_data;
 	struct msft_data *msft = hdev->msft_data;
 	int status = 0;
@@ -284,20 +273,16 @@ static int msft_le_cancel_monitor_advertisement_cb(struct hci_dev *hdev,
 
 	hci_dev_lock(hdev);
 
-	cp = hci_sent_cmd_data(hdev, hdev->msft_opcode);
-	handle_data = msft_find_handle_data(hdev, cp->handle, false);
+	handle_data = msft_find_handle_data(hdev, monitor->handle, true);
 
 	if (handle_data) {
-		monitor = idr_find(&hdev->adv_monitors_idr,
-				   handle_data->mgmt_handle);
-
-		if (monitor && monitor->state == ADV_MONITOR_STATE_OFFLOADED)
+		if (monitor->state == ADV_MONITOR_STATE_OFFLOADED)
 			monitor->state = ADV_MONITOR_STATE_REGISTERED;
 
 		/* Do not free the monitor if it is being removed due to
 		 * suspend. It will be re-monitored on resume.
 		 */
-		if (monitor && !msft->suspending) {
+		if (!msft->suspending) {
 			hci_free_adv_monitor(hdev, monitor);
 
 			/* Clear any monitored devices by this Adv Monitor */
@@ -315,6 +300,7 @@ done:
 	return status;
 }
 
+/* This function requires the caller holds hci_req_sync_lock */
 static int msft_remove_monitor_sync(struct hci_dev *hdev,
 				    struct adv_monitor *monitor)
 {
@@ -325,10 +311,8 @@ static int msft_remove_monitor_sync(struct hci_dev *hdev,
 	handle_data = msft_find_handle_data(hdev, monitor->handle, true);
 
 	/* If no matched handle, just remove without telling controller */
-	if (!handle_data) {
-		hci_free_adv_monitor(hdev, monitor);
+	if (!handle_data)
 		return -ENOENT;
-	}
 
 	cp.sub_opcode = MSFT_OP_LE_CANCEL_MONITOR_ADVERTISEMENT;
 	cp.handle = handle_data->msft_handle;
@@ -339,7 +323,7 @@ static int msft_remove_monitor_sync(struct hci_dev *hdev,
 		return PTR_ERR(skb);
 
 	return msft_le_cancel_monitor_advertisement_cb(hdev, hdev->msft_opcode,
-						       skb);
+						       monitor, skb);
 }
 
 /* This function requires the caller holds hci_req_sync_lock */
@@ -410,7 +394,6 @@ static int msft_add_monitor_sync(struct hci_dev *hdev,
 	ptrdiff_t offset = 0;
 	u8 pattern_count = 0;
 	struct sk_buff *skb;
-	struct msft_data *msft = hdev->msft_data;
 
 	if (!msft_monitor_pattern_valid(monitor))
 		return -EINVAL;
@@ -452,11 +435,11 @@ static int msft_add_monitor_sync(struct hci_dev *hdev,
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
 
-	msft->pending_add_handle = monitor->handle;
-
-	return msft_le_monitor_advertisement_cb(hdev, hdev->msft_opcode, skb);
+	return msft_le_monitor_advertisement_cb(hdev, hdev->msft_opcode,
+						monitor, skb);
 }
 
+/* This function requires the caller holds hci_req_sync_lock */
 static void reregister_monitor(struct hci_dev *hdev)
 {
 	struct adv_monitor *monitor;

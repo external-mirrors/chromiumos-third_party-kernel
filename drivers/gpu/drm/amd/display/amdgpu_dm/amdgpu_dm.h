@@ -60,6 +60,7 @@ enum aux_return_code_type;
 
 /* Forward declarations */
 struct amdgpu_device;
+struct amdgpu_crtc;
 struct drm_device;
 struct dc;
 struct amdgpu_bo;
@@ -86,16 +87,18 @@ struct dm_compressor_info {
 };
 
 /**
- * struct vblank_workqueue - Works to be executed in a separate thread during vblank
- * @mall_work: work for mall stutter
+ * struct vblank_control_work - Work data for vblank control
+ * @work: Kernel work data for the work event
  * @dm: amdgpu display manager device
- * @otg_inst: otg instance of which vblank is being set
- * @enable: true if enable vblank
+ * @acrtc: amdgpu CRTC instance for which the event has occurred
+ * @stream: DC stream for which the event has occurred
+ * @enable: true if enabling vblank
  */
-struct vblank_workqueue {
-	struct work_struct mall_work;
+struct vblank_control_work {
+	struct work_struct work;
 	struct amdgpu_display_manager *dm;
-	int otg_inst;
+	struct amdgpu_crtc *acrtc;
+	struct dc_stream_state *stream;
 	bool enable;
 };
 
@@ -422,11 +425,11 @@ struct amdgpu_display_manager {
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	/**
-	 * @vblank_workqueue:
+	 * @vblank_control_workqueue:
 	 *
-	 * amdgpu workqueue during vblank
+	 * Deferred work for vblank control events.
 	 */
-	struct vblank_workqueue *vblank_workqueue;
+	struct workqueue_struct *vblank_control_workqueue;
 #endif
 
 	struct drm_atomic_state *cached_state;
@@ -539,7 +542,6 @@ struct amdgpu_dm_connector {
 	struct drm_dp_mst_port *port;
 	struct amdgpu_dm_connector *mst_port;
 	struct drm_dp_aux *dsc_aux;
-
 	/* TODO see if we can merge with ddc_bus or make a dm_connector */
 	struct amdgpu_i2c_adapter *i2c;
 
@@ -563,6 +565,8 @@ struct amdgpu_dm_connector {
 	union dp_downstream_port_present mst_downstream_port_present;
 	/* Cached display modes */
 	struct drm_display_mode freesync_vid_base;
+
+	int psr_skip_count;
 };
 
 #define to_amdgpu_dm_connector(x) container_of(x, struct amdgpu_dm_connector, base)
@@ -698,4 +702,6 @@ int dm_atomic_get_state(struct drm_atomic_state *state,
 struct amdgpu_dm_connector *
 amdgpu_dm_find_first_crtc_matching_connector(struct drm_atomic_state *state,
 					     struct drm_crtc *crtc);
+
+int convert_dc_color_depth_into_bpc(enum dc_color_depth display_color_depth);
 #endif /* __AMDGPU_DM_H__ */
