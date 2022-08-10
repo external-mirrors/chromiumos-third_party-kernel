@@ -54,6 +54,7 @@
 #include "display/intel_fbdev.h"
 #include "display/intel_hotplug.h"
 #include "display/intel_overlay.h"
+#include "display/intel_pch_refclk.h"
 #include "display/intel_pipe_crc.h"
 #include "display/intel_pps.h"
 #include "display/intel_sprite.h"
@@ -82,14 +83,13 @@
 #include "i915_suspend.h"
 #include "i915_switcheroo.h"
 #include "i915_sysfs.h"
-#include "i915_trace.h"
 #include "i915_vgpu.h"
 #include "intel_dram.h"
 #include "intel_gvt.h"
 #include "intel_memory_region.h"
+#include "intel_pcode.h"
 #include "intel_pm.h"
 #include "intel_region_ttm.h"
-#include "intel_sideband.h"
 #include "vlv_suspend.h"
 
 static const struct drm_driver driver;
@@ -325,7 +325,7 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 	mutex_init(&dev_priv->sb_lock);
 	cpu_latency_qos_add_request(&dev_priv->sb_qos, PM_QOS_DEFAULT_VALUE);
 
-	mutex_init(&dev_priv->av_mutex);
+	mutex_init(&dev_priv->audio.mutex);
 	mutex_init(&dev_priv->wm.wm_mutex);
 	mutex_init(&dev_priv->pps_mutex);
 	mutex_init(&dev_priv->hdcp_comp_mutex);
@@ -571,7 +571,7 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 	if (ret)
 		goto err_perf;
 
-	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, "inteldrmfb");
+	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, dev_priv->drm.driver);
 	if (ret)
 		goto err_ggtt;
 
@@ -629,7 +629,9 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 
 	intel_opregion_setup(dev_priv);
 
-	intel_pcode_init(dev_priv);
+	ret = intel_pcode_init(dev_priv);
+	if (ret)
+		goto err_msi;
 
 	/*
 	 * Fill the dram structure to get the system dram info. This will be
@@ -1243,6 +1245,10 @@ static int i915_drm_resume(struct drm_device *dev)
 	int ret;
 
 	disable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
+
+	ret = intel_pcode_init(dev_priv);
+	if (ret)
+		return ret;
 
 	sanitize_gpu(dev_priv);
 

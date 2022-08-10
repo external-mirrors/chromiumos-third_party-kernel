@@ -3982,10 +3982,11 @@ static int exp_ll_privacy_feature_changed(bool enabled, struct hci_dev *hdev,
 	memcpy(ev.uuid, rpa_resolution_uuid, 16);
 	ev.flags = cpu_to_le32((enabled ? BIT(0) : 0) | BIT(1));
 
+	// Do we need to be atomic with the conn_flags?
 	if (enabled && privacy_mode_capable(hdev))
-		set_bit(HCI_CONN_FLAG_DEVICE_PRIVACY, hdev->conn_flags);
+		hdev->conn_flags |= HCI_CONN_FLAG_DEVICE_PRIVACY;
 	else
-		clear_bit(HCI_CONN_FLAG_DEVICE_PRIVACY, hdev->conn_flags);
+		hdev->conn_flags &= ~HCI_CONN_FLAG_DEVICE_PRIVACY;
 
 	return mgmt_limited_event(MGMT_EV_EXP_FEATURE_CHANGED, hdev,
 				  &ev, sizeof(ev),
@@ -4114,6 +4115,12 @@ static int set_rpa_resolution_func(struct sock *sk, struct hci_dev *hdev,
 				       MGMT_OP_SET_EXP_FEATURE,
 				       MGMT_STATUS_INVALID_INDEX);
 
+	/* Controller does not support LL privacy */
+	if (!ll_privacy_capable(hdev))
+		return mgmt_cmd_status(sk, hdev->id,
+				       MGMT_OP_SET_EXP_FEATURE,
+				       MGMT_STATUS_NOT_SUPPORTED);
+
 	/* Changes can only be made when controller is powered down */
 	if (hdev_is_powered(hdev))
 		return mgmt_cmd_status(sk, hdev->id,
@@ -4216,11 +4223,6 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 					      MGMT_STATUS_FAILED);
 			goto unlock_quality_report;
 		}
-
-		if (val)
-			hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
-		else
-			hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
 	}
 
 	BT_INFO("quality report enable %d changed %d", val, changed);
@@ -4432,8 +4434,7 @@ static int get_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	hci_dev_lock(hdev);
 
-	bitmap_to_arr32(&supported_flags, hdev->conn_flags,
-			__HCI_CONN_NUM_FLAGS);
+	supported_flags = hdev->conn_flags;
 
 	memset(&rp, 0, sizeof(rp));
 
@@ -4444,8 +4445,7 @@ static int get_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 		if (!br_params)
 			goto done;
 
-		bitmap_to_arr32(&current_flags, br_params->flags,
-				__HCI_CONN_NUM_FLAGS);
+		current_flags = br_params->flags;
 	} else {
 		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
 						le_addr_type(cp->addr.type));
@@ -4453,8 +4453,7 @@ static int get_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 		if (!params)
 			goto done;
 
-		bitmap_to_arr32(&current_flags, params->flags,
-				__HCI_CONN_NUM_FLAGS);
+		current_flags = params->flags;
 	}
 
 	bacpy(&rp.addr.bdaddr, &cp->addr.bdaddr);
@@ -4499,8 +4498,8 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 		   &cp->addr.bdaddr, cp->addr.type,
 		   __le32_to_cpu(current_flags));
 
-	bitmap_to_arr32(&supported_flags, hdev->conn_flags,
-			__HCI_CONN_NUM_FLAGS);
+	// We should take hci_dev_lock() early, I think.. conn_flags can change
+	supported_flags = hdev->conn_flags;
 
 	if ((supported_flags | current_flags) != supported_flags) {
 		bt_dev_warn(hdev, "Bad flag given (0x%x) vs supported (0x%0x)",
@@ -4516,7 +4515,7 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 							      cp->addr.type);
 
 		if (br_params) {
-			bitmap_from_u64(br_params->flags, current_flags);
+			br_params->flags = current_flags;
 			status = MGMT_STATUS_SUCCESS;
 		} else {
 			bt_dev_warn(hdev, "No such BR/EDR device %pMR (0x%x)",
@@ -4526,14 +4525,26 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
 						le_addr_type(cp->addr.type));
 		if (params) {
-			bitmap_from_u64(params->flags, current_flags);
+			/* Devices using RPAs can only be programmed in the
+			 * acceptlist LL Privacy has been enable otherwise they
+			 * cannot mark HCI_CONN_FLAG_REMOTE_WAKEUP.
+			 */
+			if ((current_flags & HCI_CONN_FLAG_REMOTE_WAKEUP) &&
+			    !use_ll_privacy(hdev) &&
+			    hci_find_irk_by_addr(hdev, &params->addr,
+						 params->addr_type)) {
+				bt_dev_warn(hdev,
+					    "Cannot set wakeable for RPA");
+				goto unlock;
+			}
+
+			params->flags = current_flags;
 			status = MGMT_STATUS_SUCCESS;
 
 			/* Update passive scan if HCI_CONN_FLAG_DEVICE_PRIVACY
 			 * has been set.
 			 */
-			if (test_bit(HCI_CONN_FLAG_DEVICE_PRIVACY,
-				     params->flags))
+			if (params->flags & HCI_CONN_FLAG_DEVICE_PRIVACY)
 				hci_update_passive_scan(hdev);
 		} else {
 			bt_dev_warn(hdev, "No such LE device %pMR (0x%x)",
@@ -4542,6 +4553,7 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 		}
 	}
 
+unlock:
 	hci_dev_unlock(hdev);
 
 done:
@@ -4632,52 +4644,89 @@ static int read_adv_mon_features(struct sock *sk, struct hci_dev *hdev,
 	return err;
 }
 
-static int __add_adv_patterns_monitor(struct sock *sk, struct hci_dev *hdev,
-				      struct adv_monitor *m, void *data,
-				      u16 len, u16 op)
+static void mgmt_add_adv_patterns_monitor_complete(struct hci_dev *hdev,
+						   void *data, int status)
 {
 	struct mgmt_rp_add_adv_patterns_monitor rp;
-	u8 status = MGMT_STATUS_SUCCESS;
-	int err;
-
-	if (pending_find(MGMT_OP_SET_LE, hdev) ||
-	    pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev)) {
-		status = MGMT_STATUS_BUSY;
-		goto done;
-	}
-
-	err = hci_add_adv_monitor(hdev, m);
-	if (err) {
-		if (err == -ENOSPC || err == -ENOMEM)
-			status = MGMT_STATUS_NO_RESOURCES;
-		else if (err == -EINVAL)
-			status = MGMT_STATUS_INVALID_PARAMS;
-		else
-			status = MGMT_STATUS_FAILED;
-
-		goto done;
-	}
+	struct mgmt_pending_cmd *cmd = data;
+	struct adv_monitor *monitor = cmd->user_data;
 
 	hci_dev_lock(hdev);
 
-	rp.monitor_handle = cpu_to_le16(m->handle);
-	mgmt_adv_monitor_added(sk, hdev, m->handle);
-	if (m->state == ADV_MONITOR_STATE_NOT_REGISTERED)
-		m->state = ADV_MONITOR_STATE_REGISTERED;
-	hdev->adv_monitors_cnt++;
-	hci_update_passive_scan(hdev);
+	rp.monitor_handle = cpu_to_le16(monitor->handle);
+
+	if (!status) {
+		mgmt_adv_monitor_added(cmd->sk, hdev, monitor->handle);
+		hdev->adv_monitors_cnt++;
+		if (monitor->state == ADV_MONITOR_STATE_NOT_REGISTERED)
+			monitor->state = ADV_MONITOR_STATE_REGISTERED;
+		hci_update_passive_scan(hdev);
+	}
+
+	mgmt_cmd_complete(cmd->sk, cmd->index, cmd->opcode,
+			  mgmt_status(status), &rp, sizeof(rp));
+	mgmt_pending_remove(cmd);
+
+	hci_dev_unlock(hdev);
+	bt_dev_dbg(hdev, "add monitor %d complete, status %d",
+		   rp.monitor_handle, status);
+}
+
+static int mgmt_add_adv_patterns_monitor_sync(struct hci_dev *hdev, void *data)
+{
+	struct mgmt_pending_cmd *cmd = data;
+	struct adv_monitor *monitor = cmd->user_data;
+
+	return hci_add_adv_monitor(hdev, monitor);
+}
+
+static int __add_adv_patterns_monitor(struct sock *sk, struct hci_dev *hdev,
+				      struct adv_monitor *m, u8 status,
+				      void *data, u16 len, u16 op)
+{
+	struct mgmt_pending_cmd *cmd;
+	int err;
+
+	hci_dev_lock(hdev);
+
+	if (status)
+		goto unlock;
+
+	if (pending_find(MGMT_OP_SET_LE, hdev) ||
+	    pending_find(MGMT_OP_ADD_ADV_PATTERNS_MONITOR, hdev) ||
+	    pending_find(MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI, hdev) ||
+	    pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev)) {
+		status = MGMT_STATUS_BUSY;
+		goto unlock;
+	}
+
+	cmd = mgmt_pending_add(sk, op, hdev, data, len);
+	if (!cmd) {
+		status = MGMT_STATUS_NO_RESOURCES;
+		goto unlock;
+	}
+
+	cmd->user_data = m;
+	err = hci_cmd_sync_queue(hdev, mgmt_add_adv_patterns_monitor_sync, cmd,
+				 mgmt_add_adv_patterns_monitor_complete);
+	if (err) {
+		if (err == -ENOMEM)
+			status = MGMT_STATUS_NO_RESOURCES;
+		else
+			status = MGMT_STATUS_FAILED;
+
+		mgmt_pending_remove(cmd);
+		goto unlock;
+	}
 
 	hci_dev_unlock(hdev);
 
-done:
-	bt_dev_dbg(hdev, "add monitor %d complete, status %u", m->handle,
-		   status);
+	return 0;
 
-	if (status)
-		return mgmt_cmd_status(sk, hdev->id, op, status);
-
-	return mgmt_cmd_complete(sk, hdev->id, op, MGMT_STATUS_SUCCESS, &rp,
-				 sizeof(rp));
+unlock:
+	hci_free_adv_monitor(hdev, m);
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, op, status);
 }
 
 static void parse_adv_monitor_rssi(struct adv_monitor *m,
@@ -4741,7 +4790,7 @@ static int add_adv_patterns_monitor(struct sock *sk, struct hci_dev *hdev,
 {
 	struct mgmt_cp_add_adv_patterns_monitor *cp = data;
 	struct adv_monitor *m = NULL;
-	int status = MGMT_STATUS_SUCCESS;
+	u8 status = MGMT_STATUS_SUCCESS;
 	size_t expected_size = sizeof(*cp);
 
 	BT_DBG("request for %s", hdev->name);
@@ -4767,14 +4816,10 @@ static int add_adv_patterns_monitor(struct sock *sk, struct hci_dev *hdev,
 
 	parse_adv_monitor_rssi(m, NULL);
 	status = parse_adv_monitor_pattern(m, cp->pattern_count, cp->patterns);
-	if (status)
-		goto done;
-
-	status = __add_adv_patterns_monitor(sk, hdev, m, data, len,
-					    MGMT_OP_ADD_ADV_PATTERNS_MONITOR);
 
 done:
-	return status;
+	return __add_adv_patterns_monitor(sk, hdev, m, status, data, len,
+					  MGMT_OP_ADD_ADV_PATTERNS_MONITOR);
 }
 
 static int add_adv_patterns_monitor_rssi(struct sock *sk, struct hci_dev *hdev,
@@ -4782,7 +4827,7 @@ static int add_adv_patterns_monitor_rssi(struct sock *sk, struct hci_dev *hdev,
 {
 	struct mgmt_cp_add_adv_patterns_monitor_rssi *cp = data;
 	struct adv_monitor *m = NULL;
-	int status = MGMT_STATUS_SUCCESS;
+	u8 status = MGMT_STATUS_SUCCESS;
 	size_t expected_size = sizeof(*cp);
 
 	BT_DBG("request for %s", hdev->name);
@@ -4808,29 +4853,59 @@ static int add_adv_patterns_monitor_rssi(struct sock *sk, struct hci_dev *hdev,
 
 	parse_adv_monitor_rssi(m, &cp->rssi);
 	status = parse_adv_monitor_pattern(m, cp->pattern_count, cp->patterns);
-	if (status)
-		goto done;
-
-	status = __add_adv_patterns_monitor(sk, hdev, m, data, len,
-					 MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI);
 
 done:
-	return status;
+	return __add_adv_patterns_monitor(sk, hdev, m, status, data, len,
+					 MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI);
+}
+
+static void mgmt_remove_adv_monitor_complete(struct hci_dev *hdev,
+					     void *data, int status)
+{
+	struct mgmt_rp_remove_adv_monitor rp;
+	struct mgmt_pending_cmd *cmd = data;
+	struct mgmt_cp_remove_adv_monitor *cp = cmd->param;
+
+	hci_dev_lock(hdev);
+
+	rp.monitor_handle = cp->monitor_handle;
+
+	if (!status)
+		hci_update_passive_scan(hdev);
+
+	mgmt_cmd_complete(cmd->sk, cmd->index, cmd->opcode,
+			  mgmt_status(status), &rp, sizeof(rp));
+	mgmt_pending_remove(cmd);
+
+	hci_dev_unlock(hdev);
+	bt_dev_dbg(hdev, "remove monitor %d complete, status %d",
+		   rp.monitor_handle, status);
+}
+
+static int mgmt_remove_adv_monitor_sync(struct hci_dev *hdev, void *data)
+{
+	struct mgmt_pending_cmd *cmd = data;
+	struct mgmt_cp_remove_adv_monitor *cp = cmd->param;
+	u16 handle = __le16_to_cpu(cp->monitor_handle);
+
+	if (!handle)
+		return hci_remove_all_adv_monitor(hdev);
+
+	return hci_remove_single_adv_monitor(hdev, handle);
 }
 
 static int remove_adv_monitor(struct sock *sk, struct hci_dev *hdev,
 			      void *data, u16 len)
 {
-	struct mgmt_cp_remove_adv_monitor *cp = data;
-	struct mgmt_rp_remove_adv_monitor rp;
 	struct mgmt_pending_cmd *cmd;
-	u16 handle = __le16_to_cpu(cp->monitor_handle);
-	int err, status = MGMT_STATUS_SUCCESS;
+	int err, status;
 
 	hci_dev_lock(hdev);
 
 	if (pending_find(MGMT_OP_SET_LE, hdev) ||
-	    pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev)) {
+	    pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev) ||
+	    pending_find(MGMT_OP_ADD_ADV_PATTERNS_MONITOR, hdev) ||
+	    pending_find(MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI, hdev)) {
 		status = MGMT_STATUS_BUSY;
 		goto unlock;
 	}
@@ -4841,33 +4916,24 @@ static int remove_adv_monitor(struct sock *sk, struct hci_dev *hdev,
 		goto unlock;
 	}
 
-	hci_dev_unlock(hdev);
-
-	if (handle)
-		err = hci_remove_single_adv_monitor(hdev, handle);
-	else
-		err = hci_remove_all_adv_monitor(hdev);
-
-	hci_dev_lock(hdev);
-
-	mgmt_pending_remove(cmd);
+	err = hci_cmd_sync_queue(hdev, mgmt_remove_adv_monitor_sync, cmd,
+				 mgmt_remove_adv_monitor_complete);
 
 	if (err) {
-		if (err == -ENOENT || err == -EINVAL)
-			status = MGMT_STATUS_INVALID_INDEX;
+		mgmt_pending_remove(cmd);
+
+		if (err == -ENOMEM)
+			status = MGMT_STATUS_NO_RESOURCES;
 		else
 			status = MGMT_STATUS_FAILED;
 
+		mgmt_pending_remove(cmd);
 		goto unlock;
 	}
 
-	rp.monitor_handle = cp->monitor_handle;
-	hci_update_passive_scan(hdev);
-
 	hci_dev_unlock(hdev);
 
-	return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_REMOVE_ADV_MONITOR,
-				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
+	return 0;
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -6612,11 +6678,6 @@ static void get_conn_info_complete(struct hci_dev *hdev, void *data, int err)
 	mgmt_cmd_complete(cmd->sk, cmd->index, MGMT_OP_GET_CONN_INFO, status,
 			  &rp, sizeof(rp));
 
-	if (conn) {
-		hci_conn_drop(conn);
-		hci_conn_put(conn);
-	}
-
 	mgmt_pending_free(cmd);
 }
 
@@ -6635,15 +6696,10 @@ static int get_conn_info_sync(struct hci_dev *hdev, void *data)
 	else
 		conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, &cp->addr.bdaddr);
 
-	if (!conn || conn != cmd->user_data || conn->state != BT_CONNECTED) {
-		if (cmd->user_data) {
-			hci_conn_drop(cmd->user_data);
-			hci_conn_put(cmd->user_data);
-			cmd->user_data = NULL;
-		}
+	if (!conn || conn->state != BT_CONNECTED)
 		return MGMT_STATUS_NOT_CONNECTED;
-	}
 
+	cmd->user_data = conn;
 	handle = cpu_to_le16(conn->handle);
 
 	/* Refresh RSSI each time */
@@ -6725,8 +6781,6 @@ static int get_conn_info(struct sock *sk, struct hci_dev *hdev, void *data,
 		if (!cmd) {
 			err = -ENOMEM;
 		} else {
-			hci_conn_hold(conn);
-			cmd->user_data = hci_conn_get(conn);
 			err = hci_cmd_sync_queue(hdev, get_conn_info_sync,
 						 cmd, get_conn_info_complete);
 		}
@@ -6779,8 +6833,6 @@ static void get_clock_info_complete(struct hci_dev *hdev, void *data, int err)
 	if (conn) {
 		rp.piconet_clock = cpu_to_le32(conn->clock);
 		rp.accuracy = cpu_to_le16(conn->clock_accuracy);
-		hci_conn_drop(conn);
-		hci_conn_put(conn);
 	}
 
 complete:
@@ -6795,30 +6847,21 @@ static int get_clock_info_sync(struct hci_dev *hdev, void *data)
 	struct mgmt_pending_cmd *cmd = data;
 	struct mgmt_cp_get_clock_info *cp = cmd->param;
 	struct hci_cp_read_clock hci_cp;
-	struct hci_conn *conn = cmd->user_data;
-	int err;
+	struct hci_conn *conn;
 
 	memset(&hci_cp, 0, sizeof(hci_cp));
-	err = hci_read_clock_sync(hdev, &hci_cp);
+	hci_read_clock_sync(hdev, &hci_cp);
 
-	if (conn) {
-		/* Make sure connection still exists */
-		conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK,
-					       &cp->addr.bdaddr);
+	/* Make sure connection still exists */
+	conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &cp->addr.bdaddr);
+	if (!conn || conn->state != BT_CONNECTED)
+		return MGMT_STATUS_NOT_CONNECTED;
 
-		if (conn && conn == cmd->user_data &&
-		    conn->state == BT_CONNECTED) {
-			hci_cp.handle = cpu_to_le16(conn->handle);
-			hci_cp.which = 0x01; /* Piconet clock */
-			err = hci_read_clock_sync(hdev, &hci_cp);
-		} else if (cmd->user_data) {
-			hci_conn_drop(cmd->user_data);
-			hci_conn_put(cmd->user_data);
-			cmd->user_data = NULL;
-		}
-	}
+	cmd->user_data = conn;
+	hci_cp.handle = cpu_to_le16(conn->handle);
+	hci_cp.which = 0x01; /* Piconet clock */
 
-	return err;
+	return hci_read_clock_sync(hdev, &hci_cp);
 }
 
 static int get_clock_info(struct sock *sk, struct hci_dev *hdev, void *data,
@@ -6877,10 +6920,6 @@ static int get_clock_info(struct sock *sk, struct hci_dev *hdev, void *data,
 
 		if (cmd)
 			mgmt_pending_free(cmd);
-
-	} else if (conn) {
-		hci_conn_hold(conn);
-		cmd->user_data = hci_conn_get(conn);
 	}
 
 
@@ -7048,8 +7087,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
 						addr_type);
 		if (params)
-			bitmap_to_arr32(&current_flags, params->flags,
-					__HCI_CONN_NUM_FLAGS);
+			current_flags = params->flags;
 	}
 
 	err = hci_cmd_sync_queue(hdev, add_device_sync, NULL, NULL);
@@ -7058,8 +7096,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 
 added:
 	device_added(sk, hdev, &cp->addr.bdaddr, cp->addr.type, cp->action);
-	bitmap_to_arr32(&supported_flags, hdev->conn_flags,
-			__HCI_CONN_NUM_FLAGS);
+	supported_flags = hdev->conn_flags;
 	device_flags_changed(NULL, hdev, &cp->addr.bdaddr, cp->addr.type,
 			     supported_flags, current_flags);
 

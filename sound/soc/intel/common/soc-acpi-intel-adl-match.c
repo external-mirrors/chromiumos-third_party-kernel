@@ -372,7 +372,7 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_adl_machines[] = {
 		.drv_name = "adl_mx98360a_cs4242",
 		.machine_quirk = snd_soc_acpi_codec_list,
 		.quirk_data = &adl_max98360a_amp,
-		.sof_tplg_filename = "sof-adl-max98360a-rt5682.tplg",
+		.sof_tplg_filename = "sof-adl-max98360a-cs42l42.tplg",
 	},
 	/* place amp-only boards in the end of table */
 	{

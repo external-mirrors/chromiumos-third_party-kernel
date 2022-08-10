@@ -1305,7 +1305,12 @@ void dcn10_init_pipes(struct dc *dc, struct dc_state *context)
 		uint32_t opp_id_src1 = OPP_ID_INVALID;
 
 		// Step 1: To find out which OPTC is running & OPTC DSC is ON
-		for (i = 0; i < dc->res_pool->res_cap->num_timing_generator; i++) {
+		// We can't use res_pool->res_cap->num_timing_generator to check
+		// Because it records display pipes default setting built in driver,
+		// not display pipes of the current chip.
+		// Some ASICs would be fused display pipes less than the default setting.
+		// In dcnxx_resource_construct function, driver would obatin real information.
+		for (i = 0; i < dc->res_pool->timing_generator_count; i++) {
 			uint32_t optc_dsc_state = 0;
 			struct timing_generator *tg = dc->res_pool->timing_generators[i];
 
@@ -1533,25 +1538,22 @@ void dcn10_init_hw(struct dc *dc)
 void dcn10_power_down_on_boot(struct dc *dc)
 {
 	struct dc_link *edp_links[MAX_NUM_EDP];
-	struct dc_link *edp_link;
+	struct dc_link *edp_link = NULL;
 	int edp_num;
 	int i = 0;
 
 	get_edp_links(dc, edp_links, &edp_num);
+	if (edp_num)
+		edp_link = edp_links[0];
 
-	if (edp_num) {
-		for (i = 0; i < edp_num; i++) {
-			edp_link = edp_links[i];
-			if (edp_link->link_enc->funcs->is_dig_enabled &&
-					edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc) &&
-					dc->hwseq->funcs.edp_backlight_control &&
-					dc->hwss.power_down &&
-					dc->hwss.edp_power_control) {
-				dc->hwseq->funcs.edp_backlight_control(edp_link, false);
-				dc->hwss.power_down(dc);
-				dc->hwss.edp_power_control(edp_link, false);
-			}
-		}
+	if (edp_link && edp_link->link_enc->funcs->is_dig_enabled &&
+			edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc) &&
+			dc->hwseq->funcs.edp_backlight_control &&
+			dc->hwss.power_down &&
+			dc->hwss.edp_power_control) {
+		dc->hwseq->funcs.edp_backlight_control(edp_link, false);
+		dc->hwss.power_down(dc);
+		dc->hwss.edp_power_control(edp_link, false);
 	} else {
 		for (i = 0; i < dc->link_count; i++) {
 			struct dc_link *link = dc->links[i];
@@ -3215,8 +3217,12 @@ void dcn10_update_dchub(struct dce_hwseq *hws, struct dchub_init_data *dh_data)
 static bool dcn10_can_pipe_disable_cursor(struct pipe_ctx *pipe_ctx)
 {
 	struct pipe_ctx *test_pipe;
-	const struct rect *r1 = &pipe_ctx->plane_res.scl_data.recout, *r2;
+	const struct scaler_data *scl_data = &pipe_ctx->plane_res.scl_data;
+	const struct rect *r1 = &scl_data->recout, *r2;
 	int r1_r = r1->x + r1->width, r1_b = r1->y + r1->height, r2_r, r2_b;
+	int cur_layer = pipe_ctx->plane_state->layer_index;
+	bool upper_pipe_exists = false;
+	struct fixed31_32 one = dc_fixpt_from_int(1);
 
 	/**
 	 * Disable the cursor if there's another pipe above this with a
@@ -3234,7 +3240,16 @@ static bool dcn10_can_pipe_disable_cursor(struct pipe_ctx *pipe_ctx)
 
 		if (r1->x >= r2->x && r1->y >= r2->y && r1_r <= r2_r && r1_b <= r2_b)
 			return true;
+
+		if (test_pipe->plane_state->layer_index < cur_layer)
+			upper_pipe_exists = true;
 	}
+
+	// if plane scaled, assume an upper plane can handle cursor if it exists.
+	if (upper_pipe_exists &&
+			(scl_data->ratios.horz.value != one.value ||
+			scl_data->ratios.vert.value != one.value))
+		return true;
 
 	return false;
 }

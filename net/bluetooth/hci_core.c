@@ -1877,6 +1877,7 @@ void hci_free_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
 
 /* Assigns handle to a monitor, and if offloading is supported and power is on,
  * also attempts to forward the request to the controller.
+ * This function requires the caller holds hci_req_sync_lock.
  */
 int hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
 {
@@ -1911,9 +1912,7 @@ int hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
 		break;
 
 	case HCI_ADV_MONITOR_EXT_MSFT:
-		hci_req_sync_lock(hdev);
 		status = msft_add_monitor_pattern(hdev, monitor);
-		hci_req_sync_unlock(hdev);
 		bt_dev_dbg(hdev, "%s add monitor %d msft status %d", hdev->name,
 			   monitor->handle, status);
 		break;
@@ -1924,6 +1923,7 @@ int hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
 
 /* Attempts to tell the controller and free the monitor. If somehow the
  * controller doesn't have a corresponding handle, remove anyway.
+ * This function requires the caller holds hci_req_sync_lock.
  */
 static int hci_remove_adv_monitor(struct hci_dev *hdev,
 				  struct adv_monitor *monitor)
@@ -1932,27 +1932,33 @@ static int hci_remove_adv_monitor(struct hci_dev *hdev,
 
 	switch (hci_get_adv_monitor_offload_ext(hdev)) {
 	case HCI_ADV_MONITOR_EXT_NONE: /* also goes here when powered off */
-		hci_free_adv_monitor(hdev, monitor);
 		bt_dev_dbg(hdev, "%s remove monitor %d status %d", hdev->name,
 			   monitor->handle, status);
-		break;
+		goto free_monitor;
 
 	case HCI_ADV_MONITOR_EXT_MSFT:
-		hci_req_sync_lock(hdev);
 		status = msft_remove_monitor(hdev, monitor);
-		hci_req_sync_unlock(hdev);
 		bt_dev_dbg(hdev, "%s remove monitor %d msft status %d",
 			   hdev->name, monitor->handle, status);
 		break;
 	}
 
+	/* In case no matching handle registered, just free the monitor */
+	if (status == -ENOENT)
+		goto free_monitor;
+
+	return status;
+
+free_monitor:
 	if (status == -ENOENT)
 		bt_dev_warn(hdev, "Removing monitor with no matching handle %d",
 			    monitor->handle);
+	hci_free_adv_monitor(hdev, monitor);
 
 	return status;
 }
 
+/* This function requires the caller holds hci_req_sync_lock */
 int hci_remove_single_adv_monitor(struct hci_dev *hdev, u16 handle)
 {
 	struct adv_monitor *monitor = idr_find(&hdev->adv_monitors_idr, handle);
@@ -1963,6 +1969,7 @@ int hci_remove_single_adv_monitor(struct hci_dev *hdev, u16 handle)
 	return hci_remove_adv_monitor(hdev, monitor);
 }
 
+/* This function requires the caller holds hci_req_sync_lock */
 int hci_remove_all_adv_monitor(struct hci_dev *hdev)
 {
 	struct adv_monitor *monitor;
@@ -2117,7 +2124,7 @@ int hci_bdaddr_list_add_with_flags(struct list_head *list, bdaddr_t *bdaddr,
 
 	bacpy(&entry->bdaddr, bdaddr);
 	entry->bdaddr_type = type;
-	bitmap_from_u64(entry->flags, flags);
+	entry->flags = flags;
 
 	list_add(&entry->list, list);
 
@@ -2597,7 +2604,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	 * callback.
 	 */
 	if (hdev->wakeup)
-		set_bit(HCI_CONN_FLAG_REMOTE_WAKEUP, hdev->conn_flags);
+		hdev->conn_flags |= HCI_CONN_FLAG_REMOTE_WAKEUP;
 
 	hci_sock_dev_event(hdev, HCI_DEV_REG);
 	hci_dev_hold(hdev);
@@ -3775,15 +3782,7 @@ static void hci_rx_work(struct work_struct *work)
 		 */
 		if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) &&
 		    !test_bit(HCI_INIT, &hdev->flags)) {
-			/* If the device has been opened in HCI_USER_CHANNEL,
-			 * we still want to process event packets for connection
-			 * management. We need to keep track of how many
-			 * connections are up and notify the driver.
-			 */
-			if (hci_skb_pkt_type(skb) == HCI_EVENT_PKT)
-				hci_handle_userchannel_packet(hdev, skb);
-			else
-				kfree_skb(skb);
+			kfree_skb(skb);
 			continue;
 		}
 

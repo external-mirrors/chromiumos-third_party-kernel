@@ -5508,6 +5508,37 @@ static void hci_disconn_phylink_complete_evt(struct hci_dev *hdev, void *data,
 #define QUALITY_SPEC_INTEL_TELEMETRY	0x1
 #define QUALITY_SPEC_AOSP_BQR		0x2
 
+static bool quality_report_evt(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	if (aosp_is_quality_report_evt(skb)) {
+		if (aosp_has_quality_report(hdev) &&
+		    aosp_pull_quality_report_data(skb))
+			mgmt_quality_report(hdev, skb, QUALITY_SPEC_AOSP_BQR);
+	} else if (hdev->is_quality_report_evt &&
+		hdev->is_quality_report_evt(skb)) {
+		if (hdev->set_quality_report &&
+		    hdev->pull_quality_report_data(skb))
+			mgmt_quality_report(hdev, skb,
+					    QUALITY_SPEC_INTEL_TELEMETRY);
+	} else {
+		return false;
+	}
+
+	return true;
+}
+
+static void hci_vendor_evt(struct hci_dev *hdev, void *data,
+			   struct sk_buff *skb)
+{
+	/* Every specification must have a well-defined condition
+	 * to determine if an event meets the specification.
+	 * The skb is consumed by a specification only if the event
+	 * meets the specification.
+	 */
+	if (!quality_report_evt(hdev, skb))
+		msft_vendor_evt(hdev, data, skb);
+}
+
 static void le_conn_update_addr(struct hci_conn *conn, bdaddr_t *bdaddr,
 				u8 bdaddr_type, bdaddr_t *local_rpa)
 {
@@ -6900,7 +6931,7 @@ static const struct hci_ev {
 	HCI_EV(HCI_EV_NUM_COMP_BLOCKS, hci_num_comp_blocks_evt,
 	       sizeof(struct hci_ev_num_comp_blocks)),
 	/* [0xff = HCI_EV_VENDOR] */
-	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
+	HCI_EV_VL(HCI_EV_VENDOR, hci_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
 };
 
 static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
@@ -6938,72 +6969,6 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 			     req_complete_skb);
 	else
 		ev->func(hdev, data, skb);
-}
-
-void hci_handle_userchannel_packet(struct hci_dev *hdev, struct sk_buff *skb)
-{
-	struct hci_event_hdr *hdr = (void *)skb->data;
-	struct hci_ev_conn_complete *cc_ev;
-	struct hci_ev_sync_conn_complete *scc_ev;
-	struct hci_ev_disconn_complete *dcc_ev;
-
-	struct hci_conn *conn;
-	u8 event = hdr->evt;
-	int conn_type;
-
-	skb_pull(skb, HCI_EVENT_HDR_SIZE);
-
-	switch (event) {
-	case HCI_EV_CONN_COMPLETE:
-		cc_ev = (void *)skb->data;
-		if (!cc_ev->status) {
-			conn_type = (cc_ev->link_type == ACL_LINK) ? ACL_LINK :
-								     SCO_LINK;
-
-			conn = hci_conn_hash_lookup_ba(hdev, conn_type,
-						       &cc_ev->bdaddr);
-			if (!conn) {
-				conn = hci_conn_add(hdev, conn_type,
-						    &cc_ev->bdaddr, 0);
-			}
-
-			if (conn) {
-				conn->handle = __le16_to_cpu(cc_ev->handle);
-				conn->type = conn_type;
-				bt_dev_dbg(hdev, "%d handle(%d) type (%d)",
-					   event, conn->handle, conn->type);
-
-				if (conn->type == SCO_LINK && hdev->notify)
-					hdev->notify(hdev, HCI_NOTIFY_ENABLE_SCO_CVSD);
-			}
-		}
-		break;
-	case HCI_EV_SYNC_CONN_COMPLETE:
-		scc_ev = (void *)skb->data;
-		if (!scc_ev->status) {
-			conn = hci_conn_hash_lookup_ba(hdev, SCO_LINK,
-						       &scc_ev->bdaddr);
-			if (!conn) {
-				conn = hci_conn_add(hdev, SCO_LINK,
-						    &scc_ev->bdaddr, 0);
-			}
-
-			if (conn && hdev->notify)
-				hdev->notify(hdev, HCI_NOTIFY_ENABLE_SCO_CVSD);
-		}
-		break;
-	case HCI_EV_DISCONN_COMPLETE:
-		dcc_ev = (void *)skb->data;
-		conn = hci_conn_hash_lookup_handle(hdev,
-						   __le16_to_cpu(dcc_ev->handle));
-		if (conn)
-			hci_conn_del(conn);
-		break;
-	default:
-		break;
-	}
-
-	kfree_skb(skb);
 }
 
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
