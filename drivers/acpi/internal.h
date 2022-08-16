@@ -189,6 +189,20 @@ struct acpi_ec {
 	unsigned int queries_in_progress;
 	bool busy_polling;
 	unsigned int polling_guard;
+	struct list_head op_regions;
+};
+
+#define ACPI_EC_OP_REGION_FILENAME_LEN	19	/* Max: acpi_ec_opreg_XXXX */
+
+struct acpi_ec_op_region {	/* OpRegion info, list on acpi_ec.op_regions */
+	struct device_attribute dattr;
+	struct list_head list;
+	u64 address;
+	u32 length;
+	u16 num;
+	u8 space_id;
+	char name[ACPI_PATH_SEGMENT_LENGTH];
+	char filename[ACPI_EC_OP_REGION_FILENAME_LEN];
 };
 
 extern struct acpi_ec *first_ec;

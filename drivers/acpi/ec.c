@@ -32,6 +32,8 @@
 #include <asm/io.h>
 
 #include "internal.h"
+#include "acpica/accommon.h"
+#include "acpica/acnamesp.h"
 
 #define ACPI_EC_CLASS			"embedded_controller"
 #define ACPI_EC_DEVICE_NAME		"Embedded Controller"
@@ -179,6 +181,10 @@ struct acpi_ec *first_ec;
 EXPORT_SYMBOL(first_ec);
 
 static struct acpi_ec *boot_ec;
+static struct acpi_device *first_ec_device;
+static struct attribute *acpi_ec_attrs_static[];
+static struct attribute_group acpi_ec_attr_group_static;
+static struct attribute_group acpi_ec_attr_group_dynamic;
 static bool boot_ec_is_ecdt = false;
 static struct workqueue_struct *ec_wq;
 static struct workqueue_struct *ec_query_wq;
@@ -1352,11 +1358,21 @@ ec_parse_io_ports(struct acpi_resource *resource, void *context);
 
 static void acpi_ec_free(struct acpi_ec *ec)
 {
-	if (first_ec == ec)
+	struct acpi_ec_op_region *opr, *nxt;
+
+	if (first_ec == ec) {
 		first_ec = NULL;
+		first_ec_device = NULL;
+	}
 	if (boot_ec == ec)
 		boot_ec = NULL;
+	list_for_each_entry_safe(opr, nxt, &ec->op_regions, list) {
+		list_del(&opr->list);
+		kfree(opr);
+	}
 	kfree(ec);
+	kfree(acpi_ec_attr_group_dynamic.attrs);
+	acpi_ec_attr_group_dynamic.attrs = NULL;
 }
 
 static struct acpi_ec *acpi_ec_alloc(void)
@@ -1368,6 +1384,7 @@ static struct acpi_ec *acpi_ec_alloc(void)
 	mutex_init(&ec->mutex);
 	init_waitqueue_head(&ec->wait);
 	INIT_LIST_HEAD(&ec->list);
+	INIT_LIST_HEAD(&ec->op_regions);
 	spin_lock_init(&ec->lock);
 	INIT_WORK(&ec->work, acpi_ec_event_handler);
 	ec->timestamp = jiffies;
@@ -1382,7 +1399,7 @@ static acpi_status
 acpi_ec_register_query_methods(acpi_handle handle, u32 level,
 			       void *context, void **return_value)
 {
-	char node_name[5];
+	char node_name[ACPI_PATH_SEGMENT_LENGTH];
 	struct acpi_buffer buffer = { sizeof(node_name), node_name };
 	struct acpi_ec *ec = context;
 	int value = 0;
@@ -1594,6 +1611,8 @@ static int acpi_ec_setup(struct acpi_ec *ec, struct acpi_device *device)
 	/* First EC capable of handling transactions */
 	if (!first_ec)
 		first_ec = ec;
+	if (device && !first_ec_device)
+		first_ec_device = device;
 
 	pr_info("EC_CMD/EC_SC=0x%lx, EC_DATA=0x%lx\n", ec->command_addr,
 		ec->data_addr);
@@ -2211,6 +2230,167 @@ static const struct dmi_system_id acpi_ec_no_wakeup[] = {
 	{ },
 };
 
+/* --------------------------------------------------------------------------
+ *                           Sysfs Attributes
+ * --------------------------------------------------------------------------
+ */
+/*
+ * While the ACPI manual Table 12-349 says that EC0._CRS can return either port
+ * I/O or memory mapped I/O addresses, ec_parse_io_ports() assumes they will
+ * always be port I/O.  So shall we, for now.
+ * Also assumes only one EC device, but can be extended for multiples when one
+ * exists.
+ */
+
+static ssize_t acpi_ec_cmd_addr_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", first_ec->command_addr);
+}
+static DEVICE_ATTR_RO(acpi_ec_cmd_addr);
+
+static ssize_t acpi_ec_data_addr_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", first_ec->data_addr);
+}
+static DEVICE_ATTR_RO(acpi_ec_data_addr);
+
+static ssize_t acpi_ec_gpe_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", first_ec->gpe);
+}
+static DEVICE_ATTR_RO(acpi_ec_gpe);
+
+static ssize_t acpi_ec_irq_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", first_ec->irq);
+}
+static DEVICE_ATTR_RO(acpi_ec_irq);
+
+static ssize_t acpi_ec_global_lock_show(struct device *dev, struct device_attribute *attr,
+					char *buf)
+{
+	return sysfs_emit(buf, "%d\n", first_ec->global_lock);
+}
+static DEVICE_ATTR_RO(acpi_ec_global_lock);
+
+static struct attribute *acpi_ec_attrs_static[] = {
+	&dev_attr_acpi_ec_cmd_addr.attr,
+	&dev_attr_acpi_ec_data_addr.attr,
+	&dev_attr_acpi_ec_gpe.attr,
+	&dev_attr_acpi_ec_irq.attr,
+	&dev_attr_acpi_ec_global_lock.attr,
+	NULL
+};
+
+static struct attribute_group acpi_ec_attr_group_static = {
+	.attrs = acpi_ec_attrs_static,
+};
+
+static struct attribute_group acpi_ec_attr_group_dynamic = {
+	.attrs = NULL,
+};
+
+static ssize_t acpi_ec_op_region_show(struct device *dev, struct device_attribute *attr,
+					char *buf)
+{
+	struct acpi_ec_op_region *opr = container_of(attr, struct acpi_ec_op_region, dattr);
+
+	if (opr->space_id < ACPI_NUM_PREDEFINED_REGIONS)
+		return sysfs_emit(buf, "%s %lu %u %s\n",
+					acpi_gbl_region_types[opr->space_id],
+					opr->address, opr->length, opr->name);
+	else
+		return sysfs_emit(buf, "SpaceID=%d %lu %u %s\n",
+					opr->space_id, opr->address, opr->length, opr->name);
+}
+
+/* Callback function for acpi_walk_namespace to find EC Operation Regions.
+ * Since they are optional, it always returns AE_OK.
+ */
+static acpi_status
+acpi_ec_find_op_regions(acpi_handle handle, u32 level,
+			       void *context, void **return_value)
+{
+	struct acpi_ec *ec = context;
+	struct acpi_namespace_node *ns;
+	struct acpi_ec_op_region *opr;
+	union acpi_operand_object *opo;
+	u16 *retp = (u16 *)return_value;
+	acpi_status status;
+	char node_name[ACPI_PATH_SEGMENT_LENGTH];
+	struct acpi_buffer buffer = { sizeof(node_name), node_name };
+
+	status = acpi_get_name(handle, ACPI_SINGLE_NAME, &buffer);
+	if (!ACPI_SUCCESS(status)) {
+		pr_err("%s: region has no name!  lvl=%u\n", __func__, level);
+		return AE_OK;
+	}
+	ns = acpi_ns_validate_handle(handle);
+	if (!ns) {
+		pr_err("%s: bad handle!  lvl=%u, name=%s, h=0x%lX\n",
+			__func__, level, node_name, handle);
+		return AE_OK;
+	}
+	opo = ns->object;
+	if (!opo) {
+		pr_err("%s: bad opo=0x%lX!  lvl=%u, name=%s\n", __func__, opo, level, node_name);
+		return AE_OK;
+	}
+	opr = kzalloc(sizeof(*opr), GFP_KERNEL);
+	if (opr) {
+		sysfs_attr_init(opr->dattr.attr);
+		opr->dattr.attr.mode = 0444;
+		opr->dattr.show = acpi_ec_op_region_show;
+		opr->space_id = opo->region.space_id;
+		opr->address  = opo->region.address;
+		opr->length   = opo->region.length;
+		opr->num      = *retp;
+		*retp += 1;
+		strncpy(opr->name, node_name, sizeof(opr->name));
+		opr->dattr.attr.name = opr->filename;
+		snprintf(opr->filename, sizeof(opr->filename),
+			"acpi_ec_opreg_%02X", opr->num);
+		list_add_tail(&opr->list, &ec->op_regions);
+	}
+	return AE_OK;
+}
+
+static int acpi_ec_dev_create_files(struct acpi_ec *ec, struct acpi_device *ec_dev)
+{
+	struct acpi_ec_op_region *opr;
+	struct attribute **attrs;
+	int err, i;
+	u16 op_reg_cnt;
+
+	if (unlikely(!ec || !ec_dev))
+		return -ENODEV;
+
+	err = sysfs_create_group(&ec_dev->dev.kobj, &acpi_ec_attr_group_static);
+	if (unlikely(err)) {
+		pr_err("Can't make static ACPI EC sysfs entries: err=%d.\n", err);
+		return err;
+	}
+
+	op_reg_cnt = 0;
+	acpi_walk_namespace(ACPI_TYPE_REGION, ec->handle, 4,
+			    acpi_ec_find_op_regions,
+			    NULL, ec, (void **)&op_reg_cnt);
+
+	attrs = kmalloc_array(op_reg_cnt + 1, sizeof(struct attribute *),
+				GFP_KERNEL | __GFP_ZERO);
+	if (!attrs)
+		return -ENOMEM;
+	i = 0;
+	list_for_each_entry(opr, &ec->op_regions, list)
+		attrs[i++] = &opr->dattr.attr;
+
+	acpi_ec_attr_group_dynamic.attrs = attrs;
+	err = sysfs_create_group(&ec_dev->dev.kobj, &acpi_ec_attr_group_dynamic);
+	if (unlikely(err))
+		pr_err("Can't make dynamic ACPI EC sysfs entries: err=%d.\n", err);
+	return err;
+}
+
 void __init acpi_ec_init(void)
 {
 	int result;
@@ -2237,6 +2417,10 @@ void __init acpi_ec_init(void)
 	acpi_bus_register_driver(&acpi_ec_driver);
 
 	acpi_ec_ecdt_start();
+
+	result = acpi_ec_dev_create_files(first_ec, first_ec_device);
+	if (result)
+		pr_debug("Can't create EC I/O sysfs entries. err=%d\n", result);
 }
 
 /* EC driver currently not unloadable */
