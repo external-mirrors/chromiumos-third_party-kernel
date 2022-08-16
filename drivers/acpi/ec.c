@@ -348,6 +348,8 @@ static inline bool acpi_ec_is_gpe_raised(struct acpi_ec *ec)
 
 static inline void acpi_ec_enable_gpe(struct acpi_ec *ec, bool open)
 {
+	if (manatee_hyp_domain())
+		return;	/* ManaTEE hypervisor does not use EC GPE */
 	if (open)
 		acpi_enable_gpe(NULL, ec->gpe);
 	else {
@@ -367,6 +369,8 @@ static inline void acpi_ec_enable_gpe(struct acpi_ec *ec, bool open)
 
 static inline void acpi_ec_disable_gpe(struct acpi_ec *ec, bool close)
 {
+	if (manatee_hyp_domain())
+		return;	/* ManaTEE hypervisor does not use EC GPE */
 	if (close)
 		acpi_disable_gpe(NULL, ec->gpe);
 	else {
@@ -560,7 +564,7 @@ static void acpi_ec_disable_event(struct acpi_ec *ec)
 void acpi_ec_flush_work(void)
 {
 	/* Without ec_wq there is nothing to flush. */
-	if (!ec_wq)
+	if (!ec_wq || manatee_hyp_domain())
 		return;
 
 	__acpi_ec_flush_work();
@@ -822,6 +826,8 @@ static int acpi_ec_transaction(struct acpi_ec *ec, struct transaction *t)
 	int status;
 	u32 glk;
 
+	if (manatee_hyp_domain())
+		return -ENODEV;		/* ManaTEE hypervisor doesn't own EC. */
 	if (!ec || (!t) || (t->wlen && !t->wdata) || (t->rlen && !t->rdata))
 		return -EINVAL;
 	if (t->rdata)
@@ -1474,6 +1480,9 @@ static int ec_install_handlers(struct acpi_ec *ec, struct acpi_device *device)
 {
 	acpi_status status;
 
+	if (manatee_hyp_domain())
+		return 0;	/* If passing EC to VM, don't install handlers. */
+
 	acpi_ec_start(ec, false);
 
 	if (!test_bit(EC_FLAGS_EC_HANDLER_INSTALLED, &ec->flags)) {
@@ -1654,13 +1663,15 @@ static int acpi_ec_add(struct acpi_device *device)
 
 	device->driver_data = ec;
 
-	ret = !!request_region(ec->data_addr, 1, "EC data");
-	WARN(!ret, "Could not request EC data io port 0x%lx", ec->data_addr);
-	ret = !!request_region(ec->command_addr, 1, "EC cmd");
-	WARN(!ret, "Could not request EC cmd io port 0x%lx", ec->command_addr);
+	if (!manatee_hyp_domain()) {
+		ret = !!request_region(ec->data_addr, 1, "EC data");
+		WARN(!ret, "Could not request EC data io port 0x%lx", ec->data_addr);
+		ret = !!request_region(ec->command_addr, 1, "EC cmd");
+		WARN(!ret, "Could not request EC cmd io port 0x%lx", ec->command_addr);
 
-	/* Reprobe devices depending on the EC */
-	acpi_dev_clear_dependencies(device);
+		/* Reprobe devices depending on the EC */
+		acpi_dev_clear_dependencies(device);
+	}
 
 	acpi_handle_debug(ec->handle, "enumerated.\n");
 	return 0;
@@ -1680,8 +1691,10 @@ static int acpi_ec_remove(struct acpi_device *device)
 		return -EINVAL;
 
 	ec = acpi_driver_data(device);
-	release_region(ec->data_addr, 1);
-	release_region(ec->command_addr, 1);
+	if (!manatee_hyp_domain()) {
+		release_region(ec->data_addr, 1);
+		release_region(ec->command_addr, 1);
+	}
 	device->driver_data = NULL;
 	if (ec != boot_ec) {
 		ec_remove_handlers(ec);
@@ -1729,10 +1742,6 @@ void __init acpi_ec_dsdt_probe(void)
 	struct acpi_ec *ec;
 	acpi_status status;
 	int ret;
-
-	/* ManaTEE hypervisor does not take control over EC driver */
-	if (manatee_hyp_domain())
-		return;
 
 	/*
 	 * If a platform has ECDT, there is no need to proceed as the
@@ -1935,10 +1944,6 @@ void __init acpi_ec_ecdt_probe(void)
 	struct acpi_ec *ec;
 	acpi_status status;
 	int ret;
-
-	/* ManaTEE hypervisor does not take control over EC driver */
-	if (manatee_hyp_domain())
-		return;
 
 	/* Generate a boot ec context. */
 	dmi_check_system(ec_dmi_table);
@@ -2210,13 +2215,14 @@ void __init acpi_ec_init(void)
 {
 	int result;
 
-	/* ManaTEE hypervisor does not take control over EC driver */
-	if (manatee_hyp_domain())
-		return;
-
-	result = acpi_ec_init_workqueues();
-	if (result)
-		return;
+	/* ManaTEE hypervisor doesn't take control of EC, so no WQ or PM. */
+	if (manatee_hyp_domain()) {
+		acpi_ec_driver.drv.pm = NULL;
+	} else {
+		result = acpi_ec_init_workqueues();
+		if (result)
+			return;
+	}
 
 	/*
 	 * Disable EC wakeup on following systems to prevent periodic
