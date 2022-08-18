@@ -548,7 +548,6 @@ static void recover_worker(struct kthread_work *work)
 	/* Record the crash state */
 	pm_runtime_get_sync(&gpu->pdev->dev);
 	msm_gpu_crashstate_capture(gpu, submit, comm, cmd);
-	pm_runtime_put_sync(&gpu->pdev->dev);
 
 	kfree(cmd);
 	kfree(comm);
@@ -595,6 +594,8 @@ static void recover_worker(struct kthread_work *work)
 			spin_unlock_irqrestore(&ring->submit_lock, flags);
 		}
 	}
+
+	pm_runtime_put_sync(&gpu->pdev->dev);
 
 	mutex_unlock(&gpu->lock);
 
