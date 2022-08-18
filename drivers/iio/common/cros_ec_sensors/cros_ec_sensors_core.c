@@ -527,11 +527,6 @@ const struct iio_chan_spec_ext_info cros_ec_sensors_limited_info[] = {
 		.shared = IIO_SHARED_BY_ALL,
 		.read = cros_ec_sensors_id
 	},
-	{
-		.name = "location",
-		.shared = IIO_SHARED_BY_ALL,
-		.read = cros_ec_sensors_loc
-	},
 	{ },
 };
 EXPORT_SYMBOL_GPL(cros_ec_sensors_limited_info);
