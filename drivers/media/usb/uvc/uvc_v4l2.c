@@ -253,7 +253,7 @@ static int uvc_v4l2_try_format(struct uvc_streaming *stream,
 	if (!video_is_registered(&stream->vdev)) {
 		mutex_unlock(&stream->mutex);
 		ret = -ENODEV;
-		goto done;
+		return ret;
 	}
 
 	if (stream->dev->quirks & UVC_QUIRK_PROBE_EXTRAFIELDS)
