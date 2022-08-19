@@ -1239,6 +1239,7 @@ struct smp_irk *hci_find_irk_by_rpa(struct hci_dev *hdev, bdaddr_t *rpa)
 	list_for_each_entry_rcu(irk, &hdev->identity_resolving_keys, list) {
 		if (smp_irk_matches(hdev, irk->val, rpa)) {
 			bacpy(&irk->rpa, rpa);
+			irk->rpa_timestamp = jiffies;
 			irk_to_return = irk;
 			goto done;
 		}
@@ -1385,6 +1386,7 @@ struct smp_irk *hci_add_irk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 
 	memcpy(irk->val, val, 16);
 	bacpy(&irk->rpa, rpa);
+	irk->rpa_timestamp = jiffies;
 
 	return irk;
 }
@@ -2430,6 +2432,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	hdev->adv_instance_cnt = 0;
 	hdev->cur_adv_instance = 0x00;
 	hdev->adv_instance_timeout = 0;
+	hdev->eir_max_name_len = 48;
 
 	hdev->advmon_allowlist_duration = 300;
 	hdev->advmon_no_filter_duration = 500;
@@ -2510,14 +2513,23 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	INIT_WORK(&hdev->tx_work, hci_tx_work);
 	INIT_WORK(&hdev->power_on, hci_power_on);
 	INIT_WORK(&hdev->error_reset, hci_error_reset);
+#ifdef CONFIG_DEV_COREDUMP
+	INIT_WORK(&hdev->dump.dump_rx, hci_devcoredump_rx);
+#endif
 
 	hci_cmd_sync_init(hdev);
 
 	INIT_DELAYED_WORK(&hdev->power_off, hci_power_off);
+#ifdef CONFIG_DEV_COREDUMP
+	INIT_DELAYED_WORK(&hdev->dump.dump_timeout, hci_devcoredump_timeout);
+#endif
 
 	skb_queue_head_init(&hdev->rx_q);
 	skb_queue_head_init(&hdev->cmd_q);
 	skb_queue_head_init(&hdev->raw_q);
+#ifdef CONFIG_DEV_COREDUMP
+	skb_queue_head_init(&hdev->dump.dump_q);
+#endif
 
 	init_waitqueue_head(&hdev->req_wait_q);
 
