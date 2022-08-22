@@ -2856,7 +2856,7 @@ static kvm_pfn_t kvm_try_get_page_ref(struct page *page, kvm_pfn_t pfn)
 	 * would then underflow the refcount when the caller does the
 	 * required put_page. Don't allow those pages here.
 	 */
-	if (kvm_is_reserved_pfn(pfn) ||
+	if (!kvm_pfn_to_refcounted_page(pfn) ||
 	    get_page_unless_zero(pfn_to_page(pfn)))
 		return pfn;
 
