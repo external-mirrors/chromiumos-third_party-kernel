@@ -1192,8 +1192,6 @@ static int __maybe_unused raydium_i2c_suspend(struct device *dev)
 		raydium_i2c_power_off(ts);
 	}
 
-	i2c_pm_suspend(dev);
-
 	return 0;
 }
 
@@ -1201,8 +1199,6 @@ static int __maybe_unused raydium_i2c_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct raydium_data *ts = i2c_get_clientdata(client);
-
-	i2c_pm_resume(dev);
 
 	if (device_may_wakeup(dev)) {
 		if (ts->wake_irq_enabled)
@@ -1218,18 +1214,8 @@ static int __maybe_unused raydium_i2c_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops __maybe_unused raydium_i2c_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(raydium_i2c_suspend, raydium_i2c_resume)
-	.prepare = i2c_pm_prepare,
-	.complete = i2c_pm_complete,
-	.suspend_late = i2c_pm_suspend_late,
-	.resume_early = i2c_pm_resume_early,
-	.suspend_noirq = i2c_pm_suspend_noirq,
-	.resume_noirq = i2c_pm_resume_noirq,
-	.runtime_suspend = i2c_pm_runtime_suspend,
-	.runtime_resume = i2c_pm_runtime_resume,
-	.runtime_idle = i2c_pm_runtime_idle,
-};
+static SIMPLE_DEV_PM_OPS(raydium_i2c_pm_ops,
+			 raydium_i2c_suspend, raydium_i2c_resume);
 
 static const struct i2c_device_id raydium_i2c_id[] = {
 	{ "raydium_i2c" , 0 },
