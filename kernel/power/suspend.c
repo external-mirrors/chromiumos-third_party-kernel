@@ -138,6 +138,7 @@ static void s2idle_loop(void)
 		}
 		clear_wakeup_reasons();
 
+		clear_wakeup_reasons();
 		s2idle_enter();
 	}
 
