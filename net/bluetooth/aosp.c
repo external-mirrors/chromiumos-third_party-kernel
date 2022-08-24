@@ -164,7 +164,7 @@ static int enable_quality_report(struct hci_dev *hdev)
 		return PTR_ERR(skb);
 	}
 
-	hci_dev_set_flag(hdev, HCI_QUALITY_REPORT);
+	hci_dev_set_flag(hdev, HCI_QUALITY_REPORT_HW);
 
 	kfree_skb(skb);
 	return 0;
@@ -188,7 +188,7 @@ static int disable_quality_report(struct hci_dev *hdev)
 		return PTR_ERR(skb);
 	}
 
-	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
+	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT_HW);
 
 	kfree_skb(skb);
 	return 0;
