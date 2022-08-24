@@ -323,7 +323,7 @@ static int dw9768_runtime_suspend(struct device *dev)
 	regulator_bulk_disable(ARRAY_SIZE(dw9768_supply_names),
 			       dw9768->supplies);
 
-	return 0;
+	return i2c_pm_runtime_suspend(dev);
 }
 
 static int dw9768_runtime_resume(struct device *dev)
@@ -332,6 +332,8 @@ static int dw9768_runtime_resume(struct device *dev)
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct dw9768 *dw9768 = sd_to_dw9768(sd);
 	int ret;
+
+	i2c_pm_runtime_resume(dev);
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(dw9768_supply_names),
 				    dw9768->supplies);
@@ -357,6 +359,24 @@ disable_regulator:
 			       dw9768->supplies);
 
 	return ret;
+}
+
+static int dw9768_suspend(struct device *dev)
+{
+	int ret;
+
+	ret = pm_runtime_force_suspend(dev);
+	if (ret)
+		return ret;
+
+	return i2c_pm_suspend(dev);
+}
+
+static int dw9768_resume(struct device *dev)
+{
+	i2c_pm_resume(dev);
+
+	return pm_runtime_force_resume(dev);
 }
 
 static int dw9768_set_ctrl(struct v4l2_ctrl *ctrl)
@@ -533,9 +553,15 @@ static const struct of_device_id dw9768_of_table[] = {
 MODULE_DEVICE_TABLE(of, dw9768_of_table);
 
 static const struct dev_pm_ops dw9768_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
-	SET_RUNTIME_PM_OPS(dw9768_runtime_suspend, dw9768_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(dw9768_suspend, dw9768_resume)
+	SET_RUNTIME_PM_OPS(dw9768_runtime_suspend, dw9768_runtime_resume,
+			   i2c_pm_runtime_idle)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
 };
 
 static struct i2c_driver dw9768_i2c_driver = {

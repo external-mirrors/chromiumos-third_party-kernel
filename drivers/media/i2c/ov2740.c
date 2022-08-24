@@ -836,6 +836,8 @@ static int __maybe_unused ov2740_suspend(struct device *dev)
 
 	mutex_unlock(&ov2740->mutex);
 
+	i2c_pm_suspend(dev);
+
 	return 0;
 }
 
@@ -844,6 +846,8 @@ static int __maybe_unused ov2740_resume(struct device *dev)
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct ov2740 *ov2740 = to_ov2740(sd);
 	int ret = 0;
+
+	i2c_pm_resume(dev);
 
 	mutex_lock(&ov2740->mutex);
 	if (!ov2740->streaming)
@@ -1220,6 +1224,15 @@ probe_error_v4l2_ctrl_handler_free:
 
 static const struct dev_pm_ops ov2740_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(ov2740_suspend, ov2740_resume)
+	.prepare = i2c_pm_prepare,
+	.complete = i2c_pm_complete,
+	.suspend_late = i2c_pm_suspend_late,
+	.resume_early = i2c_pm_resume_early,
+	.suspend_noirq = i2c_pm_suspend_noirq,
+	.resume_noirq = i2c_pm_resume_noirq,
+	.runtime_suspend = i2c_pm_runtime_suspend,
+	.runtime_resume = i2c_pm_runtime_resume,
+	.runtime_idle = i2c_pm_runtime_idle,
 };
 
 static const struct acpi_device_id ov2740_acpi_ids[] = {
