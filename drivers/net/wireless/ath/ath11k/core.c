@@ -2026,12 +2026,6 @@ int ath11k_core_start_device(struct ath11k_base *ab)
 	}
 	ath11k_hif_irq_enable(ab);
 
-	ret = ath11k_core_rfkill_config(ab);
-	if (ret && ret != -EOPNOTSUPP) {
-		ath11k_err(ab, "failed to config rfkill: %d\n", ret);
-		goto err_core_stop;
-	}
-
 	clear_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags);
 
 	mutex_unlock(&ab->core_lock);
