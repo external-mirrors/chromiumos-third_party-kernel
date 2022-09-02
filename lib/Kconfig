@@ -258,6 +258,7 @@ config DECOMPRESS_LZMA
 config DECOMPRESS_XZ
 	select XZ_DEC
 	tristate
+	default y
 
 config DECOMPRESS_LZO
 	select LZO_DECOMPRESS
