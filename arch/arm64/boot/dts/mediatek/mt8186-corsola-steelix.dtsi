@@ -116,6 +116,7 @@
 
 &i2c2 {
 	i2c-scl-internal-delay-ns = <22000>;
+	pinctrl-names = "default";
 
 	/* second source component */
 	trackpad@2c {
