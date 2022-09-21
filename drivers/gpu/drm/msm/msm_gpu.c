@@ -16,7 +16,152 @@
 #include <generated/utsrelease.h>
 #include <linux/string_helpers.h>
 #include <linux/devcoredump.h>
+#include <linux/reset.h>
 #include <linux/sched/task.h>
+
+/*
+ * gpu-boost, get notified of input events to get a head start on booting
+ * up the GPU
+ */
+
+static bool gpuboost = true;
+MODULE_PARM_DESC(gpuboost, "Enable GPU boost");
+module_param(gpuboost, bool, 0600);
+
+static void boost_worker(struct kthread_work *work)
+{
+	struct msm_gpu *gpu = container_of(work, struct msm_gpu, boost_work);
+
+	pm_runtime_get_sync(&gpu->pdev->dev);
+	pm_runtime_mark_last_busy(&gpu->pdev->dev);
+	pm_runtime_put_autosuspend(&gpu->pdev->dev);
+}
+
+static void msm_gpuboost_input_event(struct input_handle *handle,
+					unsigned int type, unsigned int code,
+					int value)
+{
+	struct input_handler *handler = handle->handler;
+	struct msm_gpu *gpu = container_of(handler, struct msm_gpu, boost_handler);
+	int ret;
+
+	if (!gpuboost)
+		return;
+
+	/* This is something we can do from irq context, to avoid scheduling
+	 * a worker if the GPU is already ticking
+	 */
+	ret = pm_runtime_get_if_in_use(&gpu->pdev->dev);
+	if (ret <= 0) {
+		trace_msm_gpu_boost(type, code, value);
+		kthread_queue_work(gpu->worker, &gpu->boost_work);
+		return;
+	}
+
+	pm_runtime_mark_last_busy(&gpu->pdev->dev);
+	pm_runtime_put_autosuspend(&gpu->pdev->dev);
+}
+
+static int msm_gpuboost_input_connect(struct input_handler *handler,
+					struct input_dev *dev,
+					const struct input_device_id *id)
+{
+	struct input_handle *handle;
+	int error;
+
+	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->name = "msm-gpu-boost";
+
+	error = input_register_handle(handle);
+	if (error)
+		goto err2;
+
+	error = input_open_device(handle);
+	if (error)
+		goto err1;
+
+	return 0;
+
+err1:
+	input_unregister_handle(handle);
+err2:
+	kfree(handle);
+	return error;
+}
+
+static void msm_gpuboost_input_disconnect(struct input_handle *handle)
+{
+	input_close_device(handle);
+	input_unregister_handle(handle);
+	kfree(handle);
+}
+
+static const struct input_device_id msm_gpuboost_ids[] = {
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+			 INPUT_DEVICE_ID_MATCH_ABSBIT,
+		.evbit = { BIT_MASK(EV_ABS) },
+		.absbit = { [BIT_WORD(ABS_MT_POSITION_X)] =
+			    BIT_MASK(ABS_MT_POSITION_X) |
+			    BIT_MASK(ABS_MT_POSITION_Y) },
+	}, /* multi-touch touchscreen */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_ABS) },
+		.absbit = { [BIT_WORD(ABS_X)] = BIT_MASK(ABS_X) }
+
+	}, /* stylus or joystick device */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(BTN_LEFT)] = BIT_MASK(BTN_LEFT) },
+	}, /* pointer (e.g. trackpad, mouse) */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(KEY_ESC)] = BIT_MASK(KEY_ESC) },
+	}, /* keyboard */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+				INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = {[BIT_WORD(BTN_JOYSTICK)] = BIT_MASK(BTN_JOYSTICK) },
+	}, /* joysticks not caught by ABS_X above */
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+				INPUT_DEVICE_ID_MATCH_KEYBIT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(BTN_GAMEPAD)] = BIT_MASK(BTN_GAMEPAD) },
+	}, /* gamepad */
+	{ },
+};
+
+static void msm_gpuboost_init(struct msm_gpu *gpu)
+{
+	struct input_handler *handler = &gpu->boost_handler;
+	int ret;
+
+	handler->event      = msm_gpuboost_input_event;
+	handler->connect    = msm_gpuboost_input_connect;
+	handler->disconnect = msm_gpuboost_input_disconnect;
+	handler->name       = "msm-gpu-boost";
+	handler->id_table   = msm_gpuboost_ids;
+
+	ret = input_register_handler(handler);
+	if (ret) {
+		DRM_DEV_ERROR(gpu->dev->dev, "failed to register input handler: %d\n", ret);
+	}
+}
+
+static void msm_gpuboost_cleanup(struct msm_gpu *gpu)
+{
+	input_unregister_handler(&gpu->boost_handler);
+}
 
 /*
  * Power Management:
@@ -281,6 +426,16 @@ static void msm_gpu_crashstate_capture(struct msm_gpu *gpu,
 	if (submit) {
 		int i;
 
+		if (state->fault_info.smmu_info.ttbr0) {
+			struct msm_gpu_fault_info *info = &state->fault_info;
+			struct msm_mmu *mmu = submit->aspace->mmu;
+
+			msm_iommu_pagetable_params(mmu, &info->pgtbl_ttbr0,
+						   &info->asid);
+			msm_iommu_pagetable_walk(mmu, info->iova, info->ptes,
+						 ARRAY_SIZE(info->ptes));
+		}
+
 		state->bos = kcalloc(submit->nr_bos,
 			sizeof(struct msm_gpu_state_bo), GFP_KERNEL);
 
@@ -394,7 +549,6 @@ static void recover_worker(struct kthread_work *work)
 	/* Record the crash state */
 	pm_runtime_get_sync(&gpu->pdev->dev);
 	msm_gpu_crashstate_capture(gpu, submit, comm, cmd);
-	pm_runtime_put_sync(&gpu->pdev->dev);
 
 	kfree(cmd);
 	kfree(comm);
@@ -423,9 +577,7 @@ static void recover_worker(struct kthread_work *work)
 		/* retire completed submits, plus the one that hung: */
 		retire_submits(gpu);
 
-		pm_runtime_get_sync(&gpu->pdev->dev);
 		gpu->funcs->recover(gpu);
-		pm_runtime_put_sync(&gpu->pdev->dev);
 
 		/*
 		 * Replay all remaining submits starting with highest priority
@@ -441,6 +593,8 @@ static void recover_worker(struct kthread_work *work)
 			spin_unlock_irqrestore(&ring->submit_lock, flags);
 		}
 	}
+
+	pm_runtime_put(&gpu->pdev->dev);
 
 	mutex_unlock(&gpu->lock);
 
@@ -664,11 +818,12 @@ static void retire_submit(struct msm_gpu *gpu, struct msm_ringbuffer *ring,
 	mutex_lock(&gpu->active_lock);
 	gpu->active_submits--;
 	WARN_ON(gpu->active_submits < 0);
-	if (!gpu->active_submits)
+	if (!gpu->active_submits) {
 		msm_devfreq_idle(gpu);
-	mutex_unlock(&gpu->active_lock);
+		pm_runtime_put_autosuspend(&gpu->pdev->dev);
+	}
 
-	pm_runtime_put_autosuspend(&gpu->pdev->dev);
+	mutex_unlock(&gpu->active_lock);
 
 	msm_gem_submit_put(submit);
 }
@@ -757,14 +912,17 @@ void msm_gpu_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 
 	/* Update devfreq on transition from idle->active: */
 	mutex_lock(&gpu->active_lock);
-	if (!gpu->active_submits)
+	if (!gpu->active_submits) {
+		pm_runtime_get(&gpu->pdev->dev);
 		msm_devfreq_active(gpu);
+	}
 	gpu->active_submits++;
 	mutex_unlock(&gpu->active_lock);
 
 	gpu->funcs->submit(gpu, submit);
 	gpu->cur_ctx_seqno = submit->queue->ctx->seqno;
 
+	pm_runtime_put(&gpu->pdev->dev);
 	hangcheck_timer_reset(gpu);
 }
 
@@ -846,10 +1004,10 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 
 	sched_set_fifo_low(gpu->worker->task);
 
-	INIT_LIST_HEAD(&gpu->active_list);
 	mutex_init(&gpu->active_lock);
 	mutex_init(&gpu->lock);
 	init_waitqueue_head(&gpu->retire_event);
+	kthread_init_work(&gpu->boost_work, boost_worker);
 	kthread_init_work(&gpu->retire_work, retire_worker);
 	kthread_init_work(&gpu->recover_work, recover_worker);
 	kthread_init_work(&gpu->fault_work, fault_worker);
@@ -900,6 +1058,9 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 	DBG("gpu_cx: %p", gpu->gpu_cx);
 	if (IS_ERR(gpu->gpu_cx))
 		gpu->gpu_cx = NULL;
+
+	gpu->cx_collapse = devm_reset_control_get_optional_exclusive(&pdev->dev,
+			"cx_collapse");
 
 	gpu->pdev = pdev;
 	platform_set_drvdata(pdev, &gpu->adreno_smmu);
@@ -954,6 +1115,8 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 
 	refcount_set(&gpu->sysprof_active, 1);
 
+	msm_gpuboost_init(gpu);
+
 	return 0;
 
 fail:
@@ -974,7 +1137,7 @@ void msm_gpu_cleanup(struct msm_gpu *gpu)
 
 	DBG("%s", gpu->name);
 
-	WARN_ON(!list_empty(&gpu->active_list));
+	msm_gpuboost_cleanup(gpu);
 
 	for (i = 0; i < ARRAY_SIZE(gpu->rb); i++) {
 		msm_ringbuffer_destroy(gpu->rb[i]);

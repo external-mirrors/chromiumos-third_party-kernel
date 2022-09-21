@@ -10,9 +10,11 @@
 #include <linux/adreno-smmu-priv.h>
 #include <linux/clk.h>
 #include <linux/devfreq.h>
+#include <linux/input.h>
 #include <linux/interconnect.h>
 #include <linux/pm_opp.h>
 #include <linux/regulator/consumer.h>
+#include <linux/reset.h>
 
 #include "msm_drv.h"
 #include "msm_fence.h"
@@ -81,11 +83,19 @@ struct msm_gpu_funcs {
 
 /* Additional state for iommu faults: */
 struct msm_gpu_fault_info {
-	u64 ttbr0;
+	struct adreno_smmu_fault_info smmu_info;
 	unsigned long iova;
 	int flags;
 	const char *type;
 	const char *block;
+
+	/* Information about what we think/expect is the current SMMU state,
+	 * for example expected_ttbr0 should match smmu_info.ttbr0 which
+	 * was read back from SMMU registers.
+	 */
+	phys_addr_t pgtbl_ttbr0;
+	u64 ptes[4];
+	int asid;
 };
 
 /**
@@ -187,12 +197,6 @@ struct msm_gpu {
 	 */
 	int cur_ctx_seqno;
 
-	/*
-	 * List of GEM active objects on this gpu.  Protected by
-	 * msm_drm_private::mm_lock
-	 */
-	struct list_head active_list;
-
 	/**
 	 * lock:
 	 *
@@ -244,6 +248,10 @@ struct msm_gpu {
 #define DRM_MSM_HANGCHECK_DEFAULT_PERIOD 500 /* in ms */
 	struct timer_list hangcheck_timer;
 
+	/* work for waking GPU on input: */
+	struct kthread_work boost_work;
+	struct input_handler boost_handler;
+
 	/* Fault info for most recent iova fault: */
 	struct msm_gpu_fault_info fault_info;
 
@@ -277,6 +285,9 @@ struct msm_gpu {
 	bool hw_apriv;
 
 	struct thermal_cooling_device *cooling;
+
+	/* To poll for cx gdsc collapse during gpu recovery */
+	struct reset_control *cx_collapse;
 };
 
 static inline struct msm_gpu *dev_to_gpu(struct device *dev)
@@ -466,7 +477,8 @@ static inline int msm_gpu_convert_priority(struct msm_gpu *gpu, int prio,
  * @node:      node in the context's list of submitqueues
  * @fence_idr: maps fence-id to dma_fence for userspace visible fence
  *             seqno, protected by submitqueue lock
- * @lock:      submitqueue lock
+ * @idr_lock:  for serializing access to fence_idr
+ * @lock:      submitqueue lock for serializing submits on a queue
  * @ref:       reference count
  * @entity:    the submit job-queue
  */
@@ -479,6 +491,7 @@ struct msm_gpu_submitqueue {
 	struct msm_file_private *ctx;
 	struct list_head node;
 	struct idr fence_idr;
+	struct mutex idr_lock;
 	struct mutex lock;
 	struct kref ref;
 	struct drm_sched_entity *entity;
