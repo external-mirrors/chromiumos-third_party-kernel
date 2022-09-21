@@ -450,6 +450,7 @@ properties:
 
       - description: Google Pazquel with LTE and Parade (newest rev)
         items:
+          - const: google,pazquel-sku6
           - const: google,pazquel-sku4
           - const: qcom,sc7180
 
@@ -457,6 +458,17 @@ properties:
         items:
           - const: google,pazquel-sku0
           - const: google,pazquel-sku2
+          - const: qcom,sc7180
+
+      - description: Google Pazquel360 with LTE (newest rev)
+        items:
+          - const: google,pazquel-sku22
+          - const: google,pazquel-sku20
+          - const: qcom,sc7180
+
+      - description: Google Pazquel360 with WiFi (newest rev)
+        items:
+          - const: google,pazquel-sku21
           - const: qcom,sc7180
 
       - description: Sharp Dynabook Chromebook C1 (rev1)
@@ -550,6 +562,7 @@ properties:
 
       - description: Qualcomm Technologies, Inc. sc7280 CRD platform (newest rev)
         items:
+          - const: google,zoglin
           - const: google,hoglin
           - const: qcom,sc7280
 
@@ -565,14 +578,34 @@ properties:
           - const: google,piglin
           - const: qcom,sc7280
 
+      - description: Google Evoker (newest rev)
+        items:
+          - const: google,evoker
+          - const: qcom,sc7280
+
       - description: Google Herobrine (newest rev)
         items:
           - const: google,herobrine
           - const: qcom,sc7280
 
+      - description: Google Villager (rev0)
+        items:
+          - const: google,villager-rev0
+          - const: qcom,sc7280
+
       - description: Google Villager (newest rev)
         items:
           - const: google,villager
+          - const: qcom,sc7280
+
+      - description: Google Villager with LTE (rev0)
+        items:
+          - const: google,villager-rev0-sku0
+          - const: qcom,sc7280
+
+      - description: Google Villager with LTE (newest rev)
+        items:
+          - const: google,villager-sku0
           - const: qcom,sc7280
 
       - items:
