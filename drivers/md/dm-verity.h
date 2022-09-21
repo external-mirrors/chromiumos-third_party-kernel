@@ -15,6 +15,7 @@
 #include <linux/device-mapper.h>
 #include <linux/interrupt.h>
 #include <crypto/hash.h>
+#include <linux/notifier.h>
 
 #define DM_VERITY_MAX_LEVELS		63
 
@@ -58,6 +59,7 @@ struct dm_verity {
 	unsigned int ahash_reqsize;/* the size of temporary space for crypto */
 	enum verity_mode mode;	/* mode for handling verification errors */
 	unsigned corrupted_errs;/* Number of errors for corrupted blocks */
+	int error_behavior;	/* selects error behavior on io errors */
 
 	struct workqueue_struct *verify_wq;
 
@@ -97,6 +99,40 @@ struct dm_verity_io {
 	 */
 };
 
+struct verity_result {
+	struct completion completion;
+	int err;
+};
+
+struct dm_verity_error_state {
+	int code;
+	int transient;  /* Likely to not happen after a reboot */
+	u64 block;
+	const char *message;
+
+	sector_t dev_start;
+	sector_t dev_len;
+	struct block_device *dev;
+
+	sector_t hash_dev_start;
+	sector_t hash_dev_len;
+	struct block_device *hash_dev;
+
+	/* Final behavior after all notifications are completed. */
+	int behavior;
+};
+
+/* This enum must be matched to allowed_error_behaviors in dm-verity.c */
+enum dm_verity_error_behavior {
+	DM_VERITY_ERROR_BEHAVIOR_EIO = 0,
+	DM_VERITY_ERROR_BEHAVIOR_PANIC,
+	DM_VERITY_ERROR_BEHAVIOR_NONE,
+	DM_VERITY_ERROR_BEHAVIOR_NOTIFY
+};
+
+int dm_verity_register_error_notifier(struct notifier_block *nb);
+int dm_verity_unregister_error_notifier(struct notifier_block *nb);
+
 static inline struct ahash_request *verity_io_hash_req(struct dm_verity *v,
 						     struct dm_verity_io *io)
 {
@@ -134,6 +170,7 @@ extern int verity_hash_for_block(struct dm_verity *v, struct dm_verity_io *io,
 				 sector_t block, u8 *digest, bool *is_zero);
 
 extern bool dm_is_verity_target(struct dm_target *ti);
+extern int dm_verity_get_mode(struct dm_target *ti);
 extern int dm_verity_get_root_digest(struct dm_target *ti, u8 **root_digest,
 				     unsigned int *digest_size);
 
