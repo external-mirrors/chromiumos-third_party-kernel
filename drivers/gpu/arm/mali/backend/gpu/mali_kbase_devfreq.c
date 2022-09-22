@@ -642,6 +642,12 @@ skip_volt_bin:
 		dev_info(kbdev->dev, "OPP %d : opp_freq=%llu core_mask=%llx\n",
 				i, opp_freq, core_mask);
 
+		for (idx = 0; idx < kbdev->nr_regulators; idx++)
+			dev_pm_opp_adjust_voltage_supply(kbdev->dev, opp_freq,
+							 opp_volts[idx],
+							 opp_volts[idx],
+							 opp_volts[idx], idx);
+
 		i++;
 	}
 
