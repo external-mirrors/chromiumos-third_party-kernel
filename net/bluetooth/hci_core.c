@@ -3462,6 +3462,10 @@ static int hci_suspend_notifier(struct notifier_block *nb, unsigned long action,
 	int ret = 0;
 	u8 state = BT_RUNNING;
 
+	/* Userspace has full control of this device. Do nothing. */
+	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL))
+		return NOTIFY_DONE;
+
 	/* If powering down, wait for completion. */
 	if (mgmt_powering_down(hdev)) {
 		set_bit(SUSPEND_POWERING_DOWN, hdev->suspend_tasks);
