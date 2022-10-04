@@ -303,6 +303,11 @@
 			reg = <0 0xC0000000 0 0x4000000>;
 		};
 	};
+
+	mtk_fsource: fsource {
+		compatible = "mtk-fsource";
+		vfsource-supply = <&mt6359_vefuse_ldo_reg>;
+	};
 };
 
 &afe {
