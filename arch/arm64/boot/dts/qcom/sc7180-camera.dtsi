@@ -69,7 +69,6 @@
 		};
 
 		smmu_jpeg: msm_cam_smmu_jpeg {
-			compatible = "qcom,msm-cam-smmu-cb";
 			iommus = <&apps_smmu 0xd80 0x20>,
 				<&apps_smmu  0xda0 0x20>;
 			label = "jpeg";
