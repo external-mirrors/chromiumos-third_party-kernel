@@ -43,7 +43,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef OSDI_IMPL_H
 #define OSDI_IMPL_H
 
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 #include "di_common.h"
 #include "pvrsrv_error.h"
