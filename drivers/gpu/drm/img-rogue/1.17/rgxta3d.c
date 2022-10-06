@@ -477,7 +477,7 @@ PVRSRV_ERROR RGXGrowFreeList(RGX_FREELIST *psFreeList,
 	IMG_DEVMEM_SIZE_T uiLength;
 	IMG_DEVMEM_SIZE_T uistartPage;
 	PVRSRV_ERROR eError;
-	static const IMG_CHAR szAllocName[] = "Free List";
+	static const IMG_CHAR szAllocName[DEVMEM_ANNOTATION_MAX_LEN] = "Free List";
 
 	/* Are we allowed to grow ? */
 	if (psFreeList->ui32MaxFLPages - (psFreeList->ui32CurrentFLPages + psFreeList->ui32ReadyFLPages) < ui32NumPages)
