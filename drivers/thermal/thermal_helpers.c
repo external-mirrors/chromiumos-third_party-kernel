@@ -73,7 +73,13 @@ int __thermal_zone_get_temp(struct thermal_zone_device *tz, int *temp)
 
 	lockdep_assert_held(&tz->lock);
 
-	if (!tz || IS_ERR(tz) || !tz->ops->get_temp)
+	if (!tz || IS_ERR(tz))
+		return -EINVAL;
+
+	if (!device_is_registered(&tz->device))
+		return -ENODEV;
+
+	if (!tz->ops->get_temp)
 		return -EINVAL;
 
 	ret = tz->ops->get_temp(tz, temp);
