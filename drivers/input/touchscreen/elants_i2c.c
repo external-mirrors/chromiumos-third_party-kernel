@@ -1587,7 +1587,7 @@ static int elants_i2c_probe(struct i2c_client *client)
 	return 0;
 }
 
-static int elants_i2c_remove(struct i2c_client *client)
+static void elants_i2c_remove(struct i2c_client *client)
 {
 	struct elants_data *ts = i2c_get_clientdata(client);
 
@@ -1597,7 +1597,7 @@ static int elants_i2c_remove(struct i2c_client *client)
 	 */
 	ts->unbinding = true;
 
-	return 0;
+	return;
 }
 
 static int __maybe_unused elants_i2c_suspend(struct device *dev)
