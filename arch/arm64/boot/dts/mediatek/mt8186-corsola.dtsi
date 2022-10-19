@@ -353,6 +353,11 @@
 			wakeup-source;
 		};
 	};
+
+	mtk_fsource: fsource {
+		compatible = "mtk-fsource";
+		vfsource-supply = <&mt6366_vefuse_reg>;
+	};
 };
 
 &adsp {
