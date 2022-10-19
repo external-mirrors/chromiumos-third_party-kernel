@@ -150,7 +150,7 @@ void ath10k_p2p_noa_update_by_vdev_id(struct ath10k *ar, u32 vdev_id,
 	};
 
 	ieee80211_iterate_active_interfaces_atomic(ar->hw,
-						   IEEE80211_IFACE_ITER_NORMAL,
+						   ITER_NORMAL_FLAGS,
 						   ath10k_p2p_noa_update_vdev_iter,
 						   &arg);
 }
