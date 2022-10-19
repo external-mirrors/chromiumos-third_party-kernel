@@ -101,4 +101,14 @@ config MTK_SOCINFO
 	  information about the SoC to the userspace including the
 	  manufacturer name, marketing name and soc name.
 
+config MTK_FSOURCE
+	tristate "MediaTek Fsource Support"
+	depends on MFD_MT6397
+	help
+	  If you say yes to this option, support will be included for the
+	  built-in MTK PMIC chips.
+
+	  Say m here if you want to include fsource support as a module. This
+	  will build a module called "mtk-fsource".
+
 endmenu
