@@ -2107,7 +2107,7 @@ static void ath10k_mac_handle_beacon_iter(void *data, u8 *mac,
 void ath10k_mac_handle_beacon(struct ath10k *ar, struct sk_buff *skb)
 {
 	ieee80211_iterate_active_interfaces_atomic(ar->hw,
-						   IEEE80211_IFACE_ITER_NORMAL,
+						   ITER_NORMAL_FLAGS,
 						   ath10k_mac_handle_beacon_iter,
 						   skb);
 }
@@ -2140,7 +2140,7 @@ static void ath10k_mac_handle_beacon_miss_iter(void *data, u8 *mac,
 void ath10k_mac_handle_beacon_miss(struct ath10k *ar, u32 vdev_id)
 {
 	ieee80211_iterate_active_interfaces_atomic(ar->hw,
-						   IEEE80211_IFACE_ITER_NORMAL,
+						   ITER_NORMAL_FLAGS,
 						   ath10k_mac_handle_beacon_miss_iter,
 						   &vdev_id);
 }
@@ -3431,7 +3431,7 @@ void ath10k_mac_tx_unlock(struct ath10k *ar, int reason)
 		return;
 
 	ieee80211_iterate_active_interfaces_atomic(ar->hw,
-						   IEEE80211_IFACE_ITER_RESUME_ALL,
+						   ITER_RESUME_FLAGS,
 						   ath10k_mac_tx_unlock_iter,
 						   ar);
 
@@ -3520,7 +3520,7 @@ void ath10k_mac_handle_tx_pause_vdev(struct ath10k *ar, u32 vdev_id,
 
 	spin_lock_bh(&ar->htt.tx_lock);
 	ieee80211_iterate_active_interfaces_atomic(ar->hw,
-						   IEEE80211_IFACE_ITER_RESUME_ALL,
+						   ITER_RESUME_FLAGS,
 						   ath10k_mac_handle_tx_pause_iter,
 						   &arg);
 	spin_unlock_bh(&ar->htt.tx_lock);
@@ -6566,7 +6566,7 @@ static int ath10k_mac_tdls_vifs_count(struct ieee80211_hw *hw)
 	int num_tdls_vifs = 0;
 
 	ieee80211_iterate_active_interfaces_atomic(hw,
-						   IEEE80211_IFACE_ITER_NORMAL,
+						   ITER_NORMAL_FLAGS,
 						   ath10k_mac_tdls_vifs_count_iter,
 						   &num_tdls_vifs);
 	return num_tdls_vifs;
@@ -8371,7 +8371,7 @@ ath10k_mac_op_change_chanctx(struct ieee80211_hw *hw,
 	if (changed & IEEE80211_CHANCTX_CHANGE_WIDTH) {
 		ieee80211_iterate_active_interfaces_atomic(
 					hw,
-					IEEE80211_IFACE_ITER_NORMAL,
+					ITER_NORMAL_FLAGS,
 					ath10k_mac_change_chanctx_cnt_iter,
 					&arg);
 		if (arg.n_vifs == 0)
@@ -8384,7 +8384,7 @@ ath10k_mac_op_change_chanctx(struct ieee80211_hw *hw,
 
 		ieee80211_iterate_active_interfaces_atomic(
 					hw,
-					IEEE80211_IFACE_ITER_NORMAL,
+					ITER_NORMAL_FLAGS,
 					ath10k_mac_change_chanctx_fill_iter,
 					&arg);
 		ath10k_mac_update_vif_chan(ar, arg.vifs, arg.n_vifs);
@@ -9161,14 +9161,12 @@ static void ath10k_get_arvif_iter(void *data, u8 *mac,
 struct ath10k_vif *ath10k_get_arvif(struct ath10k *ar, u32 vdev_id)
 {
 	struct ath10k_vif_iter arvif_iter;
-	u32 flags;
 
 	memset(&arvif_iter, 0, sizeof(struct ath10k_vif_iter));
 	arvif_iter.vdev_id = vdev_id;
 
-	flags = IEEE80211_IFACE_ITER_RESUME_ALL;
 	ieee80211_iterate_active_interfaces_atomic(ar->hw,
-						   flags,
+						   ITER_RESUME_FLAGS,
 						   ath10k_get_arvif_iter,
 						   &arvif_iter);
 	if (!arvif_iter.arvif) {
