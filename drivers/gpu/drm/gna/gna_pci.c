@@ -5,10 +5,13 @@
 #include <linux/pci.h>
 
 #include "gna_device.h"
+#include "gna_hw.h"
 #include "gna_pci.h"
 
 int gna_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci_id)
 {
+	struct gna_dev_info *dev_info;
+	void __iomem *iobase;
 	int err;
 
 	err = pcim_enable_device(pcidev);
@@ -19,7 +22,15 @@ int gna_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci_id)
 	if (err)
 		return err;
 
+	iobase = pcim_iomap_table(pcidev)[0];
+
 	pci_set_master(pcidev);
+
+	dev_info = (struct gna_dev_info *)pci_id->driver_data;
+
+	err = gna_probe(&pcidev->dev, dev_info, iobase);
+	if (err)
+		return err;
 
 	return 0;
 }
