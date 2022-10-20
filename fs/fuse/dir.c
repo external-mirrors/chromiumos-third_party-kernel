@@ -844,7 +844,7 @@ static int fuse_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
 }
 
 static int fuse_chromeos_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
-				 struct dentry *entry, umode_t mode)
+				 struct file *file, umode_t mode)
 {
 	struct fuse_chromeos_tmpfile_in inarg;
 	struct fuse_mount *fm = get_fuse_mount(dir);
@@ -861,7 +861,7 @@ static int fuse_chromeos_tmpfile(struct user_namespace *mnt_userns, struct inode
 	args.in_args[0].size = sizeof(inarg);
 	args.in_args[0].value = &inarg;
 
-	return create_new_entry(fm, &args, dir, entry, S_IFREG);
+	return create_new_entry(fm, &args, dir, file->f_path.dentry, S_IFREG);
 }
 
 static int fuse_symlink(struct user_namespace *mnt_userns, struct inode *dir,
