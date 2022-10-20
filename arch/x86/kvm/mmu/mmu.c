@@ -1139,7 +1139,8 @@ static void drop_large_spte(struct kvm_vcpu *vcpu, u64 *sptep)
 	if (__drop_large_spte(vcpu->kvm, sptep)) {
 		struct kvm_mmu_page *sp = sptep_to_sp(sptep);
 
-		kvm_flush_remote_tlbs_with_address(vcpu->kvm, sp->gfn,
+		kvm_flush_remote_tlbs_with_address(vcpu->kvm,
+			kvm_mmu_page_get_gfn(sp, sptep - sp->spt),
 			KVM_PAGES_PER_HPAGE(sp->role.level));
 	}
 }
@@ -1587,7 +1588,7 @@ static void rmap_add(struct kvm_vcpu *vcpu, struct kvm_memory_slot *slot,
 	if (rmap_count > RMAP_RECYCLE_THRESHOLD) {
 		kvm_unmap_rmapp(vcpu->kvm, rmap_head, NULL, gfn, sp->role.level, __pte(0));
 		kvm_flush_remote_tlbs_with_address(
-				vcpu->kvm, sp->gfn, KVM_PAGES_PER_HPAGE(sp->role.level));
+				vcpu->kvm, gfn, KVM_PAGES_PER_HPAGE(sp->role.level));
 	}
 }
 
@@ -2786,6 +2787,9 @@ static void direct_pte_prefetch(struct kvm_vcpu *vcpu, u64 *sptep)
 	 * accidentally prefetching those addresses.
 	 */
 	if (unlikely(vcpu->kvm->mmu_notifier_count))
+		return;
+
+	if (vcpu->kvm->arch.vm_type == KVM_X86_PROTECTED_VM)
 		return;
 
 	__direct_pte_prefetch(vcpu, sp, sptep);
@@ -4046,12 +4050,18 @@ static bool is_page_fault_stale(struct kvm_vcpu *vcpu,
 static int direct_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault)
 {
 	bool is_tdp_mmu_fault = is_tdp_mmu(vcpu->arch.mmu);
-
+	struct kvm_pinned_page *ppage = NULL;
 	unsigned long mmu_seq;
 	int r;
 
 	fault->gfn = fault->addr >> PAGE_SHIFT;
 	fault->slot = kvm_vcpu_gfn_to_memslot(vcpu, fault->gfn);
+
+	if (vcpu->kvm->arch.vm_type == KVM_X86_PROTECTED_VM) {
+		ppage = kmalloc(sizeof(*ppage), GFP_KERNEL_ACCOUNT);
+		if (!ppage)
+			return -ENOMEM;
+	}
 
 	if (page_fault_handle_page_track(vcpu, fault))
 		return RET_PF_EMULATE;
@@ -4093,6 +4103,14 @@ static int direct_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 		r = kvm_tdp_mmu_map(vcpu, fault);
 	else
 		r = __direct_map(vcpu, fault);
+
+	if (ppage && r == RET_PF_FIXED) {
+		ppage->page = pfn_to_page(fault->pfn);
+		get_page(ppage->page);
+		spin_lock(&vcpu->kvm->pkvm.pinned_page_lock);
+		list_add(&ppage->list, &vcpu->kvm->pkvm.pinned_pages);
+		spin_unlock(&vcpu->kvm->pkvm.pinned_page_lock);
+	}
 
 out_unlock:
 	if (is_tdp_mmu_fault)
@@ -6011,7 +6029,8 @@ restart:
 			pte_list_remove(kvm, rmap_head, sptep);
 
 			if (kvm_available_flush_tlb_with_range())
-				kvm_flush_remote_tlbs_with_address(kvm, sp->gfn,
+				kvm_flush_remote_tlbs_with_address(kvm,
+					kvm_mmu_page_get_gfn(sp, sptep - sp->spt),
 					KVM_PAGES_PER_HPAGE(sp->role.level));
 			else
 				need_tlb_flush = 1;

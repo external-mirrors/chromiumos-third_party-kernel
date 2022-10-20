@@ -12,8 +12,8 @@
 
 #include <nvhe/early_alloc.h>
 #include <nvhe/fixed_config.h>
-#include <nvhe/gfp.h>
-#include <nvhe/memory.h>
+#include <gfp.h>
+#include <buddy_memory.h>
 #include <nvhe/mem_protect.h>
 #include <nvhe/mm.h>
 #include <nvhe/trap_handler.h>
@@ -27,7 +27,7 @@ static void *vmemmap_base;
 static void *hyp_pgt_base;
 static void *host_s2_pgt_base;
 static struct kvm_pgtable_mm_ops pkvm_pgtable_mm_ops;
-static struct hyp_pool hpool;
+static struct pkvm_pool ppool;
 
 static int divide_memory_pool(void *virt, unsigned long size)
 {
@@ -126,10 +126,10 @@ static int recreate_hyp_mappings(phys_addr_t phys, unsigned long size,
 		 * and addresses corresponding to the guard page have the
 		 * PAGE_SHIFT bit as 0 - this is used for overflow detection.
 		 */
-		hyp_spin_lock(&pkvm_pgd_lock);
+		pkvm_spin_lock(&pkvm_pgd_lock);
 		ret = kvm_pgtable_hyp_map(&pkvm_pgtable, hyp_addr + PAGE_SIZE,
 					PAGE_SIZE, params->stack_pa, PAGE_HYP);
-		hyp_spin_unlock(&pkvm_pgd_lock);
+		pkvm_spin_unlock(&pkvm_pgd_lock);
 		if (ret)
 			return ret;
 
@@ -173,17 +173,17 @@ static void update_nvhe_init_params(void)
 
 static void *hyp_zalloc_hyp_page(void *arg)
 {
-	return hyp_alloc_pages(&hpool, 0);
+	return pkvm_alloc_pages(&ppool, 0);
 }
 
 static void hpool_get_page(void *addr)
 {
-	hyp_get_page(&hpool, addr);
+	pkvm_get_page(&ppool, addr);
 }
 
 static void hpool_put_page(void *addr)
 {
-	hyp_put_page(&hpool, addr);
+	pkvm_put_page(&ppool, addr);
 }
 
 static int finalize_host_mappings_walker(u64 addr, u64 end, u32 level,
@@ -246,8 +246,8 @@ static int finalize_host_mappings(void)
 	};
 	int i, ret;
 
-	for (i = 0; i < hyp_memblock_nr; i++) {
-		struct memblock_region *reg = &hyp_memory[i];
+	for (i = 0; i < pkvm_memblock_nr; i++) {
+		struct memblock_region *reg = &pkvm_memory[i];
 		u64 start = (u64)hyp_phys_to_virt(reg->base);
 
 		ret = kvm_pgtable_walk(&pkvm_pgtable, start, reg->size, &walker);
@@ -266,10 +266,10 @@ void __noreturn __pkvm_init_finalise(void)
 	int ret;
 
 	/* Now that the vmemmap is backed, install the full-fledged allocator */
-	pfn = hyp_virt_to_pfn(hyp_pgt_base);
+	pfn = pkvm_virt_to_pfn(hyp_pgt_base);
 	nr_pages = hyp_s1_pgtable_pages();
 	reserved_pages = hyp_early_alloc_nr_used_pages();
-	ret = hyp_pool_init(&hpool, pfn, nr_pages, reserved_pages);
+	ret = pkvm_pool_init(&ppool, pfn, nr_pages, reserved_pages);
 	if (ret)
 		goto out;
 
@@ -283,7 +283,7 @@ void __noreturn __pkvm_init_finalise(void)
 		.virt_to_phys = hyp_virt_to_phys,
 		.get_page = hpool_get_page,
 		.put_page = hpool_put_page,
-		.page_count = hyp_page_count,
+		.page_count = pkvm_page_count,
 	};
 	pkvm_pgtable.mm_ops = &pkvm_pgtable_mm_ops;
 
@@ -314,7 +314,7 @@ int __pkvm_init(phys_addr_t phys, unsigned long size, unsigned long nr_cpus,
 	if (!PAGE_ALIGNED(phys) || !PAGE_ALIGNED(size))
 		return -EINVAL;
 
-	hyp_spin_lock_init(&pkvm_pgd_lock);
+	pkvm_spinlock_init(&pkvm_pgd_lock);
 	hyp_nr_cpus = nr_cpus;
 
 	ret = divide_memory_pool(virt, size);

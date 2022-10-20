@@ -7,11 +7,11 @@
 #include <linux/memblock.h>
 #include <linux/types.h>
 
-#include <nvhe/memory.h>
-#include <nvhe/spinlock.h>
+#include <buddy_memory.h>
+#include <pkvm_spinlock.h>
 
 extern struct kvm_pgtable pkvm_pgtable;
-extern hyp_spinlock_t pkvm_pgd_lock;
+extern pkvm_spinlock_t pkvm_pgd_lock;
 
 int hyp_create_idmap(u32 hyp_va_bits);
 int hyp_map_vectors(void);
@@ -28,10 +28,10 @@ static inline void hyp_vmemmap_range(phys_addr_t phys, unsigned long size,
 				     unsigned long *start, unsigned long *end)
 {
 	unsigned long nr_pages = size >> PAGE_SHIFT;
-	struct hyp_page *p = hyp_phys_to_page(phys);
+	struct pkvm_page *p = pkvm_phys_to_page(phys);
 
 	*start = (unsigned long)p;
-	*end = *start + nr_pages * sizeof(struct hyp_page);
+	*end = *start + nr_pages * sizeof(struct pkvm_page);
 	*start = ALIGN_DOWN(*start, PAGE_SIZE);
 	*end = ALIGN(*end, PAGE_SIZE);
 }

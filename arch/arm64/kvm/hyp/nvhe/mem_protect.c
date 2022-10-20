@@ -14,8 +14,8 @@
 
 #include <hyp/fault.h>
 
-#include <nvhe/gfp.h>
-#include <nvhe/memory.h>
+#include <gfp.h>
+#include <buddy_memory.h>
 #include <nvhe/mem_protect.h>
 #include <nvhe/mm.h>
 
@@ -24,35 +24,35 @@
 extern unsigned long hyp_nr_cpus;
 struct host_kvm host_kvm;
 
-static struct hyp_pool host_s2_pool;
+static struct pkvm_pool host_s2_pool;
 
 const u8 pkvm_hyp_id = 1;
 
 static void host_lock_component(void)
 {
-	hyp_spin_lock(&host_kvm.lock);
+	pkvm_spin_lock(&host_kvm.lock);
 }
 
 static void host_unlock_component(void)
 {
-	hyp_spin_unlock(&host_kvm.lock);
+	pkvm_spin_unlock(&host_kvm.lock);
 }
 
 static void hyp_lock_component(void)
 {
-	hyp_spin_lock(&pkvm_pgd_lock);
+	pkvm_spin_lock(&pkvm_pgd_lock);
 }
 
 static void hyp_unlock_component(void)
 {
-	hyp_spin_unlock(&pkvm_pgd_lock);
+	pkvm_spin_unlock(&pkvm_pgd_lock);
 }
 
 static void *host_s2_zalloc_pages_exact(size_t size)
 {
-	void *addr = hyp_alloc_pages(&host_s2_pool, get_order(size));
+	void *addr = pkvm_alloc_pages(&host_s2_pool, get_order(size));
 
-	hyp_split_page(hyp_virt_to_page(addr));
+	pkvm_split_page(pkvm_virt_to_page(addr));
 
 	/*
 	 * The size of concatenated PGDs is always a power of two of PAGE_SIZE,
@@ -66,17 +66,17 @@ static void *host_s2_zalloc_pages_exact(size_t size)
 
 static void *host_s2_zalloc_page(void *pool)
 {
-	return hyp_alloc_pages(pool, 0);
+	return pkvm_alloc_pages(pool, 0);
 }
 
 static void host_s2_get_page(void *addr)
 {
-	hyp_get_page(&host_s2_pool, addr);
+	pkvm_get_page(&host_s2_pool, addr);
 }
 
 static void host_s2_put_page(void *addr)
 {
-	hyp_put_page(&host_s2_pool, addr);
+	pkvm_put_page(&host_s2_pool, addr);
 }
 
 static int prepare_s2_pool(void *pgt_pool_base)
@@ -84,9 +84,9 @@ static int prepare_s2_pool(void *pgt_pool_base)
 	unsigned long nr_pages, pfn;
 	int ret;
 
-	pfn = hyp_virt_to_pfn(pgt_pool_base);
+	pfn = pkvm_virt_to_pfn(pgt_pool_base);
 	nr_pages = host_s2_pgtable_pages();
-	ret = hyp_pool_init(&host_s2_pool, pfn, nr_pages, 0);
+	ret = pkvm_pool_init(&host_s2_pool, pfn, nr_pages, 0);
 	if (ret)
 		return ret;
 
@@ -95,7 +95,7 @@ static int prepare_s2_pool(void *pgt_pool_base)
 		.zalloc_page = host_s2_zalloc_page,
 		.phys_to_virt = hyp_phys_to_virt,
 		.virt_to_phys = hyp_virt_to_phys,
-		.page_count = hyp_page_count,
+		.page_count = pkvm_page_count,
 		.get_page = host_s2_get_page,
 		.put_page = host_s2_put_page,
 	};
@@ -123,7 +123,7 @@ int kvm_host_prepare_stage2(void *pgt_pool_base)
 	int ret;
 
 	prepare_host_vtcr();
-	hyp_spin_lock_init(&host_kvm.lock);
+	pkvm_spinlock_init(&host_kvm.lock);
 	mmu->arch = &host_kvm.arch;
 
 	ret = prepare_s2_pool(pgt_pool_base);
@@ -181,8 +181,8 @@ static int host_stage2_unmap_dev_all(void)
 	int i, ret;
 
 	/* Unmap all non-memory regions to recycle the pages */
-	for (i = 0; i < hyp_memblock_nr; i++, addr = reg->base + reg->size) {
-		reg = &hyp_memory[i];
+	for (i = 0; i < pkvm_memblock_nr; i++, addr = reg->base + reg->size) {
+		reg = &pkvm_memory[i];
 		ret = kvm_pgtable_stage2_unmap(pgt, addr, reg->base - addr);
 		if (ret)
 			return ret;
@@ -197,7 +197,7 @@ struct kvm_mem_range {
 
 static bool find_mem_range(phys_addr_t addr, struct kvm_mem_range *range)
 {
-	int cur, left = 0, right = hyp_memblock_nr;
+	int cur, left = 0, right = pkvm_memblock_nr;
 	struct memblock_region *reg;
 	phys_addr_t end;
 
@@ -207,7 +207,7 @@ static bool find_mem_range(phys_addr_t addr, struct kvm_mem_range *range)
 	/* The list of memblock regions is sorted, binary search it */
 	while (left < right) {
 		cur = (left + right) >> 1;
-		reg = &hyp_memory[cur];
+		reg = &pkvm_memory[cur];
 		end = reg->base + reg->size;
 		if (addr < reg->base) {
 			right = cur;
@@ -263,7 +263,7 @@ static inline int __host_stage2_idmap(u64 start, u64 end,
 #define host_stage2_try(fn, ...)					\
 	({								\
 		int __ret;						\
-		hyp_assert_lock_held(&host_kvm.lock);			\
+		pkvm_assert_lock_held(&host_kvm.lock);			\
 		__ret = fn(__VA_ARGS__);				\
 		if (__ret == -ENOMEM) {					\
 			__ret = host_stage2_unmap_dev_all();		\
@@ -286,7 +286,7 @@ static int host_stage2_adjust_range(u64 addr, struct kvm_mem_range *range)
 	u32 level;
 	int ret;
 
-	hyp_assert_lock_held(&host_kvm.lock);
+	pkvm_assert_lock_held(&host_kvm.lock);
 	ret = kvm_pgtable_get_leaf(&host_kvm.pgt, addr, &pte, &level);
 	if (ret)
 		return ret;
@@ -459,7 +459,7 @@ static int __host_check_page_state_range(u64 addr, u64 size,
 		.get_page_state	= host_get_page_state,
 	};
 
-	hyp_assert_lock_held(&host_kvm.lock);
+	pkvm_assert_lock_held(&host_kvm.lock);
 	return check_page_state_range(&host_kvm.pgt, addr, size, &d);
 }
 
@@ -527,7 +527,7 @@ static int __hyp_check_page_state_range(u64 addr, u64 size,
 		.get_page_state	= hyp_get_page_state,
 	};
 
-	hyp_assert_lock_held(&pkvm_pgd_lock);
+	pkvm_assert_lock_held(&pkvm_pgd_lock);
 	return check_page_state_range(&pkvm_pgtable, addr, size, &d);
 }
 
@@ -735,7 +735,7 @@ static int do_unshare(struct pkvm_mem_share *share)
 int __pkvm_host_share_hyp(u64 pfn)
 {
 	int ret;
-	u64 host_addr = hyp_pfn_to_phys(pfn);
+	u64 host_addr = pkvm_pfn_to_phys(pfn);
 	u64 hyp_addr = (u64)__hyp_va(host_addr);
 	struct pkvm_mem_share share = {
 		.tx	= {
@@ -768,7 +768,7 @@ int __pkvm_host_share_hyp(u64 pfn)
 int __pkvm_host_unshare_hyp(u64 pfn)
 {
 	int ret;
-	u64 host_addr = hyp_pfn_to_phys(pfn);
+	u64 host_addr = pkvm_pfn_to_phys(pfn);
 	u64 hyp_addr = (u64)__hyp_va(host_addr);
 	struct pkvm_mem_share share = {
 		.tx	= {

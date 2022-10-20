@@ -12,16 +12,16 @@
 #include <asm/spectre.h>
 
 #include <nvhe/early_alloc.h>
-#include <nvhe/gfp.h>
-#include <nvhe/memory.h>
+#include <gfp.h>
+#include <buddy_memory.h>
 #include <nvhe/mm.h>
-#include <nvhe/spinlock.h>
+#include <pkvm_spinlock.h>
 
 struct kvm_pgtable pkvm_pgtable;
-hyp_spinlock_t pkvm_pgd_lock;
+pkvm_spinlock_t pkvm_pgd_lock;
 
-struct memblock_region hyp_memory[HYP_MEMBLOCK_REGIONS];
-unsigned int hyp_memblock_nr;
+struct memblock_region pkvm_memory[PKVM_MEMBLOCK_REGIONS];
+unsigned int pkvm_memblock_nr;
 
 static u64 __io_map_base;
 
@@ -30,9 +30,9 @@ static int __pkvm_create_mappings(unsigned long start, unsigned long size,
 {
 	int err;
 
-	hyp_spin_lock(&pkvm_pgd_lock);
+	pkvm_spin_lock(&pkvm_pgd_lock);
 	err = kvm_pgtable_hyp_map(&pkvm_pgtable, start, size, phys, prot);
-	hyp_spin_unlock(&pkvm_pgd_lock);
+	pkvm_spin_unlock(&pkvm_pgd_lock);
 
 	return err;
 }
@@ -52,7 +52,7 @@ int pkvm_alloc_private_va_range(size_t size, unsigned long *haddr)
 	unsigned long base, addr;
 	int ret = 0;
 
-	hyp_spin_lock(&pkvm_pgd_lock);
+	pkvm_spin_lock(&pkvm_pgd_lock);
 
 	/* Align the allocation based on the order of its size */
 	addr = ALIGN(__io_map_base, PAGE_SIZE << get_order(size));
@@ -61,14 +61,14 @@ int pkvm_alloc_private_va_range(size_t size, unsigned long *haddr)
 	base = addr + PAGE_ALIGN(size);
 
 	/* Are we overflowing on the vmemmap ? */
-	if (!addr || base > __hyp_vmemmap)
+	if (!addr || base > __pkvm_vmemmap)
 		ret = -ENOMEM;
 	else {
 		__io_map_base = base;
 		*haddr = addr;
 	}
 
-	hyp_spin_unlock(&pkvm_pgd_lock);
+	pkvm_spin_unlock(&pkvm_pgd_lock);
 
 	return ret;
 }
@@ -100,7 +100,7 @@ int pkvm_create_mappings_locked(void *from, void *to, enum kvm_pgtable_prot prot
 	unsigned long virt_addr;
 	phys_addr_t phys;
 
-	hyp_assert_lock_held(&pkvm_pgd_lock);
+	pkvm_assert_lock_held(&pkvm_pgd_lock);
 
 	start = start & PAGE_MASK;
 	end = PAGE_ALIGN(end);
@@ -122,9 +122,9 @@ int pkvm_create_mappings(void *from, void *to, enum kvm_pgtable_prot prot)
 {
 	int ret;
 
-	hyp_spin_lock(&pkvm_pgd_lock);
+	pkvm_spin_lock(&pkvm_pgd_lock);
 	ret = pkvm_create_mappings_locked(from, to, prot);
-	hyp_spin_unlock(&pkvm_pgd_lock);
+	pkvm_spin_unlock(&pkvm_pgd_lock);
 
 	return ret;
 }
@@ -209,7 +209,7 @@ int hyp_create_idmap(u32 hyp_va_bits)
 	 */
 	__io_map_base = start & BIT(hyp_va_bits - 2);
 	__io_map_base ^= BIT(hyp_va_bits - 2);
-	__hyp_vmemmap = __io_map_base | BIT(hyp_va_bits - 3);
+	__pkvm_vmemmap = __io_map_base | BIT(hyp_va_bits - 3);
 
 	return __pkvm_create_mappings(start, end - start, start, PAGE_HYP_EXEC);
 }
