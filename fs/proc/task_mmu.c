@@ -900,6 +900,7 @@ static int totmaps_proc_show(struct seq_file *m, void *data)
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
 	struct mem_size_stats *mss_sum = priv->mss;
+	struct vma_iterator vmi;
 
 	/* reference to priv->task already taken */
 	/* but need to get the mm here because */
@@ -911,7 +912,8 @@ static int totmaps_proc_show(struct seq_file *m, void *data)
 	mmap_read_lock(mm);
 	hold_task_mempolicy(priv);
 
-	for (vma = mm->mmap; vma != priv->tail_vma; vma = vma->vm_next) {
+	vma_iter_init(&vmi, mm, 0);
+	for_each_vma(vmi, vma) {
 		struct mem_size_stats mss;
 
 		if (vma->vm_mm && !is_vm_hugetlb_page(vma)) {
