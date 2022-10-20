@@ -58,6 +58,49 @@ const struct dev_pm_ops __maybe_unused gna_pm = {
 	SET_RUNTIME_PM_OPS(gna_runtime_suspend, gna_runtime_resume, NULL)
 };
 
+static int gna_open(struct drm_device *dev, struct drm_file *file)
+{
+	struct gna_device *gna_priv;
+
+	gna_priv = to_gna_device(dev);
+
+	file->driver_priv = gna_priv;
+
+	return 0;
+}
+
+static void gna_delete_file_requests(struct drm_file *file, struct gna_device *gna_priv)
+{
+	struct gna_request *req, *temp_req;
+	struct list_head *reqs_list;
+
+	mutex_lock(&gna_priv->reqlist_lock);
+
+	reqs_list = &gna_priv->request_list;
+	if (!list_empty(reqs_list)) {
+		list_for_each_entry_safe(req, temp_req, reqs_list, node) {
+			if (req->drm_f == file) {
+				bool is_pending;
+
+				list_del_init(&req->node);
+				is_pending = cancel_work_sync(&req->work);
+				if (is_pending)
+					atomic_dec(&gna_priv->enqueued_requests);
+				kref_put(&req->refcount, gna_request_release);
+				break;
+			}
+		}
+	}
+
+	mutex_unlock(&gna_priv->reqlist_lock);
+}
+
+static void gna_close(struct drm_device *dev, struct drm_file *file)
+{
+	struct gna_device *gna_priv = (struct gna_device *)file->driver_priv;
+
+	gna_delete_file_requests(file, gna_priv);
+}
 
 static void gna_drm_dev_fini(struct drm_device *dev, void *ptr)
 {
@@ -136,6 +179,9 @@ static struct drm_gem_object *gna_create_gem_object(struct drm_device *dev,
 
 static const struct drm_driver gna_drm_driver = {
 	.driver_features = DRIVER_GEM | DRIVER_RENDER,
+	.open = gna_open,
+	.postclose = gna_close,
+
 	.gem_create_object = gna_create_gem_object,
 
 	.ioctls = gna_drm_ioctls,
