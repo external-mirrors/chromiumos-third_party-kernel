@@ -10,6 +10,7 @@
 #include <linux/types.h>
 
 #include "gna_hw.h"
+#include "gna_mem.h"
 
 #define DRIVER_NAME		"gna"
 #define DRIVER_DESC		"Intel(R) Gaussian & Neural Accelerator (Intel(R) GNA)"
@@ -28,12 +29,19 @@ struct gna_device {
 	void __iomem *iobase;
 	struct gna_dev_info info;
 	struct gna_hw_info hw_info;
+
+	struct gna_mmu_object mmu;
 };
 
 int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase);
 static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 {
 	return readl(gna_priv->iobase + reg);
+}
+
+static inline struct device *gna_dev(struct gna_device *gna_priv)
+{
+	return gna_priv->drm.dev;
 }
 
 #endif /* __GNA_DEVICE_H__ */
