@@ -11,11 +11,14 @@
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/workqueue.h>
 
 #include <uapi/drm/gna_drm.h>
 
 #include "gna_device.h"
 #include "gna_gem.h"
+#include "gna_request.h"
+
 #define GNA_DDI_VERSION_CURRENT GNA_DDI_VERSION_3
 
 DEFINE_DRM_GEM_FOPS(gna_drm_fops);
@@ -24,6 +27,7 @@ static const struct drm_ioctl_desc gna_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(GNA_GET_PARAMETER, gna_getparam_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(GNA_GEM_NEW, gna_gem_new_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(GNA_GEM_FREE, gna_gem_free_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(GNA_COMPUTE, gna_score_ioctl, DRM_RENDER_ALLOW),
 };
 
 
@@ -41,6 +45,24 @@ static int gna_drm_dev_init(struct drm_device *dev)
 		return err;
 
 	return drmm_add_action_or_reset(dev, gna_drm_dev_fini, NULL);
+}
+
+static void gna_workqueue_fini(struct drm_device *drm, void *data)
+{
+	struct workqueue_struct *request_wq = data;
+
+	destroy_workqueue(request_wq);
+}
+
+static int gna_workqueue_init(struct gna_device *gna_priv)
+{
+	const char *name = gna_name(gna_priv);
+
+	gna_priv->request_wq = create_singlethread_workqueue(name);
+	if (!gna_priv->request_wq)
+		return -EFAULT;
+
+	return drmm_add_action_or_reset(&gna_priv->drm, gna_workqueue_fini, gna_priv->request_wq);
 }
 
 static struct drm_gem_object *gna_create_gem_object(struct drm_device *dev,
@@ -90,6 +112,8 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 	gna_priv->iobase = iobase;
 	gna_priv->info = *dev_info;
 
+	atomic_set(&gna_priv->enqueued_requests, 0);
+
 	if (!(sizeof(dma_addr_t) > 4) ||
 		dma_set_mask(parent, DMA_BIT_MASK(64))) {
 		err = dma_set_mask(parent, DMA_BIT_MASK(32));
@@ -106,6 +130,15 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 
 	dev_dbg(parent, "maximum memory size %llu num pd %d\n",
 		gna_priv->info.max_hw_mem, gna_priv->info.num_pagetables);
+	atomic_set(&gna_priv->request_count, 0);
+
+	mutex_init(&gna_priv->reqlist_lock);
+	INIT_LIST_HEAD(&gna_priv->request_list);
+
+	err = gna_workqueue_init(gna_priv);
+	if (err)
+		return err;
+
 
 	dev_set_drvdata(parent, drm_dev);
 

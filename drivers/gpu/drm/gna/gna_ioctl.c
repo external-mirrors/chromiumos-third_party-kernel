@@ -5,10 +5,33 @@
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_file.h>
 
+#include <linux/workqueue.h>
+
 #include <uapi/drm/gna_drm.h>
 
 #include "gna_device.h"
 #include "gna_gem.h"
+#include "gna_request.h"
+
+int gna_score_ioctl(struct drm_device *dev, void *data,
+		struct drm_file *file)
+{
+	union gna_compute *score_args = data;
+	u64 request_id;
+	int ret;
+
+	ret = gna_validate_score_config(&score_args->in.config, to_gna_device(dev));
+	if (ret)
+		return ret;
+
+	ret = gna_enqueue_request(&score_args->in.config, file, &request_id);
+	if (ret)
+		return ret;
+
+	score_args->out.request_id = request_id;
+
+	return 0;
+}
 
 int gna_gem_free_ioctl(struct drm_device *dev, void *data,
 		struct drm_file *file)
@@ -24,6 +47,9 @@ int gna_gem_free_ioctl(struct drm_device *dev, void *data,
 		return -ENOENT;
 
 	gnagemo = to_gna_gem_obj(to_drm_gem_shmem_obj(drmgemo));
+
+	queue_work(gna_priv->request_wq, &gnagemo->work);
+	cancel_work_sync(&gnagemo->work);
 
 	ret = drm_gem_handle_delete(file, args->handle);
 
@@ -84,5 +110,6 @@ int gna_gem_new_ioctl(struct drm_device *dev, void *data,
 	gnagemo = to_gna_gem_obj(drmgemshm);
 	gnagemo->handle = args->out.handle;
 
+	INIT_WORK(&gnagemo->work, gna_gem_obj_release_work);
 	return 0;
 }

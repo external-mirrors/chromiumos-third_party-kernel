@@ -47,4 +47,6 @@ struct gna_mmu_object {
 
 int gna_mmu_init(struct gna_device *gna_priv);
 
+void gna_gem_obj_release_work(struct work_struct *work);
+
 #endif // __GNA_MEM_H__

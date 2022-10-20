@@ -7,7 +7,10 @@
 #include <drm/drm_device.h>
 #include <drm/drm_gem_shmem_helper.h>
 
+#include <linux/atomic.h>
 #include <linux/io.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/types.h>
 
 #include "gna_gem.h"
@@ -22,6 +25,7 @@
 #define DRIVER_MINOR		0
 #define DRIVER_PATCHLEVEL	0
 
+struct workqueue_struct;
 union gna_parameter;
 struct drm_file;
 struct device;
@@ -37,6 +41,15 @@ struct gna_device {
 	struct gna_hw_info hw_info;
 
 	struct gna_mmu_object mmu;
+
+	struct list_head request_list;
+	/* protects request_list */
+	struct mutex reqlist_lock;
+	struct workqueue_struct *request_wq;
+	atomic_t request_count;
+
+	/* requests that are in queue to be run +1 for currently processed one */
+	atomic_t enqueued_requests;
 };
 
 int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase);
@@ -51,9 +64,17 @@ int gna_gem_new_ioctl(struct drm_device *dev, void *data,
 int gna_gem_free_ioctl(struct drm_device *dev, void *data,
 		struct drm_file *file);
 
+int gna_score_ioctl(struct drm_device *dev, void *data,
+		struct drm_file *file);
+
 static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 {
 	return readl(gna_priv->iobase + reg);
+}
+
+static inline const char *gna_name(struct gna_device *gna_priv)
+{
+	return gna_priv->drm.unique;
 }
 
 static inline struct device *gna_dev(struct gna_device *gna_priv)

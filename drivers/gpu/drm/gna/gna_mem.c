@@ -1,15 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright(c) 2017-2022 Intel Corporation
 
+#include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
 
+#include <linux/atomic.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/kref.h>
+#include <linux/list.h>
 #include <linux/math.h>
 #include <linux/mm.h>
+#include <linux/mutex.h>
+#include <linux/workqueue.h>
 
 #include "gna_device.h"
+#include "gna_gem.h"
 #include "gna_mem.h"
+#include "gna_request.h"
 
 static void gna_mmu_set(struct gna_device *gna_priv)
 {
@@ -75,4 +83,39 @@ int gna_mmu_init(struct gna_device *gna_priv)
 	gna_mmu_set(gna_priv);
 
 	return 0;
+}
+
+static void gna_delete_score_requests(u32 handle, struct gna_device *gna_priv)
+{
+	struct gna_request *req, *temp_req;
+	struct list_head *reqs_list;
+	int i;
+
+	mutex_lock(&gna_priv->reqlist_lock);
+
+	reqs_list = &gna_priv->request_list;
+	if (!list_empty(reqs_list)) {
+		list_for_each_entry_safe(req, temp_req, reqs_list, node) {
+			for (i = 0; i < req->buffer_count; ++i) {
+				if (req->buffer_list[i].gna.handle == handle) {
+					list_del_init(&req->node);
+					cancel_work_sync(&req->work);
+					atomic_dec(&gna_priv->enqueued_requests);
+					kref_put(&req->refcount, gna_request_release);
+					break;
+				}
+			}
+		}
+	}
+
+	mutex_unlock(&gna_priv->reqlist_lock);
+}
+
+void gna_gem_obj_release_work(struct work_struct *work)
+{
+	struct gna_gem_object *gnagemo;
+
+	gnagemo = container_of(work, struct gna_gem_object, work);
+
+	gna_delete_score_requests(gnagemo->handle, to_gna_device(gnagemo->base.base.dev));
 }
