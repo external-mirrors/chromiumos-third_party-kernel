@@ -9,6 +9,7 @@
 
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
@@ -28,6 +29,7 @@ static const struct drm_ioctl_desc gna_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(GNA_GEM_NEW, gna_gem_new_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(GNA_GEM_FREE, gna_gem_free_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(GNA_COMPUTE, gna_score_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(GNA_WAIT, gna_wait_ioctl, DRM_RENDER_ALLOW),
 };
 
 
@@ -45,6 +47,16 @@ static int gna_drm_dev_init(struct drm_device *dev)
 		return err;
 
 	return drmm_add_action_or_reset(dev, gna_drm_dev_fini, NULL);
+}
+
+static irqreturn_t gna_interrupt(int irq, void *priv)
+{
+	struct gna_device *gna_priv;
+
+	gna_priv = (struct gna_device *)priv;
+	gna_priv->dev_busy = false;
+	wake_up(&gna_priv->dev_busy_waitq);
+	return IRQ_HANDLED;
 }
 
 static void gna_workqueue_fini(struct drm_device *drm, void *data)
@@ -96,7 +108,7 @@ static const struct drm_driver gna_drm_driver = {
 	.patchlevel = DRIVER_PATCHLEVEL,
 };
 
-int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase)
+int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase, int irq)
 {
 	struct gna_device *gna_priv;
 	struct drm_device *drm_dev;
@@ -130,15 +142,27 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 
 	dev_dbg(parent, "maximum memory size %llu num pd %d\n",
 		gna_priv->info.max_hw_mem, gna_priv->info.num_pagetables);
+	dev_dbg(parent, "desc rsvd size %d mmu vamax size %d\n",
+		gna_priv->info.desc_info.rsvd_size,
+		gna_priv->info.desc_info.mmu_info.vamax_size);
+
+	mutex_init(&gna_priv->mmu_lock);
+
 	atomic_set(&gna_priv->request_count, 0);
 
 	mutex_init(&gna_priv->reqlist_lock);
 	INIT_LIST_HEAD(&gna_priv->request_list);
 
+	init_waitqueue_head(&gna_priv->dev_busy_waitq);
+
 	err = gna_workqueue_init(gna_priv);
 	if (err)
 		return err;
 
+	err = devm_request_irq(parent, irq, gna_interrupt,
+			IRQF_SHARED, gna_name(gna_priv), gna_priv);
+	if (err)
+		return err;
 
 	dev_set_drvdata(parent, drm_dev);
 

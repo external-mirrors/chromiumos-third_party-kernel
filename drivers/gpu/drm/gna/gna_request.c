@@ -12,10 +12,14 @@
 #include <linux/math.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/timekeeping.h>
 #include <linux/uaccess.h>
 
 #include "gna_device.h"
+#include "gna_hw.h"
+#include "gna_mem.h"
 #include "gna_request.h"
+#include "gna_score.h"
 
 int gna_validate_score_config(struct gna_compute_cfg *compute_cfg,
 			struct gna_device *gna_priv)
@@ -45,6 +49,38 @@ int gna_validate_score_config(struct gna_compute_cfg *compute_cfg,
 	return 0;
 }
 
+static void gna_request_update_status(struct gna_request *score_request)
+{
+	struct gna_device *gna_priv = to_gna_device(score_request->drm_f->minor->dev);
+	/* The gna_priv's hw_status should be updated first */
+	u32 hw_status = gna_priv->hw_status;
+	u32 stall_cycles;
+	u32 total_cycles;
+
+	/* Technically, the time stamp can be a bit later than
+	 * when the hw actually completed scoring. Here we just
+	 * do our best in a deferred work, unless we want to
+	 * tax isr for a more accurate record.
+	 */
+	score_request->drv_perf.hw_completed = ktime_get_ns();
+
+	score_request->hw_status = hw_status;
+
+	score_request->status = gna_parse_hw_status(gna_priv, hw_status);
+
+	if (gna_hw_perf_enabled(gna_priv)) {
+		if (hw_status & GNA_STS_STATISTICS_VALID) {
+			total_cycles = gna_reg_read(gna_priv, GNA_MMIO_PTC);
+			stall_cycles = gna_reg_read(gna_priv, GNA_MMIO_PSC);
+			score_request->hw_perf.total = total_cycles;
+			score_request->hw_perf.stall = stall_cycles;
+		} else
+			dev_warn(gna_dev(gna_priv), "GNA statistics missing\n");
+	}
+	if (unlikely(hw_status & GNA_ERROR))
+		gna_print_error_status(gna_priv, hw_status);
+}
+
 static void gna_request_make_zombie(struct gna_request *score_request)
 {
 	int i;
@@ -60,15 +96,64 @@ static void gna_request_make_zombie(struct gna_request *score_request)
 
 static void gna_request_process(struct work_struct *work)
 {
+	struct gna_buffer_with_object *buffer;
 	struct gna_request *score_request;
 	struct gna_device *gna_priv;
+	unsigned long hw_timeout;
+	int ret;
+	u64 i;
 
 	score_request = container_of(work, struct gna_request, work);
 	gna_priv = to_gna_device(score_request->drm_f->minor->dev);
 
+	score_request->state = ACTIVE;
+
+	score_request->drv_perf.pre_processing = ktime_get_ns();
+
+	/* Set busy flag before kicking off HW. The isr will clear it and wake up us. There is
+	 * no difference if isr is missed in a timeout situation of the last request. We just
+	 * always set it busy and let the wait_event_timeout check the reset.
+	 * wq:  X -> true
+	 * isr: X -> false
+	 */
+	gna_priv->dev_busy = true;
+
+	ret = gna_score(score_request);
+	if (ret) {
+		score_request->status = ret;
+		goto tail;
+	}
+
+	score_request->drv_perf.processing = ktime_get_ns();
+
+	hw_timeout = gna_priv->recovery_timeout_jiffies;
+
+	hw_timeout = wait_event_timeout(gna_priv->dev_busy_waitq,
+			!gna_priv->dev_busy, hw_timeout);
+
+	if (!hw_timeout)
+		dev_warn(gna_dev(gna_priv), "hardware timeout occurred\n");
+
+	gna_priv->hw_status = gna_reg_read(gna_priv, GNA_MMIO_STS);
+
+	gna_request_update_status(score_request);
+
+	ret = gna_abort_hw(gna_priv);
+	if (ret < 0 && score_request->status == 0)
+		score_request->status = ret; // -ETIMEDOUT
+
+	gna_mmu_clear(gna_priv);
+
+	for (i = 0, buffer = score_request->buffer_list; i < score_request->buffer_count; i++, buffer++)
+		gna_gem_object_put_pages_sgt(buffer->gem);
+
+tail:
+	score_request->drv_perf.completion = ktime_get_ns();
+	score_request->state = DONE;
 	gna_request_make_zombie(score_request);
 
 	atomic_dec(&gna_priv->enqueued_requests);
+	wake_up_interruptible_all(&score_request->waitq);
 }
 
 static struct gna_request *gna_request_create(struct drm_file *file,
@@ -92,6 +177,8 @@ static struct gna_request *gna_request_create(struct drm_file *file,
 	score_request->request_id = atomic_inc_return(&gna_priv->request_count);
 	score_request->compute_cfg = *compute_cfg;
 	score_request->drm_f = file;
+	score_request->state = NEW;
+	init_waitqueue_head(&score_request->waitq);
 	INIT_WORK(&score_request->work, gna_request_process);
 	INIT_LIST_HEAD(&score_request->node);
 
@@ -334,5 +421,6 @@ void gna_request_release(struct kref *ref)
 	struct gna_request *score_request =
 		container_of(ref, struct gna_request, refcount);
 	gna_request_make_zombie(score_request);
+	wake_up_interruptible_all(&score_request->waitq);
 	kfree(score_request);
 }

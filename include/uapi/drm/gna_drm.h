@@ -20,6 +20,22 @@
 #define GNA_PARAM_INPUT_BUFFER_S	3
 #define GNA_PARAM_DDI_VERSION		4
 
+#define GNA_STS_SCORE_COMPLETED		_BITUL(0)
+#define GNA_STS_STATISTICS_VALID	_BITUL(3)
+#define GNA_STS_PCI_MMU_ERR		_BITUL(4)
+#define GNA_STS_PCI_DMA_ERR		_BITUL(5)
+#define GNA_STS_PCI_UNEXCOMPL_ERR	_BITUL(6)
+#define GNA_STS_VA_OOR			_BITUL(7)
+#define GNA_STS_PARAM_OOR		_BITUL(8)
+#define GNA_STS_SATURATE		_BITUL(17)
+
+#define GNA_ERROR			\
+	(GNA_STS_PCI_DMA_ERR		|\
+	 GNA_STS_PCI_MMU_ERR		|\
+	 GNA_STS_PCI_UNEXCOMPL_ERR	|\
+	 GNA_STS_PARAM_OOR		|\
+	 GNA_STS_VA_OOR)
+
 #define GNA_DEV_TYPE_0_9	0x09
 #define GNA_DEV_TYPE_1_0	0x10
 #define GNA_DEV_TYPE_2_0	0x20
@@ -48,6 +64,22 @@ struct gna_buffer {
 
 	__u64 patch_count;
 	__u64 patches_ptr;
+};
+
+/*
+ * Driver performance timestamps in nanoseconds.
+ * Values regard system boot time, but do not count during suspend.
+ */
+struct gna_drv_perf {
+	__u64 pre_processing;	/* driver starts pre-processing */
+	__u64 processing;	/* hw starts processing */
+	__u64 hw_completed;	/* hw finishes processing */
+	__u64 completion;	/* driver finishes post-processing */
+};
+
+struct gna_hw_perf {
+	__u64 total;
+	__u64 stall;
 };
 
 struct gna_compute_cfg {
@@ -88,6 +120,21 @@ union gna_compute {
 	} out;
 };
 
+union gna_wait {
+	struct {
+		__u64 request_id;
+		__u32 timeout;
+		__u32 pad;
+	} in;
+
+	struct {
+		__u32 hw_status;
+		__u32 pad;
+		struct gna_drv_perf drv_perf;
+		struct gna_hw_perf hw_perf;
+	} out;
+};
+
 struct gna_mem_id {
 	__u32 handle;
 	__u32 pad;
@@ -111,10 +158,12 @@ struct gna_gem_free {
 #define DRM_GNA_GEM_NEW			0x01
 #define DRM_GNA_GEM_FREE		0x02
 #define DRM_GNA_COMPUTE			0x03
+#define DRM_GNA_WAIT			0x04
 
 #define DRM_IOCTL_GNA_GET_PARAMETER	DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_GET_PARAMETER, union gna_parameter)
 #define DRM_IOCTL_GNA_GEM_NEW		DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_GEM_NEW, union gna_gem_new)
 #define DRM_IOCTL_GNA_GEM_FREE		DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_GEM_FREE, struct gna_gem_free)
 #define DRM_IOCTL_GNA_COMPUTE		DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_COMPUTE, union gna_compute)
+#define DRM_IOCTL_GNA_WAIT		DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_WAIT, union gna_wait)
 
 #endif /* _GNA_DRM_H_ */

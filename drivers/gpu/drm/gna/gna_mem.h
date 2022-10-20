@@ -47,6 +47,12 @@ struct gna_mmu_object {
 
 int gna_mmu_init(struct gna_device *gna_priv);
 
+void gna_mmu_add(struct gna_device *gna_priv, struct drm_gem_shmem_object *drmshmemo);
+
+void gna_mmu_clear(struct gna_device *gna_priv);
+
+bool gna_gem_object_put_pages_sgt(struct gna_gem_object *gna_obj);
+
 void gna_gem_obj_release_work(struct work_struct *work);
 
 #endif // __GNA_MEM_H__

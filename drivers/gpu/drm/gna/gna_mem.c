@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright(c) 2017-2022 Intel Corporation
 
+#include <drm/drm_gem.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
 
@@ -12,6 +13,10 @@
 #include <linux/math.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
+#include <linux/scatterlist.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 
 #include "gna_device.h"
@@ -85,6 +90,127 @@ int gna_mmu_init(struct gna_device *gna_priv)
 	return 0;
 }
 
+static struct scatterlist *gna_iterate_sgl(u64 sg_elems, struct scatterlist *sgl, dma_addr_t *sg_page,
+					int *sg_page_len, int *sg_pages)
+{
+	while (sg_elems-- > 0) {
+		(*sg_page) += PAGE_SIZE;
+		(*sg_pages)++;
+		if (*sg_pages == *sg_page_len) {
+			sgl = sg_next(sgl);
+			if (!sgl)
+				break;
+
+			*sg_page = sg_dma_address(sgl);
+			*sg_page_len =
+				round_up(sg_dma_len(sgl), PAGE_SIZE)
+				>> PAGE_SHIFT;
+			*sg_pages = 0;
+		}
+	}
+
+	return sgl;
+}
+
+
+void gna_mmu_add(struct gna_device *gna_priv, struct drm_gem_shmem_object *drmshmemo)
+{
+	struct gna_mmu_object *mmu;
+	struct scatterlist *sgl;
+	dma_addr_t sg_page;
+	int sg_page_len;
+	u32 *pagetable;
+	u32 mmu_page;
+	int sg_pages;
+	int i;
+	int j;
+
+	mmu = &gna_priv->mmu;
+	mutex_lock(&gna_priv->mmu_lock);
+
+	j = mmu->filled_pages;
+	sgl = drmshmemo->sgt->sgl;
+
+	if (!sgl) {
+		dev_warn(gna_dev(gna_priv), "empty scatter list in memory object\n");
+		goto warn_empty_sgl;
+	}
+	sg_page = sg_dma_address(sgl);
+	sg_page_len = round_up(sg_dma_len(sgl), PAGE_SIZE) >> PAGE_SHIFT;
+	sg_pages = 0;
+
+	for (i = mmu->filled_pts; i < mmu->num_pagetables; i++) {
+		if (!sgl)
+			break;
+
+		pagetable = mmu->pagetables[i];
+
+		for (j = mmu->filled_pages; j < GNA_PT_LENGTH; j++) {
+			mmu_page = sg_page >> PAGE_SHIFT;
+			pagetable[j] = mmu_page;
+
+			mmu->filled_pages++;
+
+			sgl = gna_iterate_sgl(1, sgl, &sg_page, &sg_page_len,
+					&sg_pages);
+			if (!sgl)
+				break;
+		}
+
+		if (j == GNA_PT_LENGTH) {
+			mmu->filled_pages = 0;
+			mmu->filled_pts++;
+		}
+	}
+
+	mmu->hwdesc->mmu.vamaxaddr =
+		(mmu->filled_pts * PAGE_SIZE * GNA_PGDIR_ENTRIES) +
+		(mmu->filled_pages * PAGE_SIZE) - 1;
+	dev_dbg(gna_dev(gna_priv), "vamaxaddr: %u\n", mmu->hwdesc->mmu.vamaxaddr);
+
+warn_empty_sgl:
+	mutex_unlock(&gna_priv->mmu_lock);
+}
+
+void gna_mmu_clear(struct gna_device *gna_priv)
+{
+	struct gna_mmu_object *mmu;
+	int i;
+
+	mmu = &gna_priv->mmu;
+	mutex_lock(&gna_priv->mmu_lock);
+
+	for (i = 0; i < mmu->filled_pts; i++)
+		memset(mmu->pagetables[i], 0, PAGE_SIZE);
+
+	if (mmu->filled_pages > 0)
+		memset(mmu->pagetables[mmu->filled_pts], 0, mmu->filled_pages * GNA_PT_ENTRY_SIZE);
+
+	mmu->filled_pts = 0;
+	mmu->filled_pages = 0;
+	mmu->hwdesc->mmu.vamaxaddr = 0;
+
+	mutex_unlock(&gna_priv->mmu_lock);
+}
+
+bool gna_gem_object_put_pages_sgt(struct gna_gem_object *gnagemo)
+{
+	struct drm_gem_shmem_object *shmem = &gnagemo->base;
+	struct drm_gem_object *drmgemo = &shmem->base;
+
+	if (!dma_resv_trylock(shmem->base.resv))
+		return false;
+	dma_unmap_sgtable(drmgemo->dev->dev, shmem->sgt, DMA_BIDIRECTIONAL, 0);
+	sg_free_table(shmem->sgt);
+	kfree(shmem->sgt);
+	shmem->sgt = NULL;
+	dma_resv_unlock(shmem->base.resv);
+
+	drm_gem_shmem_put_pages(shmem);
+
+	return true;
+}
+
 static void gna_delete_score_requests(u32 handle, struct gna_device *gna_priv)
 {
 	struct gna_request *req, *temp_req;
@@ -118,4 +244,6 @@ void gna_gem_obj_release_work(struct work_struct *work)
 	gnagemo = container_of(work, struct gna_gem_object, work);
 
 	gna_delete_score_requests(gnagemo->handle, to_gna_device(gnagemo->base.base.dev));
+
+	wake_up_interruptible(&gnagemo->waitq);
 }

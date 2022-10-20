@@ -4,7 +4,11 @@
 #ifndef __GNA_HW_H__
 #define __GNA_HW_H__
 
+#include <linux/bits.h>
 #include <linux/mm_types.h>
+
+struct gna_compute_cfg;
+struct gna_device;
 
 #define GNA_FEATURES						\
 	.max_hw_mem = 256 * 1024 * 1024,			\
@@ -42,10 +46,29 @@
 #define GNA_DEV_HWID_MTL	0x7E4C
 
 /* GNA MMIO registers */
+#define GNA_MMIO_STS		0x80
+#define GNA_MMIO_CTRL		0x84
+#define GNA_MMIO_PTC		0x8C
+#define GNA_MMIO_PSC		0x90
+#define GNA_MMIO_D0I3C		0xA8
+#define GNA_MMIO_DESBASE	0xB0
 #define GNA_MMIO_IBUFFS		0xB4
 
+#define GNA_PT_ENTRY_SIZE		4
+/* there are up to 1024 32-bit pointers in one page in Page Table (L1) */
+#define GNA_PT_LENGTH           (PAGE_SIZE / GNA_PT_ENTRY_SIZE)
+
 #define GNA_PGDIRN_LEN			64
+#define GNA_PGDIR_ENTRIES		1024 /* 32-bit page addresses */
 #define GNA_PGDIR_INVALID		1
+
+#define GNA_CTRL_START_ACCEL		BIT(0)
+#define GNA_CTRL_ACTIVE_LIST_EN		BIT(1)
+#define GNA_CTRL_ABORT_CLR_ACCEL	BIT(2)
+#define GNA_CTRL_OP_MODE		GENMASK(6, 5)
+#define GNA_CTRL_COMP_INT_EN		BIT(8)
+#define GNA_CTRL_ERR_INT_EN		BIT(10)
+#define GNA_CTRL_COMP_STATS_EN		GENMASK(15, 12)
 
 struct gna_mmu_info {
 	u32 vamax_size;
@@ -73,5 +96,12 @@ struct gna_dev_info {
 
 	struct gna_desc_info desc_info;
 };
+
+int gna_abort_hw(struct gna_device *gna_priv);
+bool gna_hw_perf_enabled(struct gna_device *gna_priv);
+int gna_parse_hw_status(struct gna_device *gna_priv, u32 hw_status);
+void gna_print_error_status(struct gna_device *gna_priv, u32 hw_status);
+void gna_start_scoring(struct gna_device *gna_priv,
+		struct gna_compute_cfg *compute_cfg);
 
 #endif // __GNA_HW_H__

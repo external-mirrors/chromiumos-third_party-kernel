@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright(c) 2017-2022 Intel Corporation
 
+#include <linux/device.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 
@@ -75,10 +76,33 @@ static const struct pci_device_id gna_pci_ids[] = {
 	{ }
 };
 
+static void gna_irq_vectors_fini(void *data)
+{
+	struct pci_dev *pcidev = data;
+
+	pci_free_irq_vectors(pcidev);
+}
+
+static int gna_irq_vectors_init(struct pci_dev *pcidev)
+{
+	int ret;
+
+	ret = pci_alloc_irq_vectors(pcidev, 1, 1, PCI_IRQ_ALL_TYPES);
+	if (ret < 0)
+		return ret;
+
+	ret = devm_add_action(&pcidev->dev, gna_irq_vectors_fini, pcidev);
+	if (ret)
+		gna_irq_vectors_fini(pcidev);
+
+	return ret;
+}
+
 int gna_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci_id)
 {
 	struct gna_dev_info *dev_info;
 	void __iomem *iobase;
+	int irq;
 	int err;
 
 	err = pcim_enable_device(pcidev);
@@ -93,9 +117,17 @@ int gna_pci_probe(struct pci_dev *pcidev, const struct pci_device_id *pci_id)
 
 	pci_set_master(pcidev);
 
+	err = gna_irq_vectors_init(pcidev);
+	if (err < 0)
+		return err;
+
+	irq = pci_irq_vector(pcidev, 0);
+	if (irq < 0)
+		return irq;
+
 	dev_info = (struct gna_dev_info *)pci_id->driver_data;
 
-	err = gna_probe(&pcidev->dev, dev_info, iobase);
+	err = gna_probe(&pcidev->dev, dev_info, iobase, irq);
 	if (err)
 		return err;
 

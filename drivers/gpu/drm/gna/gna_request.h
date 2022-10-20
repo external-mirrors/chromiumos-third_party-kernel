@@ -6,6 +6,7 @@
 
 #include <linux/kref.h>
 #include <linux/types.h>
+#include <linux/wait.h>
 #include <linux/workqueue.h>
 
 #include <uapi/drm/gna_drm.h>
@@ -13,6 +14,12 @@
 struct gna_device;
 struct gna_gem_object;
 struct drm_file;
+
+enum gna_request_state {
+	NEW,
+	ACTIVE,
+	DONE,
+};
 
 struct gna_buffer_with_object {
 	struct gna_buffer gna;
@@ -26,6 +33,15 @@ struct gna_request {
 
 	struct drm_file *drm_f;
 
+	u32 hw_status;
+
+	enum gna_request_state state;
+
+	int status;
+
+	struct gna_hw_perf hw_perf;
+	struct gna_drv_perf drv_perf;
+
 	struct list_head node;
 
 	struct gna_compute_cfg compute_cfg;
@@ -34,6 +50,7 @@ struct gna_request {
 	u64 buffer_count;
 
 	struct work_struct work;
+	struct wait_queue_head waitq;
 };
 
 int gna_validate_score_config(struct gna_compute_cfg *compute_cfg,

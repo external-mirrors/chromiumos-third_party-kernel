@@ -35,12 +35,20 @@ struct gna_device {
 
 	int recovery_timeout_jiffies;
 
+	/* hardware status set by interrupt handler */
+	u32 hw_status;
+
 	/* device related resources */
 	void __iomem *iobase;
 	struct gna_dev_info info;
 	struct gna_hw_info hw_info;
 
 	struct gna_mmu_object mmu;
+	struct mutex mmu_lock;
+
+	/* if true, then gna device is processing */
+	bool dev_busy;
+	struct wait_queue_head dev_busy_waitq;
 
 	struct list_head request_list;
 	/* protects request_list */
@@ -52,7 +60,7 @@ struct gna_device {
 	atomic_t enqueued_requests;
 };
 
-int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase);
+int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase, int irq);
 int gna_getparam(struct gna_device *gna_priv, union gna_parameter *param);
 
 int gna_getparam_ioctl(struct drm_device *dev, void *data,
@@ -67,9 +75,17 @@ int gna_gem_free_ioctl(struct drm_device *dev, void *data,
 int gna_score_ioctl(struct drm_device *dev, void *data,
 		struct drm_file *file);
 
+int gna_wait_ioctl(struct drm_device *dev, void *data,
+		struct drm_file *file);
+
 static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 {
 	return readl(gna_priv->iobase + reg);
+}
+
+static inline void gna_reg_write(struct gna_device *gna_priv, u32 reg, u32 val)
+{
+	writel(val, gna_priv->iobase + reg);
 }
 
 static inline const char *gna_name(struct gna_device *gna_priv)
