@@ -11426,6 +11426,7 @@ M:	Maciej Kwapulinski <maciej.kwapulinski@linux.intel.com>
 S:	Maintained
 F:	Documentation/gpu/gna.rst
 F:	drivers/gpu/drm/gna/*
+F:	include/uapi/drm/gna_drm.h
 
 INTEL GPIO DRIVERS
 M:	Andy Shevchenko <andy@kernel.org>

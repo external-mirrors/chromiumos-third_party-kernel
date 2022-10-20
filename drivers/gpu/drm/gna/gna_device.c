@@ -3,13 +3,22 @@
 
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
+#include <drm/drm_ioctl.h>
 #include <drm/drm_managed.h>
 
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 
+#include <uapi/drm/gna_drm.h>
+
 #include "gna_device.h"
+#define GNA_DDI_VERSION_CURRENT GNA_DDI_VERSION_3
+
+static const struct drm_ioctl_desc gna_drm_ioctls[] = {
+	DRM_IOCTL_DEF_DRV(GNA_GET_PARAMETER, gna_getparam_ioctl, DRM_RENDER_ALLOW),
+};
+
 
 static void gna_drm_dev_fini(struct drm_device *dev, void *ptr)
 {
@@ -29,6 +38,8 @@ static int gna_drm_dev_init(struct drm_device *dev)
 
 static const struct drm_driver gna_drm_driver = {
 	.driver_features = DRIVER_RENDER,
+	.ioctls = gna_drm_ioctls,
+	.num_ioctls = ARRAY_SIZE(gna_drm_ioctls),
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
@@ -50,6 +61,7 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 		return PTR_ERR(gna_priv);
 
 	drm_dev = &gna_priv->drm;
+	gna_priv->recovery_timeout_jiffies = msecs_to_jiffies(60*1000);
 	gna_priv->iobase = iobase;
 	gna_priv->info = *dev_info;
 
@@ -75,6 +87,52 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 	err = gna_drm_dev_init(drm_dev);
 	if (err)
 		return err;
+
+	return 0;
+}
+
+static u32 gna_device_type_by_hwid(u32 hwid)
+{
+	switch (hwid) {
+	case GNA_DEV_HWID_CNL:
+		return GNA_DEV_TYPE_0_9;
+	case GNA_DEV_HWID_GLK:
+	case GNA_DEV_HWID_EHL:
+	case GNA_DEV_HWID_ICL:
+		return GNA_DEV_TYPE_1_0;
+	case GNA_DEV_HWID_JSL:
+	case GNA_DEV_HWID_TGL:
+	case GNA_DEV_HWID_RKL:
+		return GNA_DEV_TYPE_2_0;
+	case GNA_DEV_HWID_ADL:
+	case GNA_DEV_HWID_RPL:
+		return GNA_DEV_TYPE_3_0;
+	case GNA_DEV_HWID_MTL:
+		return GNA_DEV_TYPE_3_5;
+	default:
+		return 0;
+	}
+}
+
+int gna_getparam(struct gna_device *gna_priv, union gna_parameter *param)
+{
+	switch (param->in.id) {
+	case GNA_PARAM_RECOVERY_TIMEOUT:
+		param->out.value = jiffies_to_msecs(gna_priv->recovery_timeout_jiffies) / 1000;
+		break;
+	case GNA_PARAM_INPUT_BUFFER_S:
+		param->out.value = gna_priv->hw_info.in_buf_s;
+		break;
+	case GNA_PARAM_DEVICE_TYPE:
+		param->out.value = gna_device_type_by_hwid(gna_priv->info.hwid);
+		break;
+	case GNA_PARAM_DDI_VERSION:
+		param->out.value = GNA_DDI_VERSION_CURRENT;
+		break;
+	default:
+		dev_dbg(gna_dev(gna_priv), "unknown parameter id: %llu\n", param->in.id);
+		return -EINVAL;
+	}
 
 	return 0;
 }

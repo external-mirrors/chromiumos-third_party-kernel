@@ -20,10 +20,14 @@
 #define DRIVER_MINOR		0
 #define DRIVER_PATCHLEVEL	0
 
+union gna_parameter;
+struct drm_file;
 struct device;
 
 struct gna_device {
 	struct drm_device drm;
+
+	int recovery_timeout_jiffies;
 
 	/* device related resources */
 	void __iomem *iobase;
@@ -34,6 +38,11 @@ struct gna_device {
 };
 
 int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase);
+int gna_getparam(struct gna_device *gna_priv, union gna_parameter *param);
+
+int gna_getparam_ioctl(struct drm_device *dev, void *data,
+		struct drm_file *file);
+
 static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 {
 	return readl(gna_priv->iobase + reg);
@@ -42,6 +51,11 @@ static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 static inline struct device *gna_dev(struct gna_device *gna_priv)
 {
 	return gna_priv->drm.dev;
+}
+
+static inline struct gna_device *to_gna_device(struct drm_device *dev)
+{
+	return container_of(dev, struct gna_device, drm);
 }
 
 #endif /* __GNA_DEVICE_H__ */
