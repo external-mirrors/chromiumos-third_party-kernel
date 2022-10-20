@@ -11,6 +11,7 @@
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/pm_runtime.h>
 #include <linux/types.h>
 
 #include "gna_gem.h"
@@ -77,6 +78,8 @@ int gna_score_ioctl(struct drm_device *dev, void *data,
 
 int gna_wait_ioctl(struct drm_device *dev, void *data,
 		struct drm_file *file);
+
+extern const struct dev_pm_ops __maybe_unused gna_pm;
 
 static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 {

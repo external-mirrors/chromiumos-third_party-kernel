@@ -138,6 +138,9 @@ static struct pci_driver gna_pci_driver = {
 	.name = DRIVER_NAME,
 	.id_table = gna_pci_ids,
 	.probe = gna_pci_probe,
+	.driver = {
+		.pm = &gna_pm,
+	},
 };
 
 module_pci_driver(gna_pci_driver);

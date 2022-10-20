@@ -32,6 +32,32 @@ static const struct drm_ioctl_desc gna_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(GNA_WAIT, gna_wait_ioctl, DRM_RENDER_ALLOW),
 };
 
+static int __maybe_unused gna_runtime_suspend(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct gna_device *gna_priv = to_gna_device(drm_dev);
+	u32 val = gna_reg_read(gna_priv, GNA_MMIO_D0I3C);
+
+	dev_dbg(dev, "%s D0I3, reg %.8x\n", __func__, val);
+
+	return 0;
+}
+
+static int __maybe_unused gna_runtime_resume(struct device *dev)
+{
+	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct gna_device *gna_priv = to_gna_device(drm_dev);
+	u32 val = gna_reg_read(gna_priv, GNA_MMIO_D0I3C);
+
+	dev_dbg(dev, "%s D0I3, reg %.8x\n", __func__, val);
+
+	return 0;
+}
+
+const struct dev_pm_ops __maybe_unused gna_pm = {
+	SET_RUNTIME_PM_OPS(gna_runtime_suspend, gna_runtime_resume, NULL)
+};
+
 
 static void gna_drm_dev_fini(struct drm_device *dev, void *ptr)
 {
@@ -47,6 +73,22 @@ static int gna_drm_dev_init(struct drm_device *dev)
 		return err;
 
 	return drmm_add_action_or_reset(dev, gna_drm_dev_fini, NULL);
+}
+
+static void gna_pm_init(struct device *dev)
+{
+	pm_runtime_set_autosuspend_delay(dev, 2000);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_allow(dev);
+	pm_runtime_put_noidle(dev);
+}
+
+static void gna_pm_fini(struct drm_device *drm, void *data)
+{
+	struct device *dev = data;
+
+	pm_runtime_get_noresume(dev);
 }
 
 static irqreturn_t gna_interrupt(int irq, void *priv)
@@ -167,6 +209,11 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 	dev_set_drvdata(parent, drm_dev);
 
 	err = gna_drm_dev_init(drm_dev);
+	if (err)
+		return err;
+
+	gna_pm_init(parent);
+	err = drmm_add_action(drm_dev, gna_pm_fini, parent);
 	if (err)
 		return err;
 
