@@ -6,6 +6,9 @@
 
 #include <drm/drm_device.h>
 
+#include <linux/io.h>
+#include <linux/types.h>
+
 #include "gna_hw.h"
 
 #define DRIVER_NAME		"gna"
@@ -24,7 +27,13 @@ struct gna_device {
 	/* device related resources */
 	void __iomem *iobase;
 	struct gna_dev_info info;
+	struct gna_hw_info hw_info;
 };
 
 int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem *iobase);
+static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
+{
+	return readl(gna_priv->iobase + reg);
+}
+
 #endif /* __GNA_DEVICE_H__ */

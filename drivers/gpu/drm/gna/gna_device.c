@@ -42,6 +42,7 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 {
 	struct gna_device *gna_priv;
 	struct drm_device *drm_dev;
+	u32 bld_reg;
 	int err;
 
 	gna_priv = devm_drm_dev_alloc(parent, &gna_drm_driver, struct gna_device, drm);
@@ -58,6 +59,9 @@ int gna_probe(struct device *parent, struct gna_dev_info *dev_info, void __iomem
 		if (err)
 			return err;
 	}
+
+	bld_reg = gna_reg_read(gna_priv, GNA_MMIO_IBUFFS);
+	gna_priv->hw_info.in_buf_s = bld_reg & GENMASK(7, 0);
 
 	dev_set_drvdata(parent, drm_dev);
 
