@@ -33,8 +33,31 @@ union gna_parameter {
 	} out;
 };
 
+struct gna_mem_id {
+	__u32 handle;
+	__u32 pad;
+	__u64 vma_fake_offset;
+	__u64 size_granted;
+};
+
+union gna_gem_new {
+	struct {
+		__u64 size;
+	} in;
+
+	struct gna_mem_id out;
+};
+
+struct gna_gem_free {
+	__u32 handle;
+};
+
 #define DRM_GNA_GET_PARAMETER		0x00
+#define DRM_GNA_GEM_NEW			0x01
+#define DRM_GNA_GEM_FREE		0x02
 
 #define DRM_IOCTL_GNA_GET_PARAMETER	DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_GET_PARAMETER, union gna_parameter)
+#define DRM_IOCTL_GNA_GEM_NEW		DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_GEM_NEW, union gna_gem_new)
+#define DRM_IOCTL_GNA_GEM_FREE		DRM_IOWR(DRM_COMMAND_BASE + DRM_GNA_GEM_FREE, struct gna_gem_free)
 
 #endif /* _GNA_DRM_H_ */

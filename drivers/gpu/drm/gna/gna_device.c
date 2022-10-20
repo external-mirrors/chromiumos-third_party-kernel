@@ -3,20 +3,27 @@
 
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
+#include <drm/drm_gem.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_managed.h>
 
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 
 #include <uapi/drm/gna_drm.h>
 
 #include "gna_device.h"
+#include "gna_gem.h"
 #define GNA_DDI_VERSION_CURRENT GNA_DDI_VERSION_3
+
+DEFINE_DRM_GEM_FOPS(gna_drm_fops);
 
 static const struct drm_ioctl_desc gna_drm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(GNA_GET_PARAMETER, gna_getparam_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(GNA_GEM_NEW, gna_gem_new_ioctl, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(GNA_GEM_FREE, gna_gem_free_ioctl, DRM_RENDER_ALLOW),
 };
 
 
@@ -36,10 +43,28 @@ static int gna_drm_dev_init(struct drm_device *dev)
 	return drmm_add_action_or_reset(dev, gna_drm_dev_fini, NULL);
 }
 
+static struct drm_gem_object *gna_create_gem_object(struct drm_device *dev,
+						size_t size)
+{
+	struct drm_gem_shmem_object *dshmem;
+	struct gna_gem_object *shmem;
+
+	shmem = kzalloc(sizeof(*shmem), GFP_KERNEL);
+	if (!shmem)
+		return NULL;
+
+	dshmem = &shmem->base;
+
+	return &dshmem->base;
+}
+
 static const struct drm_driver gna_drm_driver = {
-	.driver_features = DRIVER_RENDER,
+	.driver_features = DRIVER_GEM | DRIVER_RENDER,
+	.gem_create_object = gna_create_gem_object,
+
 	.ioctls = gna_drm_ioctls,
 	.num_ioctls = ARRAY_SIZE(gna_drm_ioctls),
+	.fops = &gna_drm_fops,
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,

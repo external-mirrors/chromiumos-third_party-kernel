@@ -5,10 +5,12 @@
 #define __GNA_DEVICE_H__
 
 #include <drm/drm_device.h>
+#include <drm/drm_gem_shmem_helper.h>
 
 #include <linux/io.h>
 #include <linux/types.h>
 
+#include "gna_gem.h"
 #include "gna_hw.h"
 #include "gna_mem.h"
 
@@ -43,6 +45,12 @@ int gna_getparam(struct gna_device *gna_priv, union gna_parameter *param);
 int gna_getparam_ioctl(struct drm_device *dev, void *data,
 		struct drm_file *file);
 
+int gna_gem_new_ioctl(struct drm_device *dev, void *data,
+		struct drm_file *file);
+
+int gna_gem_free_ioctl(struct drm_device *dev, void *data,
+		struct drm_file *file);
+
 static inline u32 gna_reg_read(struct gna_device *gna_priv, u32 reg)
 {
 	return readl(gna_priv->iobase + reg);
@@ -56,6 +64,11 @@ static inline struct device *gna_dev(struct gna_device *gna_priv)
 static inline struct gna_device *to_gna_device(struct drm_device *dev)
 {
 	return container_of(dev, struct gna_device, drm);
+}
+
+static inline struct gna_gem_object *to_gna_gem_obj(struct drm_gem_shmem_object *drm_gem_shmem)
+{
+	return container_of(drm_gem_shmem, struct gna_gem_object, base);
 }
 
 #endif /* __GNA_DEVICE_H__ */
