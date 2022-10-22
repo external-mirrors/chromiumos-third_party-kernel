@@ -41,8 +41,6 @@
 #include "inode_mark.h"
 #include "utils.h"
 
-static const char secagentd[] = "/usr/sbin/secagentd";
-
 #if defined(CONFIG_SECURITY_CHROMIUMOS_NO_UNPRIVILEGED_UNSAFE_MOUNTS) || \
 	defined(CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT)
 static void report(const char *origin, const struct path *path, char *operation)
@@ -275,6 +273,10 @@ static int chromiumos_locked_down(enum lockdown_reason what)
 	return 0;
 }
 
+#ifdef CONFIG_BPF_SYSCALL
+
+static const char secagentd[] = "/usr/sbin/secagentd";
+
 static int chromiumos_bpf(int cmd, union bpf_attr *attr, unsigned int size)
 {
 	char buf[128];
@@ -295,6 +297,7 @@ static int chromiumos_bpf(int cmd, union bpf_attr *attr, unsigned int size)
 
 	return 0;
 }
+#endif
 
 static struct security_hook_list chromiumos_security_hooks[] = {
 	LSM_HOOK_INIT(sb_mount, chromiumos_security_sb_mount),
@@ -303,7 +306,9 @@ static struct security_hook_list chromiumos_security_hooks[] = {
 	LSM_HOOK_INIT(sb_eat_lsm_opts, chromiumos_sb_eat_lsm_opts),
 	LSM_HOOK_INIT(bprm_creds_for_exec, chromiumos_bprm_creds_for_exec),
 	LSM_HOOK_INIT(locked_down, chromiumos_locked_down),
+#ifdef CONFIG_BPF_SYSCALL
 	LSM_HOOK_INIT(bpf, chromiumos_bpf),
+#endif
 };
 
 static int __init chromiumos_security_init(void)
