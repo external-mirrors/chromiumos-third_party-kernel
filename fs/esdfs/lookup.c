@@ -20,7 +20,7 @@ struct esdfs_name_data {
 	bool found;
 };
 
-static int esdfs_name_match(struct dir_context *ctx, const char *name, int namelen,
+static bool esdfs_name_match(struct dir_context *ctx, const char *name, int namelen,
 		loff_t offset, u64 ino, unsigned int d_type)
 {
 	struct esdfs_name_data *buf = container_of(ctx, struct esdfs_name_data, ctx);
@@ -30,9 +30,9 @@ static int esdfs_name_match(struct dir_context *ctx, const char *name, int namel
 		memcpy(buf->match_name, name, namelen);
 		buf->match_name[namelen] = 0;
 		buf->found = true;
-		return 1;
+		return true;
 	}
-	return 0;
+	return false;
 }
 
 int esdfs_lookup_nocase(struct path *parent,
