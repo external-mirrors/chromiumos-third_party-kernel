@@ -142,6 +142,10 @@
 	};
 };
 
+&mdp {
+	chromium-enable-overlays;
+};
+
 &i2c4 {
 	status = "okay";
 	clock-frequency = <400000>;
