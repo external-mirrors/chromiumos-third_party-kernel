@@ -2746,6 +2746,15 @@ static int em_rsm(struct x86_emulate_ctxt *ctxt)
 
 	ctxt->ops->post_leave_smm(ctxt);
 
+	/*
+	 * Note, the ctxt->ops callbacks are responsible for handling side
+	 * effects when writing MSRs and CRs, e.g. MMU context resets, CPUID
+	 * runtime updates, etc...  If that changes, e.g. this flow is moved
+	 * out of the emulator to make it look more like enter_smm(), then
+	 * those side effects need to be explicitly handled for both success
+	 * and shutdown.
+	 */
+
 	return X86EMUL_CONTINUE;
 }
 
