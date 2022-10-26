@@ -496,6 +496,7 @@ static struct pci_driver intel_lpss_pci_driver = {
 	.driver = {
 		.pm = &intel_lpss_pci_pm_ops,
 	},
+	.driver_managed_dma = true,
 };
 
 module_pci_driver(intel_lpss_pci_driver);
