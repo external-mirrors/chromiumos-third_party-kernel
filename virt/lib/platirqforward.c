@@ -248,6 +248,19 @@ err:
 	return error;
 }
 
+int plat_irq_forward_set_irq_wake(uint32_t irq_number_host, bool on)
+{
+	struct plat_irq_forward *irq;
+
+	/* Ignore requests for non-passthrough IRQs. */
+	irq = plat_irq_forward_find(irq_number_host);
+	if (!irq || (irq->flags & PLAT_IRQ_FORWARD_SET_LEVEL_SCI_FOR_GPE_TRIGGER_EVENTFD))
+		return 0;
+
+	return irq_set_irq_wake(irq_number_host, on);
+}
+EXPORT_SYMBOL(plat_irq_forward_set_irq_wake);
+
 int plat_irq_forward_ioctl(void *device_data, unsigned long arg)
 {
 	u8 *data;

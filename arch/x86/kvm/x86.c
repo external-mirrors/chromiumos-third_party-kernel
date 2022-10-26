@@ -59,6 +59,8 @@
 #include <linux/mem_encrypt.h>
 #include <linux/entry-kvm.h>
 #include <linux/suspend.h>
+#include <linux/manatee.h>
+#include <linux/plat_irqfd.h>
 
 #include <trace/events/kvm.h>
 
@@ -9344,6 +9346,13 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
 	case KVM_HC_SYSTEM_S2IDLE:
 		kvm_make_request(KVM_REQ_HV_S2IDLE, vcpu);
 		ret = 0;
+		break;
+	case KVM_HC_SYSTEM_WAKE_IRQ:
+		if (manatee_hyp_domain()) {
+#ifdef CONFIG_PLAT_IRQ_FORWARD
+			ret = plat_irq_forward_set_irq_wake(a0, a1);
+#endif
+		}
 		break;
 	case KVM_HC_MAP_GPA_RANGE: {
 		u64 gpa = a0, npages = a1, attrs = a2;
