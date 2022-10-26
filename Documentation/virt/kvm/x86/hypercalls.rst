@@ -190,3 +190,10 @@ the KVM_CAP_EXIT_HYPERCALL capability. Userspace must enable that capability
 before advertising KVM_FEATURE_HC_MAP_GPA_RANGE in the guest CPUID.  In
 addition, if the guest supports KVM_FEATURE_MIGRATION_CONTROL, userspace
 must also set up an MSR filter to process writes to MSR_KVM_MIGRATION_CONTROL.
+
+9. KVM_HC_SYSTEM_S2IDLE
+------------------------
+
+:Architecture: x86
+:Status: active
+:Purpose: Notify the hypervisor that the guest is entering s2idle state.
