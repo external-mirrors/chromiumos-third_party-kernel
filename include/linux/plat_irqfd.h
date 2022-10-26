@@ -37,6 +37,7 @@ struct gpe_fwd {
 
 int plat_irq_forward_irqfd_enable(int (*handler)(int irq, void *data),
 		void *data, struct plat_irq_forward_irqfd **pirqfd, int fd);
+int plat_irq_forward_set_irq_wake(uint32_t irq, bool on);
 
 #endif /* CONFIG_PLAT_IRQ_FORWARD */
 #endif /* PLAT_IRQFD_H */

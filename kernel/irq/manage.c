@@ -21,6 +21,10 @@
 #include <linux/sched/isolation.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/task_work.h>
+#ifdef CONFIG_X86
+#include <linux/manatee.h>
+#include <linux/kvm_para.h>
+#endif
 
 #include "internals.h"
 
@@ -907,8 +911,13 @@ int irq_set_irq_wake(unsigned int irq, unsigned int on)
 			ret = set_irq_wake_real(irq, on);
 			if (ret)
 				desc->wake_depth = 0;
-			else
+			else {
 				irqd_set(&desc->irq_data, IRQD_WAKEUP_STATE);
+#ifdef CONFIG_X86
+				if (manatee_chromeos_domain())
+					kvm_hypercall2(KVM_HC_SYSTEM_WAKE_IRQ, irq, on);
+#endif
+			}
 		}
 	} else {
 		if (desc->wake_depth == 0) {
@@ -917,8 +926,13 @@ int irq_set_irq_wake(unsigned int irq, unsigned int on)
 			ret = set_irq_wake_real(irq, on);
 			if (ret)
 				desc->wake_depth = 1;
-			else
+			else {
 				irqd_clear(&desc->irq_data, IRQD_WAKEUP_STATE);
+#ifdef CONFIG_X86
+				if (manatee_chromeos_domain())
+					kvm_hypercall2(KVM_HC_SYSTEM_WAKE_IRQ, irq, on);
+#endif
+			}
 		}
 	}
 
