@@ -246,6 +246,9 @@ intel_dpt_create(struct intel_framebuffer *fb)
 	size_t size;
 	int ret;
 
+	if (!i915->params.enable_dpt)
+		return ERR_PTR(-ENXIO);
+
 	if (intel_fb_needs_pot_stride_remap(fb))
 		size = intel_remapped_info_size(&fb->remapped_view.gtt.remapped);
 	else
