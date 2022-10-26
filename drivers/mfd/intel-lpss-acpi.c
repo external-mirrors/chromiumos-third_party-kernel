@@ -213,6 +213,7 @@ static struct platform_driver intel_lpss_acpi_driver = {
 		.acpi_match_table = intel_lpss_acpi_ids,
 		.pm = &intel_lpss_acpi_pm_ops,
 	},
+	.driver_managed_dma = true,
 };
 
 module_platform_driver(intel_lpss_acpi_driver);
