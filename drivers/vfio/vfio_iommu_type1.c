@@ -41,6 +41,9 @@
 #include <linux/irqdomain.h>
 #include "vfio.h"
 
+#include <linux/xarray.h>
+#include <linux/bits.h>
+
 #define DRIVER_VERSION  "0.2"
 #define DRIVER_AUTHOR   "Alex Williamson <alex.williamson@redhat.com>"
 #define DRIVER_DESC     "Type1 IOMMU driver for VFIO"
@@ -62,7 +65,31 @@ module_param_named(dma_entry_limit, dma_entry_limit, uint, 0644);
 MODULE_PARM_DESC(dma_entry_limit,
 		 "Maximum number of user DMA mappings per container (65535).");
 
+struct vfio_iommu_type1v3 {
+	/**
+	 * xa contains the tracking metadata, and functions as a sparse bitmap.
+	 *
+	 * The key in the bitmap is the iova_pfn. Each iova_pfn has two bits of
+	 * metadata - a present bit and a write permission bit. Since the read
+	 * bit doesn't affect unmapping behavior, it's not necessary to track.
+	 *
+	 * The metadata for multiple iova_pfns is packed into each xarray
+	 * entry, so finding an iova_pfn's metadata is a two step process -
+	 * find the right xarray entry, and then find the right bits. Bit b_2n
+	 * is the present bit, and b_(2n+1) is the write permission bit. If an
+	 * xarray entry is missing, all of its bits are interpreted as 0.
+	 */
+	struct xarray		xa;
+	struct task_struct	*task;
+	bool			lock_cap;
+};
+
+#define IOVA_PFNS_PER_XA_VAL (BITS_PER_XA_VALUE / 2)
+// Mask containing all write permission bits in an xarray entry.
+#define WRITE_MASK 0x2aaaaaaaaaaaaaaaULL
+
 struct vfio_iommu {
+	struct vfio_iommu_type1v3 type1v3;
 	struct list_head	domain_list;
 	struct list_head	iova_list;
 	struct mutex		lock;
@@ -74,6 +101,7 @@ struct vfio_iommu {
 	uint64_t		num_non_pinned_groups;
 	wait_queue_head_t	vaddr_wait;
 	bool			v2;
+	bool			v3;
 	bool			nesting;
 	bool			dirty_page_tracking;
 	bool			container_open;
@@ -153,6 +181,19 @@ struct vfio_regions {
 #define DIRTY_BITMAP_SIZE_MAX	 DIRTY_BITMAP_BYTES(DIRTY_BITMAP_PAGES_MAX)
 
 #define WAITED 1
+
+static void vfio_iommu_type13_init(struct vfio_iommu *iommu);
+static void vfio_iommu_type13_release(struct vfio_iommu *iommu);
+static int vfio_iommu_type13_do_unmap(struct vfio_iommu *iommu,
+				      struct vfio_iommu_type1_dma_unmap *unmap,
+				      size_t *unmapped);
+static int vfio_iommu_type13_do_map(struct vfio_iommu *iommu,
+				    struct vfio_iommu_type1_dma_map *map,
+				    int prot);
+static bool vfio_iommu_type13_can_attach_group(struct vfio_iommu *iommu);
+static void vfio_iommu_type13_unpin_all(struct vfio_iommu *iommu);
+
+#define VFIO_TYPE1v3_IOMMU 100001
 
 static int put_pfn(unsigned long pfn, int prot);
 
@@ -1318,6 +1359,11 @@ static int vfio_dma_do_unmap(struct vfio_iommu *iommu,
 		goto unlock;
 	}
 
+	if (iommu->v3) {
+		ret = vfio_iommu_type13_do_unmap(iommu, unmap, &unmapped);
+		goto unlock;
+	}
+
 	/* When dirty tracking is enabled, allow only min supported pgsize */
 	if ((unmap->flags & VFIO_DMA_UNMAP_FLAG_GET_DIRTY_BITMAP) &&
 	    (!iommu->dirty_page_tracking || (bitmap->pgsize != pgsize))) {
@@ -1585,6 +1631,11 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	/* Don't allow IOVA or virtual address wrap */
 	if (iova + size - 1 < iova || vaddr + size - 1 < vaddr) {
 		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (iommu->v3) {
+		ret = vfio_iommu_type13_do_map(iommu, map, prot);
 		goto out_unlock;
 	}
 
@@ -2169,6 +2220,11 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 
 	mutex_lock(&iommu->lock);
 
+	if (iommu->v3 && !vfio_iommu_type13_can_attach_group(iommu)) {
+		mutex_unlock(&iommu->lock);
+		return -EBUSY;
+	}
+
 	/* Check for duplicates */
 	if (vfio_iommu_find_iommu_group(iommu, iommu_group))
 		goto out_unlock;
@@ -2180,7 +2236,16 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	group->iommu_group = iommu_group;
 
 	if (type == VFIO_EMULATED_IOMMU) {
+		if (iommu->v3) {
+			// Mediated device support requires maintaining vaddr
+			// metadata, which would significantly increase how
+			// much memory v3 uses.
+			ret = -EOPNOTSUPP;
+			goto out_unlock;
+		}
+
 		list_add(&group->next, &iommu->emulated_iommu_groups);
+
 		/*
 		 * An emulated IOMMU group cannot dirty memory directly, it can
 		 * only use interfaces that provide dirty tracking.
@@ -2352,6 +2417,11 @@ out_unlock:
 static void vfio_iommu_unmap_unpin_all(struct vfio_iommu *iommu)
 {
 	struct rb_node *node;
+
+	if (iommu->v3) {
+		vfio_iommu_type13_unpin_all(iommu);
+		return;
+	}
 
 	while ((node = rb_first(&iommu->dma_list)))
 		vfio_remove_dma(iommu, rb_entry(node, struct vfio_dma, node));
@@ -2560,6 +2630,10 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 	case VFIO_TYPE1v2_IOMMU:
 		iommu->v2 = true;
 		break;
+	case VFIO_TYPE1v3_IOMMU:
+		iommu->v3 = true;
+		vfio_iommu_type13_init(iommu);
+		break;
 	default:
 		kfree(iommu);
 		return ERR_PTR(-EINVAL);
@@ -2615,6 +2689,9 @@ static void vfio_iommu_type1_release(void *iommu_data)
 	}
 
 	vfio_iommu_iova_free(&iommu->iova_list);
+
+	if (iommu->v3)
+		vfio_iommu_type13_release(iommu);
 
 	kfree(iommu);
 }
@@ -3151,6 +3228,276 @@ static void vfio_iommu_type1_notify(void *iommu_data,
 	iommu->container_open = false;
 	mutex_unlock(&iommu->lock);
 	wake_up_all(&iommu->vaddr_wait);
+}
+
+static void vfio_iommu_type13_init(struct vfio_iommu *iommu)
+{
+	xa_init(&iommu->type1v3.xa);
+	get_task_struct(current->group_leader);
+	iommu->type1v3.task = current->group_leader;
+	iommu->type1v3.lock_cap = capable(CAP_IPC_LOCK);
+}
+
+static void vfio_iommu_type13_release(struct vfio_iommu *iommu)
+{
+	put_task_struct(iommu->type1v3.task);
+}
+
+// Unmap from |iova| to |end|, inclusive. Returns the number of pages that were
+// unmapped. Note that this may be smaller than |end| - |iova| if there were
+// gaps in the range.
+size_t unmap_pages(struct vfio_iommu *iommu, uint64_t iova, uint64_t end)
+{
+	const size_t pgshift = __ffs(iommu->pgsize_bitmap);
+	const size_t pgsize = (size_t)1 << pgshift;
+	const u64 iova_pfn_max = end >> pgshift;
+	const u64 iova_pfn = iova >> pgshift;
+	struct vfio_dma dma = {};
+	u64 start_sub_idx;
+	size_t unmapped = 0;
+	void *entry;
+
+	XA_STATE(xas, &iommu->type1v3.xa, iova_pfn / IOVA_PFNS_PER_XA_VAL);
+
+	// To reduce the number of IOTLB invalidations and unmapping work in
+	// general, we batch together consecutive runs of pages that are mapped
+	// with the same R/W permissions. These runs are accumulated in |dma|,
+	// and flushed whenever there is a gap or permission change.
+	dma.iova = iova;
+	dma.task = iommu->type1v3.task;
+	dma.lock_cap = iommu->type1v3.lock_cap;
+	dma.pfn_list = RB_ROOT;
+	dma.size = 0;
+
+	start_sub_idx = iova_pfn % IOVA_PFNS_PER_XA_VAL;
+	xas_for_each(&xas, entry, iova_pfn_max / IOVA_PFNS_PER_XA_VAL) {
+		u64 expected_pfn, max_subidx, bits = xa_to_value(entry);
+		int i;
+
+		// If the pfn immediately after the accumulated run isn't at
+		// the current xarray index, then there was a gap.
+		expected_pfn = (dma.iova + dma.size) >> pgshift;
+		if (xas.xa_index != expected_pfn / IOVA_PFNS_PER_XA_VAL) {
+			if (dma.size)
+				vfio_unmap_unpin(iommu, &dma, true);
+			dma.size = 0;
+			dma.iova = (xas.xa_index * IOVA_PFNS_PER_XA_VAL) << pgshift;
+			start_sub_idx = 0;
+		}
+
+		if (xas.xa_index == iova_pfn_max / IOVA_PFNS_PER_XA_VAL)
+			max_subidx = iova_pfn_max % IOVA_PFNS_PER_XA_VAL;
+		else
+			max_subidx = IOVA_PFNS_PER_XA_VAL - 1;
+
+		for (i = start_sub_idx; i <= max_subidx; i++) {
+			bool present = bits & BIT_ULL(2 * i);
+			bool writable = bits & BIT_ULL((2 * i) + 1);
+
+			// If there is a gap, flush the accumulated pages and
+			// continue to the next iteration.
+			if (!present) {
+				if (dma.size)
+					vfio_unmap_unpin(iommu, &dma, true);
+				dma.iova += dma.size + pgsize;
+				dma.size = 0;
+				continue;
+			}
+
+			// If there are accumulated pages but the permission is
+			// different, flush the accumulated pages before
+			// processing the current one.
+			if (dma.size != 0 && !!(dma.prot & IOMMU_WRITE) != writable) {
+				if (dma.size)
+					vfio_unmap_unpin(iommu, &dma, true);
+				dma.iova += dma.size;
+				dma.size = 0;
+			}
+
+			dma.prot = writable ? IOMMU_WRITE : 0;
+			dma.size += pgsize;
+			unmapped += pgsize;
+		}
+
+		bits &= ~GENMASK_ULL((2 * max_subidx) + 1, 2 * start_sub_idx);
+		xas_store(&xas, bits ? xa_mk_value(bits) : 0);
+		start_sub_idx = 0;
+	}
+
+	if (dma.size)
+		vfio_unmap_unpin(iommu, &dma, true);
+
+	return unmapped;
+}
+
+static int vfio_iommu_type13_do_unmap(struct vfio_iommu *iommu,
+				      struct vfio_iommu_type1_dma_unmap *unmap,
+				      size_t *unmapped)
+{
+	if (unmap->flags & (VFIO_DMA_UNMAP_FLAG_VADDR |
+			    VFIO_DMA_UNMAP_FLAG_GET_DIRTY_BITMAP))
+		return -EOPNOTSUPP;
+
+	if (unmap->flags & VFIO_UNMAP_ALL)
+		*unmapped = unmap_pages(iommu, 0, U64_MAX);
+	else
+		*unmapped = unmap_pages(iommu, unmap->iova,
+					unmap->iova + unmap->size - 1);
+	return 0;
+}
+
+static int vfio_iommu_type13_do_map(struct vfio_iommu *iommu,
+				    struct vfio_iommu_type1_dma_map *map,
+				    int prot)
+{
+	const size_t pgshift = __ffs(iommu->pgsize_bitmap);
+	const size_t pgsize = (size_t)1 << pgshift;
+	const u64 n_pages = map->size >> pgshift;
+	const u64 iova_pfn = map->iova >> pgshift;
+	const u64 iova_pfn_max = iova_pfn + n_pages - 1;
+	const u64 idx_max = iova_pfn_max / IOVA_PFNS_PER_XA_VAL;
+	u64 subidx, unreserve_iova = 0, idx, offset = 0;
+	bool do_unreserve = false;
+	struct vfio_dma *dma = NULL;
+	int ret;
+
+	XA_STATE(xas, &iommu->type1v3.xa, iova_pfn / IOVA_PFNS_PER_XA_VAL);
+
+	if (current->group_leader != iommu->type1v3.task ||
+	    capable(CAP_IPC_LOCK) != iommu->type1v3.lock_cap)
+		return -EINVAL;
+
+	if (list_empty(&iommu->domain_list))
+		return -EINVAL;
+
+	if (!vfio_iommu_iova_dma_valid(iommu, map->iova, map->iova + map->size - 1))
+		return -EINVAL;
+
+	// We reuse vfio_pin_map_dma, which calls vfio_remove_dma in the
+	// failure case, so we need a kalloc'ed pointer.
+	dma = kzalloc(sizeof(*dma), GFP_KERNEL);
+	if (!dma)
+		return -ENOMEM;
+
+	idx = xas.xa_index;
+	subidx = iova_pfn % IOVA_PFNS_PER_XA_VAL;
+	do {
+		void *entry = xas_next(&xas);
+		u64 bits = xa_is_value(entry) ? xa_to_value(entry) : 0;
+		u64 subidx_max, new_bits;
+
+		if (idx == idx_max)
+			subidx_max = iova_pfn_max % IOVA_PFNS_PER_XA_VAL;
+		else
+			subidx_max = IOVA_PFNS_PER_XA_VAL - 1;
+
+		// Compute the bits for all pfns which are in the current
+		// xarray entry.
+		new_bits = GENMASK_ULL((2 * subidx_max) + 1, 2 * subidx);
+		if (!(prot & IOMMU_WRITE))
+			new_bits &= ~WRITE_MASK;
+
+		if (bits & new_bits) {
+			ret = -EEXIST;
+			goto err_unreserve;
+		}
+
+		bits |= new_bits;
+		entry = xas_store(&xas, xa_mk_value(bits));
+		if (xa_is_err(entry)) {
+			ret = xa_err(entry);
+			goto err_unreserve;
+		}
+
+		subidx = 0;
+		// Check before increment to avoid overflow.
+	} while (idx++ < idx_max);
+
+	dma->iova = map->iova;
+	dma->vaddr = map->vaddr;
+	dma->prot = prot;
+	dma->task = iommu->type1v3.task;
+	dma->lock_cap = iommu->type1v3.lock_cap;
+	dma->pfn_list = RB_ROOT;
+
+	// More logic to handle the fact that vfio_pin_map_dma can
+	// call vfio_remove_dma.
+	get_task_struct(iommu->type1v3.task);
+	vfio_link_dma(iommu, dma);
+	iommu->dma_avail--;
+
+	// The underlying IOMMU API only guarantees unmap granularity matching
+	// the original mapping. Since we don't track mapping granularity here
+	// in the VFIO layer, we can't perform any granularity checks when we
+	// unmap. This means we need to map page-by-page to ensure consistent
+	// behavior when unmapping.
+	while (offset < map->size) {
+		dma->size = 0;
+		ret = vfio_pin_map_dma(iommu, dma, pgsize);
+		if (ret)
+			goto err_unmap;
+
+		offset += pgsize;
+		dma->iova += pgsize;
+		dma->vaddr += pgsize;
+	}
+
+	// Clean up temporary state we added in case vfio_pin_map_dma
+	// had failed and ended up calling vfio_remove_dma.
+	vfio_unlink_dma(iommu, dma);
+	iommu->dma_avail++;
+	put_task_struct(dma->task);
+	kfree(dma);
+
+	return 0;
+
+err_unmap:
+	unmap_pages(iommu, map->iova, offset);
+	// Freed by vfio_pin_map_dma.
+	dma = NULL;
+
+	// |unreserve_iova| is the last iova_pfn that was successfully
+	// reserved. If mapping failed, then all iova_pfns must have been
+	// reserved successfully. Otherwise, if |idx| was advanced at all,
+	// the last iova_pfn of the previous index was reserved.
+	unreserve_iova = iova_pfn_max;
+	do_unreserve = true;
+err_unreserve:
+	if (!do_unreserve && idx > iova_pfn / IOVA_PFNS_PER_XA_VAL) {
+		unreserve_iova = (idx * IOVA_PFNS_PER_XA_VAL) - 1;
+		do_unreserve = true;
+	}
+
+	while (do_unreserve && unreserve_iova >= iova_pfn) {
+		u64 idx = unreserve_iova / IOVA_PFNS_PER_XA_VAL;
+		void *entry = xa_load(&iommu->type1v3.xa, idx);
+
+		u64 subidx = unreserve_iova % IOVA_PFNS_PER_XA_VAL;
+		u64 mask = ~GENMASK_ULL(2 * subidx + 1, 2 * subidx);
+
+		xa_store(&iommu->type1v3.xa, idx,
+			 xa_mk_value(xa_to_value(entry) & mask),
+			 GFP_KERNEL);
+
+		if (unreserve_iova == 0)
+			break;
+		unreserve_iova--;
+	}
+	kfree(dma);
+	return ret;
+}
+
+static bool vfio_iommu_type13_can_attach_group(struct vfio_iommu *iommu)
+{
+	// Attaching a group to an active IOMMU requires replaying the existing
+	// mappings into that group. This is possible for v3, but there are
+	// currently no use cases.
+	return xa_empty(&iommu->type1v3.xa);
+}
+
+static void vfio_iommu_type13_unpin_all(struct vfio_iommu *iommu)
+{
+	unmap_pages(iommu, 0, U64_MAX);
 }
 
 static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
