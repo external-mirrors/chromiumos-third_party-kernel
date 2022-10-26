@@ -9277,9 +9277,10 @@ static struct hci_dev *floss_get_hdev(u16 hci_id)
 	return hdev;
 }
 
-static int floss_get_sco_codec_capabilities(struct sock *sk,
-					    struct hci_dev *hdev,
-					    void *data, u16 data_len)
+static int __floss_get_sco_codec_capabilities(struct sock *sk,
+					      struct hci_dev *hdev,
+					      void *data, u16 data_len,
+					      u16 opcode)
 {
 	struct mgmt_cp_get_codec_capabilities *cp = data;
 	struct mgmt_rp_get_codec_capabilities *rp;
@@ -9298,7 +9299,8 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 	if (!hdev)
 		return -EINVAL;
 
-	wbs_supported = test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+	wbs_supported = test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED,
+				 &hdev->quirks);
 
 	if (MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE + cp->num_codecs != data_len)
 		return -EINVAL;
@@ -9353,12 +9355,27 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 	// Only return the number of codecs actually written
 	rp->num_codecs = num_rp_codecs;
 
-	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-				MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
+	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE, opcode,
 				MGMT_STATUS_SUCCESS, rp, total_size);
 	kfree(rp);
 
 	return err;
+}
+
+static int floss_get_sco_codec_capabilities_old(struct sock *sk,
+						struct hci_dev *hdev,
+						void *data, u16 data_len)
+{
+	return __floss_get_sco_codec_capabilities(sk, hdev, data, data_len,
+				MGMT_OP_GET_SCO_CODEC_CAPABILITIES_OLD);
+}
+
+static int floss_get_sco_codec_capabilities(struct sock *sk,
+					    struct hci_dev *hdev,
+					    void *data, u16 data_len)
+{
+	return __floss_get_sco_codec_capabilities(sk, hdev, data, data_len,
+				MGMT_OP_GET_SCO_CODEC_CAPABILITIES);
 }
 
 static int floss_notify_sco_connection_change(struct sock *sk,
@@ -9404,13 +9421,8 @@ static int floss_notify_sco_connection_change(struct sock *sk,
 	return 0;
 }
 
-/* The user space provides the value of vendor_specification. For example,
- * the user space wants to query what the opcode for MSFT extension is,
- * It provides MGMT_VS_OPCODE_MSFT as vendor_specification. For now,
- * the only possible value of vendor_specification is MGMT_VS_OPCODE_MSFT.
- */
-static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
-			       void *data, u16 data_len)
+static int __floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
+				 void *data, u16 data_len, u16 opcode)
 {
 	struct mgmt_cp_get_vs_opcode *cp = data;
 	struct mgmt_rp_get_vs_opcode rp;
@@ -9429,7 +9441,7 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 	// Make sure we have a valid hdev.
 	if (!hdev) {
 		BT_INFO("Cannot find hdev 0x%4.4x", hci_id);
-		return mgmt_cmd_status(sk, hci_id, MGMT_OP_GET_VS_OPCODE,
+		return mgmt_cmd_status(sk, hci_id, opcode,
 				       MGMT_STATUS_INVALID_INDEX);
 	}
 	rp.hci_id = hdev->id;
@@ -9444,10 +9456,28 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 		rp.opcode = HCI_OP_NOP;
 	}
 
-	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-				MGMT_OP_GET_VS_OPCODE,
+	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE, opcode,
 				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 	return err;
+}
+
+static int floss_get_vs_opcode_old(struct sock *sk, struct hci_dev *hdev,
+				   void *data, u16 data_len)
+{
+	return __floss_get_vs_opcode(sk, hdev, data, data_len,
+				     MGMT_OP_GET_VS_OPCODE_OLD);
+}
+
+/* The user space provides the value of vendor_specification. For example,
+ * the user space wants to query what the opcode for MSFT extension is,
+ * It provides MGMT_VS_OPCODE_MSFT as vendor_specification. For now,
+ * the only possible value of vendor_specification is MGMT_VS_OPCODE_MSFT.
+ */
+static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
+			       void *data, u16 data_len)
+{
+	return __floss_get_vs_opcode(sk, hdev, data, data_len,
+				     MGMT_OP_GET_VS_OPCODE);
 }
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
@@ -9581,6 +9611,19 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ mesh_send,               MGMT_MESH_SEND_SIZE,
 						HCI_MGMT_VAR_LEN },
 	{ mesh_send_cancel,        MGMT_MESH_SEND_CANCEL_SIZE },
+
+	{ floss_get_sco_codec_capabilities_old,
+				   MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
+						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_UNTRUSTED |
+						HCI_MGMT_VAR_LEN },
+	{ floss_notify_sco_connection_change,
+				   MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
+						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_UNTRUSTED },
+	{ floss_get_vs_opcode_old, MGMT_GET_VS_OPCODE_SIZE,
+						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_UNTRUSTED },
 
 	/* CHROMIUM specific floss handlers start here.
 	 *
