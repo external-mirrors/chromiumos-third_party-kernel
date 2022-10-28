@@ -1268,6 +1268,8 @@ static void ath10k_pci_process_htt_rx_cb(struct ath10k_ce_pipe *ce_state,
 	while (ath10k_ce_completed_recv_next_nolock(ce_state, &transfer_context,
 						    &nbytes) == 0) {
 		skb = transfer_context;
+		if (!skb)
+			continue;
 		max_nbytes = skb->len + skb_tailroom(skb);
 
 		if (unlikely(max_nbytes < nbytes)) {
