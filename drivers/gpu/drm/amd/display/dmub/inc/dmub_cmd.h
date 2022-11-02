@@ -1390,6 +1390,19 @@ struct dmub_cmd_psr_copy_settings_data {
 	 * Currently the support is only for 0 or 1
 	 */
 	uint8_t panel_inst;
+	/**
+	 * Align structure used in dmub fw.
+	 * dsc_enable_status & use_phy_fsm
+	 */
+	uint8_t reserved[2];
+	/**
+	 * frame delay for frame re-lock
+	 */
+	uint8_t relock_delay_frame_cnt;
+	/**
+	 * Explicit padding to 1 byte boundary.
+	 */
+	uint8_t pad3;
 };
 
 /**
