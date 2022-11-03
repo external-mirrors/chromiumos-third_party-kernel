@@ -122,12 +122,6 @@ struct t7xx_port {
 	int				rx_length_th;
 	bool				chan_enable;
 	struct task_struct		*thread;
-#ifdef CONFIG_WWAN_DEBUGFS
-	void 				*relaych;
-	struct dentry			*ctrl_file;
-	struct dentry			*debugfs_dir;
-	struct dentry                   *debugfs_wwan_dir;
-#endif
 };
 
 struct sk_buff *t7xx_port_alloc_skb(int payload);
