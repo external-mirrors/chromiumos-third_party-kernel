@@ -117,6 +117,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.tx_ring_size = DP_TCL_DATA_RING_SIZE,
 		.smp2p_wow_exit = false,
 		.ftm_responder = true,
+		.split_scan = false,
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ6018_HW10,
@@ -200,6 +201,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = false,
 		.support_fw_mac_sequence = false,
 		.ftm_responder = true,
+		.split_scan = false,
 	},
 	{
 		.name = "qca6390 hw2.0",
@@ -285,6 +287,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = false,
 		.support_fw_mac_sequence = true,
 		.ftm_responder = false,
+		.split_scan = false,
 	},
 	{
 		.name = "qcn9074 hw1.0",
@@ -367,6 +370,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = false,
 		.support_fw_mac_sequence = false,
 		.ftm_responder = true,
+		.split_scan = false,
 	},
 	{
 		.name = "wcn6855 hw2.0",
@@ -452,6 +456,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = false,
 		.support_fw_mac_sequence = true,
 		.ftm_responder = false,
+		.split_scan = false,
 	},
 	{
 		.name = "wcn6855 hw2.1",
@@ -535,6 +540,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = false,
 		.support_fw_mac_sequence = true,
 		.ftm_responder = false,
+		.split_scan = false,
 	},
 	{
 		.name = "wcn6750 hw1.0",
@@ -616,6 +622,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.smp2p_wow_exit = true,
 		.support_fw_mac_sequence = true,
 		.ftm_responder = false,
+		.split_scan = false,
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ5018_HW10,
