@@ -621,6 +621,9 @@ struct ath10k_hw_params {
 
 	/* maximum cfr capture bandwidth supported by target */
 	u8 max_cfr_capture_bw;
+	/* flag to disable hw assist feature in FW */
+	bool disable_hw_assist;
+
 };
 
 struct htt_rx_desc;

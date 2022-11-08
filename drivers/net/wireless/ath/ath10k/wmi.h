@@ -3861,6 +3861,7 @@ struct wmi_pdev_param_map {
 	u32 arp_dstaddr;
 	u32 enable_btcoex;
 	u32 enable_cfr_capture;
+	u32 disable_hw_assist;
 };
 
 #define WMI_PDEV_PARAM_UNSUPPORTED 0
