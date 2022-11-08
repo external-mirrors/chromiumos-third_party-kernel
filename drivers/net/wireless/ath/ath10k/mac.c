@@ -5054,7 +5054,14 @@ static int ath10k_start(struct ieee80211_hw *hw)
 			    ret);
 		goto err_core_stop;
 	}
-
+	if (ar->hw_params.disable_hw_assist) {
+		param = ar->wmi.pdev_param->disable_hw_assist;
+		ret = ath10k_wmi_pdev_set_param(ar, param, 1);
+		if (ret) {
+			ath10k_warn(ar,
+				    "failed to set hw assist param: %d\n", ret);
+		}
+	}
 	ar->num_started_vdevs = 0;
 	ath10k_regd_update(ar);
 

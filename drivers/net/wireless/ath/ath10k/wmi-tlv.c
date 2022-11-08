@@ -4596,6 +4596,7 @@ static struct wmi_pdev_param_map wmi_tlv_pdev_param_map = {
 	.arp_srcaddr = WMI_PDEV_PARAM_UNSUPPORTED,
 	.arp_dstaddr = WMI_PDEV_PARAM_UNSUPPORTED,
 	.enable_cfr_capture = WMI_TLV_PDEV_PARAM_PER_PEER_PERIODIC_CFR_ENABLE,
+	.disable_hw_assist = WMI_TLV_PDEV_PARAM_DISABLE_HW_ASSIST,
 };
 
 static struct wmi_peer_param_map wmi_tlv_peer_param_map = {
