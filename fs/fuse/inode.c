@@ -353,7 +353,17 @@ int fuse_reverse_inval_inode(struct super_block *sb, u64 nodeid,
 
 static void fuse_umount_begin(struct super_block *sb)
 {
-	fuse_abort_conn(get_fuse_conn_super(sb));
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
+
+	fuse_abort_conn(fc);
+
+	sb->s_iflags |= SB_I_RETIRED;
+
+	/* Only retire block-device-based superblocks. */
+	if (sb->s_bdev != NULL && fc->bdi_initialized) {
+		fc->bdi_initialized = 0;
+		bdi_destroy(&fc->bdi);
+	}
 }
 
 static void fuse_send_destroy(struct fuse_conn *fc)
