@@ -73,7 +73,6 @@ drm-$(CONFIG_DRM_PRIVACY_SCREEN) += \
 drm-$(CONFIG_DRM_ACCEL) += ../../accel/drm_accel.o
 obj-$(CONFIG_DRM)	+= drm.o
 
-obj-$(CONFIG_DRM_NOMODESET) += drm_nomodeset.o
 obj-$(CONFIG_DRM_PANEL_ORIENTATION_QUIRKS) += drm_panel_orientation_quirks.o
 
 #
