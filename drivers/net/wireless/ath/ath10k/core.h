@@ -841,6 +841,10 @@ enum ath10k_dev_flags {
 
 	/* Per Station statistics service */
 	ATH10K_FLAG_PEER_STATS,
+
+	/* Indicate an user requested HW restart without an actual FW
+         * crash/restart */
+	ATH10K_FLAG_USER_HW_RESTART,
 };
 
 enum ath10k_cal_mode {
