@@ -298,6 +298,13 @@ static struct rockchip_vpu_control controls[] = {
 		.step = 1,
 		.default_value = 0,
 	},
+	{
+		.id = V4L2_CID_MPEG_VIDEO_BITRATE_MODE,
+		.type = V4L2_CTRL_TYPE_MENU,
+		.maximum = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
+		.menu_skip_mask = ~(1 << V4L2_MPEG_VIDEO_BITRATE_MODE_CBR),
+		.default_value = V4L2_MPEG_VIDEO_BITRATE_MODE_CBR,
+	},
 };
 
 static inline const void *get_ctrl_ptr(struct rockchip_vpu_ctx *ctx,
