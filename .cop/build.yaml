@@ -18,6 +18,7 @@ steps:
         ./scripts/config -d CONFIG_RFKILL
         ./scripts/config -e CONFIG_DMABUF_HEAPS -e CONFIG_DMABUF_HEAPS_SYSTEM
         ./scripts/config -e CONFIG_MEMFD_CREATE -e CONFIG_DMA_SHARED_BUFFER -e CONFIG_UDMABUF
+        ./scripts/config -d CONFIG_WERROR
         make olddefconfig
 - name: 'gcr.io/cloud-builders/git'
   entrypoint: 'bash'
