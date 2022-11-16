@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/kdev_t.h>
 #include <linux/idr.h>
+#include <linux/notifier.h>
 #include <linux/thermal.h>
 #include <linux/reboot.h>
 #include <linux/string.h>
@@ -305,10 +306,44 @@ static void monitor_thermal_zone(struct thermal_zone_device *tz)
 		thermal_zone_device_set_polling(tz, tz->polling_delay_jiffies);
 }
 
-static void handle_non_critical_trips(struct thermal_zone_device *tz, int trip)
+BLOCKING_NOTIFIER_HEAD(thermal_notifier_list);
+
+/**
+ * register_thermal_notifier - Register function to be called for
+ *                             critical thermal events.
+ *
+ * @nb: Info about notifier function to be called
+ *
+ * Currently always returns zero, as blocking_notifier_chain_register()
+ * always returns zero.
+ */
+int register_thermal_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&thermal_notifier_list, nb);
+}
+EXPORT_SYMBOL(register_thermal_notifier);
+
+/**
+ * unregister_thermal_notifier - Unregister thermal notifier
+ *
+ * @nb: Hook to be unregistered
+ *
+ * Returns zero on success, or %-ENOENT on failure.
+ */
+int unregister_thermal_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&thermal_notifier_list, nb);
+}
+EXPORT_SYMBOL(unregister_thermal_notifier);
+
+static void handle_non_critical_trips(struct thermal_zone_device *tz, int trip,
+				      enum thermal_trip_type trip_type)
 {
 	tz->governor ? tz->governor->throttle(tz, trip) :
 		       def_governor->throttle(tz, trip);
+
+	blocking_notifier_call_chain(&thermal_notifier_list,
+				     trip_type, NULL);
 }
 
 void thermal_zone_device_critical(struct thermal_zone_device *tz)
@@ -334,6 +369,9 @@ static void handle_critical_trips(struct thermal_zone_device *tz,
 		return;
 
 	trace_thermal_zone_trip(tz, trip, trip_type);
+
+	blocking_notifier_call_chain(&thermal_notifier_list,
+				     trip_type, NULL);
 
 	if (trip_type == THERMAL_TRIP_HOT && tz->ops->hot)
 		tz->ops->hot(tz);
@@ -369,7 +407,7 @@ static void handle_thermal_trip(struct thermal_zone_device *tz, int trip)
 	if (type == THERMAL_TRIP_CRITICAL || type == THERMAL_TRIP_HOT)
 		handle_critical_trips(tz, trip, trip_temp, type);
 	else
-		handle_non_critical_trips(tz, trip);
+		handle_non_critical_trips(tz, trip, type);
 }
 
 static void update_temperature(struct thermal_zone_device *tz)
@@ -759,6 +797,7 @@ static void thermal_release(struct device *dev)
 		     sizeof("thermal_zone") - 1)) {
 		tz = to_thermal_zone(dev);
 		thermal_zone_destroy_device_groups(tz);
+		mutex_destroy(&tz->lock);
 		kfree(tz);
 	} else if (!strncmp(dev_name(dev), "cooling_device",
 			    sizeof("cooling_device") - 1)) {
@@ -1390,8 +1429,12 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 	thermal_remove_hwmon_sysfs(tz);
 	ida_free(&thermal_tz_ida, tz->id);
 	ida_destroy(&tz->ida);
-	mutex_destroy(&tz->lock);
-	device_unregister(&tz->device);
+
+	mutex_lock(&tz->lock);
+	device_del(&tz->device);
+	mutex_unlock(&tz->lock);
+
+	put_device(&tz->device);
 
 	thermal_notify_tz_delete(tz_id);
 }
