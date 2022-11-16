@@ -46,6 +46,8 @@ struct lpc_driver_ops {
 
 static struct lpc_driver_ops cros_ec_lpc_ops = { };
 
+static struct platform_device *pdev_extcon;
+
 /*
  * A generic instance of the read function of struct lpc_driver_ops, used for
  * the LPC EC.
@@ -354,6 +356,9 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 		return -EBUSY;
 	}
 
+	cros_ec_lpc_mec_init(EC_HOST_CMD_REGION0,
+			     EC_LPC_ADDR_MEMMAP + EC_MEMMAP_SIZE);
+
 	/*
 	 * Read the mapped ID twice, the first one is assuming the
 	 * EC is a Microchip Embedded Controller (MEC) variant, if the
@@ -441,6 +446,13 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 				 status);
 	}
 
+	/* Revert this after we introduce Type C connector class driver. */
+	if (dmi_match(DMI_PRODUCT_FAMILY, "Google_Volteer") ||
+	    dmi_match(DMI_PRODUCT_NAME, "tglrvp"))
+		pdev_extcon = platform_device_register_data(dev,
+					"extcon-tcss-cros-ec",
+					PLATFORM_DEVID_NONE, NULL, 0);
+
 	return 0;
 }
 
@@ -448,6 +460,8 @@ static int cros_ec_lpc_remove(struct platform_device *pdev)
 {
 	struct cros_ec_device *ec_dev = platform_get_drvdata(pdev);
 	struct acpi_device *adev;
+
+	platform_device_unregister(pdev_extcon);
 
 	adev = ACPI_COMPANION(&pdev->dev);
 	if (adev)
@@ -554,6 +568,7 @@ static struct platform_driver cros_ec_lpc_driver = {
 		.name = DRV_NAME,
 		.acpi_match_table = cros_ec_lpc_acpi_device_ids,
 		.pm = &cros_ec_lpc_pm_ops,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = cros_ec_lpc_probe,
 	.remove = cros_ec_lpc_remove,
@@ -586,14 +601,10 @@ static int __init cros_ec_lpc_init(void)
 		return -ENODEV;
 	}
 
-	cros_ec_lpc_mec_init(EC_HOST_CMD_REGION0,
-			     EC_LPC_ADDR_MEMMAP + EC_MEMMAP_SIZE);
-
 	/* Register the driver */
 	ret = platform_driver_register(&cros_ec_lpc_driver);
 	if (ret) {
 		pr_err(DRV_NAME ": can't register driver: %d\n", ret);
-		cros_ec_lpc_mec_destroy();
 		return ret;
 	}
 
@@ -603,7 +614,6 @@ static int __init cros_ec_lpc_init(void)
 		if (ret) {
 			pr_err(DRV_NAME ": can't register device: %d\n", ret);
 			platform_driver_unregister(&cros_ec_lpc_driver);
-			cros_ec_lpc_mec_destroy();
 		}
 	}
 
@@ -615,7 +625,6 @@ static void __exit cros_ec_lpc_exit(void)
 	if (!cros_ec_lpc_acpi_device_found)
 		platform_device_unregister(&cros_ec_lpc_device);
 	platform_driver_unregister(&cros_ec_lpc_driver);
-	cros_ec_lpc_mec_destroy();
 }
 
 module_init(cros_ec_lpc_init);
