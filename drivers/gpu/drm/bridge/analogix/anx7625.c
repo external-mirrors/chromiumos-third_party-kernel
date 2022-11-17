@@ -3074,6 +3074,7 @@ static int anx7625_link_bridge(struct drm_dp_aux *aux)
 
 	platform->bridge.funcs = &anx7625_bridge_funcs;
 	platform->bridge.of_node = dev->of_node;
+	platform->bridge.support_hdcp = true;
 	if (!anx7625_of_panel_on_aux_bus(dev))
 		platform->bridge.ops |= DRM_BRIDGE_OP_EDID;
 	if (!platform->pdata.panel_bridge)
