@@ -307,14 +307,6 @@ static int ipu_kcam_instance_write(void *dev,
 	}
 
 	switch (cmd) {
-	case IPU_IOC_GETBUF:
-		// dev_info(&adev->dev, "getbuf\n");
-		err = ipu_psys_getbuf(&karg.buf, psys);
-		break;
-	case IPU_IOC_PUTBUF:
-		// dev_info(&adev->dev, "putbuf\n");
-		err = ipu_psys_putbuf(&karg.buf, psys);
-		break;
 	case IPU_IOC_QCMD:
 		// dev_info(&adev->dev, "qcmd\n");
 		err = ipu_psys_kcmd_new(&karg.cmd,

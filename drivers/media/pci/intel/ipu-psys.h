@@ -223,8 +223,6 @@ ipu_get_completed_kcmd(struct ipu_kcam_psys_instance *instance);
 long ipu_ioctl_dqevent(struct ipu_psys_event *event,
 		       struct ipu_kcam_psys_instance *instance);
 
-int ipu_psys_getbuf(struct ipu_psys_buffer *buf, struct ipu_psys *psys);
-int ipu_psys_putbuf(struct ipu_psys_buffer *buf, struct ipu_psys *psys);
 long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 		      struct ipu_psys *psys);
 
