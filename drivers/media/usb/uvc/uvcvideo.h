@@ -139,6 +139,9 @@
 #define UVC_GUID_FORMAT_H264 \
 	{ 'H',  '2',  '6',  '4', 0x00, 0x00, 0x10, 0x00, \
 	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
+#define UVC_GUID_FORMAT_H265 \
+	{ 'H',  '2',  '6',  '5', 0x00, 0x00, 0x10, 0x00, \
+	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
 #define UVC_GUID_FORMAT_Y8I \
 	{ 'Y',  '8',  'I',  ' ', 0x00, 0x00, 0x10, 0x00, \
 	 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}
@@ -209,6 +212,7 @@
 #define UVC_QUIRK_RESTORE_CTRLS_ON_INIT	0x00000400
 #define UVC_QUIRK_FORCE_Y8		0x00000800
 #define UVC_QUIRK_FORCE_BPP		0x00001000
+#define UVC_QUIRK_PRIVACY_DURING_STREAM	0x00002000
 
 /* Format flags */
 #define UVC_FMT_FLAG_COMPRESSED		0x00000001
@@ -222,7 +226,8 @@ struct gpio_desc;
 struct sg_table;
 struct uvc_device;
 
-/* TODO: Put the most frequently accessed fields at the beginning of
+/*
+ * TODO: Put the most frequently accessed fields at the beginning of
  * structures to maximize cache efficiency.
  */
 struct uvc_control_info {
@@ -267,8 +272,7 @@ struct uvc_control {
 	struct uvc_entity *entity;
 	struct uvc_control_info info;
 
-	u8 index;	/* Used to match the uvc_control entry with a
-			   uvc_control_info. */
+	u8 index;	/* Used to match the uvc_control entry with a uvc_control_info. */
 	u8 dirty:1,
 	   loaded:1,
 	   modified:1,
@@ -286,7 +290,8 @@ struct uvc_format_desc {
 	u32 fcc;
 };
 
-/* The term 'entity' refers to both UVC units and UVC terminals.
+/*
+ * The term 'entity' refers to both UVC units and UVC terminals.
  *
  * The type field is either the terminal type (wTerminalType in the terminal
  * descriptor), or the unit type (bDescriptorSubtype in the unit descriptor).
@@ -305,8 +310,7 @@ struct uvc_format_desc {
 
 struct uvc_entity {
 	struct list_head list;		/* Entity as part of a UVC device. */
-	struct list_head chain;		/* Entity as part of a video device
-					 * chain. */
+	struct list_head chain;		/* Entity as part of a video device chain. */
 	unsigned int flags;
 
 	/*
@@ -367,6 +371,9 @@ struct uvc_entity {
 			u8  *bmControls;
 			struct gpio_desc *gpio_privacy;
 			int irq;
+			struct mutex event_mutex;
+			int last_event_val;
+			bool is_gpio_ready;
 		} gpio;
 	};
 
@@ -394,6 +401,14 @@ struct uvc_frame {
 	u32 dwDefaultFrameInterval;
 	u32 *dwFrameInterval;
 };
+
+struct uvc_roi {
+	u16 wROI_Top;
+	u16 wROI_Left;
+	u16 wROI_Bottom;
+	u16 wROI_Right;
+	u16 bmAutoControls;
+} __packed;
 
 struct uvc_format {
 	u8 type;
@@ -588,7 +603,8 @@ struct uvc_streaming {
 	struct uvc_format *cur_format;
 	struct uvc_frame *cur_frame;
 
-	/* Protect access to ctrl, cur_format, cur_frame and hardware video
+	/*
+	 * Protect access to ctrl, cur_format, cur_frame and hardware video
 	 * probe control.
 	 */
 	struct mutex mutex;
@@ -664,6 +680,7 @@ struct uvc_device_info {
 	u32	quirks;
 	u32	meta_format;
 	u16	uvc_version;
+	const struct uvc_control_mapping **mappings;
 };
 
 struct uvc_device {
@@ -836,6 +853,9 @@ extern const struct v4l2_file_operations uvc_fops;
 int uvc_mc_register_entities(struct uvc_video_chain *chain);
 void uvc_mc_cleanup_entity(struct uvc_entity *entity);
 
+/* Privacy gpio */
+void uvc_gpio_event(struct uvc_device *dev);
+
 /* Video */
 int uvc_video_init(struct uvc_streaming *stream);
 int uvc_video_suspend(struct uvc_streaming *stream);
@@ -877,6 +897,7 @@ int uvc_query_v4l2_menu(struct uvc_video_chain *chain,
 int uvc_ctrl_add_mapping(struct uvc_video_chain *chain,
 			 const struct uvc_control_mapping *mapping);
 int uvc_ctrl_init_device(struct uvc_device *dev);
+void uvc_ctrl_stop_device(struct uvc_device *dev);
 void uvc_ctrl_cleanup_device(struct uvc_device *dev);
 int uvc_ctrl_restore_values(struct uvc_device *dev);
 bool uvc_ctrl_status_event_async(struct urb *urb, struct uvc_video_chain *chain,
@@ -911,6 +932,7 @@ void uvc_simplify_fraction(u32 *numerator, u32 *denominator,
 u32 uvc_fraction_to_interval(u32 numerator, u32 denominator);
 struct usb_host_endpoint *uvc_find_endpoint(struct usb_host_interface *alts,
 					    u8 epaddr);
+u16 uvc_endpoint_max_bpi(struct usb_device *dev, struct usb_host_endpoint *ep);
 
 /* Quirks support */
 void uvc_video_decode_isight(struct uvc_urb *uvc_urb,
@@ -925,5 +947,7 @@ void uvc_debugfs_cleanup_stream(struct uvc_streaming *stream);
 
 size_t uvc_video_stats_dump(struct uvc_streaming *stream, char *buf,
 			    size_t size);
+
+struct uvc_roi *uvc_ctrl_roi(struct uvc_video_chain *chain, u8 query);
 
 #endif

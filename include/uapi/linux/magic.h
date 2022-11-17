@@ -62,6 +62,8 @@
 #define REISER2FS_SUPER_MAGIC_STRING	"ReIsEr2Fs"
 #define REISER2FS_JR_SUPER_MAGIC_STRING	"ReIsEr3Fs"
 
+#define ESDFS_SUPER_MAGIC	0x00035df5
+
 #define SMB_SUPER_MAGIC		0x517B
 #define CIFS_SUPER_MAGIC	0xFF534D42      /* the first four bytes of SMB PDUs */
 #define SMB2_SUPER_MAGIC	0xFE534D42
@@ -98,12 +100,8 @@
 
 /* Since UDF 2.01 is ISO 13346 based... */
 #define UDF_SUPER_MAGIC		0x15013346
-#define BALLOON_KVM_MAGIC	0x13661366
-#define ZSMALLOC_MAGIC		0x58295829
 #define DMA_BUF_MAGIC		0x444d4142	/* "DMAB" */
 #define DEVMEM_MAGIC		0x454d444d	/* "DMEM" */
-#define Z3FOLD_MAGIC		0x33
-#define PPC_CMM_MAGIC		0xc7571590
 #define SECRETMEM_MAGIC		0x5345434d	/* "SECM" */
 
 #endif /* __LINUX_MAGIC_H__ */

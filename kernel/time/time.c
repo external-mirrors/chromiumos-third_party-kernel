@@ -266,7 +266,7 @@ COMPAT_SYSCALL_DEFINE2(settimeofday, struct old_timeval32 __user *, tv,
 #endif
 
 #ifdef CONFIG_64BIT
-SYSCALL_DEFINE1(adjtimex, struct __kernel_timex __user *, txc_p)
+int ksys_adjtimex(struct __kernel_timex __user * txc_p)
 {
 	struct __kernel_timex txc;		/* Local copy of parameter */
 	int ret;
@@ -279,6 +279,11 @@ SYSCALL_DEFINE1(adjtimex, struct __kernel_timex __user *, txc_p)
 		return -EFAULT;
 	ret = do_adjtimex(&txc);
 	return copy_to_user(txc_p, &txc, sizeof(struct __kernel_timex)) ? -EFAULT : ret;
+}
+
+SYSCALL_DEFINE1(adjtimex, struct __kernel_timex __user *, txc_p)
+{
+	return ksys_adjtimex(txc_p);
 }
 #endif
 
@@ -346,7 +351,7 @@ int put_old_timex32(struct old_timex32 __user *utp, const struct __kernel_timex 
 	return 0;
 }
 
-SYSCALL_DEFINE1(adjtimex_time32, struct old_timex32 __user *, utp)
+int ksys_adjtimex_time32(struct old_timex32 __user * utp)
 {
 	struct __kernel_timex txc;
 	int err, ret;
@@ -363,6 +368,12 @@ SYSCALL_DEFINE1(adjtimex_time32, struct old_timex32 __user *, utp)
 
 	return ret;
 }
+
+SYSCALL_DEFINE1(adjtimex_time32, struct old_timex32 __user *, utp)
+{
+	return ksys_adjtimex_time32(utp);
+}
+
 #endif
 
 /*
@@ -449,7 +460,7 @@ time64_t mktime64(const unsigned int year0, const unsigned int mon0,
 }
 EXPORT_SYMBOL(mktime64);
 
-struct __kernel_old_timeval ns_to_kernel_old_timeval(const s64 nsec)
+struct __kernel_old_timeval ns_to_kernel_old_timeval(s64 nsec)
 {
 	struct timespec64 ts = ns_to_timespec64(nsec);
 	struct __kernel_old_timeval tv;
@@ -503,7 +514,7 @@ EXPORT_SYMBOL(set_normalized_timespec64);
  *
  * Returns the timespec64 representation of the nsec parameter.
  */
-struct timespec64 ns_to_timespec64(const s64 nsec)
+struct timespec64 ns_to_timespec64(s64 nsec)
 {
 	struct timespec64 ts = { 0, 0 };
 	s32 rem;

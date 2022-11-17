@@ -236,7 +236,8 @@ static int i2c_acpi_get_info(struct acpi_device *adev,
 		struct acpi_device *adapter_adev;
 
 		/* The adapter must be present */
-		if (acpi_bus_get_device(lookup.adapter_handle, &adapter_adev))
+		adapter_adev = acpi_fetch_acpi_dev(lookup.adapter_handle);
+		if (!adapter_adev)
 			return -ENODEV;
 		if (acpi_bus_get_status(adapter_adev) ||
 		    !adapter_adev->status.present)
@@ -257,6 +258,8 @@ static void i2c_acpi_register_device(struct i2c_adapter *adapter,
 				     struct acpi_device *adev,
 				     struct i2c_board_info *info)
 {
+	struct i2c_client *client;
+
 	/*
 	 * Skip registration on boards where the ACPI tables are
 	 * known to contain bogus I2C devices.
@@ -267,7 +270,15 @@ static void i2c_acpi_register_device(struct i2c_adapter *adapter,
 	adev->power.flags.ignore_parent = true;
 	acpi_device_set_enumerated(adev);
 
-	if (IS_ERR(i2c_new_client_device(adapter, info)))
+	if (!acpi_dev_get_property(adev, "linux,probed", ACPI_TYPE_ANY, NULL)) {
+		unsigned short addrs[] = { info->addr, I2C_CLIENT_END };
+
+		client = i2c_new_scanned_device(adapter, info, addrs, NULL);
+	} else {
+		client = i2c_new_client_device(adapter, info);
+	}
+
+	if (IS_ERR(client))
 		adev->power.flags.ignore_parent = false;
 }
 
@@ -275,13 +286,10 @@ static acpi_status i2c_acpi_add_device(acpi_handle handle, u32 level,
 				       void *data, void **return_value)
 {
 	struct i2c_adapter *adapter = data;
-	struct acpi_device *adev;
+	struct acpi_device *adev = acpi_fetch_acpi_dev(handle);
 	struct i2c_board_info info;
 
-	if (acpi_bus_get_device(handle, &adev))
-		return AE_OK;
-
-	if (i2c_acpi_get_info(adev, &info, adapter, NULL))
+	if (!adev || i2c_acpi_get_info(adev, &info, adapter, NULL))
 		return AE_OK;
 
 	i2c_acpi_register_device(adapter, adev, &info);
@@ -341,12 +349,9 @@ static acpi_status i2c_acpi_lookup_speed(acpi_handle handle, u32 level,
 					   void *data, void **return_value)
 {
 	struct i2c_acpi_lookup *lookup = data;
-	struct acpi_device *adev;
+	struct acpi_device *adev = acpi_fetch_acpi_dev(handle);
 
-	if (acpi_bus_get_device(handle, &adev))
-		return AE_OK;
-
-	if (i2c_acpi_do_lookup(adev, lookup))
+	if (!adev || i2c_acpi_do_lookup(adev, lookup))
 		return AE_OK;
 
 	if (lookup->search_handle != lookup->adapter_handle)

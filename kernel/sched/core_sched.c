@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <linux/prctl.h>
-#include "sched.h"
-
 /*
  * A simple wrapper around refcount. An allocated sched_core_cookie's
  * address is used to compute the cookie of the task.
@@ -59,7 +56,6 @@ static unsigned long sched_core_update_cookie(struct task_struct *p,
 	unsigned long old_cookie;
 	struct rq_flags rf;
 	struct rq *rq;
-	bool enqueued;
 
 	rq = task_rq_lock(p, &rf);
 
@@ -69,16 +65,24 @@ static unsigned long sched_core_update_cookie(struct task_struct *p,
 	 * a cookie until after we've removed it, we must have core scheduling
 	 * enabled here.
 	 */
-	SCHED_WARN_ON((p->core_cookie || cookie) && !sched_core_enabled(rq));
+	/*
+     * Disable the warning that came in from upstream code. On AMD devices, core
+     * scheduling is diabled via an out of tree patch (see arch/x86/bugs.c). Thus
+     * this warning appears even though the condition is valid.
+     *
+     * SCHED_WARN_ON((p->core_cookie || cookie) && !sched_core_enabled(rq));
+     */
 
-	enqueued = sched_core_enqueued(p);
-	if (enqueued)
+	if (sched_core_enqueued(p))
 		sched_core_dequeue(rq, p, DEQUEUE_SAVE);
 
 	old_cookie = p->core_cookie;
 	p->core_cookie = cookie;
 
-	if (enqueued)
+	/*
+	 * Consider the cases: !prev_cookie and !cookie.
+	 */
+	if (cookie && task_on_rq_queued(p))
 		sched_core_enqueue(rq, p);
 
 	/*
@@ -146,6 +150,9 @@ int sched_core_share_pid(unsigned int cmd, pid_t pid, enum pid_type type,
 	if (type > PIDTYPE_PGID || cmd >= PR_SCHED_CORE_MAX || pid < 0 ||
 	    (cmd != PR_SCHED_CORE_GET && uaddr))
 		return -EINVAL;
+
+	if (!static_branch_likely(&sched_coresched_supported))
+		return 0;
 
 	rcu_read_lock();
 	if (pid == 0) {
@@ -280,7 +287,11 @@ void __sched_core_account_forceidle(struct rq *rq)
 		if (p == rq_i->idle)
 			continue;
 
-		__schedstat_add(p->stats.core_forceidle_sum, delta);
+		/*
+		 * Note: this will account forceidle to the current cpu, even
+		 * if it comes from our SMT sibling.
+		 */
+		__account_forceidle_time(p, delta);
 	}
 }
 

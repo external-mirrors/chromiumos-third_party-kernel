@@ -709,9 +709,14 @@ int tpm1_auto_startup(struct tpm_chip *chip)
 	if (rc)
 		goto out;
 	rc = tpm1_do_selftest(chip);
-	if (rc) {
-		dev_err(&chip->dev, "TPM self test failed\n");
-		goto out;
+	if (rc == TPM_ERR_FAILEDSELFTEST) {
+		dev_warn(&chip->dev, "TPM self test failed, switching to the firmware upgrade mode\n");
+		/* A TPM in this state possibly allows or needs a firmware upgrade */
+		chip->flags |= TPM_CHIP_FLAG_FIRMWARE_UPGRADE;
+		return 0;
+	} else if (rc) {
+		dev_err(&chip->dev, "TPM self test failed - ignoring\n");
+		return 0;
 	}
 
 	return rc;

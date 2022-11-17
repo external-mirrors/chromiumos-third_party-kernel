@@ -7,6 +7,7 @@
  */
 
 #include <linux/atomic.h>
+#include <linux/dmi.h>
 #include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -153,6 +154,11 @@ static struct uvc_format_desc uvc_fmts[] = {
 		.name		= "H.264",
 		.guid		= UVC_GUID_FORMAT_H264,
 		.fcc		= V4L2_PIX_FMT_H264,
+	},
+	{
+		.name		= "H.265",
+		.guid		= UVC_GUID_FORMAT_H265,
+		.fcc		= V4L2_PIX_FMT_HEVC,
 	},
 	{
 		.name		= "Greyscale 8 L/R (Y8I)",
@@ -324,7 +330,8 @@ static enum v4l2_ycbcr_encoding uvc_ycbcr_enc(const u8 matrix_coefficients)
 	return V4L2_YCBCR_ENC_DEFAULT;  /* Reserved */
 }
 
-/* Simplify a fraction using a simple continued fraction decomposition. The
+/*
+ * Simplify a fraction using a simple continued fraction decomposition. The
  * idea here is to convert fractions such as 333333/10000000 to 1/30 using
  * 32 bit arithmetic only. The algorithm is not perfect and relies upon two
  * arbitrary parameters to remove non-significative terms from the simple
@@ -342,8 +349,9 @@ void uvc_simplify_fraction(u32 *numerator, u32 *denominator,
 	if (an == NULL)
 		return;
 
-	/* Convert the fraction to a simple continued fraction. See
-	 * https://mathforum.org/dr.math/faq/faq.fractions.html
+	/*
+	 * Convert the fraction to a simple continued fraction. See
+	 * https://en.wikipedia.org/wiki/Continued_fraction
 	 * Stop if the current term is bigger than or equal to the given
 	 * threshold.
 	 */
@@ -378,7 +386,8 @@ void uvc_simplify_fraction(u32 *numerator, u32 *denominator,
 	kfree(an);
 }
 
-/* Convert a fraction to a frame interval in 100ns multiples. The idea here is
+/*
+ * Convert a fraction to a frame interval in 100ns multiples. The idea here is
  * to compute numerator / denominator * 10000000 using 32 bit fixed point
  * arithmetic only.
  */
@@ -391,7 +400,8 @@ u32 uvc_fraction_to_interval(u32 numerator, u32 denominator)
 	    numerator/denominator >= ((u32)-1)/10000000)
 		return (u32)-1;
 
-	/* Divide both the denominator and the multiplier by two until
+	/*
+	 * Divide both the denominator and the multiplier by two until
 	 * numerator * multiplier doesn't overflow. If anyone knows a better
 	 * algorithm please let me know.
 	 */
@@ -543,7 +553,8 @@ static int uvc_parse_format(struct uvc_device *dev,
 
 		format->bpp = buffer[21];
 
-		/* Some devices report a format that doesn't match what they
+		/*
+		 * Some devices report a format that doesn't match what they
 		 * really send.
 		 */
 		if (dev->quirks & UVC_QUIRK_FORCE_Y8) {
@@ -658,7 +669,8 @@ static int uvc_parse_format(struct uvc_device *dev,
 	buflen -= buffer[0];
 	buffer += buffer[0];
 
-	/* Parse the frame descriptors. Only uncompressed, MJPEG and frame
+	/*
+	 * Parse the frame descriptors. Only uncompressed, MJPEG and frame
 	 * based formats have frame descriptors.
 	 */
 	while (buflen > 2 && buffer[1] == USB_DT_CS_INTERFACE &&
@@ -700,7 +712,8 @@ static int uvc_parse_format(struct uvc_device *dev,
 		}
 		frame->dwFrameInterval = *intervals;
 
-		/* Several UVC chipsets screw up dwMaxVideoFrameBufferSize
+		/*
+		 * Several UVC chipsets screw up dwMaxVideoFrameBufferSize
 		 * completely. Observed behaviours range from setting the
 		 * value to 1.1x the actual frame size to hardwiring the
 		 * 16 low bits to 0. This results in a higher than necessary
@@ -712,7 +725,8 @@ static int uvc_parse_format(struct uvc_device *dev,
 			frame->dwMaxVideoFrameBufferSize = format->bpp
 				* frame->wWidth * frame->wHeight / 8;
 
-		/* Some bogus devices report dwMinFrameInterval equal to
+		/*
+		 * Some bogus devices report dwMinFrameInterval equal to
 		 * dwMaxFrameInterval and have dwFrameIntervalStep set to
 		 * zero. Setting all null intervals to 1 fixes the problem and
 		 * some other divisions by zero that could happen.
@@ -722,7 +736,8 @@ static int uvc_parse_format(struct uvc_device *dev,
 			*(*intervals)++ = interval ? interval : 1;
 		}
 
-		/* Make sure that the default frame interval stays between
+		/*
+		 * Make sure that the default frame interval stays between
 		 * the boundaries.
 		 */
 		n -= frame->bFrameIntervalType ? 1 : 2;
@@ -814,7 +829,8 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 		return -ENOMEM;
 	}
 
-	/* The Pico iMage webcam has its class-specific interface descriptors
+	/*
+	 * The Pico iMage webcam has its class-specific interface descriptors
 	 * after the endpoint descriptors.
 	 */
 	if (buflen == 0) {
@@ -913,7 +929,8 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 			break;
 
 		case UVC_VS_FORMAT_DV:
-			/* DV format has no frame descriptor. We will create a
+			/*
+			 * DV format has no frame descriptor. We will create a
 			 * dummy frame descriptor with a dummy frame interval.
 			 */
 			nformats++;
@@ -1009,9 +1026,7 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 				streaming->header.bEndpointAddress);
 		if (ep == NULL)
 			continue;
-
-		psize = le16_to_cpu(ep->desc.wMaxPacketSize);
-		psize = (psize & 0x07ff) * (1 + ((psize >> 11) & 3));
+		psize = uvc_endpoint_max_bpi(dev->udev, ep);
 		if (psize > streaming->maxpsize)
 			streaming->maxpsize = psize;
 	}
@@ -1102,7 +1117,8 @@ static int uvc_parse_vendor_control(struct uvc_device *dev,
 		if (buffer[1] != 0x41 || buffer[2] != 0x01)
 			break;
 
-		/* Logitech implements several vendor specific functions
+		/*
+		 * Logitech implements several vendor specific functions
 		 * through vendor specific extension units (LXU).
 		 *
 		 * The LXU descriptors are similar to XU descriptors
@@ -1152,10 +1168,8 @@ static int uvc_parse_vendor_control(struct uvc_device *dev,
 					       + n;
 		memcpy(unit->extension.bmControls, &buffer[23+p], 2*n);
 
-		if (buffer[24+p+2*n] != 0)
-			usb_string(udev, buffer[24+p+2*n], unit->name,
-				   sizeof(unit->name));
-		else
+		if (buffer[24+p+2*n] == 0 ||
+		    usb_string(udev, buffer[24+p+2*n], unit->name, sizeof(unit->name)) < 0)
 			sprintf(unit->name, "Extension %u", buffer[3]);
 
 		list_add_tail(&unit->list, &dev->entities);
@@ -1279,15 +1293,15 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 			memcpy(term->media.bmTransportModes, &buffer[10+n], p);
 		}
 
-		if (buffer[7] != 0)
-			usb_string(udev, buffer[7], term->name,
-				   sizeof(term->name));
-		else if (UVC_ENTITY_TYPE(term) == UVC_ITT_CAMERA)
-			sprintf(term->name, "Camera %u", buffer[3]);
-		else if (UVC_ENTITY_TYPE(term) == UVC_ITT_MEDIA_TRANSPORT_INPUT)
-			sprintf(term->name, "Media %u", buffer[3]);
-		else
-			sprintf(term->name, "Input %u", buffer[3]);
+		if (buffer[7] == 0 ||
+		    usb_string(udev, buffer[7], term->name, sizeof(term->name)) < 0) {
+			if (UVC_ENTITY_TYPE(term) == UVC_ITT_CAMERA)
+				sprintf(term->name, "Camera %u", buffer[3]);
+			if (UVC_ENTITY_TYPE(term) == UVC_ITT_MEDIA_TRANSPORT_INPUT)
+				sprintf(term->name, "Media %u", buffer[3]);
+			else
+				sprintf(term->name, "Input %u", buffer[3]);
+		}
 
 		list_add_tail(&term->list, &dev->entities);
 		break;
@@ -1300,7 +1314,8 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 			return -EINVAL;
 		}
 
-		/* Make sure the terminal type MSB is not null, otherwise it
+		/*
+		 * Make sure the terminal type MSB is not null, otherwise it
 		 * could be confused with a unit.
 		 */
 		type = get_unaligned_le16(&buffer[4]);
@@ -1319,10 +1334,8 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 
 		memcpy(term->baSourceID, &buffer[7], 1);
 
-		if (buffer[8] != 0)
-			usb_string(udev, buffer[8], term->name,
-				   sizeof(term->name));
-		else
+		if (buffer[8] == 0 ||
+		    usb_string(udev, buffer[8], term->name, sizeof(term->name)) < 0)
 			sprintf(term->name, "Output %u", buffer[3]);
 
 		list_add_tail(&term->list, &dev->entities);
@@ -1344,10 +1357,8 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 
 		memcpy(unit->baSourceID, &buffer[5], p);
 
-		if (buffer[5+p] != 0)
-			usb_string(udev, buffer[5+p], unit->name,
-				   sizeof(unit->name));
-		else
+		if (buffer[5+p] == 0 ||
+		    usb_string(udev, buffer[5+p], unit->name, sizeof(unit->name)) < 0)
 			sprintf(unit->name, "Selector %u", buffer[3]);
 
 		list_add_tail(&unit->list, &dev->entities);
@@ -1377,10 +1388,8 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 		if (dev->uvc_version >= 0x0110)
 			unit->processing.bmVideoStandards = buffer[9+n];
 
-		if (buffer[8+n] != 0)
-			usb_string(udev, buffer[8+n], unit->name,
-				   sizeof(unit->name));
-		else
+		if (buffer[8+n] == 0 ||
+		    usb_string(udev, buffer[8+n], unit->name, sizeof(unit->name)) < 0)
 			sprintf(unit->name, "Processing %u", buffer[3]);
 
 		list_add_tail(&unit->list, &dev->entities);
@@ -1408,10 +1417,8 @@ static int uvc_parse_standard_control(struct uvc_device *dev,
 		unit->extension.bmControls = (u8 *)unit + sizeof(*unit);
 		memcpy(unit->extension.bmControls, &buffer[23+p], n);
 
-		if (buffer[23+p+n] != 0)
-			usb_string(udev, buffer[23+p+n], unit->name,
-				   sizeof(unit->name));
-		else
+		if (buffer[23+p+n] == 0 ||
+		    usb_string(udev, buffer[23+p+n], unit->name, sizeof(unit->name)) < 0)
 			sprintf(unit->name, "Extension %u", buffer[3]);
 
 		list_add_tail(&unit->list, &dev->entities);
@@ -1434,7 +1441,8 @@ static int uvc_parse_control(struct uvc_device *dev)
 	int buflen = alts->extralen;
 	int ret;
 
-	/* Parse the default alternate setting only, as the UVC specification
+	/*
+	 * Parse the default alternate setting only, as the UVC specification
 	 * defines a single alternate setting, the default alternate setting
 	 * zero.
 	 */
@@ -1452,7 +1460,8 @@ next_descriptor:
 		buffer += buffer[0];
 	}
 
-	/* Check if the optional status endpoint is present. Built-in iSight
+	/*
+	 * Check if the optional status endpoint is present. Built-in iSight
 	 * webcams have an interrupt endpoint but spit proprietary data that
 	 * don't conform to the UVC status endpoint messages. Don't try to
 	 * handle the interrupt endpoint for those cameras.
@@ -1479,7 +1488,7 @@ next_descriptor:
  * Privacy GPIO
  */
 
-static void uvc_gpio_event(struct uvc_device *dev)
+void uvc_gpio_event(struct uvc_device *dev)
 {
 	struct uvc_entity *unit = dev->gpio_unit;
 	struct uvc_video_chain *chain;
@@ -1488,18 +1497,28 @@ static void uvc_gpio_event(struct uvc_device *dev)
 	if (!unit)
 		return;
 
-	new_val = gpiod_get_value_cansleep(unit->gpio.gpio_privacy);
+	mutex_lock(&unit->gpio.event_mutex);
 
-	/* GPIO entities are always on the first chain. */
-	chain = list_first_entry(&dev->chains, struct uvc_video_chain, list);
-	uvc_ctrl_status_event(chain, unit->controls, &new_val);
+	new_val = gpiod_get_value_cansleep(unit->gpio.gpio_privacy);
+	if (unit->gpio.last_event_val != new_val) {
+		/* GPIO entities are always on the first chain. */
+		chain = list_first_entry(&dev->chains,
+					 struct uvc_video_chain, list);
+		uvc_ctrl_status_event(chain, unit->controls, &new_val);
+	}
+	unit->gpio.last_event_val = new_val;
+
+	mutex_unlock(&unit->gpio.event_mutex);
 }
 
 static int uvc_gpio_get_cur(struct uvc_device *dev, struct uvc_entity *entity,
 			    u8 cs, void *data, u16 size)
 {
-	if (cs != UVC_CT_PRIVACY_CONTROL || size < 1)
+	if (cs != UVC_CT_PRIVACY_CONTROL || size < 1 || !dev->gpio_unit)
 		return -EINVAL;
+
+	if (!dev->gpio_unit->gpio.is_gpio_ready)
+		return -EBUSY;
 
 	*(u8 *)data = gpiod_get_value_cansleep(entity->gpio.gpio_privacy);
 
@@ -1520,9 +1539,30 @@ static irqreturn_t uvc_gpio_irq(int irq, void *data)
 {
 	struct uvc_device *dev = data;
 
+	if (!dev->gpio_unit->gpio.is_gpio_ready)
+		return IRQ_HANDLED;
+
 	uvc_gpio_event(dev);
 	return IRQ_HANDLED;
 }
+
+static const struct dmi_system_id privacy_valid_during_streamon[] = {
+	{
+		.ident = "HP Elite c1030 Chromebook",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Jinlon"),
+		},
+	},
+	{
+		.ident = "HP Pro c640 Chromebook",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Dratini"),
+		},
+	},
+	{ } /* terminate list */
+};
 
 static int uvc_gpio_parse(struct uvc_device *dev)
 {
@@ -1548,6 +1588,7 @@ static int uvc_gpio_parse(struct uvc_device *dev)
 	}
 
 	unit->gpio.gpio_privacy = gpio_privacy;
+	unit->gpio.last_event_val = -1;
 	unit->gpio.irq = irq;
 	unit->gpio.bControlSize = 1;
 	unit->gpio.bmControls = (u8 *)unit + sizeof(*unit);
@@ -1555,6 +1596,18 @@ static int uvc_gpio_parse(struct uvc_device *dev)
 	unit->get_cur = uvc_gpio_get_cur;
 	unit->get_info = uvc_gpio_get_info;
 	strscpy(unit->name, "GPIO", sizeof(unit->name));
+	mutex_init(&unit->gpio.event_mutex);
+
+	/*
+	 * Note: This quirk will not match external UVC cameras,
+	 * as they will not have the corresponding ACPI GPIO entity.
+	 */
+	if (dmi_check_system(privacy_valid_during_streamon)) {
+		dev->quirks |= UVC_QUIRK_PRIVACY_DURING_STREAM;
+		unit->gpio.is_gpio_ready = false;
+	} else {
+		unit->gpio.is_gpio_ready = true;
+	}
 
 	list_add_tail(&unit->list, &dev->entities);
 
@@ -2054,7 +2107,8 @@ static int uvc_scan_device(struct uvc_device *dev)
 		if (!UVC_ENTITY_IS_OTERM(term))
 			continue;
 
-		/* If the terminal is already included in a chain, skip it.
+		/*
+		 * If the terminal is already included in a chain, skip it.
 		 * This can happen for chains that have multiple output
 		 * terminals, where all output terminals beside the first one
 		 * will be inserted in the chain in forward scans.
@@ -2167,17 +2221,28 @@ static void uvc_unregister_video(struct uvc_device *dev)
 {
 	struct uvc_streaming *stream;
 
+	mutex_lock(&dev->lock);
+
 	list_for_each_entry(stream, &dev->streams, list) {
 		if (!video_is_registered(&stream->vdev))
 			continue;
+
+		mutex_lock(&stream->mutex);
+		mutex_lock(&stream->queue.mutex);
 
 		video_unregister_device(&stream->vdev);
 		video_unregister_device(&stream->meta.vdev);
 
 		uvc_debugfs_cleanup_stream(stream);
+
+		vb2_queue_release(&stream->queue.queue);
+
+		mutex_unlock(&stream->queue.mutex);
+		mutex_unlock(&stream->mutex);
 	}
 
 	uvc_status_unregister(dev);
+	uvc_ctrl_stop_device(dev);
 
 	if (dev->vdev.dev)
 		v4l2_device_unregister(&dev->vdev);
@@ -2185,6 +2250,7 @@ static void uvc_unregister_video(struct uvc_device *dev)
 	if (media_devnode_is_registered(dev->mdev.devnode))
 		media_device_unregister(&dev->mdev);
 #endif
+	mutex_unlock(&dev->lock);
 }
 
 int uvc_register_video_device(struct uvc_device *dev,
@@ -2306,7 +2372,8 @@ static int uvc_register_terms(struct uvc_device *dev,
 		if (ret < 0)
 			return ret;
 
-		/* Register a metadata node, but ignore a possible failure,
+		/*
+		 * Register a metadata node, but ignore a possible failure,
 		 * complete registration of video nodes anyway.
 		 */
 		uvc_meta_register(stream);
@@ -2443,7 +2510,7 @@ static int uvc_probe(struct usb_interface *intf,
 			 "Forcing device quirks to 0x%x by module parameter for testing purpose.\n",
 			 dev->quirks);
 		dev_info(&dev->udev->dev,
-			 "Please report required quirks to the linux-uvc-devel mailing list.\n");
+			 "Please report required quirks to the linux-media mailing list.\n");
 	}
 
 	if (dev->info->uvc_version) {
@@ -2504,7 +2571,8 @@ static void uvc_disconnect(struct usb_interface *intf)
 {
 	struct uvc_device *dev = usb_get_intfdata(intf);
 
-	/* Set the USB interface data to NULL. This can be done outside the
+	/*
+	 * Set the USB interface data to NULL. This can be done outside the
 	 * lock, as there's no other reader.
 	 */
 	usb_set_intfdata(intf, NULL);
@@ -2640,6 +2708,30 @@ MODULE_PARM_DESC(timeout, "Streaming control requests timeout");
  * Driver initialization and cleanup
  */
 
+static const struct uvc_menu_info power_line_frequency_controls_limited[] = {
+	{ 1, "50 Hz" },
+	{ 2, "60 Hz" },
+};
+
+static const struct uvc_control_mapping uvc_ctrl_power_line_mapping_limited = {
+	.id		= V4L2_CID_POWER_LINE_FREQUENCY,
+	.entity		= UVC_GUID_UVC_PROCESSING,
+	.selector	= UVC_PU_POWER_LINE_FREQUENCY_CONTROL,
+	.size		= 2,
+	.offset		= 0,
+	.v4l2_type	= V4L2_CTRL_TYPE_MENU,
+	.data_type	= UVC_CTRL_DATA_TYPE_ENUM,
+	.menu_info	= power_line_frequency_controls_limited,
+	.menu_count	= ARRAY_SIZE(power_line_frequency_controls_limited),
+};
+
+static const struct uvc_device_info uvc_ctrl_power_line_limited = {
+	.mappings = (const struct uvc_control_mapping *[]) {
+		&uvc_ctrl_power_line_mapping_limited,
+		NULL, /* Sentinel */
+	},
+};
+
 static const struct uvc_device_info uvc_quirk_probe_minmax = {
 	.quirks = UVC_QUIRK_PROBE_MINMAX,
 };
@@ -2670,6 +2762,33 @@ static const struct uvc_device_info uvc_quirk_force_y8 = {
  * though they are compliant.
  */
 static const struct usb_device_id uvc_ids[] = {
+	/* Quanta USB2.0 HD UVC Webcam */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0408,
+	  .idProduct		= 0x3090,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
+	/* Quanta USB2.0 HD UVC Webcam */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0408,
+	  .idProduct		= 0x4030,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
+	/* Quanta USB2.0 HD UVC Webcam */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x0408,
+	  .idProduct		= 0x4034,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= UVC_PC_PROTOCOL_15,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
 	/* LogiLink Wireless Webcam */
 	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
@@ -2781,6 +2900,33 @@ static const struct usb_device_id uvc_ids[] = {
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_RESTRICT_FRAME_RATE) },
+	/* Chicony EasyCamera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x04f2,
+	  .idProduct		= 0xb5eb,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
+	/* Chicony EasyCamera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x04f2,
+	  .idProduct		= 0xb6ba,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
+	/* Chicony EasyCamera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x04f2,
+	  .idProduct		= 0xb746,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
 	/* Alcor Micro AU3820 (Future Boy PC USB Webcam) */
 	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
@@ -2845,6 +2991,15 @@ static const struct usb_device_id uvc_ids[] = {
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_PROBE_MINMAX
 					| UVC_QUIRK_BUILTIN_ISIGHT) },
+	/* Apple FaceTime HD Camera (Built-In) */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x05ac,
+	  .idProduct		= 0x8514,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_quirk_probe_def },
 	/* Apple Built-In iSight via iBridge */
 	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,
@@ -3156,6 +3311,15 @@ static const struct usb_device_id uvc_ids[] = {
 	  .bInterfaceSubClass	= 1,
 	  .bInterfaceProtocol	= 0,
 	  .driver_info		= UVC_INFO_QUIRK(UVC_QUIRK_FORCE_BPP) },
+	/* Acer EasyCamera */
+	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
+				| USB_DEVICE_ID_MATCH_INT_INFO,
+	  .idVendor		= 0x5986,
+	  .idProduct		= 0x1172,
+	  .bInterfaceClass	= USB_CLASS_VIDEO,
+	  .bInterfaceSubClass	= 1,
+	  .bInterfaceProtocol	= 0,
+	  .driver_info		= (kernel_ulong_t)&uvc_ctrl_power_line_limited },
 	/* Intel RealSense D4M */
 	{ .match_flags		= USB_DEVICE_ID_MATCH_DEVICE
 				| USB_DEVICE_ID_MATCH_INT_INFO,

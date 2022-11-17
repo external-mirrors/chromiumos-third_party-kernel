@@ -48,6 +48,51 @@ static const struct {
 	__s32 y;
 }  hid_hat_to_axis[] = {{ 0, 0}, { 0,-1}, { 1,-1}, { 1, 0}, { 1, 1}, { 0, 1}, {-1, 1}, {-1, 0}, {-1,-1}};
 
+struct usage_priority {
+	__u32 usage;			/* the HID usage associated */
+	bool global;			/* we assume all usages to be slotted,
+					 * unless global
+					 */
+	unsigned int slot_overwrite;	/* for globals: allows to set the usage
+					 * before or after the slots
+					 */
+};
+
+/*
+ * hid-input will convert this list into priorities:
+ * the first element will have the highest priority
+ * (the length of the following array) and the last
+ * element the lowest (1).
+ *
+ * hid-input will then shift the priority by 8 bits to leave some space
+ * in case drivers want to interleave other fields.
+ *
+ * To accommodate slotted devices, the slot priority is
+ * defined in the next 8 bits (defined by 0xff - slot).
+ *
+ * If drivers want to add fields before those, hid-input will
+ * leave out the first 8 bits of the priority value.
+ *
+ * This still leaves us 65535 individual priority values.
+ */
+static const struct usage_priority hidinput_usages_priorities[] = {
+	{ /* Eraser (eraser touching) must always come before tipswitch */
+	  .usage = HID_DG_ERASER,
+	},
+	{ /* Invert must always come before In Range */
+	  .usage = HID_DG_INVERT,
+	},
+	{ /* Is the tip of the tool touching? */
+	  .usage = HID_DG_TIPSWITCH,
+	},
+	{ /* Tip Pressure might emulate tip switch */
+	  .usage = HID_DG_TIPPRESSURE,
+	},
+	{ /* In Range needs to come after the other tool states */
+	  .usage = HID_DG_INRANGE,
+	},
+};
+
 #define map_abs(c)	hid_map_usage(hidinput, usage, &bit, &max, EV_ABS, (c))
 #define map_rel(c)	hid_map_usage(hidinput, usage, &bit, &max, EV_REL, (c))
 #define map_key(c)	hid_map_usage(hidinput, usage, &bit, &max, EV_KEY, (c))
@@ -288,6 +333,7 @@ static enum power_supply_property hidinput_battery_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_SCOPE,
 };
@@ -335,6 +381,10 @@ static const struct hid_device_id hid_battery_quirks[] = {
 	{ HID_I2C_DEVICE(USB_VENDOR_ID_ELAN, I2C_DEVICE_ID_HP_SPECTRE_X360_15),
 	  HID_BATTERY_QUIRK_IGNORE },
 	{ HID_I2C_DEVICE(USB_VENDOR_ID_ELAN, I2C_DEVICE_ID_SURFACE_GO_TOUCHSCREEN),
+	  HID_BATTERY_QUIRK_IGNORE },
+	{ HID_I2C_DEVICE(USB_VENDOR_ID_ELAN, I2C_DEVICE_ID_SURFACE_GO2_TOUCHSCREEN),
+	  HID_BATTERY_QUIRK_IGNORE },
+	{ HID_I2C_DEVICE(USB_VENDOR_ID_ELAN, I2C_DEVICE_ID_LENOVO_YOGA_C630_TOUCHSCREEN),
 	  HID_BATTERY_QUIRK_IGNORE },
 	{}
 };
@@ -412,6 +462,33 @@ static int hidinput_get_battery_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		val->strval = dev->name;
+		break;
+
+	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
+		/*
+		 * Serial number does not have an active HID query
+		 * mechanism like hidinput_query_battery_capacity, as the
+		 * only devices expected to have serial numbers are digitizers,
+		 * which are unlikely to be able to pull the serial number from
+		 * an untethered pen on demand.
+		 */
+		if (dev->battery_serial_number == 0) {
+			/* Make no claims about S/N format if we haven't actually seen a value yet. */
+			strcpy(dev->battery_serial_number_str, "");
+		} else {
+			if (!dev->battery_sn_64bit) {
+				snprintf(dev->battery_serial_number_str,
+					sizeof(dev->battery_serial_number_str),
+					"%08llX",
+					dev->battery_serial_number);
+			} else {
+				snprintf(dev->battery_serial_number_str,
+					sizeof(dev->battery_serial_number_str),
+					"%016llX",
+					dev->battery_serial_number);
+			}
+		}
+		val->strval = dev->battery_serial_number_str;
 		break;
 
 	case POWER_SUPPLY_PROP_STATUS:
@@ -496,6 +573,9 @@ static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
 	dev->battery_max = max;
 	dev->battery_report_type = report_type;
 	dev->battery_report_id = field->report->id;
+	dev->battery_state_changed = false;
+	dev->battery_reported = false;
+	dev->battery_sn_64bit = false;
 
 	/*
 	 * Stylus is normally not connected to the device and thus we
@@ -537,7 +617,13 @@ static void hidinput_cleanup_battery(struct hid_device *dev)
 	dev->battery = NULL;
 }
 
-static void hidinput_update_battery(struct hid_device *dev, int value)
+static void hidinput_set_battery_sn_64bit(struct hid_device *dev)
+{
+	dev->battery_sn_64bit = true;
+}
+
+static void hidinput_update_battery_capacity(struct hid_device *dev,
+					     __s32 value)
 {
 	int capacity;
 
@@ -549,15 +635,70 @@ static void hidinput_update_battery(struct hid_device *dev, int value)
 
 	capacity = hidinput_scale_battery_capacity(dev, value);
 
-	if (dev->battery_status != HID_BATTERY_REPORTED ||
-	    capacity != dev->battery_capacity ||
-	    ktime_after(ktime_get_coarse(), dev->battery_ratelimit_time)) {
+	if (capacity != dev->battery_capacity) {
 		dev->battery_capacity = capacity;
+		dev->battery_state_changed = true;
+	}
+	dev->battery_reported = true;
+}
+
+static void hidinput_update_battery_serial(struct hid_device *dev,
+					   const __s32 value, bool top_32_bits)
+{
+	__u64 sn;
+	__u32 sn_hi, sn_lo;
+
+	if (!dev->battery)
+		return;
+
+	if (!top_32_bits) {
+		sn_lo = (__u32)value;
+		sn_hi = (__u32)(dev->battery_new_serial_number >> 32);
+	} else {
+		sn_lo = (__u32)dev->battery_new_serial_number;
+		sn_hi = (__u32)value;
+	}
+
+	sn = (((__u64)sn_hi) << 32) | (__u64)sn_lo;
+
+	dev->battery_new_serial_number = sn;
+	dev->battery_reported = true;
+}
+
+static void hidinput_flush_battery(struct hid_device *dev)
+{
+	if (!dev->battery)
+		return;
+
+	/* Only consider pushing a battery change if there is a
+	 * battery field in this report.
+	 */
+	if (!dev->battery_reported)
+		return;
+
+	/* As we have the entire S/N now, check if it changed, and is non-zero.
+	 * We do want to ignore actual updates of zero, as they are expected to
+	 * convey 'no information', instead of 'no stylus present'.
+	 */
+	if (dev->battery_new_serial_number != 0 &&
+	    dev->battery_new_serial_number != dev->battery_serial_number) {
+		dev->battery_serial_number = dev->battery_new_serial_number;
+		dev->battery_state_changed = true;
+	}
+
+	if (dev->battery_status != HID_BATTERY_REPORTED ||
+	    dev->battery_state_changed ||
+	    ktime_after(ktime_get_coarse(), dev->battery_ratelimit_time)) {
 		dev->battery_status = HID_BATTERY_REPORTED;
+		dev->battery_state_changed = false;
 		dev->battery_ratelimit_time =
 			ktime_add_ms(ktime_get_coarse(), 30 * 1000);
 		power_supply_changed(dev->battery);
 	}
+
+	/* Clean up for next report */
+	dev->battery_reported = false;
+	dev->battery_new_serial_number = 0;
 }
 #else  /* !CONFIG_HID_BATTERY_STRENGTH */
 static int hidinput_setup_battery(struct hid_device *dev, unsigned report_type,
@@ -570,7 +711,21 @@ static void hidinput_cleanup_battery(struct hid_device *dev)
 {
 }
 
-static void hidinput_update_battery(struct hid_device *dev, int value)
+static void hidinput_set_battery_sn_64bit(struct hid_device *dev)
+{
+}
+
+static void hidinput_update_battery_capacity(struct hid_device *dev,
+					     __s32 value)
+{
+}
+
+static void hidinput_update_battery_serial(struct hid_device *dev,
+					   const __s32 value, bool top_32_bits)
+{
+}
+
+static void hidinput_flush_battery(struct hid_device *dev)
 {
 }
 #endif	/* CONFIG_HID_BATTERY_STRENGTH */
@@ -586,11 +741,13 @@ static bool hidinput_field_in_collection(struct hid_device *device, struct hid_f
 }
 
 static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_field *field,
-				     struct hid_usage *usage)
+				     struct hid_usage *usage, unsigned int usage_index)
 {
 	struct input_dev *input = hidinput->input;
 	struct hid_device *device = input_get_drvdata(input);
+	const struct usage_priority *usage_priority = NULL;
 	int max = 0, code;
+	unsigned int i = 0;
 	unsigned long *bit = NULL;
 
 	field->hidinput = hidinput;
@@ -607,6 +764,28 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 			(usage->hid & HID_USAGE_PAGE) != HID_UP_LED) {
 		goto ignore;
 	}
+
+	/* assign a priority based on the static list declared here */
+	for (i = 0; i < ARRAY_SIZE(hidinput_usages_priorities); i++) {
+		if (usage->hid == hidinput_usages_priorities[i].usage) {
+			usage_priority = &hidinput_usages_priorities[i];
+
+			field->usages_priorities[usage_index] =
+				(ARRAY_SIZE(hidinput_usages_priorities) - i) << 8;
+			break;
+		}
+	}
+
+	/*
+	 * For slotted devices, we need to also add the slot index
+	 * in the priority.
+	 */
+	if (usage_priority && usage_priority->global)
+		field->usages_priorities[usage_index] |=
+			usage_priority->slot_overwrite;
+	else
+		field->usages_priorities[usage_index] |=
+			(0xff - field->slot_idx) << 16;
 
 	if (device->driver->input_mapping) {
 		int ret = device->driver->input_mapping(device, hidinput, field,
@@ -809,7 +988,8 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		break;
 
 	case HID_UP_DIGITIZER:
-		if ((field->application & 0xff) == 0x01) /* Digitizer */
+		if (((field->application & 0xff) == 0x01) ||
+			(device->quirks & HID_QUIRK_DEVICE_IS_DIGITIZER)) /* Digitizer */
 			__set_bit(INPUT_PROP_POINTER, input->propbit);
 		else if ((field->application & 0xff) == 0x02) /* Pen */
 			__set_bit(INPUT_PROP_DIRECT, input->propbit);
@@ -828,10 +1008,31 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 			break;
 
 		case 0x32: /* InRange */
-			switch (field->physical & 0xff) {
-			case 0x21: map_key(BTN_TOOL_MOUSE); break;
-			case 0x22: map_key(BTN_TOOL_FINGER); break;
-			default: map_key(BTN_TOOL_PEN); break;
+			switch (field->physical) {
+			case HID_DG_PUCK:
+				map_key(BTN_TOOL_MOUSE);
+				break;
+			case HID_DG_FINGER:
+				map_key(BTN_TOOL_FINGER);
+				break;
+			default:
+				/*
+				 * If the physical is not given,
+				 * rely on the application.
+				 */
+				if (!field->physical) {
+					switch (field->application) {
+					case HID_DG_TOUCHSCREEN:
+					case HID_DG_TOUCHPAD:
+						map_key_clear(BTN_TOOL_FINGER);
+						break;
+					default:
+						map_key_clear(BTN_TOOL_PEN);
+					}
+				} else {
+					map_key(BTN_TOOL_PEN);
+				}
+				break;
 			}
 			break;
 
@@ -880,6 +1081,7 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 		case 0x5b: /* TransducerSerialNumber */
 		case 0x6e: /* TransducerSerialNumber2 */
 			map_msc(MSC_SERIAL);
+			hidinput_set_battery_sn_64bit(device);
 			break;
 
 		default:  goto unknown;
@@ -1318,29 +1520,60 @@ static void hidinput_handle_scroll(struct hid_usage *usage,
 	input_event(input, EV_REL, usage->code, hi_res);
 }
 
+static void hid_report_release_tool(struct hid_report *report, struct input_dev *input,
+				    unsigned int tool)
+{
+	/* if the given tool is not currently reported, ignore */
+	if (!test_bit(tool, input->key))
+		return;
+
+	/*
+	 * if the given tool was previously set, release it,
+	 * release any TOUCH and send an EV_SYN
+	 */
+	input_event(input, EV_KEY, BTN_TOUCH, 0);
+	input_event(input, EV_KEY, tool, 0);
+	input_event(input, EV_SYN, SYN_REPORT, 0);
+
+	report->tool = 0;
+}
+
+static void hid_report_set_tool(struct hid_report *report, struct input_dev *input,
+				unsigned int new_tool)
+{
+	if (report->tool != new_tool)
+		hid_report_release_tool(report, input, report->tool);
+
+	input_event(input, EV_KEY, new_tool, 1);
+	report->tool = new_tool;
+}
+
 void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct hid_usage *usage, __s32 value)
 {
 	struct input_dev *input;
+	struct hid_report *report = field->report;
 	unsigned *quirks = &hid->quirks;
 
 	if (!usage->type)
 		return;
 
 	if (usage->type == EV_PWR) {
-		hidinput_update_battery(hid, value);
+		hidinput_update_battery_capacity(hid, value);
 		return;
+	}
+	if (usage->type == EV_MSC && usage->hid == (HID_UP_DIGITIZER | 0x006e)) { /* TransducerSerialNumberSecond32Bits */
+		hidinput_update_battery_serial(hid, value, true);
+		return;
+	}
+	if (usage->type == EV_MSC && usage->code == MSC_SERIAL) {
+		hidinput_update_battery_serial(hid, value, false);
+		/* fall through to standard MSC_SERIAL processing */
 	}
 
 	if (!field->hidinput)
 		return;
 
 	input = field->hidinput->input;
-
-	if (usage->type == EV_ABS &&
-	    (((*quirks & HID_QUIRK_X_INVERT) && usage->code == ABS_X) ||
-	     ((*quirks & HID_QUIRK_Y_INVERT) && usage->code == ABS_Y))) {
-		value = field->logical_maximum - value;
-	}
 
 	if (usage->hat_min < usage->hat_max || usage->hat_dir) {
 		int hat_dir = usage->hat_dir;
@@ -1349,61 +1582,6 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 		if (hat_dir < 0 || hat_dir > 8) hat_dir = 0;
 		input_event(input, usage->type, usage->code    , hid_hat_to_axis[hat_dir].x);
 		input_event(input, usage->type, usage->code + 1, hid_hat_to_axis[hat_dir].y);
-		return;
-	}
-
-	if (usage->hid == HID_DG_INVERT) {
-		*quirks = value ? (*quirks | HID_QUIRK_INVERT) : (*quirks & ~HID_QUIRK_INVERT);
-		return;
-	}
-
-	if (usage->hid == HID_DG_INRANGE) {
-		if (value) {
-			input_event(input, usage->type, (*quirks & HID_QUIRK_INVERT) ? BTN_TOOL_RUBBER : usage->code, 1);
-			return;
-		}
-		input_event(input, usage->type, usage->code, 0);
-		input_event(input, usage->type, BTN_TOOL_RUBBER, 0);
-		return;
-	}
-
-	if (usage->hid == HID_DG_TIPPRESSURE && (*quirks & HID_QUIRK_NOTOUCH)) {
-		int a = field->logical_minimum;
-		int b = field->logical_maximum;
-		input_event(input, EV_KEY, BTN_TOUCH, value > a + ((b - a) >> 3));
-	}
-
-	if (usage->hid == (HID_UP_PID | 0x83UL)) { /* Simultaneous Effects Max */
-		dbg_hid("Maximum Effects - %d\n",value);
-		return;
-	}
-
-	if (usage->hid == (HID_UP_PID | 0x7fUL)) {
-		dbg_hid("PID Pool Report\n");
-		return;
-	}
-
-	if ((usage->type == EV_KEY) && (usage->code == 0)) /* Key 0 is "unassigned", not KEY_UNKNOWN */
-		return;
-
-	if ((usage->type == EV_REL) && (usage->code == REL_WHEEL_HI_RES ||
-					usage->code == REL_HWHEEL_HI_RES)) {
-		hidinput_handle_scroll(usage, input, value);
-		return;
-	}
-
-	if ((usage->type == EV_ABS) && (field->flags & HID_MAIN_ITEM_RELATIVE) &&
-			(usage->code == ABS_VOLUME)) {
-		int count = abs(value);
-		int direction = value > 0 ? KEY_VOLUMEUP : KEY_VOLUMEDOWN;
-		int i;
-
-		for (i = 0; i < count; i++) {
-			input_event(input, EV_KEY, direction, 1);
-			input_sync(input);
-			input_event(input, EV_KEY, direction, 0);
-			input_sync(input);
-		}
 		return;
 	}
 
@@ -1419,7 +1597,7 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 	 * don't specify logical min and max.
 	 */
 	if ((field->flags & HID_MAIN_ITEM_VARIABLE) &&
-	    (field->logical_minimum < field->logical_maximum)) {
+	    field->logical_minimum < field->logical_maximum) {
 		if (field->flags & HID_MAIN_ITEM_NULL_STATE &&
 		    (value < field->logical_minimum ||
 		     value > field->logical_maximum)) {
@@ -1429,6 +1607,126 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 		value = clamp(value,
 			      field->logical_minimum,
 			      field->logical_maximum);
+	}
+
+	switch (usage->hid) {
+	case HID_DG_ERASER:
+		report->tool_active |= !!value;
+
+		/*
+		 * if eraser is set, we must enforce BTN_TOOL_RUBBER
+		 * to accommodate for devices not following the spec.
+		 */
+		if (value)
+			hid_report_set_tool(report, input, BTN_TOOL_RUBBER);
+		else if (report->tool != BTN_TOOL_RUBBER)
+			/* value is off, tool is not rubber, ignore */
+			return;
+
+		/* let hid-input set BTN_TOUCH */
+		break;
+
+	case HID_DG_INVERT:
+		report->tool_active |= !!value;
+
+		/*
+		 * If invert is set, we store BTN_TOOL_RUBBER.
+		 */
+		if (value)
+			hid_report_set_tool(report, input, BTN_TOOL_RUBBER);
+		else if (!report->tool_active)
+			/* tool_active not set means Invert and Eraser are not set */
+			hid_report_release_tool(report, input, BTN_TOOL_RUBBER);
+
+		/* no further processing */
+		return;
+
+	case HID_DG_INRANGE:
+		report->tool_active |= !!value;
+
+		if (report->tool_active) {
+			/*
+			 * if tool is not set but is marked as active,
+			 * assume ours
+			 */
+			if (!report->tool)
+				report->tool = usage->code;
+
+			/* drivers may have changed the value behind our back, resend it */
+			hid_report_set_tool(report, input, report->tool);
+		} else {
+			hid_report_release_tool(report, input, usage->code);
+		}
+
+		/* reset tool_active for the next event */
+		report->tool_active = false;
+
+		/* no further processing */
+		return;
+
+	case HID_DG_TIPSWITCH:
+		report->tool_active |= !!value;
+
+		/* if tool is set to RUBBER we should ignore the current value */
+		if (report->tool == BTN_TOOL_RUBBER)
+			return;
+
+		break;
+
+	case HID_DG_TIPPRESSURE:
+		if (*quirks & HID_QUIRK_NOTOUCH) {
+			int a = field->logical_minimum;
+			int b = field->logical_maximum;
+
+			if (value > a + ((b - a) >> 3)) {
+				input_event(input, EV_KEY, BTN_TOUCH, 1);
+				report->tool_active = true;
+			}
+		}
+		break;
+
+	case HID_UP_PID | 0x83UL: /* Simultaneous Effects Max */
+		dbg_hid("Maximum Effects - %d\n",value);
+		return;
+
+	case HID_UP_PID | 0x7fUL:
+		dbg_hid("PID Pool Report\n");
+		return;
+	}
+
+	switch (usage->type) {
+	case EV_KEY:
+		if (usage->code == 0) /* Key 0 is "unassigned", not KEY_UNKNOWN */
+			return;
+		break;
+
+	case EV_REL:
+		if (usage->code == REL_WHEEL_HI_RES ||
+		    usage->code == REL_HWHEEL_HI_RES) {
+			hidinput_handle_scroll(usage, input, value);
+			return;
+		}
+		break;
+
+	case EV_ABS:
+		if ((field->flags & HID_MAIN_ITEM_RELATIVE) &&
+		    usage->code == ABS_VOLUME) {
+			int count = abs(value);
+			int direction = value > 0 ? KEY_VOLUMEUP : KEY_VOLUMEDOWN;
+			int i;
+
+			for (i = 0; i < count; i++) {
+				input_event(input, EV_KEY, direction, 1);
+				input_sync(input);
+				input_event(input, EV_KEY, direction, 0);
+				input_sync(input);
+			}
+			return;
+
+		} else if (((*quirks & HID_QUIRK_X_INVERT) && usage->code == ABS_X) ||
+			   ((*quirks & HID_QUIRK_Y_INVERT) && usage->code == ABS_Y))
+			value = field->logical_maximum - value;
+		break;
 	}
 
 	/*
@@ -1465,6 +1763,8 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 void hidinput_report_event(struct hid_device *hid, struct hid_report *report)
 {
 	struct hid_input *hidinput;
+
+	hidinput_flush_battery(hid);
 
 	if (hid->quirks & HID_QUIRK_NO_INPUT_SYNC)
 		return;
@@ -1933,12 +2233,63 @@ static struct hid_input *hidinput_match_application(struct hid_report *report)
 static inline void hidinput_configure_usages(struct hid_input *hidinput,
 					     struct hid_report *report)
 {
-	int i, j;
+	int i, j, k;
+	int first_field_index = 0;
+	int slot_collection_index = -1;
+	int prev_collection_index = -1;
+	unsigned int slot_idx = 0;
+	struct hid_field *field;
+
+	/*
+	 * First tag all the fields that are part of a slot,
+	 * a slot needs to have one Contact ID in the collection
+	 */
+	for (i = 0; i < report->maxfield; i++) {
+		field = report->field[i];
+
+		/* ignore fields without usage */
+		if (field->maxusage < 1)
+			continue;
+
+		/*
+		 * janitoring when collection_index changes
+		 */
+		if (prev_collection_index != field->usage->collection_index) {
+			prev_collection_index = field->usage->collection_index;
+			first_field_index = i;
+		}
+
+		/*
+		 * if we already found a Contact ID in the collection,
+		 * tag and continue to the next.
+		 */
+		if (slot_collection_index == field->usage->collection_index) {
+			field->slot_idx = slot_idx;
+			continue;
+		}
+
+		/* check if the current field has Contact ID */
+		for (j = 0; j < field->maxusage; j++) {
+			if (field->usage[j].hid == HID_DG_CONTACTID) {
+				slot_collection_index = field->usage->collection_index;
+				slot_idx++;
+
+				/*
+				 * mark all previous fields and this one in the
+				 * current collection to be slotted.
+				 */
+				for (k = first_field_index; k <= i; k++)
+					report->field[k]->slot_idx = slot_idx;
+				break;
+			}
+		}
+	}
 
 	for (i = 0; i < report->maxfield; i++)
 		for (j = 0; j < report->field[i]->maxusage; j++)
 			hidinput_configure_usage(hidinput, report->field[i],
-						 report->field[i]->usage + j);
+						 report->field[i]->usage + j,
+						 j);
 }
 
 /*

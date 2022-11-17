@@ -50,6 +50,7 @@ pci_config_attr(subsystem_vendor, "0x%04x\n");
 pci_config_attr(subsystem_device, "0x%04x\n");
 pci_config_attr(revision, "0x%02x\n");
 pci_config_attr(class, "0x%06x\n");
+pci_config_attr(untrusted, "%u\n");
 
 static ssize_t irq_show(struct device *dev,
 			struct device_attribute *attr,
@@ -567,31 +568,11 @@ static ssize_t driver_override_store(struct device *dev,
 				     const char *buf, size_t count)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	char *driver_override, *old, *cp;
+	int ret;
 
-	/* We need to keep extra room for a newline */
-	if (count >= (PAGE_SIZE - 1))
-		return -EINVAL;
-
-	driver_override = kstrndup(buf, count, GFP_KERNEL);
-	if (!driver_override)
-		return -ENOMEM;
-
-	cp = strchr(driver_override, '\n');
-	if (cp)
-		*cp = '\0';
-
-	device_lock(dev);
-	old = pdev->driver_override;
-	if (strlen(driver_override)) {
-		pdev->driver_override = driver_override;
-	} else {
-		kfree(driver_override);
-		pdev->driver_override = NULL;
-	}
-	device_unlock(dev);
-
-	kfree(old);
+	ret = driver_set_override(dev, &pdev->driver_override, buf, count);
+	if (ret)
+		return ret;
 
 	return count;
 }
@@ -638,6 +619,7 @@ static struct attribute *pci_dev_attrs[] = {
 #endif
 	&dev_attr_driver_override.attr,
 	&dev_attr_ari_enabled.attr,
+	&dev_attr_untrusted.attr,
 	NULL,
 };
 
@@ -754,8 +736,6 @@ static ssize_t pci_read_config(struct file *filp, struct kobject *kobj,
 		u8 val;
 		pci_user_read_config_byte(dev, off, &val);
 		data[off - init_off] = val;
-		off++;
-		--size;
 	}
 
 	pci_config_pm_runtime_put(dev);
@@ -818,11 +798,8 @@ static ssize_t pci_write_config(struct file *filp, struct kobject *kobj,
 		size -= 2;
 	}
 
-	if (size) {
+	if (size)
 		pci_user_write_config_byte(dev, off, data[off - init_off]);
-		off++;
-		--size;
-	}
 
 	pci_config_pm_runtime_put(dev);
 

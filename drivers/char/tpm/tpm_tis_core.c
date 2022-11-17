@@ -247,8 +247,15 @@ static int get_burstcount(struct tpm_chip *chip)
 			return rc;
 
 		burstcnt = (value >> 8) & 0xFFFF;
-		if (burstcnt)
+		if (burstcnt) {
+			if (priv->phy_ops->max_xfer_size &&
+			    (burstcnt > priv->phy_ops->max_xfer_size)) {
+				dev_warn(&chip->dev,
+					 "Bad burstcnt read: %d\n", burstcnt);
+				burstcnt = priv->phy_ops->max_xfer_size;
+			}
 			return burstcnt;
+		}
 		usleep_range(TPM_TIMEOUT_USECS_MIN, TPM_TIMEOUT_USECS_MAX);
 	} while (time_before(jiffies, stop));
 	return -EBUSY;
@@ -289,6 +296,7 @@ static int tpm_tis_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 	int size = 0;
 	int status;
 	u32 expected;
+	int rc;
 
 	if (count < TPM_HEADER_SIZE) {
 		size = -EIO;
@@ -325,6 +333,13 @@ static int tpm_tis_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 	if (status & TPM_STS_DATA_AVAIL) {	/* retry? */
 		dev_err(&chip->dev, "Error left over data\n");
 		size = -EIO;
+		goto out;
+	}
+
+	rc = tpm_tis_verify_crc(priv, (size_t)size, buf);
+	if (rc < 0) {
+		dev_err(&chip->dev, "CRC mismatch for response.\n");
+		size = rc;
 		goto out;
 	}
 
@@ -442,6 +457,12 @@ static int tpm_tis_send_main(struct tpm_chip *chip, const u8 *buf, size_t len)
 	rc = tpm_tis_send_data(chip, buf, len);
 	if (rc < 0)
 		return rc;
+
+	rc = tpm_tis_verify_crc(priv, len, buf);
+	if (rc < 0) {
+		dev_err(&chip->dev, "CRC mismatch for command.\n");
+		return rc;
+	}
 
 	/* go and do it */
 	rc = tpm_tis_write8(priv, TPM_STS(priv->locality), TPM_STS_GO);
@@ -919,6 +940,31 @@ static const struct tpm_class_ops tpm_tis = {
 	.clk_enable = tpm_tis_clkrun_enable,
 };
 
+static ssize_t did_vid_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct tpm_tis_data *priv = dev_get_drvdata(dev);
+	u32 did_vid = 0;
+	int rc;
+
+	rc = tpm_tis_read32(priv, TPM_DID_VID(0), &did_vid);
+	if (rc < 0) {
+		dev_warn(dev, "%s: failed to read did_vid: %d\n", __func__, rc);
+		return rc;
+	}
+	return sprintf(buf, "0x%08X\n", did_vid);
+}
+static DEVICE_ATTR_RO(did_vid);
+
+static struct attribute *tpm_tis_attrs[] = {
+	&dev_attr_did_vid.attr,
+	NULL,
+};
+
+static const struct attribute_group tpm_tis_group = {
+	.attrs = tpm_tis_attrs,
+};
+
 int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 		      const struct tpm_tis_phy_ops *phy_ops,
 		      acpi_handle acpi_dev_handle)
@@ -1019,6 +1065,9 @@ int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 	dev_info(dev, "%s TPM (device-id 0x%X, rev-id %d)\n",
 		 (chip->flags & TPM_CHIP_FLAG_TPM2) ? "2.0" : "1.2",
 		 vendor >> 16, rid);
+
+	/* Expose the DID_VID information to userspace */
+	chip->groups[chip->groups_cnt++] = &tpm_tis_group;
 
 	probe = probe_itpm(chip);
 	if (probe < 0) {

@@ -1518,7 +1518,7 @@ Description:	This entry shows the number of reads that cannot be changed to
 
 		The file is read only.
 
-What:		/sys/class/scsi_device/*/device/hpb_stats/rb_noti_cnt
+What:		/sys/class/scsi_device/*/device/hpb_stats/rcmd_noti_cnt
 Date:		June 2021
 Contact:	Daejun Park <daejun7.park@samsung.com>
 Description:	This entry shows the number of response UPIUs that has
@@ -1526,19 +1526,23 @@ Description:	This entry shows the number of response UPIUs that has
 
 		The file is read only.
 
-What:		/sys/class/scsi_device/*/device/hpb_stats/rb_active_cnt
+What:		/sys/class/scsi_device/*/device/hpb_stats/rcmd_active_cnt
 Date:		June 2021
 Contact:	Daejun Park <daejun7.park@samsung.com>
-Description:	This entry shows the number of active sub-regions recommended by
-		response UPIUs.
+Description:	For the HPB device control mode, this entry shows the number of
+        active sub-regions recommended by response UPIUs. For the HPB host control
+        mode, this entry shows the number of active sub-regions recommended by the
+        HPB host control mode heuristic algorithm.
 
 		The file is read only.
 
-What:		/sys/class/scsi_device/*/device/hpb_stats/rb_inactive_cnt
+What:		/sys/class/scsi_device/*/device/hpb_stats/rcmd_inactive_cnt
 Date:		June 2021
 Contact:	Daejun Park <daejun7.park@samsung.com>
-Description:	This entry shows the number of inactive regions recommended by
-		response UPIUs.
+Description:	For the HPB device control mode, this entry shows the number of
+        inactive regions recommended by response UPIUs. For the HPB host control
+        mode, this entry shows the number of inactive regions recommended by the
+        HPB host control mode heuristic algorithm.
 
 		The file is read only.
 
@@ -1583,6 +1587,32 @@ Description:	This entry shows the status of HPB.
 		== ============================
 		0  HPB is not enabled.
 		1  HPB is enabled
+		== ============================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/capabilities/clock_scaling
+What:		/sys/bus/platform/devices/*.ufs/capabilities/clock_scaling
+Date:		July 2022
+Contact:	Daniil Lunev <dlunev@chromium.org>
+Description:	Indicates status of clock scaling.
+
+		== ============================
+		0  Clock scaling is not supported.
+		1  Clock scaling is supported.
+		== ============================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/capabilities/write_booster
+What:		/sys/bus/platform/devices/*.ufs/capabilities/write_booster
+Date:		July 2022
+Contact:	Daniil Lunev <dlunev@chromium.org>
+Description:	Indicates status of Write Booster.
+
+		== ============================
+		0  Write Booster can not be enabled.
+		1  Write Booster can be enabled.
 		== ============================
 
 		The file is read only.

@@ -1,20 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * NXP Wireless LAN device driver: CFG80211
  *
  * Copyright 2011-2020 NXP
- *
- * This software file (the "File") is distributed by NXP
- * under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  */
 
 #include "cfg80211.h"
@@ -1753,10 +1741,12 @@ mwifiex_mgmt_stypes[NUM_NL80211_IFTYPES] = {
  * Function configures data rates to firmware using bitrate mask
  * provided by cfg80211.
  */
-static int mwifiex_cfg80211_set_bitrate_mask(struct wiphy *wiphy,
-				struct net_device *dev,
-				const u8 *peer,
-				const struct cfg80211_bitrate_mask *mask)
+static int
+mwifiex_cfg80211_set_bitrate_mask(struct wiphy *wiphy,
+				  struct net_device *dev,
+				  unsigned int link_id,
+				  const u8 *peer,
+				  const struct cfg80211_bitrate_mask *mask)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 	u16 bitmap_rates[MAX_BITMAP_RATES_SIZE];
@@ -1998,7 +1988,8 @@ mwifiex_cfg80211_get_antenna(struct wiphy *wiphy, u32 *tx_ant, u32 *rx_ant)
 /* cfg80211 operation handler for stop ap.
  * Function stops BSS running at uAP interface.
  */
-static int mwifiex_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *dev)
+static int mwifiex_cfg80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
+				    unsigned int link_id)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 
@@ -2421,7 +2412,7 @@ mwifiex_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		return -EINVAL;
 	}
 
-	if (priv->wdev.current_bss) {
+	if (priv->wdev.connected) {
 		mwifiex_dbg(adapter, ERROR,
 			    "%s: already connected\n", dev->name);
 		return -EALREADY;
@@ -2649,7 +2640,7 @@ mwifiex_cfg80211_scan(struct wiphy *wiphy,
 		return -EBUSY;
 	}
 
-	if (!priv->wdev.current_bss && priv->scan_block)
+	if (!priv->wdev.connected && priv->scan_block)
 		priv->scan_block = false;
 
 	if (!mwifiex_stop_bg_scan(priv))
@@ -4025,6 +4016,7 @@ mwifiex_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 
 static int mwifiex_cfg80211_get_channel(struct wiphy *wiphy,
 					struct wireless_dev *wdev,
+					unsigned int link_id,
 					struct cfg80211_chan_def *chandef)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(wdev->netdev);
@@ -4327,6 +4319,93 @@ int mwifiex_init_channel_scan_gap(struct mwifiex_adapter *adapter)
 	return 0;
 }
 
+static const struct nla_policy
+mwifiex_vendor_attr_policy[NUM_MWIFIEX_VENDOR_CMD_ATTR] = {
+	[MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_24] = { .type = NLA_U8 },
+	[MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_52] = { .type = NLA_U8 },
+};
+
+static int mwifiex_parse_vendor_data(struct nlattr **tb,
+				     const void *data, int data_len)
+{
+	if (!data)
+		return -EINVAL;
+
+	return nla_parse(tb, MAX_MWIFIEX_VENDOR_CMD_ATTR, data, data_len,
+			 mwifiex_vendor_attr_policy, NULL);
+}
+
+static int mwifiex_vendor_set_tx_power_limt(struct wiphy *wiphy,
+					    struct wireless_dev *wdev,
+					    const void *data, int data_len)
+{
+	struct mwifiex_private *priv = mwifiex_netdev_get_priv(wdev->netdev);
+	struct nlattr *tb[NUM_MWIFIEX_VENDOR_CMD_ATTR];
+	int ret;
+	u8 lowpwr;
+
+	ret = mwifiex_parse_vendor_data(tb, data, data_len);
+	if (ret)
+		return ret;
+
+	if (tb[MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_24]) {
+		lowpwr = nla_get_u8(tb[MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_24]) ?
+				true : false;
+		if (lowpwr != priv->adapter->lowpwr_mode_2g4 &&
+		    priv->adapter->dt_node) {
+			ret = mwifiex_dnld_dt_cfgdata
+					(priv, priv->adapter->dt_node, lowpwr ?
+					 "marvell,caldata_00_txpwrlimit_2g" :
+					 "marvell,caldata_01_txpwrlimit_2g");
+			if (ret)
+				return -1;
+			priv->adapter->lowpwr_mode_2g4 = lowpwr;
+		}
+	}
+
+	if (tb[MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_52]) {
+		lowpwr = nla_get_u8(tb[MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_52]) ?
+				true : false;
+		if (lowpwr != priv->adapter->lowpwr_mode_5g2 &&
+		    priv->adapter->dt_node) {
+			ret = mwifiex_dnld_dt_cfgdata
+					(priv, priv->adapter->dt_node, lowpwr ?
+					 "marvell,caldata_00_txpwrlimit_5g" :
+					 "marvell,caldata_01_txpwrlimit_5g");
+			if (ret)
+				return -1;
+			priv->adapter->lowpwr_mode_5g2 = lowpwr;
+		}
+	}
+
+	return 0;
+}
+
+static const struct wiphy_vendor_command mwifiex_vendor_commands[] = {
+	{
+		.info = {
+			.vendor_id = MWIFIEX_VENDOR_ID,
+			.subcmd = MWIFIEX_VENDOR_CMD_SET_TX_POWER_LIMIT,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV,
+		.doit = mwifiex_vendor_set_tx_power_limt,
+		.policy = mwifiex_vendor_attr_policy,
+		.maxattr = MAX_MWIFIEX_VENDOR_CMD_ATTR,
+	},
+};
+
+/* @brief register vendor commands and events
+ *
+ * @param wiphy       A pointer to wiphy struct
+ *
+ * @return
+ */
+static void mwifiex_register_cfg80211_vendor_command(struct wiphy *wiphy)
+{
+	wiphy->vendor_commands = mwifiex_vendor_commands;
+	wiphy->n_vendor_commands = ARRAY_SIZE(mwifiex_vendor_commands);
+}
+
 /*
  * This function registers the device with CFG802.11 subsystem.
  *
@@ -4364,7 +4443,10 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 	if (ISSUPP_ADHOC_ENABLED(adapter->fw_cap_info))
 		wiphy->interface_modes |= BIT(NL80211_IFTYPE_ADHOC);
 
+	mwifiex_register_cfg80211_vendor_command(wiphy);
+
 	wiphy->bands[NL80211_BAND_2GHZ] = &mwifiex_band_2ghz;
+
 	if (adapter->config_bands & BAND_A)
 		wiphy->bands[NL80211_BAND_5GHZ] = &mwifiex_band_5ghz;
 	else
@@ -4475,16 +4557,15 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 				mwifiex_dbg(adapter, WARN,
 					    "Ignore world regulatory domain\n");
 			} else {
-				wiphy->regulatory_flags |=
-					REGULATORY_DISABLE_BEACON_HINTS |
-					REGULATORY_COUNTRY_IE_IGNORE;
 				country_code =
 					mwifiex_11d_code_2_region(
 						adapter->region_code);
-				if (country_code &&
-				    regulatory_hint(wiphy, country_code))
-					mwifiex_dbg(priv->adapter, ERROR,
-						    "regulatory_hint() failed\n");
+				if (country_code) {
+					mwifiex_dbg(priv->adapter, MSG,
+						    "ignoring EEPROM country code: %c%c\n",
+						    country_code[0],
+						    country_code[1]);
+				}
 			}
 		}
 	}

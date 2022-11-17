@@ -1051,15 +1051,24 @@ retry_delete:
 }
 
 /*
- * This is called by do_exit or de_thread, only when there are no more
- * references to the shared signal_struct.
+ * This is called by do_exit or de_thread, only when nobody else can
+ * modify the signal->posix_timers list. Yet we need sighand->siglock
+ * to prevent the race with /proc/pid/timers.
  */
-void exit_itimers(struct signal_struct *sig)
+void exit_itimers(struct task_struct *tsk)
 {
+	struct list_head timers;
 	struct k_itimer *tmr;
 
-	while (!list_empty(&sig->posix_timers)) {
-		tmr = list_entry(sig->posix_timers.next, struct k_itimer, list);
+	if (list_empty(&tsk->signal->posix_timers))
+		return;
+
+	spin_lock_irq(&tsk->sighand->siglock);
+	list_replace_init(&tsk->signal->posix_timers, &timers);
+	spin_unlock_irq(&tsk->sighand->siglock);
+
+	while (!list_empty(&timers)) {
+		tmr = list_first_entry(&timers, struct k_itimer, list);
 		itimer_delete(tmr);
 	}
 }
@@ -1109,8 +1118,8 @@ int do_clock_adjtime(const clockid_t which_clock, struct __kernel_timex * ktx)
 	return kc->clock_adj(which_clock, ktx);
 }
 
-SYSCALL_DEFINE2(clock_adjtime, const clockid_t, which_clock,
-		struct __kernel_timex __user *, utx)
+int ksys_clock_adjtime(const clockid_t which_clock,
+		       struct __kernel_timex __user * utx)
 {
 	struct __kernel_timex ktx;
 	int err;
@@ -1124,6 +1133,12 @@ SYSCALL_DEFINE2(clock_adjtime, const clockid_t, which_clock,
 		return -EFAULT;
 
 	return err;
+}
+
+SYSCALL_DEFINE2(clock_adjtime, const clockid_t, which_clock,
+		struct __kernel_timex __user *, utx)
+{
+	return ksys_clock_adjtime(which_clock, utx);
 }
 
 SYSCALL_DEFINE2(clock_getres, const clockid_t, which_clock,
@@ -1179,8 +1194,7 @@ SYSCALL_DEFINE2(clock_gettime32, clockid_t, which_clock,
 	return err;
 }
 
-SYSCALL_DEFINE2(clock_adjtime32, clockid_t, which_clock,
-		struct old_timex32 __user *, utp)
+int ksys_clock_adjtime32(clockid_t which_clock, struct old_timex32 __user * utp)
 {
 	struct __kernel_timex ktx;
 	int err;
@@ -1195,6 +1209,12 @@ SYSCALL_DEFINE2(clock_adjtime32, clockid_t, which_clock,
 		return -EFAULT;
 
 	return err;
+}
+
+SYSCALL_DEFINE2(clock_adjtime32, clockid_t, which_clock,
+		struct old_timex32 __user *, utp)
+{
+	return ksys_clock_adjtime32(which_clock, utp);
 }
 
 SYSCALL_DEFINE2(clock_getres_time32, clockid_t, which_clock,

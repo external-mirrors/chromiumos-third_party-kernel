@@ -73,7 +73,7 @@ static unsigned int __read_mostly sysctl_hung_task_all_cpu_backtrace;
  * hung task is detected:
  */
 unsigned int __read_mostly sysctl_hung_task_panic =
-				CONFIG_BOOTPARAM_HUNG_TASK_PANIC_VALUE;
+				IS_ENABLED(CONFIG_BOOTPARAM_HUNG_TASK_PANIC);
 
 static int
 hung_task_panic(struct notifier_block *this, unsigned long event, void *ptr)
@@ -212,8 +212,10 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 		trigger_all_cpu_backtrace();
 	}
 
-	if (hung_task_call_panic)
+	if (hung_task_call_panic) {
+		show_state_filter(TASK_UNINTERRUPTIBLE);
 		panic("hung_task: blocked tasks");
+	}
 }
 
 static long hung_timeout_jiffies(unsigned long last_checked,
@@ -229,7 +231,7 @@ static long hung_timeout_jiffies(unsigned long last_checked,
  * Process updating of timeout sysctl
  */
 static int proc_dohung_task_timeout_secs(struct ctl_table *table, int write,
-				  void __user *buffer,
+				  void *buffer,
 				  size_t *lenp, loff_t *ppos)
 {
 	int ret;

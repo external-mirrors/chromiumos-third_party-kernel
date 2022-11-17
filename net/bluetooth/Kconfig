@@ -29,6 +29,7 @@ menuconfig BT
 		SCO audio links
 		L2CAP (Logical Link Control and Adaptation Protocol)
 		SMP (Security Manager Protocol) on LE (Low Energy) links
+		ISO isochronous links
 	     HCI Device drivers (Interface to the hardware)
 	     RFCOMM Module (RFCOMM Protocol)  
 	     BNEP Module (Bluetooth Network Encapsulation Protocol)
@@ -147,5 +148,16 @@ config BT_FEATURE_DEBUG
 	help
 	  This provides an option to enable/disable debugging statements
 	  at runtime via the experimental features interface.
+
+config BT_FEATURE_DEBUG_FUNC_NAMES
+	bool "Include function names in debugging statements"
+	depends on BT_FEATURE_DEBUG
+	default n
+	help
+	  Provides an option to include function names in debugging
+	  statements.
+
+	  When enabled, trace statements will include the function name as a
+	  prefix which may help identify the source code references.
 
 source "drivers/bluetooth/Kconfig"

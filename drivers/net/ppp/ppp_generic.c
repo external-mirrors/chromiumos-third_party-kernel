@@ -51,6 +51,7 @@
 
 #include <linux/nsproxy.h>
 #include <net/net_namespace.h>
+#include <net/sock.h>
 #include <net/netns/generic.h>
 
 #define PPP_VERSION	"2.4.2"
@@ -388,7 +389,7 @@ static int ppp_open(struct inode *inode, struct file *file)
 	/*
 	 * This could (should?) be enforced by the permissions on /dev/ppp.
 	 */
-	if (!ns_capable(file->f_cred->user_ns, CAP_NET_ADMIN))
+	if (!android_ns_capable(current->nsproxy->net_ns, CAP_NET_ADMIN))
 		return -EPERM;
 	return 0;
 }
@@ -2968,7 +2969,7 @@ ppp_unregister_channel(struct ppp_channel *chan)
 	chan->ppp = NULL;
 
 	/*
-	 * This ensures that we have returned from any calls into the
+	 * This ensures that we have returned from any calls into
 	 * the channel's start_xmit or ioctl routine before we proceed.
 	 */
 	down_write(&pch->chan_sem);

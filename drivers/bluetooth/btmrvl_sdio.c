@@ -1,21 +1,8 @@
-/**
+// SPDX-License-Identifier: GPL-2.0-only
+/*
  * Marvell BT-over-SDIO driver: SDIO interface related functions.
  *
  * Copyright (C) 2009, Marvell International Ltd.
- *
- * This software file (the "File") is distributed by Marvell International
- * Ltd. under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  **/
 
 #include <linux/firmware.h>
@@ -1656,7 +1643,6 @@ static int btmrvl_sdio_suspend(struct device *dev)
 	priv->adapter->is_suspending = true;
 	hcidev = priv->btmrvl_dev.hcidev;
 	BT_DBG("%s: SDIO suspend", hcidev->name);
-	hci_suspend_dev(hcidev);
 
 	if (priv->adapter->hs_state != HS_ACTIVATED) {
 		if (btmrvl_enable_hs(priv)) {
@@ -1721,7 +1707,6 @@ static int btmrvl_sdio_resume(struct device *dev)
 	BT_DBG("%s: HS DEACTIVATED in resume!", hcidev->name);
 	priv->adapter->is_suspended = false;
 	BT_DBG("%s: SDIO resume", hcidev->name);
-	hci_resume_dev(hcidev);
 
 	/* Disable platform specific wakeup interrupt */
 	if (card->plt_wake_cfg && card->plt_wake_cfg->irq_bt >= 0 &&

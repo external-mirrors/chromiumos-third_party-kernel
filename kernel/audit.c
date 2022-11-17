@@ -1100,7 +1100,7 @@ static inline void audit_log_user_recv_msg(struct audit_buffer **ab,
 	audit_log_common_recv_msg(NULL, ab, msg_type);
 }
 
-int is_audit_feature_set(int i)
+static int is_audit_feature_set(int i)
 {
 	return af.features & AUDIT_FEATURE_TO_MASK(i);
 }
@@ -1390,7 +1390,7 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh)
 						 str);
 			} else {
 				audit_log_format(ab, " data=");
-				if (data_len > 0 && str[data_len - 1] == '\0')
+				if (str[data_len - 1] == '\0')
 					data_len--;
 				audit_log_n_untrustedstring(ab, str, data_len);
 			}
@@ -2131,6 +2131,12 @@ void audit_log_d_path(struct audit_buffer *ab, const char *prefix,
 
 	if (prefix)
 		audit_log_format(ab, "%s", prefix);
+
+	/* The process may be exiting. */
+	if (!current->fs) {
+		audit_log_format(ab, "<unknown>");
+		return;
+	}
 
 	/* We will allow 11 spaces for ' (deleted)' to be appended */
 	pathname = kmalloc(PATH_MAX+11, ab->gfp_mask);

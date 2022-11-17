@@ -8,6 +8,7 @@
  */
 
 #include <drm/drm_atomic_state_helper.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_probe_helper.h>
 
@@ -60,6 +61,14 @@ static enum drm_mode_status udl_mode_valid(struct drm_connector *connector,
 			  struct drm_display_mode *mode)
 {
 	struct udl_device *udl = to_udl(connector->dev);
+	int con_type = connector->connector_type;
+
+	if ((con_type == DRM_MODE_CONNECTOR_DVII ||
+	     con_type == DRM_MODE_CONNECTOR_DVID ||
+	     con_type == DRM_MODE_CONNECTOR_DVIA) &&
+	    mode->clock > 165000)
+		return MODE_CLOCK_HIGH;
+
 	if (!udl->sku_pixel_limit)
 		return 0;
 
@@ -128,7 +137,7 @@ struct drm_connector *udl_connector_init(struct drm_device *dev)
 
 	connector = &udl_connector->connector;
 	drm_connector_init(dev, connector, &udl_connector_funcs,
-			   DRM_MODE_CONNECTOR_DVII);
+			   DRM_MODE_CONNECTOR_VGA);
 	drm_connector_helper_add(connector, &udl_connector_helper_funcs);
 
 	connector->polled = DRM_CONNECTOR_POLL_HPD |

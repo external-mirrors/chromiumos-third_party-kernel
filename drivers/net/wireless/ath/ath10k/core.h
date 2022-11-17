@@ -59,9 +59,6 @@
 #define ATH10K_KEEPALIVE_MAX_IDLE 3895
 #define ATH10K_KEEPALIVE_MAX_UNRESPONSIVE 3900
 
-/* NAPI poll budget */
-#define ATH10K_NAPI_BUDGET      64
-
 /* SMBIOS type containing Board Data File Name Extension */
 #define ATH10K_SMBIOS_BDF_EXT_TYPE 0xF8
 
@@ -83,6 +80,8 @@
 #define ATH10K_AIRTIME_WEIGHT_MULTIPLIER  4
 
 #define ATH10K_MAX_RETRY_COUNT 30
+
+#define ATH10K_START_RETRY 10
 
 #define ATH10K_ITER_NORMAL_FLAGS (IEEE80211_IFACE_ITER_NORMAL | \
 				  IEEE80211_IFACE_SKIP_SDATA_NOT_IN_DRIVER)
@@ -1317,6 +1316,7 @@ static inline bool ath10k_peer_stats_enabled(struct ath10k *ar)
 	return false;
 }
 
+extern unsigned int ath10k_frame_mode;
 extern unsigned long ath10k_coredump_mask;
 
 void ath10k_core_napi_sync_disable(struct ath10k *ar);

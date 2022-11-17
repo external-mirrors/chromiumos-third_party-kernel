@@ -8,6 +8,7 @@
  * EC about sensors data. Data access is presented through iio sysfs.
  */
 
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/iio/buffer.h>
 #include <linux/iio/common/cros_ec_sensors_core.h>
@@ -16,6 +17,7 @@
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
@@ -213,6 +215,17 @@ static int cros_ec_sensors_write(struct iio_dev *indio_dev,
 
 	mutex_unlock(&st->core.cmd_lock);
 
+	if ((ret == 0) &&
+	    ((mask == IIO_CHAN_INFO_FREQUENCY) ||
+	     (mask == IIO_CHAN_INFO_SAMP_FREQ))) {
+		/*
+		 * Add a delay to allow the EC to flush older datum.
+		 * Assuming 1Mb link to the EC and 20 bytes per event, with 200
+		 * elements in the FIFO, we need 4ms. Add time for interrupt
+		 * handling and waking up requestor.
+		 */
+		usleep_range(10000, 15000);
+	}
 	return ret;
 }
 
@@ -235,8 +248,7 @@ static int cros_ec_sensors_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ret = cros_ec_sensors_core_init(pdev, indio_dev, true,
-					cros_ec_sensors_capture,
-					cros_ec_sensors_push_data);
+					cros_ec_sensors_capture);
 	if (ret)
 		return ret;
 
@@ -297,7 +309,8 @@ static int cros_ec_sensors_probe(struct platform_device *pdev)
 	else
 		state->core.read_ec_sensors_data = cros_ec_sensors_read_cmd;
 
-	return devm_iio_device_register(dev, indio_dev);
+	return cros_ec_sensors_core_register(dev, indio_dev,
+			cros_ec_sensors_push_data);
 }
 
 static const struct platform_device_id cros_ec_sensors_ids[] = {

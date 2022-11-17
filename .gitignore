@@ -45,6 +45,7 @@
 *.symversions
 *.tab.[ch]
 *.tar
+*.usyms
 *.xz
 *.zst
 Module.symvers
@@ -104,6 +105,9 @@ modules.order
 /include/generated/
 /include/ksym/
 /arch/*/include/generated/
+
+# kernelconfig build directory
+/build/
 
 # stgit generated dirs
 patches-*

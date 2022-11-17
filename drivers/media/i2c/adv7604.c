@@ -2484,7 +2484,7 @@ static int adv76xx_read_infoframe(struct v4l2_subdev *sd, int index,
 		buffer[i + 3] = infoframe_read(sd,
 				       adv76xx_cri[index].payload_addr + i);
 
-	if (hdmi_infoframe_unpack(frame, buffer, sizeof(buffer)) < 0) {
+	if (hdmi_infoframe_unpack(frame, buffer, len + 3) < 0) {
 		v4l2_err(sd, "%s: unpack of %s infoframe failed\n", __func__,
 			 adv76xx_cri[index].desc);
 		return -ENOENT;
@@ -2505,9 +2505,8 @@ static void adv76xx_log_infoframes(struct v4l2_subdev *sd)
 		union hdmi_infoframe frame;
 		struct i2c_client *client = v4l2_get_subdevdata(sd);
 
-		if (adv76xx_read_infoframe(sd, i, &frame))
-			return;
-		hdmi_infoframe_log(KERN_INFO, &client->dev, &frame);
+		if (!adv76xx_read_infoframe(sd, i, &frame))
+			hdmi_infoframe_log(KERN_INFO, &client->dev, &frame);
 	}
 }
 

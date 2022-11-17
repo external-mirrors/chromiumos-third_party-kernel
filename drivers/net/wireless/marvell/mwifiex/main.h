@@ -1,20 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * NXP Wireless LAN device driver: major data structures and prototypes
  *
  * Copyright 2011-2020 NXP
- *
- * This software file (the "File") is distributed by NXP
- * under the terms of the GNU General Public License Version 2, June 1991
- * (the "License").  You may use, redistribute and/or modify this File in
- * accordance with the terms and conditions of the License, a copy of which
- * is available by writing to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or on the
- * worldwide web at http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt.
- *
- * THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE
- * ARE EXPRESSLY DISCLAIMED.  The License provides additional details about
- * this warranty disclaimer.
  */
 
 #ifndef _MWIFIEX_MAIN_H_
@@ -169,6 +157,23 @@ enum {
 #define MWIFIEX_ALIGN_ADDR(p, a) (((long)(p) + (a) - 1) & ~((a) - 1))
 
 #define MWIFIEX_MAC_LOCAL_ADMIN_BIT		41
+
+/* marvell vendor command and event ID */
+#define MWIFIEX_VENDOR_ID  0x005043
+
+/* vendor sub command */
+enum mwifiex_vendor_sub_command {
+	MWIFIEX_VENDOR_CMD_SET_TX_POWER_LIMIT = 0,
+	MWIFIEX_VENDOR_CMD_MAX,
+};
+
+enum mwifiex_vendor_cmd_attr {
+	MWIFIEX_VENDOR_CMD_ATTR_INVALID,
+	MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_24,
+	MWIFIEX_VENDOR_CMD_ATTR_TXP_LIMIT_52,
+	NUM_MWIFIEX_VENDOR_CMD_ATTR,
+	MAX_MWIFIEX_VENDOR_CMD_ATTR = NUM_MWIFIEX_VENDOR_CMD_ATTR - 1,
+};
 
 /**
  *enum mwifiex_debug_level  -  marvell wifi debug level
@@ -870,6 +875,8 @@ struct mwifiex_if_ops {
 };
 
 struct mwifiex_adapter {
+	u8 lowpwr_mode_2g4;
+	u8 lowpwr_mode_5g2;
 	u8 iface_type;
 	unsigned int debug_mask;
 	struct mwifiex_iface_comb iface_limit;

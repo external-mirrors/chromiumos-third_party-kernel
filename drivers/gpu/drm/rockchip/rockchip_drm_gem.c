@@ -13,6 +13,7 @@
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_prime.h>
 #include <drm/drm_vma_manager.h>
+#include <drm/rockchip_drm.h>
 
 #include "rockchip_drm_drv.h"
 #include "rockchip_drm_gem.h"
@@ -417,6 +418,26 @@ int rockchip_gem_dumb_create(struct drm_file *file_priv,
 	return PTR_ERR_OR_ZERO(rk_obj);
 }
 
+int rockchip_gem_map_offset_ioctl(struct drm_device *drm, void *data,
+				  struct drm_file *file_priv)
+{
+	struct drm_rockchip_gem_map_off *args = data;
+
+	return drm_gem_dumb_map_offset(file_priv, drm, args->handle,
+				       &args->offset);
+}
+
+int rockchip_gem_create_ioctl(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	struct drm_rockchip_gem_create *args = data;
+	struct rockchip_gem_object *rk_obj;
+
+	rk_obj = rockchip_gem_create_with_handle(file_priv, dev, args->size,
+						 &args->handle);
+	return PTR_ERR_OR_ZERO(rk_obj);
+}
+
 /*
  * Allocate a sg_table for this GEM object.
  * Note: Both the table's contents, and the sg_table itself must be freed by
@@ -510,7 +531,7 @@ err_free_rk_obj:
 	return ERR_PTR(ret);
 }
 
-int rockchip_gem_prime_vmap(struct drm_gem_object *obj, struct dma_buf_map *map)
+int rockchip_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)
 {
 	struct rockchip_gem_object *rk_obj = to_rockchip_obj(obj);
 
@@ -519,18 +540,19 @@ int rockchip_gem_prime_vmap(struct drm_gem_object *obj, struct dma_buf_map *map)
 				  pgprot_writecombine(PAGE_KERNEL));
 		if (!vaddr)
 			return -ENOMEM;
-		dma_buf_map_set_vaddr(map, vaddr);
+		iosys_map_set_vaddr(map, vaddr);
 		return 0;
 	}
 
 	if (rk_obj->dma_attrs & DMA_ATTR_NO_KERNEL_MAPPING)
 		return -ENOMEM;
-	dma_buf_map_set_vaddr(map, rk_obj->kvaddr);
+	iosys_map_set_vaddr(map, rk_obj->kvaddr);
 
 	return 0;
 }
 
-void rockchip_gem_prime_vunmap(struct drm_gem_object *obj, struct dma_buf_map *map)
+void rockchip_gem_prime_vunmap(struct drm_gem_object *obj,
+			       struct iosys_map *map)
 {
 	struct rockchip_gem_object *rk_obj = to_rockchip_obj(obj);
 

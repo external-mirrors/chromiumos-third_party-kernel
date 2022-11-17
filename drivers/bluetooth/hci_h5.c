@@ -102,6 +102,11 @@ struct h5 {
 	struct gpio_desc *device_wake_gpio;
 };
 
+enum h5_capabilities {
+	H5_CAP_WIDEBAND_SPEECH = BIT(0),
+	H5_CAP_VALID_LE_STATES = BIT(1),
+};
+
 enum h5_driver_info {
 	H5_INFO_WAKEUP_DISABLE = BIT(0),
 };
@@ -116,6 +121,7 @@ struct h5_vnd {
 };
 
 struct h5_device_data {
+	uint32_t capabilities;
 	uint32_t driver_info;
 	struct h5_vnd *vnd;
 };
@@ -629,9 +635,11 @@ static int h5_enqueue(struct hci_uart *hu, struct sk_buff *skb)
 		break;
 	}
 
-	pm_runtime_get_sync(&hu->serdev->dev);
-	pm_runtime_mark_last_busy(&hu->serdev->dev);
-	pm_runtime_put_autosuspend(&hu->serdev->dev);
+	if (hu->serdev) {
+		pm_runtime_get_sync(&hu->serdev->dev);
+		pm_runtime_mark_last_busy(&hu->serdev->dev);
+		pm_runtime_put_autosuspend(&hu->serdev->dev);
+	}
 
 	return 0;
 }
@@ -814,6 +822,7 @@ static const struct hci_uart_proto h5p = {
 static int h5_serdev_probe(struct serdev_device *serdev)
 {
 	struct device *dev = &serdev->dev;
+	struct hci_dev *hdev;
 	struct h5 *h5;
 	const struct h5_device_data *data;
 
@@ -858,6 +867,15 @@ static int h5_serdev_probe(struct serdev_device *serdev)
 						       GPIOD_OUT_LOW);
 	if (IS_ERR(h5->device_wake_gpio))
 		return PTR_ERR(h5->device_wake_gpio);
+
+	hdev = h5->serdev_hu.hdev;
+
+	/* Set match specific quirks */
+	if (data->capabilities & H5_CAP_WIDEBAND_SPEECH)
+		set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+
+	if (data->capabilities & H5_CAP_VALID_LE_STATES)
+		set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
 
 	return hci_uart_register_device(&h5->serdev_hu, &h5p);
 }
@@ -966,6 +984,11 @@ static void h5_btrtl_open(struct h5 *h5)
 		pm_runtime_enable(&h5->hu->serdev->dev);
 	}
 
+	/* The controller needs reset to startup */
+	gpiod_set_value_cansleep(h5->enable_gpio, 0);
+	gpiod_set_value_cansleep(h5->device_wake_gpio, 0);
+	msleep(100);
+
 	/* The controller needs up to 500ms to wakeup */
 	gpiod_set_value_cansleep(h5->enable_gpio, 1);
 	gpiod_set_value_cansleep(h5->device_wake_gpio, 1);
@@ -1062,6 +1085,7 @@ static struct h5_vnd rtl_vnd = {
 };
 
 static const struct h5_device_data h5_data_rtl8822cs = {
+	.capabilities = H5_CAP_WIDEBAND_SPEECH | H5_CAP_VALID_LE_STATES,
 	.vnd = &rtl_vnd,
 };
 

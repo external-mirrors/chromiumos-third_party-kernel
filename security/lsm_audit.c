@@ -215,7 +215,7 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 	 * start making this union too large!  See struct lsm_network_audit
 	 * as an example of how to deal with large data.
 	 */
-	BUILD_BUG_ON(sizeof(a->u) > sizeof(void *)*2);
+	BUILD_BUG_ON(sizeof(a->u) > sizeof(void *)*3);
 
 	audit_log_format(ab, " pid=%d comm=", task_tgid_nr(current));
 	audit_log_untrustedstring(ab, memcpy(comm, current->comm, sizeof(comm)));
@@ -432,6 +432,9 @@ static void dump_common_audit_data(struct audit_buffer *ab,
 	case LSM_AUDIT_DATA_LOCKDOWN:
 		audit_log_format(ab, " lockdown_reason=\"%s\"",
 				 lockdown_reasons[a->u.reason]);
+		break;
+	case LSM_AUDIT_DATA_ANONINODE:
+		audit_log_format(ab, " anonclass=%s", a->u.anonclass);
 		break;
 	} /* switch (a->type) */
 }

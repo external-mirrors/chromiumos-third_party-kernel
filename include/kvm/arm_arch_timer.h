@@ -76,8 +76,6 @@ int kvm_arm_timer_set_attr(struct kvm_vcpu *vcpu, struct kvm_device_attr *attr);
 int kvm_arm_timer_get_attr(struct kvm_vcpu *vcpu, struct kvm_device_attr *attr);
 int kvm_arm_timer_has_attr(struct kvm_vcpu *vcpu, struct kvm_device_attr *attr);
 
-bool kvm_timer_is_pending(struct kvm_vcpu *vcpu);
-
 u64 kvm_phys_timer_read(void);
 
 void kvm_timer_vcpu_load(struct kvm_vcpu *vcpu);
@@ -105,5 +103,8 @@ void kvm_arm_timer_write_sysreg(struct kvm_vcpu *vcpu,
 /* Needed for tracing */
 u32 timer_get_ctl(struct arch_timer_context *ctxt);
 u64 timer_get_cval(struct arch_timer_context *ctxt);
+
+/* Nedded for debugfs */
+u64 timer_get_offset(struct arch_timer_context *ctxt);
 
 #endif

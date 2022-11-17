@@ -158,11 +158,36 @@ trace_exit:
 	syscall_trace_exit(regs);
 }
 
-static inline void sve_user_discard(void)
+/*
+ * As per the ABI exit SME streaming mode and clear the SVE state not
+ * shared with FPSIMD on syscall entry.
+ */
+static inline void fp_user_discard(void)
 {
+	/*
+	 * If SME is active then exit streaming mode.  If ZA is active
+	 * then flush the SVE registers but leave userspace access to
+	 * both SVE and SME enabled, otherwise disable SME for the
+	 * task and fall through to disabling SVE too.  This means
+	 * that after a syscall we never have any streaming mode
+	 * register state to track, if this changes the KVM code will
+	 * need updating.
+	 */
+	if (system_supports_sme() && test_thread_flag(TIF_SME)) {
+		u64 svcr = read_sysreg_s(SYS_SVCR);
+
+		if (svcr & SVCR_SM_MASK)
+			sme_smstop_sm();
+	}
+
 	if (!system_supports_sve())
 		return;
 
+	/*
+	 * If SME is not active then disable SVE, the registers will
+	 * be cleared when userspace next attempts to access them and
+	 * we do not need to track the SVE register state until then.
+	 */
 	clear_thread_flag(TIF_SVE);
 
 	/*
@@ -177,14 +202,28 @@ static inline void sve_user_discard(void)
 
 void do_el0_svc(struct pt_regs *regs)
 {
-	sve_user_discard();
+	struct thread_info __maybe_unused *ti;
+
+	fp_user_discard();
+#ifdef CONFIG_ALT_SYSCALL
+	ti = current_thread_info();
+	el0_svc_common(regs, regs->regs[8], ti->nr_syscalls,
+		       ti->sys_call_table);
+#else
 	el0_svc_common(regs, regs->regs[8], __NR_syscalls, sys_call_table);
+#endif
 }
 
 #ifdef CONFIG_COMPAT
 void do_el0_svc_compat(struct pt_regs *regs)
 {
+#ifdef CONFIG_ALT_SYSCALL
+	struct thread_info *ti = current_thread_info();
+	el0_svc_common(regs, regs->regs[7], ti->compat_nr_syscalls,
+		       ti->compat_sys_call_table);
+#else
 	el0_svc_common(regs, regs->regs[7], __NR_compat_syscalls,
 		       compat_sys_call_table);
+#endif
 }
 #endif

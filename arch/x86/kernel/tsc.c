@@ -644,10 +644,24 @@ unsigned long native_calibrate_tsc(void)
 	 * Denverton SoCs don't report crystal clock, and also don't support
 	 * CPUID.0x16 for the calculation below, so hardcode the 25MHz crystal
 	 * clock.
+	 * Also estimation code is not reliable and gives 1.5%  difference for
+	 * tsc/clock ratio on Skylake mobile. Therefore below is a hardcoded
+	 * crystal frequency for Skylake which was removed by upstream commit
+	 * "x86/tsc: Use CPUID.0x16 to calculate missing crystal frequency"
+	 * This is temporary workaround for bugs:
+	 * b/148108096, b/154283905, b/146787525, b/153400677, b/148178929
+	 * chromium/1031054
 	 */
-	if (crystal_khz == 0 &&
-			boot_cpu_data.x86_model == INTEL_FAM6_ATOM_GOLDMONT_D)
-		crystal_khz = 25000;
+	if (crystal_khz == 0) {
+		switch (boot_cpu_data.x86_model) {
+			case INTEL_FAM6_SKYLAKE_L:
+			crystal_khz = 24000;	/* 24.0 MHz */
+			break;
+		case INTEL_FAM6_ATOM_GOLDMONT_D:
+			crystal_khz = 25000;	/* 25.0 MHz */
+			break;
+		}
+	}
 
 	/*
 	 * TSC frequency reported directly by CPUID is a "hardware reported"
@@ -1353,7 +1367,12 @@ restart:
 		 */
 		hpet = is_hpet_enabled();
 		tsc_start = tsc_read_refs(&ref_start, hpet);
-		schedule_delayed_work(&tsc_irqwork, HZ);
+		/* temporary workaround for AMD Cezanne. BUG=b:191845735 */
+		if ((boot_cpu_data.x86_vendor == X86_VENDOR_AMD) && (boot_cpu_data.x86 == 25)
+			&& (boot_cpu_data.x86_model == 80))
+			schedule_delayed_work(&tsc_irqwork, HZ/2);
+		else
+			schedule_delayed_work(&tsc_irqwork, HZ);
 		return;
 	}
 
@@ -1487,6 +1506,9 @@ static unsigned long __init get_loops_per_jiffy(void)
 
 static void __init tsc_enable_sched_clock(void)
 {
+	loops_per_jiffy = get_loops_per_jiffy();
+	use_tsc_delay();
+
 	/* Sanitize TSC ADJUST before cyc2ns gets initialized */
 	tsc_store_and_check_tsc_adjust(true);
 	cyc2ns_init_boot_cpu();
@@ -1502,8 +1524,6 @@ void __init tsc_early_init(void)
 		return;
 	if (!determine_cpu_tsc_frequencies(true))
 		return;
-	loops_per_jiffy = get_loops_per_jiffy();
-
 	tsc_enable_sched_clock();
 }
 
@@ -1537,7 +1557,6 @@ void __init tsc_init(void)
 		enable_sched_clock_irqtime();
 
 	lpj_fine = get_loops_per_jiffy();
-	use_tsc_delay();
 
 	check_system_tsc_reliable();
 

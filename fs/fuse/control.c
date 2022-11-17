@@ -64,6 +64,33 @@ static ssize_t fuse_conn_waiting_read(struct file *file, char __user *buf,
 	return simple_read_from_buffer(buf, len, ppos, tmp, size);
 }
 
+static ssize_t fuse_conn_file_system_read(struct file *file, char __user *buf,
+					  size_t len, loff_t *ppos)
+{
+	char tmp[32];
+	size_t size;
+
+	if (!*ppos) {
+		struct fuse_conn *fc = fuse_ctl_file_conn_get(file);
+
+		if (!fc)
+			return 0;
+		down_read(&fc->killsb);
+		if (!list_empty(&fc->mounts)) {
+			struct fuse_mount *fm;
+
+			fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
+			file->private_data = (void *)fm->sb->s_type->name;
+		} else {
+			file->private_data = "(NULL)";
+		}
+		up_read(&fc->killsb);
+		fuse_conn_put(fc);
+	}
+	size = sprintf(tmp, "%.30s\n", (char *)file->private_data);
+	return simple_read_from_buffer(buf, len, ppos, tmp, size);
+}
+
 static ssize_t fuse_conn_limit_read(struct file *file, char __user *buf,
 				    size_t len, loff_t *ppos, unsigned val)
 {
@@ -164,7 +191,6 @@ static ssize_t fuse_conn_congestion_threshold_write(struct file *file,
 {
 	unsigned val;
 	struct fuse_conn *fc;
-	struct fuse_mount *fm;
 	ssize_t ret;
 
 	ret = fuse_conn_limit_write(file, buf, count, ppos, &val,
@@ -178,22 +204,6 @@ static ssize_t fuse_conn_congestion_threshold_write(struct file *file,
 	down_read(&fc->killsb);
 	spin_lock(&fc->bg_lock);
 	fc->congestion_threshold = val;
-
-	/*
-	 * Get any fuse_mount belonging to this fuse_conn; s_bdi is
-	 * shared between all of them
-	 */
-
-	if (!list_empty(&fc->mounts)) {
-		fm = list_first_entry(&fc->mounts, struct fuse_mount, fc_entry);
-		if (fc->num_background < fc->congestion_threshold) {
-			clear_bdi_congested(fm->sb->s_bdi, BLK_RW_SYNC);
-			clear_bdi_congested(fm->sb->s_bdi, BLK_RW_ASYNC);
-		} else {
-			set_bdi_congested(fm->sb->s_bdi, BLK_RW_SYNC);
-			set_bdi_congested(fm->sb->s_bdi, BLK_RW_ASYNC);
-		}
-	}
 	spin_unlock(&fc->bg_lock);
 	up_read(&fc->killsb);
 	fuse_conn_put(fc);
@@ -224,6 +234,12 @@ static const struct file_operations fuse_conn_congestion_threshold_ops = {
 	.open = nonseekable_open,
 	.read = fuse_conn_congestion_threshold_read,
 	.write = fuse_conn_congestion_threshold_write,
+	.llseek = no_llseek,
+};
+
+static const struct file_operations fuse_conn_file_system_ops = {
+	.open = nonseekable_open,
+	.read = fuse_conn_file_system_read,
 	.llseek = no_llseek,
 };
 
@@ -275,7 +291,7 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 	struct dentry *parent;
 	char name[32];
 
-	if (!fuse_control_sb)
+	if (!fuse_control_sb || fc->no_control)
 		return 0;
 
 	parent = fuse_control_sb->s_root;
@@ -295,7 +311,9 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 				 1, NULL, &fuse_conn_max_background_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "congestion_threshold",
 				 S_IFREG | 0600, 1, NULL,
-				 &fuse_conn_congestion_threshold_ops))
+				 &fuse_conn_congestion_threshold_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "filesystem", S_IFREG | 0400, 1,
+				 NULL, &fuse_conn_file_system_ops))
 		goto err;
 
 	return 0;
@@ -313,7 +331,7 @@ void fuse_ctl_remove_conn(struct fuse_conn *fc)
 {
 	int i;
 
-	if (!fuse_control_sb)
+	if (!fuse_control_sb || fc->no_control)
 		return;
 
 	for (i = fc->ctl_ndents - 1; i >= 0; i--) {

@@ -8,7 +8,10 @@
 #include <linux/wireless.h>
 #include <linux/if_bridge.h>
 #include <net/dsa.h>
+#include <net/sock.h>
 #include <net/wext.h>
+
+#include "dev.h"
 
 /*
  *	Map an interface index to its name (SIOCGIFNAME)
@@ -382,10 +385,10 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, void __user *data,
 			return -ENODEV;
 		if (!netif_is_bridge_master(dev))
 			return -EOPNOTSUPP;
-		dev_hold_track(dev, &dev_tracker, GFP_KERNEL);
+		netdev_hold(dev, &dev_tracker, GFP_KERNEL);
 		rtnl_unlock();
 		err = br_ioctl_call(net, netdev_priv(dev), cmd, ifr, NULL);
-		dev_put_track(dev, &dev_tracker);
+		netdev_put(dev, &dev_tracker);
 		rtnl_lock();
 		return err;
 
@@ -576,7 +579,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
 	case SIOCBRADDIF:
 	case SIOCBRDELIF:
 	case SIOCSHWTSTAMP:
-		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		if (!android_ns_capable(net, CAP_NET_ADMIN))
 			return -EPERM;
 		fallthrough;
 	case SIOCBONDSLAVEINFOQUERY:

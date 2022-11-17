@@ -17,6 +17,7 @@
 #define ETSI_WEATHER_RADAR_BAND_LOW		5590
 #define ETSI_WEATHER_RADAR_BAND_HIGH		5650
 #define ETSI_WEATHER_RADAR_BAND_CAC_TIMEOUT	600000
+#define ATH11K_MAX_REG_WAIT	(3 * HZ)
 
 static const struct ieee80211_regdomain ath11k_world_regd = {
 	.n_reg_rules = 3,
@@ -48,6 +49,7 @@ ath11k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct wmi_init_country_params init_country_param;
+	struct wmi_set_current_country_params set_current_param = {};
 	struct ath11k *ar = hw->priv;
 	int ret;
 
@@ -76,24 +78,33 @@ ath11k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 		return;
 	}
 
-	/* Set the country code to the firmware and wait for
+	/* Set the country code to the firmware and will receive
 	 * the WMI_REG_CHAN_LIST_CC EVENT for updating the
 	 * reg info
 	 */
-	init_country_param.flags = ALPHA_IS_SET;
-	memcpy(&init_country_param.cc_info.alpha2, request->alpha2, 2);
-	init_country_param.cc_info.alpha2[2] = 0;
+	if (ar->ab->hw_params.current_cc_support) {
+		memcpy(&set_current_param.alpha2, request->alpha2, 2);
+		memcpy(&ar->alpha2, &set_current_param.alpha2, 2);
+		ret = ath11k_wmi_send_set_current_country_cmd(ar, &set_current_param);
+		if (ret)
+			ath11k_warn(ar->ab,
+				    "failed set current country code: %d\n", ret);
+	} else {
+		init_country_param.flags = ALPHA_IS_SET;
+		memcpy(&init_country_param.cc_info.alpha2, request->alpha2, 2);
+		init_country_param.cc_info.alpha2[2] = 0;
 
-	ret = ath11k_wmi_send_init_country_cmd(ar, init_country_param);
-	if (ret)
-		ath11k_warn(ar->ab,
-			    "INIT Country code set to fw failed : %d\n", ret);
+		ret = ath11k_wmi_send_init_country_cmd(ar, init_country_param);
+		if (ret)
+			ath11k_warn(ar->ab,
+				    "INIT Country code set to fw failed : %d\n", ret);
+	}
 
 	ath11k_mac_11d_scan_stop(ar);
 	ar->regdom_set_by_user = true;
 }
 
-int ath11k_reg_update_chan_list(struct ath11k *ar)
+int ath11k_reg_update_chan_list(struct ath11k *ar, bool wait)
 {
 	struct ieee80211_supported_band **bands;
 	struct scan_chan_list_params *params;
@@ -102,7 +113,35 @@ int ath11k_reg_update_chan_list(struct ath11k *ar)
 	struct channel_param *ch;
 	enum nl80211_band band;
 	int num_channels = 0;
-	int i, ret;
+	int i, ret, left;
+
+	if (wait && ar->state_11d != ATH11K_11D_IDLE) {
+		left = wait_for_completion_timeout(&ar->completed_11d_scan,
+						   ATH11K_SCAN_TIMEOUT_HZ);
+		if (!left) {
+			ath11k_dbg(ar->ab, ATH11K_DBG_REG,
+				   "failed to receive 11d scan complete: timed out\n");
+			ar->state_11d = ATH11K_11D_IDLE;
+		}
+		ath11k_dbg(ar->ab, ATH11K_DBG_REG,
+			   "reg 11d scan wait left time %d\n", left);
+	}
+
+	if (wait &&
+	    (ar->scan.state == ATH11K_SCAN_STARTING ||
+	    ar->scan.state == ATH11K_SCAN_RUNNING)) {
+		left = wait_for_completion_timeout(&ar->scan.completed,
+						   ATH11K_SCAN_TIMEOUT_HZ);
+		if (!left)
+			ath11k_dbg(ar->ab, ATH11K_DBG_REG,
+				   "failed to receive hw scan complete: timed out\n");
+
+		ath11k_dbg(ar->ab, ATH11K_DBG_REG,
+			   "reg hw scan wait left time %d\n", left);
+	}
+
+	if (ar->state == ATH11K_STATE_RESTARTING)
+		return 0;
 
 	bands = hw->wiphy->bands;
 	for (band = 0; band < NUM_NL80211_BANDS; band++) {
@@ -184,11 +223,6 @@ int ath11k_reg_update_chan_list(struct ath11k *ar)
 	ret = ath11k_wmi_send_scan_chan_list_cmd(ar, params);
 	kfree(params);
 
-	if (ar->pending_11d) {
-		complete(&ar->finish_11d_ch_list);
-		ar->pending_11d = false;
-	}
-
 	return ret;
 }
 
@@ -210,6 +244,8 @@ int ath11k_regd_update(struct ath11k *ar)
 	struct ieee80211_regdomain *regd, *regd_copy = NULL;
 	int ret, regd_len, pdev_id;
 	struct ath11k_base *ab;
+	unsigned long before;
+	int acquired;
 
 	ab = ar->ab;
 	pdev_id = ar->pdev_idx;
@@ -254,15 +290,22 @@ int ath11k_regd_update(struct ath11k *ar)
 		goto err;
 	}
 
-	if (ar->pending_11d)
-		complete(&ar->finish_11d_scan);
+	before = jiffies;
+	while (true) {
+		acquired = rtnl_trylock();
+		if (!acquired)
+			cond_resched();
+		if (acquired || time_after(jiffies, before + ATH11K_MAX_REG_WAIT))
+			break;
+	}
 
-	rtnl_lock();
+	if (!acquired) {
+		ret = -EBUSY;
+		ath11k_warn(ar->ab, "rtnl acquire failed\n");
+		goto err;
+	}
+
 	wiphy_lock(ar->hw->wiphy);
-
-	if (ar->pending_11d)
-		reinit_completion(&ar->finish_11d_ch_list);
-
 	ret = regulatory_set_wiphy_regd_sync(ar->hw->wiphy, regd_copy);
 	wiphy_unlock(ar->hw->wiphy);
 	rtnl_unlock();
@@ -273,7 +316,7 @@ int ath11k_regd_update(struct ath11k *ar)
 		goto err;
 
 	if (ar->state == ATH11K_STATE_ON) {
-		ret = ath11k_reg_update_chan_list(ar);
+		ret = ath11k_reg_update_chan_list(ar, true);
 		if (ret)
 			goto err;
 	}
@@ -731,5 +774,7 @@ void ath11k_reg_free(struct ath11k_base *ab)
 	for (i = 0; i < ab->hw_params.max_radios; i++) {
 		kfree(ab->default_regd[i]);
 		kfree(ab->new_regd[i]);
+		ab->default_regd[i] = NULL;
+		ab->new_regd[i] = NULL;
 	}
 }
