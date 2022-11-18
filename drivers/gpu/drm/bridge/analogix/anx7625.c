@@ -2704,8 +2704,7 @@ static int anx7625_register_typec_switches(struct device *device, struct anx7625
 	return ret;
 }
 
-static int anx7625_i2c_probe(struct i2c_client *client,
-			     const struct i2c_device_id *id)
+static int anx7625_i2c_probe(struct i2c_client *client)
 {
 	struct anx7625_data *platform;
 	struct anx7625_platform_data *pdata;
@@ -2904,7 +2903,7 @@ static struct i2c_driver anx7625_driver = {
 		.of_match_table = anx_match_table,
 		.pm = &anx7625_pm_ops,
 	},
-	.probe = anx7625_i2c_probe,
+	.probe_new = anx7625_i2c_probe,
 	.remove = anx7625_i2c_remove,
 
 	.id_table = anx7625_id,
