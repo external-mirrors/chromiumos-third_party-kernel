@@ -306,7 +306,7 @@ static int vcam_probe(struct platform_device *pdev)
 		dev_err(vcam->dev, "%s: cam device initialization failed\n",
 			__func__);
 		kfree(vcam);
-		return ret;
+		return -ENOMEM;
 	}
 
 	idx = 0;
