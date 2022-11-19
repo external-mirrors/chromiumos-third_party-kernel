@@ -46,7 +46,6 @@ static void cam_devnode_release(struct device *devnode)
 static void cam_device_release_free(struct cam_device *cam)
 {
 	cam_ns_release(&cam->ns);
-	cam_pipeline_destroy(&cam->pipeline);
 	kfree(cam);
 }
 
@@ -57,12 +56,6 @@ static int cam_device_init(struct cam_device *cam)
 	ret = cam_ns_init(&cam->ns, CAM_NS_POL_UNIQUE_ID);
 	if (ret)
 		return ret;
-
-	ret = cam_pipeline_init(cam, &cam->pipeline);
-	if (ret) {
-		cam_ns_release(&cam->ns);
-		return ret;
-	}
 
 	init_waitqueue_head(&cam->uapi.wait);
 
@@ -75,7 +68,6 @@ static int cam_device_init(struct cam_device *cam)
 	spin_lock_init(&cam->context_lock);
 	cam->fence_context = dma_fence_context_alloc(1);
 	atomic64_set(&cam->fence_seqno, 0);
-	atomic_set(&cam->num_users, 0);
 
 	return 0;
 }

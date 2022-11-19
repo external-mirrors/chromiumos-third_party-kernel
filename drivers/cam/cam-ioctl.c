@@ -33,20 +33,21 @@ static int cam_open(struct inode *inode, struct file *filp)
 	struct cam_device *cam = container_of(inode->i_cdev,
 					      struct cam_device, cdev);
 	struct cam_fh *fh;
-
-	/* We permit only one active CAM user at this point */
-	if (atomic_inc_return(&cam->num_users) != 1) {
-		atomic_dec(&cam->num_users);
-		return -EINVAL;
-	}
-
-	if (cam_pipeline_io_setup(&cam->pipeline))
-		return -EINVAL;
+	int ret;
 
 	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
-	if (!fh) {
-		cam_pipeline_io_release(&cam->pipeline);
+	if (!fh)
 		return -ENOMEM;
+
+	ret = cam_pipeline_init(cam, &fh->pipeline);
+	if (ret) {
+		kfree(fh);
+		return ret;
+	}
+
+	if (cam_pipeline_io_setup(&fh->pipeline)) {
+		kfree(fh);
+		return -EINVAL;
 	}
 
 	filp->private_data = fh;
@@ -59,8 +60,8 @@ static int cam_release(struct inode *inode, struct file *filp)
 {
 	struct cam_fh *fh = filp->private_data;
 
-	atomic_dec(&fh->cam->num_users);
-	cam_pipeline_io_release(&fh->cam->pipeline);
+	cam_pipeline_io_release(&fh->pipeline);
+	cam_pipeline_destroy(&fh->pipeline);
 	kfree(fh);
 
 	return 0;
@@ -139,7 +140,7 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 					      &output);
 			break;
 		case CAM_QUERY_TYPE_OPERATIONS:
-			ret = cam_pipeline_query(&fh->cam->pipeline,
+			ret = cam_pipeline_query(&fh->pipeline,
 						 &query.query_operations,
 						 &output);
 			break;
@@ -206,11 +207,11 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 
 		switch (op.operation_type) {
 		case CAM_OPERATION_TYPE_ADD:
-			ret = cam_pipeline_enqueue(&fh->cam->pipeline,
+			ret = cam_pipeline_enqueue(&fh->pipeline,
 						   &op.operation_add);
 			break;
 		case CAM_OPERATION_TYPE_REMOVE:
-			ret = cam_pipeline_dequeue(&fh->cam->pipeline,
+			ret = cam_pipeline_dequeue(&fh->pipeline,
 						   &op.operation_remove);
 			break;
 		default:
@@ -285,7 +286,7 @@ static ssize_t cam_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	size_t written = 0;
 	size_t size;
 
-	events_rb = &fh->cam->pipeline.event_buffer;
+	events_rb = &fh->pipeline.event_buffer;
 	while ((size = iov_iter_count(iter)) > 0) {
 		struct cam_completion completion = {};
 		size_t copied;
@@ -317,7 +318,7 @@ static __poll_t cam_poll(struct file *filp, struct poll_table_struct *wait)
 	struct cam_fh *fh = filp->private_data;
 	struct cam_ringbuffer *events_rb;
 
-	events_rb = &fh->cam->pipeline.event_buffer;
+	events_rb = &fh->pipeline.event_buffer;
 	poll_wait(filp, &events_rb->wait, wait);
 
 	if (cam_ringbuffer_has_entry(events_rb))

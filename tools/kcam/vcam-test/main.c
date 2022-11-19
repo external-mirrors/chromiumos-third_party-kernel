@@ -2123,11 +2123,6 @@ int main(int argc, char *argv[])
 		return -EINVAL;
 	}
 
-	if (libkc_open(cam_path)) {
-		pr_err("FATAL: more than one active CAM users\n");
-		return -EINVAL;
-	}
-
 	ret = test_query_entities(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_query_entities()\n");

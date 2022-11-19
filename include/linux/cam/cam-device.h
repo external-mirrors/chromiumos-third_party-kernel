@@ -48,9 +48,6 @@ struct cam_device {
 	/** @ns: CAM objects namespace */
 	struct cam_ns ns;
 
-	/** @pipeline: Operation execution pipeline */
-	struct cam_pipeline pipeline;
-
 	/** @context_lock: DMA fence context lock */
 	spinlock_t context_lock;
 
@@ -62,9 +59,6 @@ struct cam_device {
 
 	/** @root_entity: CAM root entity object */
 	struct cam_obj_entity *root_entity;
-
-	/** @num_users: number of users of CAM device */
-	atomic_t num_users;
 
 	/** @devnode: The device node associated with this CAM device */
 	struct device devnode;
@@ -89,6 +83,8 @@ struct cam_device {
 struct cam_fh {
 	/** @cam: the CAM device */
 	struct cam_device *cam;
+	/** @pipeline: Operation execution pipeline */
+	struct cam_pipeline pipeline;
 };
 
 struct cam_device *cam_device_get(void);
