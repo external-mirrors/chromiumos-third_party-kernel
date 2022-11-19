@@ -1,6 +1,6 @@
 AM_CFLAGS = -I$(top_srcdir)/../include -I$(top_srcdir)/include -I./include -fno-common
 vcamtest_LDADD = $(top_builddir)/libkc/libkc.la
-LIBS =
+LIBS = -lpthread
 
 sbin_PROGRAMS = vcamtest
 

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <libkc/libkc.h>
 #include <vcam_objects.h>
@@ -2086,6 +2087,55 @@ out:
 	return ret;
 }
 
+static void *thread_fn(void *arg)
+{
+	struct libkc *cam;
+	const char *cam_path = "/dev/cam";
+	int ret;
+	int id;
+
+	cam = libkc_open(cam_path);
+	if (!cam) {
+		pr_err("FATAL: cannot open %s\n", cam_path);
+		goto out;
+	}
+
+	ret = test_operations(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_operations()\n");
+		goto out;
+	}
+out:
+	libkc_close(cam);
+	return NULL;
+}
+
+#define NUM_THREADS	8
+
+static int multi_threaded_test(void)
+{
+	pthread_t threads[NUM_THREADS];
+	int i;
+
+	pr_info("--- MULTI THREADED TEST ---\n");
+
+	for (i = 0; i < NUM_THREADS; i++) {
+		int ret;
+
+		pr_info("Starting thread %d\n", i);
+		ret = pthread_create(&threads[i], NULL, thread_fn, NULL);
+		if (ret) {
+			pr_err("FATAL: failed to create thread: %d\n", ret);
+			return ret;
+		}
+	}
+
+	for (i = 0; i < NUM_THREADS; i++)
+		pthread_join(threads[i], NULL);
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	static struct option long_options[] = {
@@ -2160,5 +2210,11 @@ int main(int argc, char *argv[])
 	}
 
 	libkc_close(cam);
+
+	ret = multi_threaded_test();
+	if (ret) {
+		pr_err("FATAL: failure multi_threaded_test()\n");
+		return ret;
+	}
 	return EXIT_SUCCESS;
 }
