@@ -13,6 +13,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 __attribute__ ((format (printf, 2, 3)))
 void __pr_log(int level, const char *fmt, ...);
@@ -26,7 +28,7 @@ extern int log_level;
 #define PR_INFO			1
 #define PR_DEBUG		2
 
-#define PREFIX			"[%s:%d] "
+#define PREFIX			"[%s:%d/%u] "
 #define PRERR			PREFIX" ERROR: "
 #define PRINF			PREFIX" INFO: "
 #define PRDEBUG			PREFIX" DEBUG: "
@@ -35,6 +37,7 @@ extern int log_level;
 	do {							\
 		if ((l) <= log_level)				\
 			__pr_log((l), (f), __func__, __LINE__,	\
+				syscall(SYS_gettid),		\
 				##__VA_ARGS__);			\
 	} while (0)
 
