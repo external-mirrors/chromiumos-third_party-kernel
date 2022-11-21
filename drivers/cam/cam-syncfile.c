@@ -67,12 +67,31 @@ static void cam_in_syncfile_release(struct cam_obj *nsobj)
 	kfree(sf);
 }
 
-static void cam_syncfile_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
+static void cam_in_syncfile_release_work(struct work_struct *work)
 {
 	struct cam_obj_syncfile *sf;
 
+	sf = container_of(work, struct cam_obj_syncfile, in.release_work);
+	cam_syncfile_unregister(sf);
+}
+
+static void cam_syncfile_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
+{
+	struct cam_obj_syncfile *sf;
+	unsigned long flags;
+
 	sf = container_of(cb, struct cam_obj_syncfile, in.cb);
-	cam_in_syncfile_trigger_signals(sf);
+
+	write_lock_irqsave(&sf->in.notify_lock, flags);
+	cam_fire_active_signals(&sf->in.notify_active_chain);
+	write_unlock_irqrestore(&sf->in.notify_lock, flags);
+
+	/*
+	 * We cannot release CAM syncfile object here, because fences are
+	 * signaled from atomic context whlie CAM syncfile release function
+	 * might_sleep(). Hence we need to use a deferred context.
+	 */
+	schedule_work(&sf->in.release_work);
 }
 
 __printf(3, 4)
@@ -102,17 +121,17 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 		     cam_in_syncfile_release,
 		     &cam->ns);
 
+	INIT_WORK(&sf->in.release_work, cam_in_syncfile_release_work);
 	sf->in.fence = sync_file_get_fence(fd);
 	if (!sf->in.fence)
 		goto error;
 
 	ret = dma_fence_add_callback(sf->in.fence,
-				   &sf->in.cb,
-				   cam_syncfile_fence_cb);
+				     &sf->in.cb,
+				     cam_syncfile_fence_cb);
 	/* -ENOENT is returned when fence is already signaled */
-	if (ret && ret != -ENOENT) {
+	if (ret && ret != -ENOENT)
 		goto error;
-	}
 
 	if (cam_graph_node_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
 		goto error;
@@ -127,19 +146,6 @@ error:
 	return NULL;
 }
 ALLOW_ERROR_INJECTION(cam_in_syncfile_register, NULL);
-
-/**
- * cam_in_syncfile_trigger_signals() - Trigger active syncfile signals
- * @sf: pointer to CAM syncfile
- */
-void cam_in_syncfile_trigger_signals(struct cam_obj_syncfile *sf)
-{
-	unsigned long flags;
-
-	write_lock_irqsave(&sf->in.notify_lock, flags);
-	cam_fire_active_signals(&sf->in.notify_active_chain);
-	write_unlock_irqrestore(&sf->in.notify_lock, flags);
-}
 
 bool cam_in_syncfile_activate_signal(struct cam_op_signal *sig)
 {
@@ -181,7 +187,6 @@ static void cam_drain_in_syncfile_callback(struct cam_obj *nsobj,
 	write_unlock_irqrestore(&sf->in.notify_lock, flags);
 }
 
-
 int cam_drain_in_syncfiles(struct cam_device *cam)
 {
 	struct cam_ns_walk_control ctl = {};
@@ -200,24 +205,32 @@ static void cam_out_syncfile_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_syncfile *sf = nsobj_to_cam_out_syncfile(nsobj);
 
-	dma_fence_put(sf->out.fence);
 	cam_graph_node_unlink(nsobj);
 	kfree(sf);
 }
 
-static const char *cam_driver_name(struct dma_fence *fence)
+static void cam_dma_fence_release(struct dma_fence *fence)
+{
+	struct cam_obj_syncfile *sf;
+
+	sf = container_of(fence, struct cam_obj_syncfile, out.fence);
+	cam_syncfile_unregister(sf);
+}
+
+static const char *cam_dma_fence_driver_name(struct dma_fence *fence)
 {
 	return "kcam";
 }
 
-static const char *cam_timeline_name(struct dma_fence *fence)
+static const char *cam_dma_fence_timeline_name(struct dma_fence *fence)
 {
 	return "kcam-timeline";
 }
 
 static struct dma_fence_ops cam_out_fence_ops = {
-	.get_driver_name        = cam_driver_name,
-	.get_timeline_name      = cam_timeline_name,
+	.get_driver_name	= cam_dma_fence_driver_name,
+	.get_timeline_name	= cam_dma_fence_timeline_name,
+	.release		= cam_dma_fence_release,
 };
 
 __printf(2, 3)
@@ -238,6 +251,8 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
+	spin_lock_init(&sf->out.context_lock);
+	atomic64_set(&sf->out.fence_seqno, 0);
 	sf->out.fd = -1;
 	strlcpy(sf->name, name, CAM_SYNCFILE_NAME_SZ);
 	cam_obj_init(&sf->nsobj,
@@ -245,21 +260,18 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 		     cam_out_syncfile_release,
 		     &cam->ns);
 
-	sf->out.fence = kzalloc(sizeof(struct dma_fence), GFP_KERNEL);
-	if (!sf->out.fence)
-		goto error;
-
-	dma_fence_init(sf->out.fence,
+	sf->out.fence_context = dma_fence_context_alloc(1);
+	dma_fence_init(&sf->out.fence,
 		       &cam_out_fence_ops,
-		       &cam->context_lock,
-		       cam->fence_context,
-		       atomic64_inc_return(&cam->fence_seqno));
+		       &sf->out.context_lock,
+		       sf->out.fence_context,
+		       atomic64_inc_return(&sf->out.fence_seqno));
 
 	sf->out.fd = get_unused_fd_flags(O_CLOEXEC);
 	if (sf->out.fd < 0)
 		goto error;
 
-	syncfile = sync_file_create(sf->out.fence);
+	syncfile = sync_file_create(&sf->out.fence);
 	if (!syncfile)
 		goto error;
 
@@ -282,7 +294,31 @@ error:
 }
 ALLOW_ERROR_INJECTION(cam_out_syncfile_register, NULL);
 
-int cam_out_syncfile_signal(struct cam_obj_syncfile *sf)
+int cam_fire_out_syncfile_signal(struct cam_obj_syncfile *sf)
 {
-	return dma_fence_signal(sf->out.fence);
+	int ret;
+
+	if (!sf)
+		return 0;
+
+	/*
+	 * Exported DMA fence can be imported many times so we need to depend
+	 * on DMA fence ref-counter and cannot release CAM syncfile object,
+	 * because DMA fence uses context_lock that belongs to CAM synfile.
+	 *
+	 * We take a different approach here: we put DMA fence and release
+	 * CAM syncfile object only from DAM fence ->release callback.
+	 */
+	ret = dma_fence_signal(&sf->out.fence);
+	dma_fence_put(&sf->out.fence);
+	return ret;
+}
+
+int cam_drain_out_syncfile(struct cam_obj_syncfile *sf)
+{
+	if (!sf)
+		return 0;
+
+	dma_fence_put(&sf->out.fence);
+	return 0;
 }

@@ -48,15 +48,6 @@ struct cam_device {
 	/** @ns: CAM objects namespace */
 	struct cam_ns ns;
 
-	/** @context_lock: DMA fence context lock */
-	spinlock_t context_lock;
-
-	/** @fence_context: Fence context index */
-	u64 fence_context;
-
-	/** @fence_seqno: Accumulative fence seqno */
-	atomic64_t fence_seqno;
-
 	/** @root_entity: CAM root entity object */
 	struct cam_obj_entity *root_entity;
 

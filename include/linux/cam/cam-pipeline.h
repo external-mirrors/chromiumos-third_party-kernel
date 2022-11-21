@@ -83,19 +83,6 @@ struct cam_op_signal {
 	bool (*fire)(struct cam_op_signal *sig);
 };
 
-enum cam_op_exec_action_type {
-	CAM_OP_POST_EXEC_ACTION_FENCE_OUT,
-	CAM_OP_POST_EXEC_ACTION_FENCE_IN,
-};
-
-struct cam_op_exec_action {
-	enum cam_op_exec_action_type		type;
-	union {
-		struct cam_obj_syncfile	*syncfile;
-	};
-	struct list_head		entry;
-};
-
 struct cam_obj_syncfile;
 
 /**
@@ -135,10 +122,10 @@ struct cam_obj_op {
 	 */
 	struct list_head		notify_pending_chain;
 	/**
-	 * @post_exec_action_chain: List of exec actions that need to be
-	 * signaled/cleaned up once operation is executed.
+	 * @out_syncfile: Exported DMA fence that we need to notify after
+	 * OP is executed.
 	 */
-	struct list_head		post_exec_action_chain;
+	struct cam_obj_syncfile		*out_syncfile;
 };
 
 struct cam_device;

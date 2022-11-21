@@ -26,11 +26,18 @@ struct cam_obj_syncfile {
 		struct export {
 			/** @fd: File descriptor of this fence */
 			int			fd;
-			/** @f: pointer to the base dma_fence object */
-			struct dma_fence	*fence;
+			/** @context_lock: DMA fence context lock */
+			spinlock_t		context_lock;
+			/** @fence_context: Fence context index */
+			u64			fence_context;
+			/** @fence_seqno: Accumulative fence seqno */
+			atomic64_t		fence_seqno;
+			/** @fence: base dma_fence object */
+			struct dma_fence	fence;
 		} out;
 
 		struct import {
+			/** @fence: base dma_fence object */
 			struct dma_fence	*fence;
 			/** @cb: DMA fence notify callback */
 			struct dma_fence_cb	cb;
@@ -39,6 +46,8 @@ struct cam_obj_syncfile {
 			/** @notify_active_chain: list of operations that are
 			 *			  blocked on us */
 			struct list_head	notify_active_chain;
+			/** @release_work: Delayed release of in-fence */
+			struct work_struct	release_work;
 		} in;
 	};
 
@@ -61,9 +70,8 @@ void cam_syncfile_put(struct cam_obj_syncfile *sf);
 
 bool cam_in_syncfile_activate_signal(struct cam_op_signal *sig);
 
-int cam_out_syncfile_signal(struct cam_obj_syncfile *sf);
-void cam_in_syncfile_trigger_signals(struct cam_obj_syncfile *sf);
+int cam_fire_out_syncfile_signal(struct cam_obj_syncfile *sf);
 int cam_drain_in_syncfiles(struct cam_device *cam);
-
+int cam_drain_out_syncfile(struct cam_obj_syncfile *sf);
 
 #endif /* __LINUX_CAM_SYNCFILE_H__ */

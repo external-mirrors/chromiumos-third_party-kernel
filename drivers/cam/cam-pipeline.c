@@ -70,53 +70,6 @@ static void cam_op_put(struct cam_obj_op *op)
 }
 
 /**
- * process_post_exec_action() - Execute a post-operation action
- * @action: pointer to the action
- *
- * Different actions will be taken depending on the action type.
- */
-static void process_post_exec_action(struct cam_op_exec_action *action)
-{
-	/*
-	 * Fences (syncfiles) are short-lived objects, they are supposed to
-	 * be released once OP execution is done. Pipeline (exec action in
-	 * particular) creates and owns these syncfile objects so we can just
-	 * proceed releasing it, but after we signal OUT fences.
-	 */
-	switch (action->type) {
-	case CAM_OP_POST_EXEC_ACTION_FENCE_OUT:
-		cam_out_syncfile_signal(action->syncfile);
-		cam_syncfile_unregister(action->syncfile);
-		break;
-	case CAM_OP_POST_EXEC_ACTION_FENCE_IN:
-		cam_syncfile_unregister(action->syncfile);
-		break;
-	default:
-		pr_err("Unknown OP post exec action type: %d\n",
-		       action->type);
-	}
-}
-
-/**
- * cam_op_process_post_actions() - Execute a list of post actions
- * @op: pointer to CAM operation
- */
-static void cam_op_process_post_actions(struct cam_obj_op *op)
-{
-	struct cam_op_exec_action *action;
-
-	while (!list_empty(&op->post_exec_action_chain)) {
-		action = list_first_entry(&op->post_exec_action_chain,
-					  struct cam_op_exec_action,
-					  entry);
-
-		list_del(&action->entry);
-		process_post_exec_action(action);
-		kfree(action);
-	}
-}
-
-/**
  * cam_op_release() - Release CAM operation
  * @nsobj: pointer to CAM object that represents a CAM operation
  *
@@ -131,7 +84,7 @@ static void cam_op_release(struct cam_obj *nsobj)
 	WARN_ON(!list_empty(&op->notify_active_chain));
 	WARN_ON(!list_empty(&op->notify_pending_chain));
 
-	cam_op_process_post_actions(op);
+	//cam_op_process_post_actions(op);
 
 	if (op->exec_entity)
 		cam_entity_put(op->exec_entity);
@@ -487,6 +440,7 @@ static void cam_drain_op_callback(struct cam_obj *nsobj,
 	 */
 	drain_notify_chain(&op->notify_active_chain);
 	drain_notify_chain(&op->notify_pending_chain);
+	cam_drain_out_syncfile(op->out_syncfile);
 
 	/*
 	 * Note we cannot remove OP from namespace here, because we are
@@ -549,6 +503,7 @@ static void cam_op_fire_signals(struct cam_obj_op *op)
 	 * Famous last words.
 	 */
 	cam_fire_active_signals(&op->notify_active_chain);
+	cam_fire_out_syncfile_signal(op->out_syncfile);
 }
 
 /**
@@ -964,37 +919,54 @@ static int cam_fence_in_dependency_add(struct cam_pipeline *pipeline,
 				       struct cam_dependency *req,
 				       struct cam_obj_op *op)
 {
-	struct cam_op_exec_action *action;
+	struct cam_obj_syncfile *syncfile;
 	int ret;
 
-	action = kzalloc(sizeof(*action), GFP_KERNEL);
-	if (!action)
-		return -ENOMEM;
-
-	INIT_LIST_HEAD(&action->entry);
-	action->type = CAM_OP_POST_EXEC_ACTION_FENCE_IN;
-	action->syncfile = cam_in_syncfile_register(pipeline->cam,
-						    req->id,
-						    "in-fence-%d",
-						    req->id);
-	if (!action->syncfile) {
+	syncfile = cam_in_syncfile_register(pipeline->cam,
+					    req->id,
+					    "in-fence-%d",
+					    req->id);
+	if (!syncfile) {
 		ret = -EINVAL;
 		goto error;
 	}
 
-	ret = cam_op_add_pending_signal(&action->syncfile->nsobj, op,
+	ret = cam_op_add_pending_signal(&syncfile->nsobj, op,
 					cam_in_syncfile_activate_signal);
 	if (ret)
 		goto error;
 
-	list_add_tail(&action->entry, &op->post_exec_action_chain);
 	return 0;
 
 error:
-	if (action->syncfile)
-		cam_syncfile_unregister(action->syncfile);
-	kfree(action);
+	if (syncfile)
+		cam_syncfile_unregister(syncfile);
 	return ret;
+}
+
+/**
+ * cam_fence_out_dependency_add(struct() - Create Out-Fence-to-OP dependency
+ * @pipeline: pointer to CAM pipeline
+ * @req: add request from user-space
+ * @op: pointer to the dependent operation
+ *
+ * Return: 0 on success or a negative error code otherwise.
+ */
+static int cam_fence_out_dependency_add(struct cam_pipeline *pipeline,
+					struct cam_operation_add *req,
+					struct cam_obj_op *op)
+{
+	u32 id;
+
+	id = cam_obj_id(&op->nsobj);
+	op->out_syncfile = cam_out_syncfile_register(pipeline->cam,
+						     "out-fence-%d",
+						     id);
+	if (!op->out_syncfile)
+		return -EINVAL;
+
+	req->fence_out = cam_out_syncfile_fd(op->out_syncfile);
+	return 0;
 }
 
 /**
@@ -1144,26 +1116,8 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 	}
 
 	if (req->flags & CAM_OPERATION_FLAG_EXPORT_FENCE) {
-		struct cam_op_exec_action *action;
-		u32 id;
-
-		id = cam_obj_id(&op->nsobj);
-		action = kzalloc(sizeof(*action), GFP_KERNEL);
-		if (!action)
+		if (cam_fence_out_dependency_add(pipeline, req, op))
 			goto error;
-
-		INIT_LIST_HEAD(&action->entry);
-		action->type = CAM_OP_POST_EXEC_ACTION_FENCE_OUT;
-		action->syncfile = cam_out_syncfile_register(pipeline->cam,
-							     "out-fence-%d",
-							     id);
-		if (!action->syncfile) {
-			kfree(action);
-			goto error;
-		}
-
-		list_add_tail(&action->entry, &op->post_exec_action_chain);
-		req->fence_out = cam_out_syncfile_fd(action->syncfile);
 	}
 
 	return 0;
@@ -1202,7 +1156,6 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 	atomic_set(&op->num_blockers, 0);
 	INIT_LIST_HEAD(&op->notify_active_chain);
 	INIT_LIST_HEAD(&op->notify_pending_chain);
-	INIT_LIST_HEAD(&op->post_exec_action_chain);
 	INIT_LIST_HEAD(&op->io_queue_entry);
 	rwlock_init(&op->notify_lock);
 	op->pipeline = pipeline;
