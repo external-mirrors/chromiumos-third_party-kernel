@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 
 #define CAM_PIPELINE_IO_ACTIVE	(1 << 0)
+#define CAM_PIPELINE_IO_EXITING	(1 << 1)
 
 /**
  * cam_pipeline - CAM execution pipeline
@@ -35,6 +36,8 @@ struct cam_pipeline {
 	struct list_head	io_queue;
 	/** @io_state: IO queue/thread state flags */
 	unsigned long		io_state;
+	/** @io_relase_lock: Lock to protect IO-thread release */
+	struct mutex		io_release_lock;
 };
 
 /**

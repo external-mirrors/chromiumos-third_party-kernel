@@ -34,9 +34,9 @@
  */
 static bool cam_pipeline_active(struct cam_pipeline *pipeline)
 {
-	if (WARN_ON(!test_bit(CAM_PIPELINE_IO_ACTIVE, &pipeline->io_state)))
+	if (test_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state))
 		return false;
-	if (WARN_ON(!pipeline->io_thread))
+	if (!test_bit(CAM_PIPELINE_IO_ACTIVE, &pipeline->io_state))
 		return false;
 	return true;
 }
@@ -762,7 +762,7 @@ static int cam_pipeline_io_worker(void *data)
 	snprintf(buf, sizeof(buf), "cam-io");
 	set_task_comm(current, buf);
 
-	while (test_bit(CAM_PIPELINE_IO_ACTIVE, &pipeline->io_state)) {
+	while (!test_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state)) {
 		struct cam_obj_op *op = NULL;
 
 		if (signal_pending(current)) {
@@ -805,8 +805,11 @@ static int cam_pipeline_io_worker(void *data)
 	cam_drain_ops(pipeline);
 	cam_flush_ops(pipeline);
 
-	/* All signals were drained, nothing should cam_op_enqueue() */
+	mutex_lock(&pipeline->io_release_lock);
 	pipeline->io_thread = NULL;
+	mutex_unlock(&pipeline->io_release_lock);
+
+	clear_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state);
 	do_exit(0);
 	return 0;
 }
@@ -1493,13 +1496,17 @@ int cam_pipeline_io_setup(struct cam_pipeline *pipeline)
  */
 int cam_pipeline_io_release(struct cam_pipeline *pipeline)
 {
+	set_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state);
 	if (!test_bit(CAM_PIPELINE_IO_ACTIVE, &pipeline->io_state))
 		return 0;
 
-	clear_bit(CAM_PIPELINE_IO_ACTIVE, &pipeline->io_state);
-	if (WARN_ON(!pipeline->io_thread))
-		return -EINVAL;
-	wake_up_process(pipeline->io_thread);
+	mutex_lock(&pipeline->io_release_lock);
+	if (pipeline->io_thread)
+		wake_up_process(pipeline->io_thread);
+	mutex_unlock(&pipeline->io_release_lock);
+
+	while (test_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state))
+		schedule_timeout(HZ / 10);
 	return 0;
 }
 
@@ -1528,6 +1535,7 @@ int cam_pipeline_init(struct cam_device *cam, struct cam_pipeline *pipeline)
 
 	INIT_LIST_HEAD(&pipeline->io_queue);
 	spin_lock_init(&pipeline->io_queue_lock);
+	mutex_init(&pipeline->io_release_lock);
 	pipeline->io_thread = NULL;
 	pipeline->cam = cam;
 	return ret;
