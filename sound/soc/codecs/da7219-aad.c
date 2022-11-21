@@ -356,8 +356,13 @@ static irqreturn_t da7219_aad_irq_thread(int irq, void *data)
 	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
 	struct da7219_priv *da7219 = snd_soc_codec_get_drvdata(codec);
 	u8 events[DA7219_AAD_IRQ_REG_MAX];
-	u8 statusa;
+	u8 statusa, srm_st;
 	int i, report = 0, mask = 0;
+
+	srm_st = snd_soc_read(codec, DA7219_PLL_SRM_STS) & DA7219_PLL_SRM_STS_MCLK;
+	msleep(da7219_aad->gnd_switch_delay * ((srm_st == 0x0) ? 2 : 1) - 4);
+	/* Enable ground switch */
+	snd_soc_update_bits(codec, 0xFB, 0x01, 0x01);
 
 	/* Read current IRQ events */
 	regmap_bulk_read(da7219->regmap, DA7219_ACCDET_IRQ_EVENT_A,
@@ -458,8 +463,8 @@ static irqreturn_t da7219_aad_irq_thread(int irq, void *data)
 			snd_soc_dapm_disable_pin(dapm, "Mic Bias");
 			snd_soc_dapm_sync(dapm);
 
-			/* Enable ground switch */
-			snd_soc_update_bits(codec, 0xFB, 0x01, 0x01);
+			/* Disable ground switch */
+			snd_soc_update_bits(codec, 0xFB, 0x01, 0x00);
 		}
 	}
 
@@ -836,6 +841,32 @@ static void da7219_aad_handle_pdata(struct snd_soc_codec *codec)
 	}
 }
 
+static void da7219_aad_handle_gnd_switch_time(struct snd_soc_codec *codec)
+{
+	struct da7219_priv *da7219 = snd_soc_codec_get_drvdata(codec);
+	struct da7219_aad_priv *da7219_aad = da7219->aad;
+	u8 jack_det;
+
+	jack_det = snd_soc_read(codec, DA7219_ACCDET_CONFIG_2)
+		& DA7219_JACK_DETECT_RATE_MASK;
+	switch (jack_det) {
+	case 0x00:
+		da7219_aad->gnd_switch_delay = 32;
+		break;
+	case 0x10:
+		da7219_aad->gnd_switch_delay = 64;
+		break;
+	case 0x20:
+		da7219_aad->gnd_switch_delay = 128;
+		break;
+	case 0x30:
+		da7219_aad->gnd_switch_delay = 256;
+		break;
+	default:
+		da7219_aad->gnd_switch_delay = 32;
+		break;
+	}
+}
 
 /*
  * Suspend/Resume
@@ -921,9 +952,6 @@ int da7219_aad_init(struct snd_soc_codec *codec)
 	snd_soc_update_bits(codec, DA7219_ACCDET_CONFIG_1,
 			    DA7219_BUTTON_CONFIG_MASK, 0);
 
-	/* Enable ground switch */
-	snd_soc_update_bits(codec, 0xFB, 0x01, 0x01);
-
 	INIT_WORK(&da7219_aad->btn_det_work, da7219_aad_btn_det_work);
 	INIT_WORK(&da7219_aad->hptest_work, da7219_aad_hptest_work);
 
@@ -940,6 +968,8 @@ int da7219_aad_init(struct snd_soc_codec *codec)
 	memset(mask, 0, DA7219_AAD_IRQ_REG_MAX);
 	regmap_bulk_write(da7219->regmap, DA7219_ACCDET_IRQ_MASK_A,
 			  &mask, DA7219_AAD_IRQ_REG_MAX);
+
+	da7219_aad_handle_gnd_switch_time(codec);
 
 	return 0;
 }
