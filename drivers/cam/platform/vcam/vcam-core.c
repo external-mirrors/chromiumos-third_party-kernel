@@ -36,6 +36,12 @@ static const char *entity_names[] = {
 	VCAM_SLOW_IRQ_ENTITY_NAME,
 };
 
+struct vcam_buffer {
+	u32				fd;
+	struct cam_obj_buffer		*buffer;
+	struct list_head		entry;
+};
+
 struct vcam_device {
 	struct device			*dev;
 	struct cam_device		*cam;
@@ -45,7 +51,8 @@ struct vcam_device {
 	struct cam_obj_entity		*entities[2];
 	struct cam_obj_event		*events[4];
 
-	struct cam_obj_buffer		*buffer;
+	struct mutex			buffers_lock;
+	struct list_head		buffers;
 
 	struct hrtimer			event_timer_fast;
 	struct hrtimer			event_timer_slow;
@@ -112,26 +119,52 @@ static int vcam_buffer_add(struct vcam_device *vcam,
 			   struct cam_obj_entity *entity,
 			   int fd)
 {
-	if (WARN_ON(vcam->buffer))
-		return -EINVAL;
+	struct vcam_buffer *vb;
 
-	vcam->buffer = cam_buffer_register(vcam->cam,
-					   cam_entity_id(entity),
-					   vcam->dev,
-					   fd);
-	if (!vcam->buffer)
+	vb = kzalloc(sizeof(struct vcam_buffer), GFP_KERNEL);
+	if (!vb)
+		return -ENOMEM;
+
+	vb->fd = fd;
+	vb->buffer = cam_buffer_register(vcam->cam,
+					 cam_entity_id(entity),
+					 vcam->dev,
+					 fd);
+	if (!vb->buffer) {
+		kfree(vb);
 		return -EINVAL;
+	}
+
+	mutex_lock(&vcam->buffers_lock);
+	list_add(&vb->entry, &vcam->buffers);
+	mutex_unlock(&vcam->buffers_lock);
 
 	return 0;
 }
 
 static int vcam_buffer_remove(struct vcam_device *vcam, int fd)
 {
-	if (!vcam->buffer)
-		return -EINVAL;
-	cam_buffer_unregister(vcam->buffer);
-	vcam->buffer = NULL;
-	return 0;
+	struct vcam_buffer *vb;
+	int ret = -EINVAL;
+
+	mutex_lock(&vcam->buffers_lock);
+	if (WARN_ON(list_empty(&vcam->buffers))) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	list_for_each_entry(vb, &vcam->buffers, entry) {
+		if (vb->fd == fd) {
+			list_del(&vb->entry);
+			cam_buffer_unregister(vb->buffer);
+			kfree(vb);
+			ret = 0;
+			goto out;
+		}
+	}
+out:
+	mutex_unlock(&vcam->buffers_lock);
+	return ret;
 }
 
 static int dma_importer_write(struct cam_obj_entity *entity,
@@ -246,6 +279,7 @@ static enum hrtimer_restart vcam_event_hrtimer_slow(struct hrtimer *hrtimer)
 
 static void cam_objects_release(struct vcam_device *vcam)
 {
+	struct vcam_buffer *vb;
 	int obj;
 
 	trigger_event_on(vcam, ENTITY_1, ENTITY_1_EVENT_1);
@@ -266,11 +300,19 @@ static void cam_objects_release(struct vcam_device *vcam)
 			cam_entity_unregister(vcam->entities[obj]);
 	}
 
-	if (vcam->buffer) {
-		pr_err("User-space did not destroy imported DMA buffer\n");
-		cam_buffer_unregister(vcam->buffer);
-		vcam->buffer = NULL;
+	mutex_lock(&vcam->buffers_lock);
+	while (!list_empty(&vcam->buffers)) {
+		pr_err("User-space did not destroy imported DMA buffer: %d\n",
+		       vb->fd);
+		vb = list_first_entry(&vcam->buffers,
+				      struct vcam_buffer,
+				      entry);
+
+		list_del(&vb->entry);
+		cam_buffer_unregister(vb->buffer);
+		kfree(vb);
 	}
+	mutex_unlock(&vcam->buffers_lock);
 
 	if (vcam->dma_import_entity)
 		cam_entity_unregister(vcam->dma_import_entity);
@@ -292,6 +334,8 @@ static int vcam_probe(struct platform_device *pdev)
 	if (!vcam)
 		return -ENOMEM;
 
+	mutex_init(&vcam->buffers_lock);
+	INIT_LIST_HEAD(&vcam->buffers);
 	vcam->dev = &pdev->dev;
 	platform_set_drvdata(pdev, vcam);
 	hrtimer_init(&vcam->event_timer_fast, CLOCK_MONOTONIC,
