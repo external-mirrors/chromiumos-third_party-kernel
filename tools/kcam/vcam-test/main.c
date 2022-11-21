@@ -2247,6 +2247,25 @@ static void *thread_fn(void *arg)
 	}
 	pthread_mutex_unlock(&buffers_lock);
 
+	/*
+	 * We don't wait for OPs execution and don't consume completions.
+	 * Quite the contrary - we enqueue operations and immediately
+	 * close out /dev/cam file handle, forcing pipeline destruction
+	 */
+	ret = wait_for_slow_entity_timer(cam);
+	if (ret) {
+		pr_err("FATAL: can't sync with slow entity timer\n");
+		goto out;
+	}
+
+	ret = test_add_valid_operations(cam, VCAM_SLOW_IRQ_ENTITY_NAME,
+					41 * TEST_NUM_OPERATIONS,
+					CAM_DEPENDENCY_STRICT_ORDER);
+	if (ret) {
+		pr_err("FATAL: failure test_add_valid_operations()\n");
+		goto out;
+	}
+
 out:
 	libkc_close(cam);
 	return NULL;
