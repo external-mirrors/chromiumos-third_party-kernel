@@ -467,6 +467,8 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 	rhashtable_walk_enter(&ns->objs, &iter);
 	rhashtable_walk_start(&iter);
 	while ((nsobj = rhashtable_walk_next(&iter))) {
+		if (IS_ERR(nsobj))
+			continue;
 		if (!kref_get_unless_zero(&nsobj->kref))
 			continue;
 		if (nsobj->flags & CAM_OBJ_FLAG_ACTIVE)
