@@ -2377,5 +2377,7 @@ int main(int argc, char *argv[])
 		pr_err("FATAL: failure multi_threaded_test()\n");
 		return ret;
 	}
+
+	pr_info("Success\n");
 	return EXIT_SUCCESS;
 }
