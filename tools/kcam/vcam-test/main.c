@@ -2100,9 +2100,119 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_operations(cam);
+	ret = wait_for_slow_entity_timer(cam);
 	if (ret) {
-		pr_err("FATAL: failure test_operations()\n");
+		pr_err("FATAL: can't sync with slow entity timer\n");
+		goto out;
+	}
+
+	ret = test_add_instant_operations(cam, TEST_NUM_OPERATIONS);
+	if (ret) {
+		pr_err("FATAL: failure test_add_instant_operations()\n");
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, TEST_NUM_OPERATIONS);
+	if (ret != TEST_NUM_OPERATIONS) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
+		goto out;
+	}
+
+	ret = test_add_valid_operations(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					TEST_NUM_OPERATIONS,
+					CAM_DEPENDENCY_WEAK_ORDER);
+	if (ret) {
+		pr_err("FATAL: failure test_add_valid_operations()\n");
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, TEST_NUM_OPERATIONS);
+	if (ret != TEST_NUM_OPERATIONS) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
+		goto out;
+	}
+
+	ret = test_add_valid_operations(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					TEST_NUM_OPERATIONS,
+					CAM_DEPENDENCY_STRICT_ORDER);
+	if (ret) {
+		pr_err("FATAL: failure test_add_valid_operations()\n");
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, TEST_NUM_OPERATIONS);
+	if (ret != TEST_NUM_OPERATIONS) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
+		goto out;
+	}
+
+	ret = test_add_valid_complex_operations(cam, VCAM_SLOW_IRQ_ENTITY_NAME,
+						TEST_NUM_OPERATIONS);
+	if (ret) {
+		pr_err("FATAL: test_add_valid_complex_operations() failed\n");
+		goto out;
+	}
+
+	ret = test_query_operations(cam, 0, CAM_OP_QUERY_UNIQUE);
+	if (ret != 1) {
+		pr_err("FATAL: failure test_query_operation(): %d\n", ret);
+		goto out;
+	}
+
+	ret = test_query_operations(cam, 0, CAM_OP_QUERY_UNIQUE_AND_DEPS);
+	if (ret != 3) {
+		pr_err("FATAL: failure test_query_operation(): %d\n", ret);
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, TEST_NUM_OPERATIONS);
+	if (ret != TEST_NUM_OPERATIONS) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
+		goto out;
+	}
+
+	ret = test_add_valid_rw_operations(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					   TEST_NUM_RW_OPERATIONS);
+	if (ret) {
+		pr_err("FATAL: failure test_add_valid_rw_operations()\n");
+		goto out;
+	}
+
+	ret = test_add_valid_operations(cam, VCAM_SLOW_IRQ_ENTITY_NAME,
+					TEST_NUM_OPERATIONS,
+					CAM_DEPENDENCY_STRICT_ORDER);
+	if (ret) {
+		pr_err("FATAL: failure test_add_valid_operations()\n");
+		goto out;
+	}
+
+	ret = test_query_operations(cam, CAM_OP_ID_ALL_OP, CAM_OP_QUERY_ALL);
+	if (ret <= 0) {
+		pr_err("FATAL: failure test_query_operations()\n");
+		goto out;
+	}
+
+	ret = test_query_operations(cam, CAM_OP_ID_ALL_OP, CAM_OP_QUERY_SLEEP);
+	if (ret <= 0) {
+		pr_err("FATAL: failure test_query_operations()\n");
+		goto out;
+	}
+
+	ret = test_query_operations(cam, CAM_OP_ID_ALL_OP, CAM_OP_QUERY_QUEUED);
+	if (ret != 0) {
+		pr_err("FATAL: failure test_query_operations()\n");
+		goto out;
+	}
+
+	ret = test_remove_operations(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_remove_operations()\n");
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, TEST_NUM_OPERATIONS);
+	if (ret != TEST_NUM_OPERATIONS) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
 		goto out;
 	}
 
