@@ -140,6 +140,7 @@ static int entity_register(struct cam_query_entity_entry *entry)
 	obj->type = OBJ_TYPE_ENTITY;
 	strcpy(obj->name, entry->name);
 	INIT_LIST_HEAD(&obj->children);
+	INIT_LIST_HEAD(&obj->obj_list);
 	list_add_tail(&obj->obj_list, &entities);
 
 	if (obj->id == CAM_OBJ_ID_ROOT)
@@ -171,6 +172,7 @@ static int event_register(struct cam_query_event_entry *entry,
 	obj->id = entry->id;
 	obj->type = OBJ_TYPE_EVENT;
 	strcpy(obj->name, entry->name);
+	INIT_LIST_HEAD(&obj->obj_list);
 	list_add_tail(&obj->obj_list, &events);
 
 	parent = entity_lookup(entity_id);
@@ -198,6 +200,7 @@ static int buffer_register(struct obj_entity *parent,
 	obj->type = OBJ_TYPE_BUFFER;
 	obj->id = buf->fd;
 	obj->dmabuf = buf;
+	INIT_LIST_HEAD(&obj->obj_list);
 	list_add_tail(&obj->obj_list, &buffers);
 
 	list_add(&obj->parent_entry, &parent->children);
