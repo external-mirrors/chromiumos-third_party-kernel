@@ -26,6 +26,8 @@ static int num_events;
 static LIST_HEAD(buffers);
 static int num_buffers;
 
+static pthread_mutex_t buffers_lock = PTHREAD_MUTEX_INITIALIZER;
+
 #define CAM_NO_DEP	0xffffffff
 
 #define CAM_DEFAULT_OUT_SZ	4096
@@ -202,7 +204,10 @@ static int buffer_register(struct obj_entity *parent,
 	obj->id = buf->fd;
 	obj->dmabuf = buf;
 	INIT_LIST_HEAD(&obj->obj_list);
+
+	pthread_mutex_lock(&buffers_lock);
 	list_add_tail(&obj->obj_list, &buffers);
+	pthread_mutex_unlock(&buffers_lock);
 	return 0;
 }
 
@@ -2075,6 +2080,7 @@ static int test_remove_buffers(struct libkc *cam)
 	int ret;
 
 	ret = -EINVAL;
+	pthread_mutex_lock(&buffers_lock);
 	while (!list_empty(&buffers)) {
 		buf = list_first_entry(&buffers, struct obj_buffer, obj_list);
 
@@ -2084,11 +2090,13 @@ static int test_remove_buffers(struct libkc *cam)
 		buffer_unregister(buf);
 	}
 out:
+	pthread_mutex_unlock(&buffers_lock);
 	return ret;
 }
 
 static void *thread_fn(void *arg)
 {
+	struct obj_buffer *buf;
 	struct libkc *cam;
 	const char *cam_path = "/dev/cam";
 	int ret;
@@ -2221,6 +2229,23 @@ static void *thread_fn(void *arg)
 		pr_err("FATAL: failure test_export_import_operations()\n");
 		goto out;
 	}
+
+	ret = test_add_buffers(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_add_buffers()\n");
+		goto out;
+	}
+
+	pthread_mutex_lock(&buffers_lock);
+	if (!list_empty(&buffers)) {
+		buf = list_first_entry(&buffers, struct obj_buffer, obj_list);
+
+		ret = test_remove_buffer(cam, buf);
+		if (ret)
+			pr_err("FATAL: failure test_remove_buffer()\n");
+		buffer_unregister(buf);
+	}
+	pthread_mutex_unlock(&buffers_lock);
 
 out:
 	libkc_close(cam);
