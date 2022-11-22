@@ -2247,6 +2247,8 @@ static void *thread_fn(void *arg)
 	}
 	pthread_mutex_unlock(&buffers_lock);
 
+	pr_info("Test emergency pipeline drain\n");
+
 	/*
 	 * We don't wait for OPs execution and don't consume completions.
 	 * Quite the contrary - we enqueue operations and immediately
@@ -2268,6 +2270,12 @@ static void *thread_fn(void *arg)
 
 out:
 	libkc_close(cam);
+
+	if (ret)
+		pr_err("Thread terminates (last error: %d)\n", ret);
+	else
+		pr_info("Thread terminates\n");
+
 	return NULL;
 }
 
