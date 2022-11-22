@@ -2105,6 +2105,13 @@ static void *thread_fn(void *arg)
 		pr_err("FATAL: failure test_operations()\n");
 		goto out;
 	}
+
+	ret = test_export_import_operations(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_export_import_operations()\n");
+		goto out;
+	}
+
 out:
 	libkc_close(cam);
 	return NULL;
