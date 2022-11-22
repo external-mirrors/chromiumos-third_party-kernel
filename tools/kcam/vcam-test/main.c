@@ -202,15 +202,12 @@ static int buffer_register(struct obj_entity *parent,
 	obj->dmabuf = buf;
 	INIT_LIST_HEAD(&obj->obj_list);
 	list_add_tail(&obj->obj_list, &buffers);
-
-	list_add(&obj->parent_entry, &parent->children);
 	return 0;
 }
 
 static void buffer_unregister(struct obj_buffer *buf)
 {
 	num_buffers--;
-	list_del(&buf->parent_entry);
 	list_del(&buf->obj_list);
 	libkc_dmabuf_put(buf->dmabuf);
 	free(buf);

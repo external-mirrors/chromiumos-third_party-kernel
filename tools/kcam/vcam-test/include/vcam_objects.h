@@ -45,7 +45,6 @@ struct obj_event {
 
 struct obj_buffer {
 	/* Do not move these fields */
-	struct list_head	parent_entry;
 	enum obj_type		type;
 
 	unsigned int		id;
