@@ -20,6 +20,10 @@
 #include "acp.h"
 #include "acp-dsp-offset.h"
 
+#define MP1_C2PMSG_69 0x3B10A14
+#define MP1_C2PMSG_85 0x3B10A54
+#define MP1_C2PMSG_93 0x3B10A74
+
 static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
 {
 	pci_write_config_dword(dev, 0x60, smn_addr);
@@ -34,6 +38,22 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
 	pci_read_config_dword(dev, 0x64, data);
 
 	return 0;
+}
+
+static void master_clock_generate(struct acp_dev_data *adata)
+{
+	int data;
+	smn_write(adata->smn_dev, MP1_C2PMSG_93,0);
+	smn_write(adata->smn_dev, MP1_C2PMSG_85, 0xC4);
+	smn_write(adata->smn_dev, MP1_C2PMSG_69, 0x4);
+
+	while(1) {
+		smn_read(adata->smn_dev, MP1_C2PMSG_93, &data);
+		if (data == 1){
+			return;
+		}else
+			continue;
+    }
 }
 
 static void init_dma_descriptor(struct acp_dev_data *adata)
@@ -390,6 +410,7 @@ static int acp_power_on(struct snd_sof_dev *sdev)
 
 static int acp_reset(struct snd_sof_dev *sdev)
 {
+	const struct sof_amd_acp_desc *desc = get_chip_info(sdev->pdata);
 	unsigned int val;
 	int ret;
 
@@ -410,6 +431,7 @@ static int acp_reset(struct snd_sof_dev *sdev)
 	if (ret < 0)
 		dev_err(sdev->dev, "timeout in releasing reset\n");
 
+	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->acp_clkmux_sel, ACP_CLOCK_ACLK);
 	return ret;
 }
 
@@ -456,7 +478,7 @@ int amd_sof_acp_resume(struct snd_sof_dev *sdev)
 		return ret;
 	}
 
-	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->acp_clkmux_sel, 0x03);
+	snd_sof_dsp_write(sdev, ACP_DSP_BAR, desc->acp_clkmux_sel, ACP_CLOCK_ACLK);
 
 	ret = acp_memory_init(sdev);
 
@@ -528,7 +550,7 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	sdev->debug_box.size = BOX_SIZE_1024;
 
 	acp_memory_init(sdev);
-
+	master_clock_generate(adata);
 	acp_dsp_stream_init(sdev);
 
 	return 0;
