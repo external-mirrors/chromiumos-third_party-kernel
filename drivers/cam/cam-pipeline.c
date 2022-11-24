@@ -84,8 +84,6 @@ static void cam_op_release(struct cam_obj *nsobj)
 	WARN_ON(!list_empty(&op->notify_active_chain));
 	WARN_ON(!list_empty(&op->notify_pending_chain));
 
-	//cam_op_process_post_actions(op);
-
 	if (op->exec_entity)
 		cam_entity_put(op->exec_entity);
 	kfree(op);
