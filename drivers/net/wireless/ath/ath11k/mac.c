@@ -4578,7 +4578,7 @@ static u32 ath11k_mac_ieee80211_sta_bw_to_wmi(struct ath11k *ar,
 {
 	u32 bw = WMI_PEER_CHWIDTH_20MHZ;
 
-	switch (sta->bandwidth) {
+	switch (sta->deflink.bandwidth) {
 	case IEEE80211_STA_RX_BW_20:
 		bw = WMI_PEER_CHWIDTH_20MHZ;
 		break;
@@ -4593,7 +4593,7 @@ static u32 ath11k_mac_ieee80211_sta_bw_to_wmi(struct ath11k *ar,
 		break;
 	default:
 		ath11k_warn(ar->ab, "Invalid bandwidth %d for %pM\n",
-			    sta->bandwidth, sta->addr);
+			    sta->deflink.bandwidth, sta->addr);
 		bw = WMI_PEER_CHWIDTH_20MHZ;
 		break;
 	}
