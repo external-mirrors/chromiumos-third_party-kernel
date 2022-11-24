@@ -27,12 +27,12 @@
 #include <uapi/linux/cam.h>
 
 /**
- * cam_pipeline_active() - Check whether the execution pipeline is active
+ * cam_pipeline_is_active() - Check whether the execution pipeline is active
  * @pipeline: pointer to CAM pipeline
  *
  * Return: true if the pipeline is active, or false otherwise.
  */
-static bool cam_pipeline_active(struct cam_pipeline *pipeline)
+static bool cam_pipeline_is_active(struct cam_pipeline *pipeline)
 {
 	if (test_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state))
 		return false;
@@ -260,7 +260,7 @@ static void cam_op_enqueue(struct cam_obj_op *op)
 	list_add_tail(&op->io_queue_entry, &pipeline->io_queue);
 	spin_unlock_irqrestore(&pipeline->io_queue_lock, flags);
 
-	if (cam_pipeline_active(pipeline))
+	if (cam_pipeline_is_active(pipeline))
 		wake_up_process(pipeline->io_thread);
 }
 
@@ -785,7 +785,7 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 	struct cam_obj_op *op;
 	int ret;
 
-	if (!cam_pipeline_active(pipeline))
+	if (!cam_pipeline_is_active(pipeline))
 		return -EINVAL;
 
 	op = cam_op_lookup(&pipeline->ns, req->id);
@@ -1213,7 +1213,7 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 	execute = false;
 
 	/* Check pipeline status as late as possible */
-	if (!cam_pipeline_active(pipeline))
+	if (!cam_pipeline_is_active(pipeline))
 		goto error;
 
 	/*
