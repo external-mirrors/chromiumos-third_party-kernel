@@ -714,10 +714,9 @@ static int mtk_read_temp(struct thermal_zone_device *tz, int *temperature)
 	return 0;
 }
 
-static int mtk_read_sensor_temp(void *data, int *temperature)
+static int mtk_read_sensor_temp(struct thermal_zone_device *tz, int *temperature)
 {
-	struct mtk_thermal_zone *tz = data;
-	struct mtk_thermal *mt = tz->mt;
+	struct mtk_thermal *mt = tz->devdata;
 	const struct mtk_thermal_data *conf = mt->conf;
 	int id = tz->id - 1;
 	int temp = INT_MIN;
@@ -1172,7 +1171,7 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 		tz->mt = mt;
 		tz->id = i;
 
-		tzdev = devm_thermal_zone_of_sensor_register(&pdev->dev, i,
+		tzdev = devm_thermal_of_zone_register(&pdev->dev, i,
 				tz, (i == 0) ?
 				&mtk_thermal_ops : &mtk_thermal_sensor_ops);
 
