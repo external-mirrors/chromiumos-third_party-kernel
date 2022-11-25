@@ -270,8 +270,8 @@ int tpg_set_stream(struct v4l2_subdev *sd, int enable)
 	struct ipu_isys_tpg *tpg = to_ipu_isys_tpg(sd);
 	__u32 code = tpg->asd.ffmt[TPG_PAD_SOURCE].code;
 	unsigned int bpp = ipu_isys_mbus_code_to_bpp(code);
-	struct ipu_isys_pipeline *ip =
-			to_ipu_isys_pipeline(sd->entity.pipe);
+	struct media_pipeline *mp = media_entity_pipeline(&sd->entity);
+	struct ipu_isys_pipeline *ip = to_ipu_isys_pipeline(mp);
 
 	/*
 	 * MIPI_GEN block is CSI2 FB. Need to enable/disable TPG selection
