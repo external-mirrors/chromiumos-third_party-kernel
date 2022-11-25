@@ -82,6 +82,12 @@ struct hdmi_codec_ops {
 		       struct hdmi_codec_params *hparms);
 
 	/*
+	 * PCM trigger callback.
+	 * Optional
+	 */
+	int (*trigger)(struct device *dev, int event);
+
+	/*
 	 * Shuts down the audio stream.
 	 * Mandatory
 	 */
