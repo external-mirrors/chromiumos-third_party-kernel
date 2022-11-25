@@ -1,0 +1,160 @@
+From bcca4ffc931fa4aa35894b7faaf2a1884edb853e Mon Sep 17 00:00:00 2001
+From: Stephen Boyd <swboyd@chromium.org>
+Date: Tue, 25 Oct 2022 17:36:41 -0700
+Subject: [PATCH] BACKPORT: FROMGIT: dt-bindings: cros-ec: Add ChromeOS
+ fingerprint binding
+
+Add a binding to describe the fingerprint processor found on Chromebooks
+with a fingerprint sensor. Previously we've been describing this with
+the google,cros-ec-spi binding but it lacks gpio and regulator control
+used during firmware flashing.
+
+Cc: Rob Herring <robh+dt@kernel.org>
+Cc: Krzysztof Kozlowski <krzysztof.kozlowski+dt@linaro.org>
+Cc: <devicetree@vger.kernel.org>
+Cc: <chrome-platform@lists.linux.dev>
+Cc: Guenter Roeck <groeck@chromium.org>
+Cc: Douglas Anderson <dianders@chromium.org>
+Cc: Craig Hesling <hesling@chromium.org>
+Cc: Tom Hughes <tomhughes@chromium.org>
+Cc: Alexandru M Stan <amstan@chromium.org>
+Cc: Tzung-Bi Shih <tzungbi@kernel.org>
+Cc: Matthias Kaehlcke <mka@chromium.org>
+Cc: Benson Leung <bleung@chromium.org>
+Cc: Lee Jones <lee.jones@linaro.org>
+Signed-off-by: Stephen Boyd <swboyd@chromium.org>
+Reviewed-by: Rob Herring <robh@kernel.org>
+Signed-off-by: Tzung-Bi Shih <tzungbi@kernel.org>
+Link: https://lore.kernel.org/r/20221026003641.2688765-3-swboyd@chromium.org
+
+(cherry picked from commit e068bc0b01cfcc0169645effc22b9f0dea0e97ed
+ https://git.kernel.org/pub/scm/linux/kernel/git/chrome-platform/linux.git for-next)
+
+Conflicts:
+   Documentation/devicetree/bindings/mfd/google,cros-ec.yaml
+
+Commit dfeda4ae0a64 ("FROMLIST: dt-bindings: mfd: Add DT compatible
+string "google,cros_ec_uart"") isn't upstream. We have a conflict
+because the example is added at the end.
+
+BUG=b:179533783
+TEST=emerge-herobrine chromeos-kernel-5_15
+
+Change-Id: Ida7b2eb2a5bdeb41724898bc4f55ae0ed1efa315
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3531241
+Tested-by: Stephen Boyd <swboyd@chromium.org>
+Reviewed-by: Douglas Anderson <dianders@chromium.org>
+Commit-Queue: Stephen Boyd <swboyd@chromium.org>
+
+[rebase61(tzungbi):
+    Fix context conflicts due to "FROMGIT: dt-bindings: cros-ec: Reorganize
+    and enforce property availability".
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    cb08378a2cac7e147fc96b3965363373c08118ed
+
+ .../bindings/mfd/google,cros-ec.yaml          | 66 +++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/mfd/google,cros-ec.yaml b/Documentation/devicetree/bindings/mfd/google,cros-ec.yaml
+index 4dc563209c9a..2e66dafe4b94 100644
+--- a/Documentation/devicetree/bindings/mfd/google,cros-ec.yaml
++++ b/Documentation/devicetree/bindings/mfd/google,cros-ec.yaml
+@@ -25,6 +25,10 @@ properties:
+       - description:
+           For implementations of the EC connected through SPI.
+         const: google,cros-ec-spi
++          For implementations of the FPMCU is connected through SPI.
++        items:
++          - const: google,cros-ec-fp
++          - const: google,cros-ec-spi
+       - description:
+           For implementations of the EC connected through RPMSG.
+         const: google,cros-ec-rpmsg
+@@ -70,6 +74,15 @@ properties:
+   interrupts:
+     maxItems: 1
+ 
++  reset-gpios:
++    maxItems: 1
++
++  boot0-gpios:
++    maxItems: 1
++    description: Assert for bootloader mode.
++
++  vdd-supply: true
++
+   wakeup-source:
+     description: Button can wake-up the system.
+ 
+@@ -180,6 +193,41 @@ allOf:
+         - reg
+         - interrupts
+ 
++  - if:
++      properties:
++        compatible:
++          contains:
++            const: google,cros-ec-fp
++    then:
++      properties:
++        '#address-cells': false
++        '#size-cells': false
++        typec: false
++        ec-pwm: false
++        kbd-led-backlight: false
++        keyboard-controller: false
++        proximity: false
++        codecs: false
++        cbas: false
++
++      patternProperties:
++        "^i2c-tunnel[0-9]*$": false
++        "^regulator@[0-9]+$": false
++        "^extcon[0-9]*$": false
++
++      # Using additionalProperties: false here and
++      # listing true properties doesn't work
++
++      required:
++        - reset-gpios
++        - boot0-gpios
++        - vdd-supply
++    else:
++      properties:
++        reset-gpios: false
++        boot0-gpios: false
++        vdd-supply: false
++
+ additionalProperties: false
+ 
+ examples:
+@@ -243,4 +291,22 @@ examples:
+             compatible = "google,cros-ec-uart";
+         };
+     };
++
++  # Example for FPMCU
++  - |
++    spi0 {
++      #address-cells = <0x1>;
++      #size-cells = <0x0>;
++
++      ec@0 {
++        compatible = "google,cros-ec-fp", "google,cros-ec-spi";
++        reg = <0x0>;
++        interrupt-parent = <&gpio_controller>;
++        interrupts = <4 IRQ_TYPE_LEVEL_LOW>;
++        spi-max-frequency = <3000000>;
++        reset-gpios = <&gpio_controller 5 GPIO_ACTIVE_LOW>;
++        boot0-gpios = <&gpio_controller 10 GPIO_ACTIVE_HIGH>;
++        vdd-supply = <&pp3300_fp_mcu>;
++      };
++    };
+ ...
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

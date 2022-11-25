@@ -1,0 +1,126 @@
+From 537cbad2661ce9af07a3abf2e2f1b9f9b3cec0c1 Mon Sep 17 00:00:00 2001
+From: V sujith kumar Reddy <Vsujithkumar.Reddy@amd.com>
+Date: Wed, 17 Aug 2022 16:39:20 +0530
+Subject: [PATCH] CHROMIUM: ASoC: max98357a: Add mixer control to mute/unmute
+ speaker
+
+Add "Playback Switch" mixer control to mute or unmute speaker
+playback from ucm conf depend on use cases.
+
+Will Revert this patch once we finish the bug
+A long-term solution to fix a speaker issue on SOF path(b:211725621).
+
+BUG=b:241888982
+TEST= SOF speaker audio on Skyrim board
+
+Signed-off-by: V sujith kumar Reddy <vsujithkumar.reddy@amd.corp-partner.google.com>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3833757
+Reviewed-by: Yu-Hsuan Hsu <yuhsuan@chromium.org>
+Tested-by: Yu-Hsuan Hsu <yuhsuan@chromium.org>
+Commit-Queue: Yu-Hsuan Hsu <yuhsuan@chromium.org>
+Change-Id: I34f48a0686ddd0e06a0bdd86eab7082099d74848
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3853316
+Commit-Queue: Baili Deng <bailideng@google.com>
+Reviewed-by: Baili Deng <bailideng@google.com>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: ASoC: max98357a: Add mixer control to mute/unmute speaker
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    a6cc258d9503de86226ebc15a79af53d8c7ecd0e
+    34fd0248a02c2fe550a2df06422655ac401aa683
+
+ sound/soc/codecs/max98357a.c | 52 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
+
+diff --git a/sound/soc/codecs/max98357a.c b/sound/soc/codecs/max98357a.c
+index 2a2b286f1747..408d832f5850 100644
+--- a/sound/soc/codecs/max98357a.c
++++ b/sound/soc/codecs/max98357a.c
+@@ -19,6 +19,7 @@
+ #include <sound/soc.h>
+ #include <sound/soc-dai.h>
+ #include <sound/soc-dapm.h>
++#include <linux/dmi.h>
+ 
+ struct max98357a_priv {
+ 	struct gpio_desc *sdmode;
+@@ -73,6 +74,38 @@ static int max98357a_sdmode_event(struct snd_soc_dapm_widget *w,
+ 	return 0;
+ }
+ 
++static int speaker_mute_get(struct snd_kcontrol *kcontrol,
++			    struct snd_ctl_elem_value *ucontrol)
++{
++	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
++	struct max98357a_priv *max98357a = snd_soc_component_get_drvdata(component);
++
++	ucontrol->value.enumerated.item[0] = max98357a->sdmode_switch;
++
++	return 0;
++}
++
++static int speaker_mute_put(struct snd_kcontrol *kcontrol,
++			    struct snd_ctl_elem_value *ucontrol)
++{
++	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
++	struct max98357a_priv *max98357a = snd_soc_component_get_drvdata(component);
++	int mode = ucontrol->value.enumerated.item[0];
++
++	max98357a->sdmode_switch = mode;
++	gpiod_set_value_cansleep(max98357a->sdmode, mode);
++	dev_dbg(component->dev, "set sdmode to %d", mode);
++
++	return 0;
++}
++
++/* sdmode gpio can be enabled/disabled by mixer control with out the use of trigger function */
++
++static const struct snd_kcontrol_new max98357a_snd_controls[] = {
++	SOC_SINGLE_BOOL_EXT("Playback Switch", 0,
++			    speaker_mute_get, speaker_mute_put),
++};
++
+ static const struct snd_soc_dapm_widget max98357a_dapm_widgets[] = {
+ 	SND_SOC_DAPM_OUTPUT("Speaker"),
+ 	SND_SOC_DAPM_OUT_DRV_E("SD_MODE", SND_SOC_NOPM, 0, 0, NULL, 0,
+@@ -85,6 +118,18 @@ static const struct snd_soc_dapm_route max98357a_dapm_routes[] = {
+ 	{"Speaker", NULL, "SD_MODE"},
+ };
+ 
++static const struct snd_soc_component_driver max98357quirk_component_driver = {
++	.controls		= max98357a_snd_controls,
++	.num_controls		= ARRAY_SIZE(max98357a_snd_controls),
++	.dapm_widgets		= max98357a_dapm_widgets,
++	.num_dapm_widgets	= ARRAY_SIZE(max98357a_dapm_widgets),
++	.dapm_routes		= max98357a_dapm_routes,
++	.num_dapm_routes	= ARRAY_SIZE(max98357a_dapm_routes),
++	.idle_bias_on		= 1,
++	.use_pmdown_time	= 1,
++	.endianness		= 1,
++};
++
+ static const struct snd_soc_component_driver max98357a_component_driver = {
+ 	.dapm_widgets		= max98357a_dapm_widgets,
+ 	.num_dapm_widgets	= ARRAY_SIZE(max98357a_dapm_widgets),
+@@ -146,6 +191,13 @@ static int max98357a_platform_probe(struct platform_device *pdev)
+ 
+ 	dev_set_drvdata(&pdev->dev, max98357a);
+ 
++	if (dmi_match(DMI_BOARD_NAME, "Skyrim") ||
++			dmi_match(DMI_BOARD_NAME, "Nipperkin")) {
++		return devm_snd_soc_register_component(&pdev->dev,
++				&max98357quirk_component_driver,
++				&max98357a_dai_driver, 1);
++	}
++
+ 	return devm_snd_soc_register_component(&pdev->dev,
+ 			&max98357a_component_driver,
+ 			&max98357a_dai_driver, 1);
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

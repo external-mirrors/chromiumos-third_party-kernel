@@ -1,0 +1,81 @@
+From 786f308ca222f30d152626d47dcd2ec9763131c7 Mon Sep 17 00:00:00 2001
+From: V sujith kumar Reddy <Vsujithkumar.Reddy@amd.com>
+Date: Fri, 15 Jul 2022 14:52:50 +0530
+Subject: [PATCH] CHROMIUM: ASOC: SoF: amd: Set MCLK from acp sof driver.
+
+Configure I2S MCLK to 196.6MHz from acp sof driver.
+
+BUG=b:238970923
+TEST=SOF audio on Skyrim
+
+Cq-Depend: chromium:3782255
+Change-Id: Iad0841ee4e03f209e513b354bb83194c15146aac
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3760349
+Reviewed-by: Yu-Hsuan Hsu <yuhsuan@chromium.org>
+Commit-Queue: Yu-Hsuan Hsu <yuhsuan@chromium.org>
+Tested-by: Yu-Hsuan Hsu <yuhsuan@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: ASOC: SoF: amd: Set MCLK from acp sof driver
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    ebf451e494301a84fa0be409baddbc7a582aba7d
+    7672580023a411df79a06b9461df2eb5b486ff4d
+
+ sound/soc/sof/amd/acp.c | 22 +++++++++++++++++++++-
+ 1 file changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/sound/soc/sof/amd/acp.c b/sound/soc/sof/amd/acp.c
+index 36966643e36a..e372f3ed2ae0 100644
+--- a/sound/soc/sof/amd/acp.c
++++ b/sound/soc/sof/amd/acp.c
+@@ -20,6 +20,10 @@
+ #include "acp.h"
+ #include "acp-dsp-offset.h"
+ 
++#define MP1_C2PMSG_69 0x3B10A14
++#define MP1_C2PMSG_85 0x3B10A54
++#define MP1_C2PMSG_93 0x3B10A74
++
+ static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
+ {
+ 	pci_write_config_dword(dev, 0x60, smn_addr);
+@@ -36,6 +40,22 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
+ 	return 0;
+ }
+ 
++static void master_clock_generate(struct acp_dev_data *adata)
++{
++	int data;
++	smn_write(adata->smn_dev, MP1_C2PMSG_93,0);
++	smn_write(adata->smn_dev, MP1_C2PMSG_85, 0xC4);
++	smn_write(adata->smn_dev, MP1_C2PMSG_69, 0x4);
++
++	while(1) {
++		smn_read(adata->smn_dev, MP1_C2PMSG_93, &data);
++		if (data == 1){
++			return;
++		}else
++			continue;
++    }
++}
++
+ static void init_dma_descriptor(struct acp_dev_data *adata)
+ {
+ 	struct snd_sof_dev *sdev = adata->dev;
+@@ -528,7 +548,7 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
+ 	sdev->debug_box.size = BOX_SIZE_1024;
+ 
+ 	acp_memory_init(sdev);
+-
++	master_clock_generate(adata);
+ 	acp_dsp_stream_init(sdev);
+ 
+ 	return 0;
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

@@ -1,0 +1,333 @@
+From 6a468115cb2233b34ca15d03958feb763067d908 Mon Sep 17 00:00:00 2001
+From: Manikanta Pubbisetty <quic_mpubbise@quicinc.com>
+Date: Wed, 20 Jul 2022 19:19:58 +0530
+Subject: [PATCH] FROMLIST: ath11k: Enable low power mode when WLAN is not
+ active
+
+Currently, WLAN chip is powered once during driver probe and is kept
+ON (powered) always even when WLAN is not active; keeping the chip
+powered ON all the time will consume extra power which is not
+desirable for a battery operated device. Same is the case with non-WoW
+suspend, chip will never be put into low power mode when the system is
+suspended resulting in higher battery drain.
+
+As per the recommendation, sending a PDEV suspend WMI command followed
+by a QMI MODE OFF command will cease all WLAN activity and put the device
+in low power mode. When WLAN interfaces are brought up, sending a QMI
+MISSION MODE command would be sufficient to bring the chip out of low
+power. This is a better approach than doing hif_power_down()/hif_power_up()
+for every WiFi ON/OFF sequence since the turnaround time for entry/exit of
+low power mode is much less. Overhead is just the time taken for sending
+QMI MODE OFF & QMI MISSION MODE commands instead of going through the
+entire chip boot & QMI init sequence.
+
+Change is applicable for all ath11k devices and should not cause any
+negative impact.
+
+Tested-on: WCN6750 hw1.0 AHB WLAN.MSL.1.0.1-00887-QCAMSLSWPLZ-1
+
+Signed-off-by: Manikanta Pubbisetty <quic_mpubbise@quicinc.com>
+(am from https://patchwork.kernel.org/patch/12924007/)
+(also found at https://lore.kernel.org/r/20220720134959.15688-4-quic_mpubbise@quicinc.com)
+
+BUG=b:234659420
+TEST=Suspend/resume works on hoglin (without NVMe)
+
+Signed-off-by: Matthias Kaehlcke <mka@chromium.org>
+Change-Id: Ia7295b4e6f74d9da58fb68d4edf6479dc05743f8
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3842740
+Reviewed-by: Sean Paul <sean@poorly.run>
+Reviewed-by: Douglas Anderson <dianders@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: FROMLIST: ath11k: Enable low power mode when WLAN is not active
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    4267d86d1d3b640b9f8acd3b31698de041ff8c55
+    26cd483a6a6fe79436f7e0f7287ac8410bc94f8a
+
+ drivers/net/wireless/ath/ath11k/core.c | 149 ++++++++++++++++++++++---
+ drivers/net/wireless/ath/ath11k/core.h |   2 +
+ drivers/net/wireless/ath/ath11k/mac.c  |   4 +
+ 3 files changed, 138 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/ath11k/core.c b/drivers/net/wireless/ath/ath11k/core.c
+index 314a585fb5fc..6bebf1477be3 100644
+--- a/drivers/net/wireless/ath/ath11k/core.c
++++ b/drivers/net/wireless/ath/ath11k/core.c
+@@ -1293,7 +1293,6 @@ static int ath11k_core_soc_create(struct ath11k_base *ab)
+ static void ath11k_core_soc_destroy(struct ath11k_base *ab)
+ {
+ 	ath11k_debugfs_soc_destroy(ab);
+-	ath11k_dp_free(ab);
+ 	ath11k_reg_free(ab);
+ 	ath11k_qmi_deinit_service(ab);
+ }
+@@ -1349,11 +1348,7 @@ static int ath11k_core_pdev_create(struct ath11k_base *ab)
+ 
+ static void ath11k_core_pdev_destroy(struct ath11k_base *ab)
+ {
+-	ath11k_spectral_deinit(ab);
+-	ath11k_thermal_unregister(ab);
+ 	ath11k_mac_unregister(ab);
+-	ath11k_hif_irq_disable(ab);
+-	ath11k_dp_pdev_free(ab);
+ 	ath11k_debugfs_pdev_destroy(ab);
+ }
+ 
+@@ -1485,7 +1480,7 @@ static int ath11k_core_start_firmware(struct ath11k_base *ab,
+ 	return ret;
+ }
+ 
+-int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
++static int ath11k_core_setup_device(struct ath11k_base *ab)
+ {
+ 	int ret;
+ 
+@@ -1518,17 +1513,44 @@ int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
+ 		break;
+ 	default:
+ 		ath11k_info(ab, "invalid crypto_mode: %d\n", ath11k_crypto_mode);
+-		return -EINVAL;
++		ret = -EINVAL;
++		goto err_dp_free;
+ 	}
+ 
+ 	if (ath11k_frame_mode == ATH11K_HW_TXRX_RAW)
+ 		set_bit(ATH11K_FLAG_RAW_MODE, &ab->dev_flags);
+ 
++	return 0;
++
++err_dp_free:
++	ath11k_dp_free(ab);
++err_firmware_stop:
++	ath11k_qmi_firmware_stop(ab);
++
++	return ret;
++}
++
++static void ath11k_core_free_device(struct ath11k_base *ab)
++{
++	ath11k_dp_free(ab);
++	ath11k_qmi_firmware_stop(ab);
++}
++
++int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
++{
++	int ret;
++
++	ret = ath11k_core_setup_device(ab);
++	if (ret) {
++		ath11k_err(ab, "failed to setup device: %d\n", ret);
++		return ret;
++	}
++
+ 	mutex_lock(&ab->core_lock);
+ 	ret = ath11k_core_start(ab);
+ 	if (ret) {
+ 		ath11k_err(ab, "failed to start core: %d\n", ret);
+-		goto err_dp_free;
++		goto err_core_free;
+ 	}
+ 
+ 	ret = ath11k_core_pdev_create(ab);
+@@ -1537,6 +1559,7 @@ int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
+ 		goto err_core_stop;
+ 	}
+ 	ath11k_hif_irq_enable(ab);
++	ath11k_core_stop_device(ab);
+ 	mutex_unlock(&ab->core_lock);
+ 
+ 	return 0;
+@@ -1544,11 +1567,9 @@ int ath11k_core_qmi_firmware_ready(struct ath11k_base *ab)
+ err_core_stop:
+ 	ath11k_core_stop(ab);
+ 	ath11k_mac_destroy(ab);
+-err_dp_free:
+-	ath11k_dp_free(ab);
++err_core_free:
+ 	mutex_unlock(&ab->core_lock);
+-err_firmware_stop:
+-	ath11k_qmi_firmware_stop(ab);
++	ath11k_core_free_device(ab);
+ 
+ 	return ret;
+ }
+@@ -1828,7 +1849,6 @@ void ath11k_core_deinit(struct ath11k_base *ab)
+ 	mutex_lock(&ab->core_lock);
+ 
+ 	ath11k_core_pdev_destroy(ab);
+-	ath11k_core_stop(ab);
+ 
+ 	mutex_unlock(&ab->core_lock);
+ 
+@@ -1896,35 +1916,130 @@ struct ath11k_base *ath11k_core_alloc(struct device *dev, size_t priv_size,
+ }
+ EXPORT_SYMBOL(ath11k_core_alloc);
+ 
++static int ath11k_core_suspend_target(struct ath11k_base *ab, u32 suspend_opt)
++{
++	struct ath11k *ar;
++	struct ath11k_pdev *pdev;
++	unsigned long time_left;
++	int ret;
++	int i;
++
++	for (i = 0; i < ab->num_radios; i++) {
++		pdev = &ab->pdevs[i];
++		ar = pdev->ar;
++
++		reinit_completion(&ab->htc_suspend);
++
++		ret = ath11k_wmi_pdev_suspend(ar, suspend_opt, pdev->pdev_id);
++		if (ret) {
++			ath11k_warn(ab, "could not suspend target (%d)\n", ret);
++			return ret;
++		}
++
++		time_left = wait_for_completion_timeout(&ab->htc_suspend, 3 * HZ);
++
++		if (!time_left) {
++			ath11k_warn(ab, "suspend timed out - target pause event never came\n");
++			return -ETIMEDOUT;
++		}
++	}
++
++	return 0;
++}
++
++void ath11k_core_stop_device(struct ath11k_base *ab)
++{
++	ath11k_core_suspend_target(ab, WMI_PDEV_SUSPEND_AND_DISABLE_INTR);
++	ath11k_hif_irq_disable(ab);
++	ath11k_hif_stop(ab);
++
++	if (!test_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags))
++		ath11k_qmi_firmware_stop(ab);
++
++	ath11k_wmi_detach(ab);
++	ath11k_dp_pdev_reo_cleanup(ab);
++	ath11k_spectral_deinit(ab);
++	ath11k_thermal_unregister(ab);
++	ath11k_dp_pdev_free(ab);
++	ath11k_dp_free(ab);
++}
++
++int ath11k_core_any_pdevs_on(struct ath11k_base *ab)
++{
++	struct ath11k_pdev *pdev;
++	struct ath11k *ar;
++	int i;
++
++	for (i = 0; i < ab->num_radios; i++) {
++		pdev = &ab->pdevs[i];
++		ar = pdev->ar;
++		if (!ar)
++			continue;
++
++		if (ar->state == ATH11K_STATE_ON)
++			return true;
++	}
++
++	return false;
++}
++
+ int ath11k_core_start_device(struct ath11k_base *ab)
+ {
+ 	int ret;
+ 
+-	if (!test_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags))
++	/* Initialize the hardware/firmware only for the first PDEV
++	 * or during hardware recovery.
++	 */
++	if (!test_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags) &&
++	    ath11k_core_any_pdevs_on(ab))
+ 		return 0;
+ 
++	mutex_lock(&ab->core_lock);
++
+ 	ath11k_hal_srng_deinit(ab);
+ 
+ 	ret = ath11k_hal_srng_init(ab);
+ 	if (ret) {
+ 		ath11k_err(ab, "failed to init srng: %d\n", ret);
+-		return ret;
++		goto err_unlock;
+ 	}
+ 
+ 	clear_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
+ 
+-	ret = ath11k_core_qmi_firmware_ready(ab);
++	ret = ath11k_core_setup_device(ab);
+ 	if (ret) {
+-		ath11k_err(ab, "failed to init core: %d\n", ret);
++		ath11k_err(ab, "failed to setup device: %d\n", ret);
+ 		goto err_hal_srng_deinit;
+ 	}
+ 
++	ret = ath11k_core_start(ab);
++	if (ret) {
++		ath11k_err(ab, "failed to start core: %d\n", ret);
++		goto err_core_free;
++	}
++
++	ret = ath11k_core_pdev_create(ab);
++	if (ret) {
++		ath11k_err(ab, "failed to create pdev core: %d\n", ret);
++		goto err_core_stop;
++	}
++	ath11k_hif_irq_enable(ab);
++
+ 	clear_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags);
+ 
++	mutex_unlock(&ab->core_lock);
++
+ 	return 0;
+ 
++err_core_stop:
++	ath11k_core_stop(ab);
++	ath11k_mac_destroy(ab);
++err_core_free:
++	ath11k_core_free_device(ab);
+ err_hal_srng_deinit:
+ 	ath11k_hal_srng_deinit(ab);
++err_unlock:
++	mutex_unlock(&ab->core_lock);
+ 	return ret;
+ }
+ 
+diff --git a/drivers/net/wireless/ath/ath11k/core.h b/drivers/net/wireless/ath/ath11k/core.h
+index 0d0ccff207b0..2be46f45951f 100644
+--- a/drivers/net/wireless/ath/ath11k/core.h
++++ b/drivers/net/wireless/ath/ath11k/core.h
+@@ -1153,6 +1153,8 @@ void ath11k_core_halt(struct ath11k *ar);
+ int ath11k_core_resume(struct ath11k_base *ab);
+ int ath11k_core_suspend(struct ath11k_base *ab);
+ int ath11k_core_start_device(struct ath11k_base *ab);
++void ath11k_core_stop_device(struct ath11k_base *ab);
++int ath11k_core_any_pdevs_on(struct ath11k_base *ab);
+ 
+ const struct firmware *ath11k_core_firmware_request(struct ath11k_base *ab,
+ 						    const char *filename);
+diff --git a/drivers/net/wireless/ath/ath11k/mac.c b/drivers/net/wireless/ath/ath11k/mac.c
+index 90ceda7a3c10..4148e05234f0 100644
+--- a/drivers/net/wireless/ath/ath11k/mac.c
++++ b/drivers/net/wireless/ath/ath11k/mac.c
+@@ -5890,6 +5890,10 @@ static void ath11k_mac_op_stop(struct ieee80211_hw *hw)
+ 	synchronize_rcu();
+ 
+ 	atomic_set(&ar->num_pending_mgmt_tx, 0);
++
++	/* If all PDEVs on the SoC are down, then power down the device */
++	if (!ath11k_core_any_pdevs_on(ar->ab))
++		ath11k_core_stop_device(ar->ab);
+ }
+ 
+ static void
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

@@ -1,0 +1,322 @@
+From 18ae23dbc6020a92e428c2028246700fa0423968 Mon Sep 17 00:00:00 2001
+From: Eizan Miyamoto <eizan@chromium.org>
+Date: Wed, 25 Aug 2021 16:33:20 +1000
+Subject: [PATCH] CHROMIUM: media: mtk-mdp: don't pm_run_time_get/put for
+ master comp in clock_on
+
+The original intent of commit 86698b9505bbc ("media: mtk-mdp: convert
+mtk_mdp_dev.comp array to list") was to create a list to track all the
+MDP components that needed to have their clocks enabled/disabled when
+calling mtk_mdp_comp_clock_on/off. However, there was a bug inside
+mtk_mdp_register_component where the args to a call to list_add were
+swapped. The result is that only one component was added to
+mtk_mdp_dev.comp_list because comp_list was instead being
+repeatedly added to the single element lists headed by each
+mtk_mdp_comp.
+
+The order of the args to list_add in mtk_mdp_register_component was
+fixed in https://patchwork.kernel.org/patch/11742895/ (Fix Null pointer
+dereference when calling list_add).
+
+Then, as a result of https://patchwork.kernel.org/patch/11530769/
+(mtk-mdp: use pm_runtime in MDP component driver) if all the components
+are added to the component list, the mdp "master" / rdma0 component
+ends up having pm_runtime_get_sync() called on it twice recursively:
+
+    rpm_resume+0x694/0x8f8
+    __pm_runtime_resume+0x7c/0xa0 ***NOTE***
+    mtk_mdp_comp_clock_on+0x48/0x104 [mtk_mdp]
+    mtk_mdp_pm_resume+0x2c/0x44 [mtk_mdp]
+    pm_generic_runtime_resume+0x34/0x48
+    __genpd_runtime_resume+0x6c/0x80
+    genpd_runtime_resume+0x104/0x1ac
+    __rpm_callback+0x120/0x238
+    rpm_callback+0x34/0x8c
+    rpm_resume+0x7a0/0x8f8
+    __pm_runtime_resume+0x7c/0xa0 ***NOTE***
+    mtk_mdp_m2m_start_streaming+0x2c/0x3c [mtk_mdp]
+
+(The calls to pm_runtime_get_sync are inlined and correspond to the
+calls to __pm_runtime_resume). It is not correct to have
+pm_runtime_get_sync called recursively and the second call will block
+indefinitely.
+
+As a result of all that, this change factors mtk_mdp_comp_clock_on/off
+into mtk_mdp_comp_power_on/off and moves the calls to
+pm_runtime_get/put into the power_on/off functions.
+
+This change then special-cases the master/rdma0 MDP component and does
+these things:
+- the master/rdma0 component is not added to mtk_mdp_dev.comp_list
+- the master/rdma0 component has its clocks (*but not power*) toggled
+  by mtk_mpd_comp_clock_on/off inside mtk_mdp_clock_on/off.
+- the other components have their clocks *and* power toggled with
+  mtk_mdp_comp_power_on/off.
+
+This change introduces the assumption that mtk_mdp_pm_resume will
+always be called though a callback from pm_runtime_get_sync made on the
+master / rdma0 component.
+
+BUG=b:229583743
+TEST=Open YouTube and check chrome://media-internals
+
+Signed-off-by: Eizan Miyamoto <eizan@chromium.org>
+Reviewed-by: Houlong Wei <houlong.wei@mediatek.com>
+Change-Id: I73ee38d48b9a70d2581c6a8f2c0cb09ef780ab2f
+Signed-off-by: Pin-Yen Lin <treapking@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3583711
+Reviewed-by: Hsin-Yi Wang <hsinyi@chromium.org>
+Commit-Queue: Hsin-Yi Wang <hsinyi@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: mtk-mdp: use pm_runtime in MDP component driver
+	FIXUP: CHROMIUM: media: mtk-mdp: don't pm_run_time_get/put for master comp in clock_on
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    cb01b92725a2099be09ca5e2bc55be6087eb60d8
+    96f13437ce83bca11739c147130398739a2ec9c4
+    cda2d5bc4ecd4298b5adde254a0797201cc27580
+
+ .../platform/mediatek/mdp/mtk_mdp_comp.c      | 61 +++++++++++++----
+ .../platform/mediatek/mdp/mtk_mdp_comp.h      |  5 +-
+ .../platform/mediatek/mdp/mtk_mdp_core.c      | 65 +++++++++++++++----
+ 3 files changed, 106 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.c b/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.c
+index a6377c11b24f..932a228b8cb2 100644
+--- a/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.c
++++ b/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.c
+@@ -51,30 +51,71 @@ static const struct of_device_id mtk_mdp_comp_driver_dt_match[] = {
+ };
+ MODULE_DEVICE_TABLE(of, mtk_mdp_comp_driver_dt_match);
+ 
+-void mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
++int mtk_mdp_comp_power_on(struct mtk_mdp_comp *comp)
++
+ {
+-	int i, err, status;
++	int err;
+ 
+ 	err = pm_runtime_get_sync(comp->dev);
+ 	if (err < 0) {
+-		dev_err(comp->dev,
+-			"failed to runtime get, err %d.\n",
+-			err);
+-		return;
++		dev_err(comp->dev, "failed to runtime get, err %d.\n", err);
++		return err;
++	}
++
++	err = mtk_mdp_comp_clock_on(comp);
++	if (err) {
++		dev_err(comp->dev, "failed to turn on clock. err=%d", err);
++		goto err_mtk_mdp_comp_clock_on;
+ 	}
+ 
++	return 0;
++
++err_mtk_mdp_comp_clock_on:
++	err = pm_runtime_put_sync(comp->dev);
++	if (err)
++		dev_err(comp->dev, "failed to runtime put in cleanup. err=%d", err);
++
++	return err;
++}
++
++int mtk_mdp_comp_power_off(struct mtk_mdp_comp *comp)
++{
++	int status, err;
++
++	mtk_mdp_comp_clock_off(comp);
++
++	err = pm_runtime_put_sync(comp->dev);
++	if (err < 0) {
++		dev_err(comp->dev, "failed to runtime put, err %d.\n", err);
++		status = err;
++		goto err_pm_runtime_put_sync;
++	}
++
++	return 0;
++
++err_pm_runtime_put_sync:
++	err = mtk_mdp_comp_clock_on(comp);
++	if (err)
++		dev_err(comp->dev, "failed to turn on clock in cleanup. err=%d", err);
++
++	return status;
++}
++
++int mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
++{
++	int i, err;
++
+ 	for (i = 0; i < ARRAY_SIZE(comp->clk); i++) {
+ 		if (IS_ERR(comp->clk[i]))
+ 			continue;
+ 		err = clk_prepare_enable(comp->clk[i]);
+ 		if (err) {
+-			status = err;
+ 			dev_err(comp->dev, "failed to enable clock, err %d. i:%d\n", err, i);
+ 			goto err_clk_prepare_enable;
+ 		}
+ 	}
+ 
+-	return;
++	return 0;
+ 
+ err_clk_prepare_enable:
+ 	for (--i; i >= 0; i--) {
+@@ -85,7 +126,7 @@ void mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp)
+ 
+ 	pm_runtime_put_sync(comp->dev);
+ 
+-	return;
++	return err;
+ }
+ 
+ void mtk_mdp_comp_clock_off(struct mtk_mdp_comp *comp)
+@@ -97,8 +138,6 @@ void mtk_mdp_comp_clock_off(struct mtk_mdp_comp *comp)
+ 			continue;
+ 		clk_disable_unprepare(comp->clk[i]);
+ 	}
+-	
+-	pm_runtime_put_sync(comp->dev);
+ }
+ 
+ static int mtk_mdp_comp_bind(struct device *dev, struct device *master, void *data)
+diff --git a/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.h b/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.h
+index 355e226d74fe..e37d955cc9df 100644
+--- a/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.h
++++ b/drivers/media/platform/mediatek/mdp/mtk_mdp_comp.h
+@@ -21,7 +21,10 @@ struct mtk_mdp_comp {
+ 
+ int mtk_mdp_comp_init(struct mtk_mdp_comp *comp, struct device *dev);
+ 
+-void mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp);
++int mtk_mdp_comp_clock_on(struct mtk_mdp_comp *comp);
++int mtk_mdp_comp_power_on(struct mtk_mdp_comp *comp);
++int mtk_mdp_comp_power_off(struct mtk_mdp_comp *comp);
++
+ void mtk_mdp_comp_clock_off(struct mtk_mdp_comp *comp);
+ 
+ extern struct platform_driver mtk_mdp_component_driver;
+diff --git a/drivers/media/platform/mediatek/mdp/mtk_mdp_core.c b/drivers/media/platform/mediatek/mdp/mtk_mdp_core.c
+index 0ff4c2e9e0b3..a83b73d9ab0a 100644
+--- a/drivers/media/platform/mediatek/mdp/mtk_mdp_core.c
++++ b/drivers/media/platform/mediatek/mdp/mtk_mdp_core.c
+@@ -51,20 +51,66 @@ MODULE_DEVICE_TABLE(of, mtk_mdp_of_ids);
+ 
+ static void mtk_mdp_clock_on(struct mtk_mdp_dev *mdp)
+ {
+-	struct device *dev = &mdp->pdev->dev;
+ 	struct mtk_mdp_comp *comp_node;
+-	mtk_mdp_comp_clock_off(comp_node);
++	int err;
+ 
+ 	list_for_each_entry(comp_node, &mdp->comp_list, node)
+ 		mtk_mdp_comp_clock_on(comp_node);
++
++	/*
++	 * The master / rdma0 component will have pm_runtime_get_sync called
++	 * on it through mtk_mdp_m2m_start_streaming, making it unnecessary to
++	 * have mtk_mdp_comp_power_on called on it.
++	 */
++	 mtk_mdp_comp_clock_on(&mdp->comp_self);
++
++	list_for_each_entry(comp_node, &mdp->comp_list, node) {
++		err = mtk_mdp_comp_power_on(comp_node);
++		if (err)
++			goto err_mtk_mdp_comp_power_on;
++	}
++
++	return;
++
++err_mtk_mdp_comp_power_on:
++	list_for_each_entry_continue_reverse(comp_node, &mdp->comp_list, node) {
++		err = mtk_mdp_comp_power_off(comp_node);
++		if (err)
++			dev_err(&mdp->pdev->dev, "failed to power off after error. err=%d", err);
++	}
++	return;
+ }
+ 
+-static void mtk_mdp_clock_off(struct mtk_mdp_dev *mdp)
++static int mtk_mdp_clock_off(struct mtk_mdp_dev *mdp)
+ {
+ 	struct mtk_mdp_comp *comp_node;
++	int status, err;
+ 
+-	list_for_each_entry(comp_node, &mdp->comp_list, node)
+-		mtk_mdp_comp_clock_off(comp_node);
++	list_for_each_entry(comp_node, &mdp->comp_list, node) {
++		err = mtk_mdp_comp_power_off(comp_node);
++		if (err) {
++			status = err;
++			goto err_mtk_mdp_comp_power_off;
++		}
++	}
++
++	/*
++	 * The master / rdma0 component will have pm_runtime_put called
++	 * on it through mtk_mdp_m2m_stop_streaming, making it unnecessary to
++	 * have mtk_mdp_comp_power_off called on it.
++	 */
++	mtk_mdp_comp_clock_off(&mdp->comp_self);
++
++	return 0;
++
++err_mtk_mdp_comp_power_off:
++	list_for_each_entry_continue_reverse(comp_node, &mdp->comp_list, node) {
++		err = mtk_mdp_comp_power_on(comp_node);
++		if (err)
++			dev_err(&mdp->pdev->dev, "failed to power on after error. err=%d", err);
++	}
++
++	return status;
+ }
+ 
+ static void mtk_mdp_wdt_worker(struct work_struct *work)
+@@ -103,8 +149,6 @@ static int mtk_mdp_master_bind(struct device *dev)
+ 	int status;
+ 	struct mtk_mdp_dev *mdp = dev_get_drvdata(dev);
+ 
+-	mtk_mdp_register_component(mdp, &mdp->comp_self);
+-
+ 	status = component_bind_all(dev, mdp);
+ 	if (status) {
+ 		dev_err(dev, "Failed to bind all components: %d\n", status);
+@@ -125,8 +169,6 @@ static int mtk_mdp_master_bind(struct device *dev)
+ 	component_unbind_all(dev, mdp);
+ 
+ err_component_bind_all:
+-	mtk_mdp_unregister_component(mdp, &mdp->comp_self);
+-
+ 	return status;
+ }
+ 
+@@ -137,7 +179,6 @@ static void mtk_mdp_master_unbind(struct device *dev)
+ 	pm_runtime_disable(dev);
+ 	mtk_mdp_unregister_m2m_device(mdp);
+ 	component_unbind_all(dev, mdp);
+-	mtk_mdp_unregister_component(mdp, &mdp->comp_self);
+ }
+ 
+ static const struct component_master_ops mtk_mdp_com_ops = {
+@@ -320,9 +361,7 @@ static int __maybe_unused mtk_mdp_pm_suspend(struct device *dev)
+ {
+ 	struct mtk_mdp_dev *mdp = dev_get_drvdata(dev);
+ 
+-	mtk_mdp_clock_off(mdp);
+-
+-	return 0;
++	return mtk_mdp_clock_off(mdp);
+ }
+ 
+ static int __maybe_unused mtk_mdp_pm_resume(struct device *dev)
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

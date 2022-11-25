@@ -1,0 +1,4 @@
+1437b8dfed8ea2d7ab31c1afc7db0afada374193 FROMLIST: fuse: Definitions and ioctl for passthrough
+0bdba25c4da489383c0776f2feb4450fd9fa1ba5 REVISIT: ANDROID: power: wakeup_reason: add an API to log wakeup reasons
+e4de1a59fd448f0a64422a6e1df734c1ef5fa198 NOUPSTREAM: ANDROID: net: xfrm: make PF_KEY SHA256 use RFC-compliant truncation.
+564076857a052c83d3bab60675704acdcdba8111 FIXUP: FROMLIST: fuse: Definitions and ioctl for passthrough

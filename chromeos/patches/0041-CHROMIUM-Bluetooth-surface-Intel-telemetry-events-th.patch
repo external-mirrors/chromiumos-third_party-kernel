@@ -1,0 +1,170 @@
+From a24051860c934b17268e8f936c1192b0a132bc66 Mon Sep 17 00:00:00 2001
+From: Joseph Hwang <josephsih@chromium.org>
+Date: Fri, 12 Nov 2021 23:21:46 +0800
+Subject: [PATCH] CHROMIUM: Bluetooth: surface Intel telemetry events through
+ mgmt
+
+When receiving a HCI vendor event, the kernel checks if it is an
+Intel telemetry event. If yes, the event is sent to bluez user
+space through the mgmt socket.
+
+BUG=b:203035611,b:208922349,b:242124116
+TEST=Run an audio a2dp or hfp test and check logs.
+
+Signed-off-by: Joseph Hwang <josephsih@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3299654
+Reviewed-by: Archie Pusaka <apusaka@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3554314
+Change-Id: I63681490281b2392aa1ac05dff91a126394ab649
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3823821
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: Bluetooth: surface Intel telemetry events through mgmt
+	FIXUP: CHROMIUM: Bluetooth: surface Intel telemetry events through mgmt
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    f3049ca41c9081822f98622c1788adcf02f01ed9
+    785205fd7270d3c1cda76f64506642eb89faf689
+    208699c82c572cb890ffa5387652e44a02629030
+
+ drivers/bluetooth/btintel.c      | 43 +++++++++++++++++++++++++++++++-
+ drivers/bluetooth/btintel.h      | 12 +++++++++
+ include/net/bluetooth/hci_core.h |  2 ++
+ net/bluetooth/hci_event.c        | 12 ++++++---
+ 4 files changed, 65 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/bluetooth/btintel.c b/drivers/bluetooth/btintel.c
+index a657e9a3e96a..d0675ca31ee2 100644
+--- a/drivers/bluetooth/btintel.c
++++ b/drivers/bluetooth/btintel.c
+@@ -1392,6 +1392,45 @@ int btintel_set_quality_report(struct hci_dev *hdev, bool enable)
+ }
+ EXPORT_SYMBOL_GPL(btintel_set_quality_report);
+ 
++#define INTEL_PREFIX		0x8087
++#define TELEMETRY_CODE		0x03
++
++struct intel_prefix_evt_data {
++	__le16 vendor_prefix;
++	__u8 code;
++	__u8 data[0];   /* a number of struct intel_tlv subevents */
++} __packed;
++
++bool btintel_is_quality_report_evt(struct sk_buff *skb)
++{
++	struct intel_prefix_evt_data *ev;
++	u16 vendor_prefix;
++
++	if (skb->len < sizeof(struct intel_prefix_evt_data))
++		return false;
++
++	ev = (struct intel_prefix_evt_data *)skb->data;
++	vendor_prefix = __le16_to_cpu(ev->vendor_prefix);
++
++	return vendor_prefix == INTEL_PREFIX && ev->code == TELEMETRY_CODE;
++}
++EXPORT_SYMBOL_GPL(btintel_is_quality_report_evt);
++
++bool btintel_pull_quality_report_data(struct sk_buff *skb)
++{
++	skb_pull(skb, sizeof(struct intel_prefix_evt_data));
++
++	/* A telemetry event contains at least one intel_tlv subevent. */
++	if (skb->len < sizeof(struct intel_tlv)) {
++		BT_ERR("Telemetry event length %u too short (at least %zu)",
++		       skb->len, sizeof(struct intel_tlv));
++		return false;
++	}
++
++	return true;
++}
++EXPORT_SYMBOL_GPL(btintel_pull_quality_report_data);
++
+ static const struct firmware *btintel_legacy_rom_get_fw(struct hci_dev *hdev,
+ 					       struct intel_version *ver)
+ {
+@@ -2403,8 +2442,10 @@ static int btintel_setup_combined(struct hci_dev *hdev)
+ 	set_bit(HCI_QUIRK_SIMULTANEOUS_DISCOVERY, &hdev->quirks);
+ 	set_bit(HCI_QUIRK_NON_PERSISTENT_DIAG, &hdev->quirks);
+ 
+-	/* Set up the quality report callback for Intel devices */
++	/* Set up the quality report callbacks for Intel devices */
+ 	hdev->set_quality_report = btintel_set_quality_report;
++	hdev->is_quality_report_evt = btintel_is_quality_report_evt;
++	hdev->pull_quality_report_data = btintel_pull_quality_report_data;
+ 
+ 	/* For Legacy device, check the HW platform value and size */
+ 	if (skb->len == sizeof(ver) && skb->data[1] == 0x37) {
+diff --git a/drivers/bluetooth/btintel.h b/drivers/bluetooth/btintel.h
+index e0060e58573c..fe75c510dd85 100644
+--- a/drivers/bluetooth/btintel.h
++++ b/drivers/bluetooth/btintel.h
+@@ -211,6 +211,8 @@ void btintel_bootup(struct hci_dev *hdev, const void *ptr, unsigned int len);
+ void btintel_secure_send_result(struct hci_dev *hdev,
+ 				const void *ptr, unsigned int len);
+ int btintel_set_quality_report(struct hci_dev *hdev, bool enable);
++bool btintel_is_quality_report_evt(struct sk_buff *skb);
++bool btintel_pull_quality_report_data(struct sk_buff *skb);
+ #else
+ 
+ static inline int btintel_check_bdaddr(struct hci_dev *hdev)
+@@ -306,4 +308,14 @@ static inline int btintel_set_quality_report(struct hci_dev *hdev, bool enable)
+ {
+ 	return -ENODEV;
+ }
++
++static inline bool btintel_is_quality_report_evt(struct sk_buff *skb)
++{
++	return false;
++}
++
++static inline bool btintel_pull_quality_report_data(struct sk_buff *skb)
++{
++	return false;
++}
+ #endif
+diff --git a/include/net/bluetooth/hci_core.h b/include/net/bluetooth/hci_core.h
+index 50733362c2c2..331bfced866c 100644
+--- a/include/net/bluetooth/hci_core.h
++++ b/include/net/bluetooth/hci_core.h
+@@ -668,6 +668,8 @@ struct hci_dev {
+ 	int (*get_codec_config_data)(struct hci_dev *hdev, __u8 type,
+ 				     struct bt_codec *codec, __u8 *vnd_len,
+ 				     __u8 **vnd_data);
++	bool (*is_quality_report_evt)(struct sk_buff *skb);
++	bool (*pull_quality_report_data)(struct sk_buff *skb);
+ };
+ 
+ #define HCI_PHY_HANDLE(handle)	(handle & 0xff)
+diff --git a/net/bluetooth/hci_event.c b/net/bluetooth/hci_event.c
+index 7078d5f15d82..8efe4a2bbabe 100644
+--- a/net/bluetooth/hci_event.c
++++ b/net/bluetooth/hci_event.c
+@@ -5765,11 +5765,17 @@ static bool quality_report_evt(struct hci_dev *hdev, struct sk_buff *skb)
+ 		if (aosp_has_quality_report(hdev) &&
+ 		    aosp_pull_quality_report_data(skb))
+ 			mgmt_quality_report(hdev, skb, QUALITY_SPEC_AOSP_BQR);
+-
+-		return true;
++	} else if (hdev->is_quality_report_evt &&
++		   hdev->is_quality_report_evt(skb)) {
++		if (hdev->set_quality_report &&
++		    hdev->pull_quality_report_data(skb))
++			mgmt_quality_report(hdev, skb,
++					    QUALITY_SPEC_INTEL_TELEMETRY);
++	} else {
++		return false;
+ 	}
+ 
+-	return false;
++	return true;
+ }
+ 
+ static void hci_vendor_evt(struct hci_dev *hdev, void *data,
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

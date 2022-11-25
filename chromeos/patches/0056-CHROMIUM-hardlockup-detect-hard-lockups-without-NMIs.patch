@@ -1,0 +1,398 @@
+From 1f0af02500132083980e0b91123368fa20c86924 Mon Sep 17 00:00:00 2001
+From: Colin Cross <ccross@android.com>
+Date: Thu, 6 Jun 2019 10:25:08 -0700
+Subject: [PATCH] CHROMIUM: hardlockup: detect hard lockups without NMIs using
+ secondary cpus
+
+Emulate NMIs on systems where they are not available by using timer
+interrupts on other cpus.  Each cpu will use its softlockup hrtimer
+to check that the next cpu is processing hrtimer interrupts by
+verifying that a counter is increasing.
+
+This patch is useful on systems where the hardlockup detector is not
+available due to a lack of NMIs, for example most ARM SoCs.
+Without this patch any cpu stuck with interrupts disabled can
+cause a hardware watchdog reset with no debugging information,
+but with this patch the kernel can detect the lockup and panic,
+which can result in useful debugging info.
+
+BUG=chromium:941638
+TEST=see CL:Ibef3a87fb30ae679b398ac5d40263662904989fe
+  arm64 and x86_64 defconfigs still build
+
+Signed-off-by: Colin Cross <ccross@android.com>
+(mka@: ported from CrOS v4.4. Main delta is that upstream moved parts
+ of watchdog.c to watchdog_hld.c, also we now have most new code in
+ watchdog_buddy_cpu.c. A FROMLIST version with some comments can be
+ found at https://patchwork.kernel.org/patch/1967551/
+ / https://lkml.kernel.org/r/1357941108-14138-1-git-send-email-ccross@android.com)
+Signed-off-by: Matthias Kaehlcke <mka@chromium.org>
+
+Change-Id: I8d24aab8bb3a3b37e4492668a29b66516c66268b
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/1662655
+Tested-by: Matthias Kaehlcke <mka@chromium.org>
+Reviewed-by: Douglas Anderson <dianders@chromium.org>
+Reviewed-by: Guenter Roeck <groeck@chromium.org>
+Commit-Queue: Douglas Anderson <dianders@chromium.org>
+[rebase54(groeck): Squashed:
+	FIXUP: CHROMIUM: hardlockup: detect hard lockups without NMIs using secondary cpus
+]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+[rebase510(groeck): Conflicts:
+	kernel/watchdog.c
+    Squash:
+	FIXUP: CHROMIUM: hardlockup: detect hard lockups without NMIs using secondary cpus
+]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase515(groeck):
+  Squashed:
+    FIXUP: CHROMIUM: hardlockup: detect hard lockups without NMIs using secondary cpus
+]
+
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: hardlockup: detect hard lockups without NMIs using secondary cpus
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    def9800f2d271ee32b4f5b5722608af3ff87cfad
+    56f8dcfdcc49a981308331d9f26fbc7c469ae1fb
+
+ include/linux/nmi.h         |  17 ++++-
+ kernel/Makefile             |   1 +
+ kernel/watchdog.c           |  22 +++++--
+ kernel/watchdog_buddy_cpu.c | 128 ++++++++++++++++++++++++++++++++++++
+ lib/Kconfig.debug           |  19 +++++-
+ 5 files changed, 178 insertions(+), 9 deletions(-)
+ create mode 100644 kernel/watchdog_buddy_cpu.c
+
+diff --git a/include/linux/nmi.h b/include/linux/nmi.h
+index f700ff2df074..ed33f6abc4f5 100644
+--- a/include/linux/nmi.h
++++ b/include/linux/nmi.h
+@@ -45,6 +45,8 @@ extern void touch_softlockup_watchdog(void);
+ extern void touch_softlockup_watchdog_sync(void);
+ extern void touch_all_softlockup_watchdogs(void);
+ extern unsigned int  softlockup_panic;
++DECLARE_PER_CPU(unsigned long, hrtimer_interrupts);
++DECLARE_PER_CPU(unsigned long, hrtimer_interrupts_saved);
+ 
+ extern int lockup_detector_online_cpu(unsigned int cpu);
+ extern int lockup_detector_offline_cpu(unsigned int cpu);
+@@ -81,14 +83,14 @@ static inline void reset_hung_task_detector(void) { }
+ #define NMI_WATCHDOG_ENABLED      (1 << NMI_WATCHDOG_ENABLED_BIT)
+ #define SOFT_WATCHDOG_ENABLED     (1 << SOFT_WATCHDOG_ENABLED_BIT)
+ 
+-#if defined(CONFIG_HARDLOCKUP_DETECTOR)
++#if defined(CONFIG_HARDLOCKUP_DETECTOR_CORE)
+ extern void hardlockup_detector_disable(void);
+ extern unsigned int hardlockup_panic;
+ #else
+ static inline void hardlockup_detector_disable(void) {}
+ #endif
+ 
+-#if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR)
++#if defined(CONFIG_HAVE_NMI_WATCHDOG) || defined(CONFIG_HARDLOCKUP_DETECTOR_CORE)
+ # define NMI_WATCHDOG_SYSCTL_PERM	0644
+ #else
+ # define NMI_WATCHDOG_SYSCTL_PERM	0444
+@@ -124,6 +126,14 @@ void watchdog_nmi_disable(unsigned int cpu);
+ 
+ void lockup_detector_reconfigure(void);
+ 
++#ifdef CONFIG_HARDLOCKUP_DETECTOR_BUDDY_CPU
++extern void buddy_cpu_touch_watchdog(void);
++void watchdog_check_hardlockup(void);
++#else
++static inline void buddy_cpu_touch_watchdog(void) {}
++static inline void watchdog_check_hardlockup(void) {}
++#endif
++
+ /**
+  * touch_nmi_watchdog - restart NMI watchdog timeout.
+  *
+@@ -134,6 +144,7 @@ void lockup_detector_reconfigure(void);
+ static inline void touch_nmi_watchdog(void)
+ {
+ 	arch_touch_nmi_watchdog();
++	buddy_cpu_touch_watchdog();
+ 	touch_softlockup_watchdog();
+ }
+ 
+@@ -197,7 +208,7 @@ u64 hw_nmi_get_sample_period(int watchdog_thresh);
+ #endif
+ 
+ #if defined(CONFIG_HARDLOCKUP_CHECK_TIMESTAMP) && \
+-    defined(CONFIG_HARDLOCKUP_DETECTOR)
++    defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
+ void watchdog_update_hrtimer_threshold(u64 period);
+ #else
+ static inline void watchdog_update_hrtimer_threshold(u64 period) { }
+diff --git a/kernel/Makefile b/kernel/Makefile
+index f60487298e0a..5759c742de95 100644
+--- a/kernel/Makefile
++++ b/kernel/Makefile
+@@ -95,6 +95,7 @@ obj-$(CONFIG_FAIL_FUNCTION) += fail_function.o
+ obj-$(CONFIG_KGDB) += debug/
+ obj-$(CONFIG_DETECT_HUNG_TASK) += hung_task.o
+ obj-$(CONFIG_LOCKUP_DETECTOR) += watchdog.o
++obj-$(CONFIG_HARDLOCKUP_DETECTOR_BUDDY_CPU) += watchdog_buddy_cpu.o
+ obj-$(CONFIG_HARDLOCKUP_DETECTOR_PERF) += watchdog_hld.o
+ obj-$(CONFIG_SECCOMP) += seccomp.o
+ obj-$(CONFIG_RELAY) += relay.o
+diff --git a/kernel/watchdog.c b/kernel/watchdog.c
+index 8e61f21e7e33..34a966f69a57 100644
+--- a/kernel/watchdog.c
++++ b/kernel/watchdog.c
+@@ -29,7 +29,7 @@
+ 
+ static DEFINE_MUTEX(watchdog_mutex);
+ 
+-#if defined(CONFIG_HARDLOCKUP_DETECTOR) || defined(CONFIG_HAVE_NMI_WATCHDOG)
++#if defined(CONFIG_HARDLOCKUP_DETECTOR_CORE) || defined(CONFIG_HAVE_NMI_WATCHDOG)
+ # define WATCHDOG_DEFAULT	(SOFT_WATCHDOG_ENABLED | NMI_WATCHDOG_ENABLED)
+ # define NMI_WATCHDOG_DEFAULT	1
+ #else
+@@ -47,7 +47,7 @@ static int __read_mostly nmi_watchdog_available;
+ struct cpumask watchdog_cpumask __read_mostly;
+ unsigned long *watchdog_cpumask_bits = cpumask_bits(&watchdog_cpumask);
+ 
+-#ifdef CONFIG_HARDLOCKUP_DETECTOR
++#ifdef CONFIG_HARDLOCKUP_DETECTOR_CORE
+ 
+ # ifdef CONFIG_SMP
+ int __read_mostly sysctl_hardlockup_all_cpu_backtrace;
+@@ -85,7 +85,9 @@ static int __init hardlockup_panic_setup(char *str)
+ }
+ __setup("nmi_watchdog=", hardlockup_panic_setup);
+ 
+-#endif /* CONFIG_HARDLOCKUP_DETECTOR */
++#endif /* CONFIG_HARDLOCKUP_DETECTOR_CORE */
++
++#ifdef CONFIG_HARDLOCKUP_DETECTOR
+ 
+ /*
+  * These functions can be overridden if an architecture implements its
+@@ -106,6 +108,13 @@ void __weak watchdog_nmi_disable(unsigned int cpu)
+ 	hardlockup_detector_perf_disable();
+ }
+ 
++#else
++
++int __weak watchdog_nmi_enable(unsigned int cpu) { return 0; }
++void __weak watchdog_nmi_disable(unsigned int cpu) { return; }
++
++#endif /* CONFIG_HARDLOCKUP_DETECTOR */
++
+ /* Return 0, if a NMI watchdog is available. Error code otherwise */
+ int __weak __init watchdog_nmi_probe(void)
+ {
+@@ -179,8 +188,8 @@ static DEFINE_PER_CPU(unsigned long, watchdog_touch_ts);
+ static DEFINE_PER_CPU(unsigned long, watchdog_report_ts);
+ static DEFINE_PER_CPU(struct hrtimer, watchdog_hrtimer);
+ static DEFINE_PER_CPU(bool, softlockup_touch_sync);
+-static DEFINE_PER_CPU(unsigned long, hrtimer_interrupts);
+-static DEFINE_PER_CPU(unsigned long, hrtimer_interrupts_saved);
++DEFINE_PER_CPU(unsigned long, hrtimer_interrupts);
++DEFINE_PER_CPU(unsigned long, hrtimer_interrupts_saved);
+ static unsigned long soft_lockup_nmi_warn;
+ 
+ static int __init nowatchdog_setup(char *str)
+@@ -364,6 +373,9 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
+ 	/* kick the hardlockup detector */
+ 	watchdog_interrupt_count();
+ 
++	/* test for hardlockups */
++	watchdog_check_hardlockup();
++
+ 	/* kick the softlockup detector */
+ 	if (completion_done(this_cpu_ptr(&softlockup_completion))) {
+ 		reinit_completion(this_cpu_ptr(&softlockup_completion));
+diff --git a/kernel/watchdog_buddy_cpu.c b/kernel/watchdog_buddy_cpu.c
+new file mode 100644
+index 000000000000..56d96c0a2825
+--- /dev/null
++++ b/kernel/watchdog_buddy_cpu.c
+@@ -0,0 +1,128 @@
++// SPDX-License-Identifier: GPL-2.0
++
++#include <linux/cpu.h>
++#include <linux/cpumask.h>
++#include <linux/kernel.h>
++#include <linux/nmi.h>
++#include <linux/percpu-defs.h>
++
++static DEFINE_PER_CPU(bool, watchdog_touch);
++static DEFINE_PER_CPU(bool, hard_watchdog_warn);
++static cpumask_t __read_mostly watchdog_cpus;
++
++int __init watchdog_nmi_probe(void)
++{
++	return 0;
++}
++
++notrace void buddy_cpu_touch_watchdog(void)
++{
++	/*
++	 * Using __raw here because some code paths have
++	 * preemption enabled.  If preemption is enabled
++	 * then interrupts should be enabled too, in which
++	 * case we shouldn't have to worry about the watchdog
++	 * going off.
++	 */
++	raw_cpu_write(watchdog_touch, true);
++}
++EXPORT_SYMBOL_GPL(buddy_cpu_touch_watchdog);
++
++static unsigned int watchdog_next_cpu(unsigned int cpu)
++{
++	cpumask_t cpus = watchdog_cpus;
++	unsigned int next_cpu;
++
++	next_cpu = cpumask_next(cpu, &cpus);
++	if (next_cpu >= nr_cpu_ids)
++		next_cpu = cpumask_first(&cpus);
++
++	if (next_cpu == cpu)
++		return nr_cpu_ids;
++
++	return next_cpu;
++}
++
++int watchdog_nmi_enable(unsigned int cpu)
++{
++	/*
++	 * The new cpu will be marked online before the first hrtimer interrupt
++	 * runs on it.  If another cpu tests for a hardlockup on the new cpu
++	 * before it has run its first hrtimer, it will get a false positive.
++	 * Touch the watchdog on the new cpu to delay the first check for at
++	 * least 3 sampling periods to guarantee one hrtimer has run on the new
++	 * cpu.
++	 */
++	per_cpu(watchdog_touch, cpu) = true;
++	smp_wmb();
++	cpumask_set_cpu(cpu, &watchdog_cpus);
++	return 0;
++}
++
++void watchdog_nmi_disable(unsigned int cpu)
++{
++	unsigned int next_cpu = watchdog_next_cpu(cpu);
++
++	/*
++	 * Offlining this cpu will cause the cpu before this one to start
++	 * checking the one after this one.  If this cpu just finished checking
++	 * the next cpu and updating hrtimer_interrupts_saved, and then the
++	 * previous cpu checks it within one sample period, it will trigger a
++	 * false positive.  Touch the watchdog on the next cpu to prevent it.
++	 */
++	if (next_cpu < nr_cpu_ids)
++		per_cpu(watchdog_touch, next_cpu) = true;
++	smp_wmb();
++	cpumask_clear_cpu(cpu, &watchdog_cpus);
++}
++
++static int is_hardlockup_buddy_cpu(unsigned int cpu)
++{
++	unsigned long hrint = per_cpu(hrtimer_interrupts, cpu);
++
++	if (per_cpu(hrtimer_interrupts_saved, cpu) == hrint)
++		return 1;
++
++	per_cpu(hrtimer_interrupts_saved, cpu) = hrint;
++	return 0;
++}
++
++void watchdog_check_hardlockup(void)
++{
++	unsigned int next_cpu;
++
++	/*
++	 * Test for hardlockups every 3 samples.  The sample period is
++	 *  watchdog_thresh * 2 / 5, so 3 samples gets us back to slightly over
++	 *  watchdog_thresh (over by 20%).
++	 */
++	if (__this_cpu_read(hrtimer_interrupts) % 3 != 0)
++		return;
++
++	/* check for a hardlockup on the next cpu */
++	next_cpu = watchdog_next_cpu(smp_processor_id());
++	if (next_cpu >= nr_cpu_ids)
++		return;
++
++	smp_rmb();
++
++	if (per_cpu(watchdog_touch, next_cpu) == true) {
++		per_cpu(watchdog_touch, next_cpu) = false;
++		return;
++	}
++
++	if (is_hardlockup_buddy_cpu(next_cpu)) {
++		/* only warn once */
++		if (per_cpu(hard_watchdog_warn, next_cpu) == true)
++			return;
++
++		if (hardlockup_panic)
++			panic("Watchdog detected hard LOCKUP on cpu %u", next_cpu);
++		else
++			WARN(1, "Watchdog detected hard LOCKUP on cpu %u", next_cpu);
++
++		per_cpu(hard_watchdog_warn, next_cpu) = true;
++	} else {
++		per_cpu(hard_watchdog_warn, next_cpu) = false;
++	}
++}
+diff --git a/lib/Kconfig.debug b/lib/Kconfig.debug
+index b733ef1f1ac9..cb7120b3482c 100644
+--- a/lib/Kconfig.debug
++++ b/lib/Kconfig.debug
+@@ -1070,6 +1070,9 @@ config HARDLOCKUP_DETECTOR_PERF
+ config HARDLOCKUP_CHECK_TIMESTAMP
+ 	bool
+ 
++config HARDLOCKUP_DETECTOR_CORE
++	bool
++
+ #
+ # arch/ can define HAVE_HARDLOCKUP_DETECTOR_ARCH to provide their own hard
+ # lockup detector rather than the perf based detector.
+@@ -1079,6 +1082,7 @@ config HARDLOCKUP_DETECTOR
+ 	depends on DEBUG_KERNEL && !S390
+ 	depends on HAVE_HARDLOCKUP_DETECTOR_PERF || HAVE_HARDLOCKUP_DETECTOR_ARCH
+ 	select LOCKUP_DETECTOR
++	select HARDLOCKUP_DETECTOR_CORE
+ 	select HARDLOCKUP_DETECTOR_PERF if HAVE_HARDLOCKUP_DETECTOR_PERF
+ 	help
+ 	  Say Y here to enable the kernel to act as a watchdog to detect
+@@ -1089,9 +1093,22 @@ config HARDLOCKUP_DETECTOR
+ 	  chance to run.  The current stack trace is displayed upon detection
+ 	  and the system will stay locked up.
+ 
++config HARDLOCKUP_DETECTOR_BUDDY_CPU
++	bool "Buddy CPU hardlockup detector"
++	depends on DEBUG_KERNEL && SMP
++	depends on !HARDLOCKUP_DETECTOR && !HAVE_NMI_WATCHDOG
++	depends on !S390
++	select HARDLOCKUP_DETECTOR_CORE
++	select SOFTLOCKUP_DETECTOR
++	help
++	  Say Y here to enable a hardlockup detector where CPUs check
++	  each other for lockup. Each cpu uses its softlockup hrtimer
++	  to check that the next cpu is processing hrtimer interrupts by
++	  verifying that a counter is increasing.
++
+ config BOOTPARAM_HARDLOCKUP_PANIC
+ 	bool "Panic (Reboot) On Hard Lockups"
+-	depends on HARDLOCKUP_DETECTOR
++	depends on HARDLOCKUP_DETECTOR_CORE
+ 	help
+ 	  Say Y here to enable the kernel to panic on "hard lockups",
+ 	  which are bugs that cause the kernel to loop in kernel
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

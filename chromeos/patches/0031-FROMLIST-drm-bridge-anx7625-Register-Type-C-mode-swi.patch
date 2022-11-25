@@ -1,0 +1,201 @@
+From 2d7d79c115cfbd0a5de50e4abb8872bed852af83 Mon Sep 17 00:00:00 2001
+From: Prashant Malani <pmalani@chromium.org>
+Date: Wed, 22 Jun 2022 17:34:33 +0000
+Subject: [PATCH] FROMLIST: drm/bridge: anx7625: Register Type-C mode switches
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When the DT node has "switches" available, register a Type-C mode-switch
+for each listed "switch". This allows the driver to receive state
+information about what operating mode a Type-C port and its connected
+peripherals are in, as well as status information (like VDOs) related to
+that state.
+
+The callback function is currently a stub, but subsequent patches will
+implement the required functionality.
+
+Reviewed-by: AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+Reviewed-by: Nícolas F. R. A. Prado <nfraprado@collabora.com>
+Tested-by: Nícolas F. R. A. Prado <nfraprado@collabora.com>
+Signed-off-by: Prashant Malani <pmalani@chromium.org>
+(am from https://patches.linaro.org/project/linux-usb/patch/20220622173605.1168416-5-pmalani@chromium.org//)
+(also found at https://lore.kernel.org/r/20220622173605.1168416-5-pmalani@chromium.org)
+
+BUG=b:212382669
+TEST=Check external displays on Kingler/Krabby
+UPSTREAM-TASK=b:247731050
+
+Signed-off-by: Pin-yen Lin <treapking@chromium.org>
+Change-Id: Ib23c40ae1b67cb0620a66f2aa848cb1699c46b0c
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3904827
+Reviewed-by: Sean Paul <sean@poorly.run>
+Reviewed-by: Hsin-Yi Wang <hsinyi@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: FROMLIST: drm/bridge: anx7625: Register Type-C mode switches
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    193265900fe9c2a0fb480337f64c8a5201ab7cd4
+    0a3387f287bfdb975ea9029e9f5ab77743c0472d
+
+ drivers/gpu/drm/bridge/analogix/anx7625.c | 83 +++++++++++++++++++++--
+ drivers/gpu/drm/bridge/analogix/anx7625.h |  6 ++
+ 2 files changed, 85 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/bridge/analogix/anx7625.c b/drivers/gpu/drm/bridge/analogix/anx7625.c
+index 22d1e62161c6..e89f4ad4f11e 100644
+--- a/drivers/gpu/drm/bridge/analogix/anx7625.c
++++ b/drivers/gpu/drm/bridge/analogix/anx7625.c
+@@ -15,6 +15,7 @@
+ #include <linux/regulator/consumer.h>
+ #include <linux/slab.h>
+ #include <linux/types.h>
++#include <linux/usb/typec_mux.h>
+ #include <linux/workqueue.h>
+ 
+ #include <linux/of_gpio.h>
+@@ -2562,10 +2563,61 @@ static void anx7625_runtime_disable(void *data)
+ 	pm_runtime_disable(data);
+ }
+ 
++static int anx7625_typec_mux_set(struct typec_mux_dev *mux,
++				 struct typec_mux_state *state)
++{
++	return 0;
++}
++
++static int anx7625_register_mode_switch(struct device *dev, struct device_node *node,
++					struct anx7625_data *ctx)
++{
++	struct anx7625_port_data *port_data;
++	struct typec_mux_desc mux_desc = {};
++	char name[32];
++	u32 port_num;
++	int ret;
++
++	ret = of_property_read_u32(node, "reg", &port_num);
++	if (ret)
++		return ret;
++
++	if (port_num >= ctx->num_typec_switches) {
++		dev_err(dev, "Invalid port number specified: %d\n", port_num);
++		return -EINVAL;
++	}
++
++	port_data = &ctx->typec_ports[port_num];
++	port_data->ctx = ctx;
++	mux_desc.fwnode = &node->fwnode;
++	mux_desc.drvdata = port_data;
++	snprintf(name, sizeof(name), "%s-%u", node->name, port_num);
++	mux_desc.name = name;
++	mux_desc.set = anx7625_typec_mux_set;
++
++	port_data->typec_mux = typec_mux_register(dev, &mux_desc);
++	if (IS_ERR(port_data->typec_mux)) {
++		ret = PTR_ERR(port_data->typec_mux);
++		dev_err(dev, "Mode switch register for port %d failed: %d", port_num, ret);
++	}
++
++	return ret;
++}
++
++static void anx7625_unregister_typec_switches(struct anx7625_data *ctx)
++{
++	int i;
++
++	for (i = 0; i < ctx->num_typec_switches; i++)
++		typec_mux_unregister(ctx->typec_ports[i].typec_mux);
++}
++
+ static int anx7625_register_typec_switches(struct device *device, struct anx7625_data *ctx)
+ {
+-	struct device_node *of = of_get_child_by_name(device->of_node, "switches");
++	struct device_node *of, *sw;
++	int ret = 0;
+ 
++	of = of_get_child_by_name(device->of_node, "switches");
+ 	if (!of)
+ 		return -ENODEV;
+ 
+@@ -2573,7 +2625,28 @@ static int anx7625_register_typec_switches(struct device *device, struct anx7625
+ 	if (ctx->num_typec_switches <= 0)
+ 		return -ENODEV;
+ 
+-	return 0;
++	ctx->typec_ports = devm_kzalloc(device,
++					ctx->num_typec_switches * sizeof(struct anx7625_port_data),
++					GFP_KERNEL);
++	if (!ctx->typec_ports)
++		return -ENOMEM;
++
++	/* Register switches for each connector. */
++	for_each_available_child_of_node(of, sw) {
++		if (!of_property_read_bool(sw, "mode-switch"))
++			continue;
++		ret = anx7625_register_mode_switch(device, sw, ctx);
++		if (ret) {
++			dev_err(device, "Failed to register mode switch: %d\n", ret);
++			of_node_put(sw);
++			break;
++		}
++	}
++
++	if (ret)
++		anx7625_unregister_typec_switches(ctx);
++
++	return ret;
+ }
+ 
+ static int anx7625_i2c_probe(struct i2c_client *client,
+@@ -2685,8 +2758,8 @@ static int anx7625_i2c_probe(struct i2c_client *client,
+ 		queue_work(platform->workqueue, &platform->work);
+ 
+ 	ret = anx7625_register_typec_switches(dev, platform);
+-	if (ret)
+-		dev_dbg(dev, "Didn't register Type C switches, err: %d\n", ret);
++	if (ret && ret != -ENODEV)
++		dev_warn(dev, "Didn't register Type C switches, err: %d\n", ret);
+ 
+ 	platform->bridge.funcs = &anx7625_bridge_funcs;
+ 	platform->bridge.of_node = client->dev.of_node;
+@@ -2739,6 +2812,8 @@ static void anx7625_i2c_remove(struct i2c_client *client)
+ 
+ 	drm_bridge_remove(&platform->bridge);
+ 
++	anx7625_unregister_typec_switches(platform);
++
+ 	if (platform->pdata.intp_irq)
+ 		destroy_workqueue(platform->workqueue);
+ 
+diff --git a/drivers/gpu/drm/bridge/analogix/anx7625.h b/drivers/gpu/drm/bridge/analogix/anx7625.h
+index c4154fc23233..49cf70eb8021 100644
+--- a/drivers/gpu/drm/bridge/analogix/anx7625.h
++++ b/drivers/gpu/drm/bridge/analogix/anx7625.h
+@@ -449,6 +449,11 @@ struct anx7625_i2c_client {
+ 	struct i2c_client *tcpc_client;
+ };
+ 
++struct anx7625_port_data {
++	struct typec_mux_dev *typec_mux;
++	struct anx7625_data *ctx;
++};
++
+ struct anx7625_data {
+ 	struct anx7625_platform_data pdata;
+ 	struct platform_device *audio_pdev;
+@@ -480,6 +485,7 @@ struct anx7625_data {
+ 	struct mipi_dsi_device *dsi;
+ 	struct drm_dp_aux aux;
+ 	int num_typec_switches;
++	struct anx7625_port_data *typec_ports;
+ };
+ 
+ #endif  /* __ANX7625_H__ */
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
