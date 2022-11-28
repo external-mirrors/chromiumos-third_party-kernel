@@ -160,6 +160,9 @@ static const struct edid_quirk {
 	EDID_QUIRK('S', 'A', 'M', 596, EDID_QUIRK_PREFER_LARGE_60),
 	EDID_QUIRK('S', 'A', 'M', 638, EDID_QUIRK_PREFER_LARGE_60),
 
+	/* 144 Hz should only be used when needed; it wastes power */
+	EDID_QUIRK('S', 'H', 'P', 0x1523, EDID_QUIRK_PREFER_LARGE_60),
+
 	/* Sony PVM-2541A does up to 12 bpc, but only reports max 8 bpc */
 	EDID_QUIRK('S', 'N', 'Y', 0x2541, EDID_QUIRK_FORCE_12BPC),
 
@@ -2730,6 +2733,8 @@ u32 drm_edid_get_panel_id(struct i2c_adapter *adapter)
 
 	if (edid_block_status_valid(status, edid_block_tag(base_block)))
 		panel_id = edid_extract_panel_id(base_block);
+	else
+		edid_block_dump(KERN_NOTICE, base_block, 0);
 
 	kfree(base_block);
 
