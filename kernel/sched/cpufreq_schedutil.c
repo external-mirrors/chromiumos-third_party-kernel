@@ -20,7 +20,6 @@ struct sugov_policy {
 	struct list_head	tunables_hook;
 
 	raw_spinlock_t		update_lock;
-	u64			last_update;
 	u64			last_freq_update_time;
 	s64			freq_update_delay_ns;
 	unsigned int		next_freq;
@@ -180,13 +179,9 @@ static bool sugov_iowait_reset(struct sugov_cpu *sg_cpu, u64 time,
 			       bool set_iowait_boost)
 {
 	s64 delta_ns = time - sg_cpu->last_update;
-	unsigned int ticks = TICK_NSEC;
 
-	if (sysctl_iowait_reset_ticks)
-		ticks = sysctl_iowait_reset_ticks * TICK_NSEC;
-
-	/* Reset boost only if enough ticks has elapsed since last request. */
-	if (delta_ns <= ticks)
+	/* Reset boost only if a tick has elapsed since last request */
+	if (delta_ns <= TICK_NSEC)
 		return false;
 
 	sg_cpu->iowait_boost = set_iowait_boost ? IOWAIT_BOOST_MIN : 0;
@@ -268,9 +263,7 @@ static void sugov_iowait_apply(struct sugov_cpu *sg_cpu, u64 time)
 	if (sugov_iowait_reset(sg_cpu, time, false))
 		return;
 
-	if (!sg_cpu->iowait_boost_pending &&
-	    (!sysctl_iowait_apply_ticks ||
-	     (time - sg_policy->last_update > (sysctl_iowait_apply_ticks * TICK_NSEC)))) {
+	if (!sg_cpu->iowait_boost_pending) {
 		/*
 		 * No boost pending; reduce the boost value.
 		 */
@@ -455,14 +448,6 @@ sugov_update_shared(struct update_util_data *hook, u64 time, unsigned int flags)
 
 		if (!sugov_update_next_freq(sg_policy, time, next_f))
 			goto unlock;
-
-		/*
-		 * Required for ensuring iowait decay does not happen too
-		 * quickly.  This can happen, for example, if a neighboring CPU
-		 * does a cpufreq update immediately after a CPU that just
-		 * completed I/O.
-		 */
-		sg_policy->last_update = time;
 
 		if (sg_policy->policy->fast_switch_enabled)
 			cpufreq_driver_fast_switch(sg_policy->policy, next_f);
