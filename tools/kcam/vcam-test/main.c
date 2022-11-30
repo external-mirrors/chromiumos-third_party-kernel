@@ -943,33 +943,35 @@ static int add_single_invalid_operation(struct libkc *cam,
 		"id_dep: %x entity: %x event: %x fence_in: %x\n",
 		id_dep, event_entity, event_id, fence_in);
 
-	for_each_cam_operation(lco, i, op) {
-		op->operation_type		= CAM_OPERATION_TYPE_ADD;
-		op->operation_add.id		= i;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
-		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
-		op->operation_add.entity	= event_entity;
-		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+	op = libkc_operation_at(lco, 0);
+	if (!op)
+		return -EINVAL;
 
-		if (id_dep != CAM_NO_DEP) {
-			op->operation_add.deps[d].type	= CAM_DEPENDENCY_OP;
-			op->operation_add.deps[d].id	= id_dep;
-			d++;
-		}
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 0;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= 0;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+	op->operation_add.entity	= event_entity;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
-		if (event_id != CAM_NO_ENTITY) {
-			op->operation_add.deps[d].type	= CAM_DEPENDENCY_EVENT;
-			op->operation_add.deps[d].id	= event_id;
-			d++;
-		}
+	if (id_dep != CAM_NO_DEP) {
+		op->operation_add.deps[d].type	= CAM_DEPENDENCY_OP;
+		op->operation_add.deps[d].id	= id_dep;
+		d++;
+	}
 
-		if (fence_in != CAM_NO_FENCE) {
-			op->operation_add.deps[d].type	= CAM_DEPENDENCY_FENCE_IN;
-			op->operation_add.deps[d].id	= fence_in;
-			d++;
-		}
+	if (event_id != CAM_NO_ENTITY) {
+		op->operation_add.deps[d].type	= CAM_DEPENDENCY_EVENT;
+		op->operation_add.deps[d].id	= event_id;
+		d++;
+	}
+
+	if (fence_in != CAM_NO_FENCE) {
+		op->operation_add.deps[d].type	= CAM_DEPENDENCY_FENCE_IN;
+		op->operation_add.deps[d].id	= fence_in;
+		d++;
 	}
 
 	return libkc_operation_ioctl(cam, lco);
