@@ -1288,7 +1288,6 @@ int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 	cam_obj_deinit(&op->nsobj);
 	return 0;
 }
-ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_cancel, ERRNO);
 
 /*
  * This function is called under RCU, so it cannot sleep.
