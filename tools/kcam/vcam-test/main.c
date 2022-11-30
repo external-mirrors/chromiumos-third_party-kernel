@@ -1427,7 +1427,7 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 	struct obj_entity *entity;
 	struct cam_operation *op;
 	struct obj_event *event;
-	int op_idx, rw_idx;
+	int rw_idx;
 	char *read_buffer;
 	int ret;
 
@@ -1457,7 +1457,7 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
-	op->operation_add.id		= op_idx;
+	op->operation_add.id		= 0;
 	op->operation_add.fence_out	= 0;
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
