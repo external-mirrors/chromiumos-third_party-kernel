@@ -975,6 +975,42 @@ static int add_single_invalid_operation(struct libkc *cam,
 	return libkc_operation_ioctl(cam, lco);
 }
 
+static int add_single_invalid_fence_out_operation(struct libkc *cam,
+						  struct libkc_operation *lco)
+{
+	struct cam_operation *op;
+	struct obj_entity *entity;
+
+	pr_info("Test add_single_invalid_fence_out_operation()\n");
+
+	op = libkc_operation_at(lco, 0);
+	if (!op)
+		return -EINVAL;
+
+	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Entity lookup has failed\n");
+		return -EINVAL;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 0;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= CAM_OPERATION_FLAG_EXPORT_FENCE;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
+	op->operation_add.deps[0].id	= 255;
+
+	op->operation_add.deps[1].type	= CAM_DEPENDENCY_EVENT;
+	op->operation_add.deps[1].id	= 255;
+
+	return libkc_operation_ioctl(cam, lco);
+}
+
 static int add_many_invalid_operations(struct libkc *cam,
 				       struct libkc_operation *lco)
 {
@@ -1102,6 +1138,14 @@ static int test_add_invalid_operations(struct libkc *cam)
 					   CAM_NO_ENTITY, 255);
 	if (!ret) {
 		pr_err("FATAL: unmet fence_in dependency should fail\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+
+	ret = add_single_invalid_fence_out_operation(cam, lco);
+	if (!ret) {
+		pr_err("FATAL: unmet entity:event dependency should fail\n");
 		ret = -EINVAL;
 		goto out;
 	}
