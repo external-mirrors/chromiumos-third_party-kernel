@@ -1280,6 +1280,7 @@ int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 
 	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
 	cam_flush_op_dependencies(op);
+	cam_drain_out_syncfile(op->out_syncfile);
 	/* drop lookup ref-count */
 	cam_op_put(op);
 	/* Now release the object */
