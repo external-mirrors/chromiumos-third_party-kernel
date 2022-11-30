@@ -1,0 +1,102 @@
+From 4d23ef0a773c3983ac153a04b5d5afb471366027 Mon Sep 17 00:00:00 2001
+From: Jora Jacobi <jora@google.com>
+Date: Fri, 6 Nov 2020 13:41:15 -0800
+Subject: [PATCH] CHROMIUM: Restore missing cursor for digitizer devices
+
+A previously committed patch to remove cursors for HID Digitizer-Pen
+devices also removed the cursors for some tablets which have incorrect HID
+descriptors. These devices should enumerate with Usage ID "Digitizer"
+instead of Usage ID "Pen".
+
+Patch which introduced the issue: commit 8473a93d1ba5
+("HID: input: Set INPUT_PROP_-property for HID_UP_DIGITIZERS")
+
+Changes-
+Add HID quirk HID_QUIRK_DEVICE_IS_DIGITIZER
+Quirk will force INPUT_PROP_POINTER for HID Digitizers
+Apply quirk to Huion tablets
+Apply quirk to UGEE/XP-Pen tablets based on device ID
+
+BUG=b:172337748
+TEST=Tested with Huion H640P and H430P. Connected the digitizer to the
+Chromebook and confirmed with a drawing program that the cursor appears and
+moves when the digitizer's stylus is hovering over the surface of the
+digitizer.
+
+Signed-off-by: Jora Jacobi <jora@google.com>
+Change-Id: Ib292d62203cc4a2656c43874c03893b40bb05819
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/2523562
+Reviewed-by: Harry Cutts <hcutts@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: Restore missing cursor for digitizer devices
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    3c5bffc1f36f1190aa6967c83243e81ce677b1c3
+    07c4f34fff5e6ebcf320271bac28a0e25e0cb8e6
+
+ drivers/hid/hid-input.c  | 3 ++-
+ drivers/hid/hid-quirks.c | 9 +++++++++
+ include/linux/hid.h      | 1 +
+ 3 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/hid/hid-input.c b/drivers/hid/hid-input.c
+index 859aeb07542e..69f7a5234805 100644
+--- a/drivers/hid/hid-input.c
++++ b/drivers/hid/hid-input.c
+@@ -882,7 +882,8 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
+ 		break;
+ 
+ 	case HID_UP_DIGITIZER:
+-		if ((field->application & 0xff) == 0x01) /* Digitizer */
++		if (((field->application & 0xff) == 0x01) ||
++			(device->quirks & HID_QUIRK_DEVICE_IS_DIGITIZER)) /* Digitizer */
+ 			__set_bit(INPUT_PROP_POINTER, input->propbit);
+ 		else if ((field->application & 0xff) == 0x02) /* Pen */
+ 			__set_bit(INPUT_PROP_DIRECT, input->propbit);
+diff --git a/drivers/hid/hid-quirks.c b/drivers/hid/hid-quirks.c
+index a0de615ad6a0..37065c0e98c8 100644
+--- a/drivers/hid/hid-quirks.c
++++ b/drivers/hid/hid-quirks.c
+@@ -102,6 +102,8 @@ static const struct hid_device_id hid_quirks[] = {
+ 	{ HID_USB_DEVICE(USB_VENDOR_ID_HP, USB_PRODUCT_ID_HP_PIXART_OEM_USB_OPTICAL_MOUSE_0941), HID_QUIRK_ALWAYS_POLL },
+ 	{ HID_USB_DEVICE(USB_VENDOR_ID_HP, USB_PRODUCT_ID_HP_PIXART_OEM_USB_OPTICAL_MOUSE_0641), HID_QUIRK_ALWAYS_POLL },
+ 	{ HID_USB_DEVICE(USB_VENDOR_ID_HP, USB_PRODUCT_ID_HP_PIXART_OEM_USB_OPTICAL_MOUSE_1f4a), HID_QUIRK_ALWAYS_POLL },
++	{ HID_USB_DEVICE(USB_VENDOR_ID_HUION, USB_DEVICE_ID_HUION_TABLET2), HID_QUIRK_DEVICE_IS_DIGITIZER },
++	{ HID_USB_DEVICE(USB_VENDOR_ID_HUION, USB_DEVICE_ID_HUION_TABLET), HID_QUIRK_DEVICE_IS_DIGITIZER },
+ 	{ HID_USB_DEVICE(USB_VENDOR_ID_IDEACOM, USB_DEVICE_ID_IDEACOM_IDC6680), HID_QUIRK_MULTI_INPUT },
+ 	{ HID_USB_DEVICE(USB_VENDOR_ID_INNOMEDIA, USB_DEVICE_ID_INNEX_GENESIS_ATARI), HID_QUIRK_MULTI_INPUT },
+ 	{ HID_USB_DEVICE(USB_VENDOR_ID_KYE, USB_DEVICE_ID_KYE_EASYPEN_M610X), HID_QUIRK_MULTI_INPUT },
+@@ -1298,6 +1300,13 @@ unsigned long hid_lookup_quirk(const struct hid_device *hdev)
+ 		quirks = hid_gets_squirk(hdev);
+ 	mutex_unlock(&dquirks_lock);
+ 
++	/*
++	 * UGEE/XP-Pen HID Pen devices which have 0x0-0x9 as the low nibble
++	 * of the device ID are actually digitizers, not HID Pen devices
++	 */
++	if (hdev->vendor == USB_VENDOR_ID_UGEE && (hdev->product & 0x0F) <= 0x09)
++		quirks |= HID_QUIRK_DEVICE_IS_DIGITIZER;
++
+ 	return quirks;
+ }
+ EXPORT_SYMBOL_GPL(hid_lookup_quirk);
+diff --git a/include/linux/hid.h b/include/linux/hid.h
+index 8677ae38599e..8d09f380e821 100644
+--- a/include/linux/hid.h
++++ b/include/linux/hid.h
+@@ -352,6 +352,7 @@ struct hid_item {
+ #define HID_QUIRK_INPUT_PER_APP			BIT(11)
+ #define HID_QUIRK_X_INVERT			BIT(12)
+ #define HID_QUIRK_Y_INVERT			BIT(13)
++#define HID_QUIRK_DEVICE_IS_DIGITIZER		BIT(14)
+ #define HID_QUIRK_SKIP_OUTPUT_REPORTS		BIT(16)
+ #define HID_QUIRK_SKIP_OUTPUT_REPORT_ID		BIT(17)
+ #define HID_QUIRK_NO_OUTPUT_REPORTS_ON_INTR_EP	BIT(18)
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

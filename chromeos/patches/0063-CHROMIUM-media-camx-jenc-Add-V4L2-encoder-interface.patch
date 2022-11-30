@@ -1,0 +1,4611 @@
+From 98cd3a7e6cd055662b90b0635025cdeb1ba48518 Mon Sep 17 00:00:00 2001
+From: Atanas Filipov <afilipov@mm-sol.corp-partner.google.com>
+Date: Sun, 10 Oct 2021 21:39:18 +0300
+Subject: [PATCH] CHROMIUM: media: camx: jenc: Add V4L2 encoder interface
+
+BUG=b:196080792,b:196080793
+ TEST: Build with W=1 C=1
+       Record video and take snapshot on both cameras.
+       v4l2-compliance -s -v -d /dev/video2
+       Verified for regressions with camera g-test set.
+       Verified for regressions with CTS camera test set.
+
+Change-Id: I7ac9c96c7a4a48f769a7779491ce19ec63a0cee7
+Signed-off-by: Atanas Filipov <afilipov@mm-sol.corp-partner.google.com>
+Cq-Depend: chromium:3546262,chrome-internal:4517111
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3318623
+Reviewed-by: Ricardo Ribalda <ribalda@chromium.org>
+Tested-by: Atanas Filipov <afilipov@mm-sol.com>
+Tested-by: Ricardo Ribalda <ribalda@chromium.org>
+Commit-Queue: Ricardo Ribalda <ribalda@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3686301
+Reviewed-by: Stephen Boyd <swboyd@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: media: camx: jenc: Add V4L2 encoder interface
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    4d012167d81412050d58f6704d6450a83156a1da
+    3310a3d6f48b8ae3c08ed27f4465b82e3419451d
+
+ arch/arm64/boot/dts/qcom/sc7180-camera.dtsi   |    3 +-
+ drivers/media/platform/camx/cam_jpeg/Kconfig  |    4 +
+ drivers/media/platform/camx/cam_jpeg/Makefile |    1 +
+ .../platform/camx/cam_jpeg/cam_jpeg_dev.h     |   38 +-
+ .../camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.c   |    5 +
+ .../camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.h   |    2 +
+ .../cam_jpeg/jpeg_hw/jpeg_enc_hw/Makefile     |    6 +-
+ .../jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2.c       |  737 +++++++++
+ .../jpeg_enc_hw/cam_jenc_v4l2_common.c        |  309 ++++
+ .../jpeg_enc_hw/cam_jenc_v4l2_common.h        |   72 +
+ .../jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_defs.h  | 1429 +++++++++++++++++
+ .../jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.c   | 1350 ++++++++++++++++
+ .../jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.h   |   82 +
+ .../jpeg_hw/jpeg_enc_hw/jpeg_enc_core.c       |   52 +-
+ .../jpeg_hw/jpeg_enc_hw/jpeg_enc_core.h       |    7 +
+ .../jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.c        |   55 +-
+ .../jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.h        |   25 +
+ .../platform/camx/cam_smmu/cam_smmu_api.c     |   67 +
+ .../platform/camx/cam_smmu/cam_smmu_api.h     |    7 +
+ 19 files changed, 4238 insertions(+), 13 deletions(-)
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2.c
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.c
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.h
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_defs.h
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.c
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.h
+ create mode 100644 drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.h
+
+diff --git a/arch/arm64/boot/dts/qcom/sc7180-camera.dtsi b/arch/arm64/boot/dts/qcom/sc7180-camera.dtsi
+index 9f7a585d813c..57ba83343259 100644
+--- a/arch/arm64/boot/dts/qcom/sc7180-camera.dtsi
++++ b/arch/arm64/boot/dts/qcom/sc7180-camera.dtsi
+@@ -68,7 +68,7 @@ iova-mem-region-io {
+ 			};
+ 		};
+ 
+-		msm_cam_smmu_jpeg {
++		smmu_jpeg: msm_cam_smmu_jpeg {
+ 			compatible = "qcom,msm-cam-smmu-cb";
+ 			iommus = <&apps_smmu 0xd80 0x20>,
+ 				<&apps_smmu  0xda0 0x20>;
+@@ -863,6 +863,7 @@ cam_jpeg_mgr: qcom,cam-jpeg {
+ 		cam_jpeg_enc: qcom,jpegenc@ac4e000 {
+ 			cell-index = <0>;
+ 			compatible = "qcom,cam_jpeg_enc";
++			smmu_intf = <&smmu_jpeg>;
+ 			reg-names = "jpege_hw";
+ 			reg = <0 0xac4e000 0 0x4000>;
+ 			reg-cam-base = <0x4e000>;
+diff --git a/drivers/media/platform/camx/cam_jpeg/Kconfig b/drivers/media/platform/camx/cam_jpeg/Kconfig
+index 431423d54918..c906ae32dabd 100644
+--- a/drivers/media/platform/camx/cam_jpeg/Kconfig
++++ b/drivers/media/platform/camx/cam_jpeg/Kconfig
+@@ -2,6 +2,10 @@ config QTI_JPEG
+ 	bool "Qualcomm JPEG driver"
+ 	default n
+ 	depends on (QTI_CAMERA_SYNC && QTI_CAMERA_SMMU && QTI_CAMERA_CRM)
++        depends on (VIDEO_DEV && VIDEO_V4L2)
++        select VIDEOBUF2_VMALLOC
++        select V4L2_MEM2MEM_DEV
++        select VIDEOBUF2_DMA_CONTIG
+ 	help
+ 	  Say Y here to enable selecting module
+ 	  Support for the JPEG engine
+diff --git a/drivers/media/platform/camx/cam_jpeg/Makefile b/drivers/media/platform/camx/cam_jpeg/Makefile
+index 208d47a16de2..23dc7b02f0a1 100644
+--- a/drivers/media/platform/camx/cam_jpeg/Makefile
++++ b/drivers/media/platform/camx/cam_jpeg/Makefile
+@@ -5,6 +5,7 @@ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_core
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_smmu
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/include
++ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_cpas/include/
+ 
+ obj-$(CONFIG_SPECTRA_CAMERA) += jpeg_hw/
+diff --git a/drivers/media/platform/camx/cam_jpeg/cam_jpeg_dev.h b/drivers/media/platform/camx/cam_jpeg/cam_jpeg_dev.h
+index 53199720a25e..af605970301c 100644
+--- a/drivers/media/platform/camx/cam_jpeg/cam_jpeg_dev.h
++++ b/drivers/media/platform/camx/cam_jpeg/cam_jpeg_dev.h
+@@ -14,10 +14,21 @@
+ #ifndef _CAM_JPEG_DEV_H_
+ #define _CAM_JPEG_DEV_H_
+ 
+-#include "cam_subdev.h"
+-#include "cam_hw_mgr_intf.h"
++#include <media/v4l2-device.h>
++
+ #include "cam_context.h"
++#include "cam_hw.h"
++#include "cam_hw_intf.h"
++#include "cam_hw_mgr_intf.h"
+ #include "cam_jpeg_context.h"
++#include "cam_subdev.h"
++#include "jpeg_enc_dev.h"
++
++#define JENC_QUALITY_MIN	1
++#define JENC_QUALITY_DEF	98
++#define JENC_QUALITY_MAX	100
++#define JENC_QUALITY_MID	(JENC_QUALITY_MAX / 2)
++#define JENC_QUALITY_STEP	1
+ 
+ /**
+  * struct cam_jpeg_dev - Camera JPEG V4l2 device node
+@@ -37,4 +48,27 @@ struct cam_jpeg_dev {
+ 	struct mutex jpeg_mutex;
+ 	int32_t open_cnt;
+ };
++
++struct jpeg_encoder {
++	u32		   hw_type;
++	u32		   hw_idx;
++	struct cam_hw_ops  hw_ops;
++	void		  *hw_priv;
++	struct device *dev;
++	struct v4l2_device v4l2_dev;
++	struct video_device vfd;
++#ifdef CONFIG_MEDIA_CONTROLLER
++	struct media_device mdev;
++#endif
++	struct mutex dev_mutex;
++	struct v4l2_m2m_dev *m2m_dev;
++	atomic_t ref_count;
++	struct device *smmu;
++	s32 iommu_hdl;
++};
++
++int jenc_v4l2_device_create(struct jpeg_encoder *jenc);
++
++void jenc_v4l2_device_destroy(struct jpeg_encoder *jenc);
++
+ #endif /* __CAM_JPEG_DEV_H__ */
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.c b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.c
+index 0d1e7d910a70..6f5cbd4f7caa 100644
+--- a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.c
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.c
+@@ -1645,6 +1645,11 @@ static int cam_jpeg_mgr_cmd(void *hw_mgr_priv, void *cmd_args)
+ 	return rc;
+ }
+ 
++int cam_jpeg_get_iommu_hd(void)
++{
++	return g_jpeg_hw_mgr.iommu_hdl;
++}
++
+ int cam_jpeg_hw_mgr_init(struct device_node *of_node, uint64_t *hw_mgr_hdl,
+ 	int *iommu_hdl)
+ {
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.h b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.h
+index 2a72255db33e..bbbcf423cbe1 100644
+--- a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.h
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/cam_jpeg_hw_mgr.h
+@@ -168,4 +168,6 @@ struct cam_jpeg_hw_mgr {
+ 	struct cam_jpeg_hw_cfg_req req_list[CAM_JPEG_HW_CFG_Q_MAX];
+ };
+ 
++int cam_jpeg_get_iommu_hd(void);
++
+ #endif /* CAM_JPEG_HW_MGR_H */
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/Makefile b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/Makefile
+index 9cfbe330e464..10ccca8b8eaa 100644
+--- a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/Makefile
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/Makefile
+@@ -6,5 +6,9 @@ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/include
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/
+ ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw
++ccflags-y += -I$(srctree)/drivers/media/platform/camx/cam_smmu
+ 
+-obj-$(CONFIG_SPECTRA_CAMERA) += jpeg_enc_dev.o jpeg_enc_core.o jpeg_enc_soc.o
++obj-$(CONFIG_SPECTRA_CAMERA) += jpeg_enc_dev.o jpeg_enc_core.o jpeg_enc_soc.o \
++	cam_jenc_v4l2.o \
++	cam_jenc_v4l2_common.o \
++	cam_jenc_v4l2_hal.o
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2.c b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2.c
+new file mode 100644
+index 000000000000..fb3ea82d9c21
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2.c
+@@ -0,0 +1,737 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2021-2022, MM Solutions EAD. All rights reserved.
++ *	Author: Atanas Filipov <afilipov@mm-sol.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/module.h>
++#include <linux/of_platform.h>
++#include <linux/platform_device.h>
++#include <media/v4l2-ctrls.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-event.h>
++#include <media/v4l2-ioctl.h>
++#include <media/v4l2-mem2mem.h>
++#include <media/videobuf2-dma-sg.h>
++
++#include "jpeg_enc_core.h"
++#include "cam_jpeg_dev.h"
++#include "cam_jenc_v4l2_hal.h"
++#include "cam_jenc_v4l2_common.h"
++
++#include "cam_jpeg_hw_mgr.h"
++
++#define JENC_MEDIA_ENT		MEDIA_ENT_F_PROC_VIDEO_ENCODER
++#define JENC_DEF_TIMER_MS	5
++
++#define JENC_MIN_NUM_BUFS	1
++
++static inline struct jenc_context *jenc_file2ctx(struct file *file)
++{
++	return container_of(file->private_data, struct jenc_context, fh);
++}
++
++static int op_jenc_v4l2_set_ctrls(struct v4l2_ctrl *ctrl)
++{
++	struct jenc_context *jctx = container_of(ctrl->handler,
++						 struct jenc_context, ctrl_hdl);
++
++	switch (ctrl->id) {
++	case V4L2_CID_JPEG_COMPRESSION_QUALITY:
++		jctx->quality = ctrl->val;
++		break;
++	default:
++		dev_err(jctx->dev, "%s Ivalid control:0x%x\n", __func__,
++			ctrl->id);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static const struct v4l2_ctrl_ops jenc_v4l2_ctrl_ops = {
++	.s_ctrl = op_jenc_v4l2_set_ctrls,
++};
++
++static int op_jenc_vb2_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
++				   unsigned int *plns_per_buff,
++				   unsigned int sizes[],
++				   struct device *alloc_devs[])
++{
++	struct jenc_context *jctx = vb2_get_drv_priv(vq);
++	struct v4l2_pix_format_mplane *pixfmt;
++	struct jenc_bufq *bufq;
++	int i, rc = 0;
++
++	if (!jctx)
++		return -EIO;
++
++	bufq = jenc_hal_get_bufq(jctx, TYPE2ID(vq->type));
++	pixfmt = &bufq->vf.fmt.pix_mp;
++
++	if (*plns_per_buff) {
++		if (*plns_per_buff != pixfmt->num_planes)
++			return -EINVAL;
++		for (i = 0; i < pixfmt->num_planes; ++i)
++			if (sizes[i] < pixfmt->plane_fmt[i].sizeimage)
++				return -EINVAL;
++		return 0;
++	}
++
++	*plns_per_buff = pixfmt->num_planes;
++	for (i = 0; i < pixfmt->num_planes; ++i)
++		sizes[i] = pixfmt->plane_fmt[i].sizeimage;
++
++	vq->min_buffers_needed = JENC_MIN_NUM_BUFS;
++
++	return rc;
++}
++
++static int op_jenc_vb2_buf_out_validate(struct vb2_buffer *vb)
++{
++	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
++
++	if (vbuf->field == V4L2_FIELD_ANY)
++		vbuf->field = V4L2_FIELD_NONE;
++	if (vbuf->field != V4L2_FIELD_NONE)
++		return -EINVAL;
++
++	return 0;
++}
++
++static int op_jenc_vb2_buf_prepare(struct vb2_buffer *vb)
++{
++	struct jenc_context *jctx = vb2_get_drv_priv(vb->vb2_queue);
++	struct jenc_bufq *bufq;
++	struct v4l2_pix_format_mplane *pix_mp;
++	int i, rc = 0;
++
++	if (!jctx)
++		return -EIO;
++
++	bufq = jenc_hal_get_bufq(jctx, TYPE2ID(vb->type));
++	pix_mp = &bufq->vf.fmt.pix_mp;
++
++	for (i = 0; i < pix_mp->num_planes; i++) {
++		if (V4L2_TYPE_IS_CAPTURE(vb->type))
++			vb2_set_plane_payload(vb, i,
++					      pix_mp->plane_fmt[i].sizeimage /
++					      JENC_PAYLOAD_DIV);
++		else
++			vb2_set_plane_payload(vb, i,
++					      pix_mp->plane_fmt[i].sizeimage);
++	}
++
++	return rc;
++}
++
++static void op_jenc_vb2_buf_queue(struct vb2_buffer *vb)
++{
++	struct jenc_context *jctx = vb2_get_drv_priv(vb->vb2_queue);
++	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
++
++	if (!jctx)
++		return;
++
++	v4l2_m2m_buf_queue(jctx->fh.m2m_ctx, vbuf);
++}
++
++static int op_jenc_vb2_start_streaming(struct vb2_queue *q, unsigned int count)
++{
++	struct jenc_context *jctx = vb2_get_drv_priv(q);
++
++	if (!jctx)
++		return -EINVAL;
++
++	jenc_v4l2_set_sequence(jctx, q->type, 0);
++
++	return 0;
++}
++
++static void op_jenc_vb2_stop_streaming(struct vb2_queue *q)
++{
++	struct jenc_context *jctx = vb2_get_drv_priv(q);
++
++	if (!jctx)
++		return;
++
++	jenc_hal_process_done(jctx, true);
++}
++
++static void op_jenc_vb2_buf_finish(struct vb2_buffer *vb)
++{
++	struct jenc_context *jctx = vb2_get_drv_priv(vb->vb2_queue);
++
++	if (!jctx)
++		return;
++
++	dev_dbg(jctx->dev, "Result size:%zd\n", jctx->result_size);
++}
++
++static const struct vb2_ops jenc_v4l2_vb2_ops = {
++	.queue_setup		= op_jenc_vb2_queue_setup,
++	.buf_out_validate	= op_jenc_vb2_buf_out_validate,
++	.buf_prepare		= op_jenc_vb2_buf_prepare,
++	.buf_queue		= op_jenc_vb2_buf_queue,
++	.buf_finish		= op_jenc_vb2_buf_finish,
++	.start_streaming	= op_jenc_vb2_start_streaming,
++	.stop_streaming		= op_jenc_vb2_stop_streaming,
++	.wait_prepare		= vb2_ops_wait_prepare,
++	.wait_finish		= vb2_ops_wait_finish,
++};
++
++static void op_jenc_m2m_job_abort(void *priv)
++{
++	struct jenc_context *jctx = priv;
++
++	if (!jctx)
++		return;
++
++	jenc_hal_process_done(jctx, true);
++
++	v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
++}
++
++static void op_jenc_m2m_job_run(void *priv)
++{
++	struct jenc_context *jctx = priv;
++	struct vb2_v4l2_buffer *src_vb, *dst_vb;
++	struct jenc_bufq *sdsc, *ddsc;
++
++	if (!jctx)
++		return;
++
++	src_vb = v4l2_m2m_next_src_buf(jctx->fh.m2m_ctx);
++	dst_vb = v4l2_m2m_next_dst_buf(jctx->fh.m2m_ctx);
++
++	if (!src_vb && !dst_vb)
++		return;
++
++	sdsc = jenc_hal_get_bufq(jctx, TYPE2ID(src_vb->vb2_buf.type));
++	ddsc = jenc_hal_get_bufq(jctx, TYPE2ID(dst_vb->vb2_buf.type));
++
++	src_vb->sequence = sdsc->sequence++;
++	dst_vb->sequence = ddsc->sequence++;
++	v4l2_m2m_buf_copy_metadata(src_vb, dst_vb, true);
++
++	if (jenc_hal_process_exec(jctx, src_vb, dst_vb))
++		op_jenc_m2m_job_abort(jctx);
++}
++
++static const struct v4l2_m2m_ops jenc_v4l2_m2m_ops = {
++	.device_run	= op_jenc_m2m_job_run,
++	.job_abort	= op_jenc_m2m_job_abort,
++};
++
++static int op_jenc_querycap(struct file *file, void *priv,
++			    struct v4l2_capability *cap)
++{
++	strscpy(cap->driver, CAM_JPEC_ENC_NAME, sizeof(cap->driver));
++	strscpy(cap->card, CAM_JPEC_ENC_NAME, sizeof(cap->card));
++	snprintf(cap->bus_info, sizeof(cap->bus_info), "platform:%s",
++		 CAM_JPEC_ENC_NAME);
++
++	cap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_M2M_MPLANE;
++	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
++
++	return 0;
++}
++
++static bool is_invalid_src(struct jenc_context *jctx, u32 type)
++{
++	bool is_invalid = (V4L2_TYPE_IS_CAPTURE(type) ||
++			   !V4L2_TYPE_IS_MULTIPLANAR(type));
++	if (is_invalid)
++		dev_err(jctx->dev, "Invalid src type or format\n");
++
++	return is_invalid;
++}
++
++static bool is_invalid_dst(struct jenc_context *jctx, u32 type)
++{
++	bool is_invalid = (V4L2_TYPE_IS_OUTPUT(type) &&
++			   !V4L2_TYPE_IS_MULTIPLANAR(type));
++
++	if (is_invalid)
++		dev_err(jctx->dev, "Invalid dst type or format\n");
++
++	return is_invalid;
++}
++
++static int op_jenc_enum_fmt_vid_dst(struct file *file, void *priv,
++				    struct v4l2_fmtdesc *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_dst(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_enum_fmt_dst(f);
++}
++
++static int op_jenc_enum_fmt_vid_src(struct file *file, void *priv,
++				    struct v4l2_fmtdesc *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_src(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_enum_fmt_src(f);
++}
++
++static int op_jenc_enum_framesizes(struct file *file, void *priv,
++				   struct v4l2_frmsizeenum *fsize)
++{
++	return jenc_v4l2_enum_framesizes(file, priv, fsize);
++}
++
++static int op_jenc_try_fmt_vid_dst(struct file *file, void *priv,
++				   struct v4l2_format *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_dst(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_try_format(jctx, f);
++}
++
++static int op_jenc_try_fmt_vid_src(struct file *file, void *priv,
++				   struct v4l2_format *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_src(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_try_format(jctx, f);
++}
++
++static int op_jenc_get_fmt_vid_dst(struct file *file, void *priv,
++				   struct v4l2_format *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_dst(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_get_format(jctx, f);
++}
++
++static int op_jenc_get_fmt_vid_src(struct file *file, void *priv,
++				   struct v4l2_format *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_src(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_get_format(jctx, f);
++}
++
++static int op_jenc_set_fmt_vid_dst(struct file *file, void *priv,
++				   struct v4l2_format *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_dst(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_set_format(jctx, f);
++}
++
++static int op_jenc_set_fmt_vid_src(struct file *file, void *priv,
++				   struct v4l2_format *f)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!jctx)
++		return -EIO;
++
++	if (is_invalid_src(jctx, f->type))
++		return -EINVAL;
++
++	return jenc_v4l2_set_format(jctx, f);
++}
++
++static int op_jenc_query_ext_ctrl(struct file *file, void *fh,
++				  struct v4l2_query_ext_ctrl *xctrl)
++{
++	return 0;
++}
++
++static int op_jenc_g_selection(struct file *file, void *fh,
++			       struct v4l2_selection *s)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++	struct jenc_bufq *bq = jenc_hal_get_bufq(jctx, TYPE2ID(s->type));
++
++	if (V4L2_TYPE_IS_CAPTURE(s->type))
++		return -EINVAL;
++
++	switch (s->target) {
++	case V4L2_SEL_TGT_CROP_DEFAULT:
++	case V4L2_SEL_TGT_CROP_BOUNDS:
++		s->r.left	= 0;
++		s->r.top	= 0;
++		s->r.width	= bq->vf.fmt.pix_mp.width;
++		s->r.height	= bq->vf.fmt.pix_mp.height;
++		break;
++	case V4L2_SEL_TGT_CROP:
++		*s = jctx->sel;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int op_jenc_s_selection(struct file *file, void *fh,
++			       struct v4l2_selection *s)
++{
++	struct jenc_context *jctx = jenc_file2ctx(file);
++	struct jenc_bufq *dbq = jenc_hal_get_bufq(jctx, TYPE2ID(s->type));
++
++	if (V4L2_TYPE_IS_CAPTURE(s->type))
++		return -EINVAL;
++
++	s->r.width  = clamp_t(u32, s->r.width, 0, dbq->vf.fmt.pix_mp.width);
++	s->r.height = clamp_t(u32, s->r.height, 0, dbq->vf.fmt.pix_mp.height);
++	s->r.left   = clamp_t(u32, s->r.left, 0, JENC_HW_MAX_WIDTH - s->r.width);
++	s->r.top    = clamp_t(u32, s->r.top, 0, JENC_HW_MAX_HEIGHT - s->r.height);
++
++	switch (s->target) {
++	case V4L2_SEL_TGT_CROP:
++		jctx->sel = *s;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	dev_dbg(jctx->dev, "Image:%dx%d Crop: L:%d W:%d T:%d H:%d\n",
++		dbq->vf.fmt.pix_mp.width, dbq->vf.fmt.pix_mp.height,
++		s->r.left, s->r.width, s->r.top, s->r.height);
++
++	return 0;
++}
++
++static const struct v4l2_ioctl_ops jenc_v4l2_ioctl_ops = {
++	.vidioc_querycap		= op_jenc_querycap,
++	.vidioc_enum_fmt_vid_cap	= op_jenc_enum_fmt_vid_dst,
++	.vidioc_enum_framesizes		= op_jenc_enum_framesizes,
++	.vidioc_enum_fmt_vid_out	= op_jenc_enum_fmt_vid_src,
++
++	.vidioc_g_fmt_vid_cap_mplane	= op_jenc_get_fmt_vid_dst,
++	.vidioc_try_fmt_vid_cap_mplane	= op_jenc_try_fmt_vid_dst,
++	.vidioc_s_fmt_vid_cap_mplane	= op_jenc_set_fmt_vid_dst,
++	.vidioc_g_fmt_vid_out_mplane	= op_jenc_get_fmt_vid_src,
++	.vidioc_try_fmt_vid_out_mplane	= op_jenc_try_fmt_vid_src,
++	.vidioc_s_fmt_vid_out_mplane	= op_jenc_set_fmt_vid_src,
++
++	.vidioc_reqbufs			= v4l2_m2m_ioctl_reqbufs,
++	.vidioc_querybuf		= v4l2_m2m_ioctl_querybuf,
++	.vidioc_prepare_buf		= v4l2_m2m_ioctl_prepare_buf,
++	.vidioc_create_bufs		= v4l2_m2m_ioctl_create_bufs,
++	.vidioc_streamon		= v4l2_m2m_ioctl_streamon,
++	.vidioc_streamoff		= v4l2_m2m_ioctl_streamoff,
++	.vidioc_qbuf			= v4l2_m2m_ioctl_qbuf,
++	.vidioc_dqbuf			= v4l2_m2m_ioctl_dqbuf,
++	.vidioc_expbuf			= v4l2_m2m_ioctl_expbuf,
++
++	.vidioc_subscribe_event		= v4l2_ctrl_subscribe_event,
++	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
++	.vidioc_query_ext_ctrl		= op_jenc_query_ext_ctrl,
++
++	.vidioc_g_selection		= op_jenc_g_selection,
++	.vidioc_s_selection		= op_jenc_s_selection,
++};
++
++static int jenc_v4l2_init_queue(void *priv, struct vb2_queue *src_vq,
++				struct vb2_queue *dst_vq)
++{
++	struct jenc_context *jctx = priv;
++	int ret;
++
++	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
++	src_vq->io_modes = VB2_MMAP | VB2_DMABUF;
++	src_vq->drv_priv = jctx;
++	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
++	src_vq->ops = &jenc_v4l2_vb2_ops;
++	src_vq->dev = jctx->jenc->smmu;
++	src_vq->mem_ops = &vb2_dma_sg_memops;
++	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
++	src_vq->lock = &jctx->vb_mutex;
++
++	ret = vb2_queue_init(src_vq);
++	if (ret)
++		return ret;
++
++	*dst_vq  = *src_vq;
++	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
++
++	return vb2_queue_init(dst_vq);
++}
++
++/*
++ * File operations
++ */
++static int op_jenc_file_open(struct file *file)
++{
++	struct jpeg_encoder *jenc = video_drvdata(file);
++	struct jenc_context *jctx;
++	bool hw_reset = false;
++	int rc = 0;
++
++	if (!jenc)
++		return -EIO;
++
++	jctx = kzalloc(sizeof(*jctx), GFP_KERNEL);
++	if (!jctx)
++		return -ENOMEM;
++
++	jctx->jenc	= jenc;
++	jctx->dev	= jenc->dev;
++	jctx->iommu_hdl	= cam_jpeg_get_iommu_hd();
++
++	if (atomic_inc_return(&jenc->ref_count) == 1)
++		hw_reset = true;
++
++	rc = jenc_hal_prepare(jctx, hw_reset);
++	if (rc)
++		goto err_jctx_free;
++
++	v4l2_fh_init(&jctx->fh, video_devdata(file));
++	file->private_data = &jctx->fh;
++
++	v4l2_ctrl_handler_init(&jctx->ctrl_hdl, 1);
++	jctx->quality_ctl = v4l2_ctrl_new_std(&jctx->ctrl_hdl,
++					      &jenc_v4l2_ctrl_ops,
++					      V4L2_CID_JPEG_COMPRESSION_QUALITY,
++					      JENC_QUALITY_MIN,
++					      JENC_QUALITY_MAX,
++					      JENC_QUALITY_STEP,
++					      JENC_QUALITY_DEF);
++	if (jctx->ctrl_hdl.error) {
++		rc = jctx->ctrl_hdl.error;
++		goto err_fh_exit;
++	}
++
++	jctx->fh.ctrl_handler = &jctx->ctrl_hdl;
++	rc = v4l2_ctrl_handler_setup(&jctx->ctrl_hdl);
++	if (rc)
++		goto err_fh_exit;
++
++	jctx->fh.m2m_ctx = v4l2_m2m_ctx_init(jenc->m2m_dev, jctx,
++					     &jenc_v4l2_init_queue);
++	if (IS_ERR(jctx->fh.m2m_ctx)) {
++		rc = PTR_ERR(jctx->fh.m2m_ctx);
++		goto err_handler_free;
++	}
++
++	mutex_init(&jctx->vb_mutex);
++	spin_lock_init(&jctx->irqlock);
++
++	v4l2_fh_add(&jctx->fh);
++
++	/* Initialize the parameters by default */
++	jenc_v4l2_set_defaults(jctx);
++
++	dev_dbg(jctx->dev, "Acquiring instance %p\n", jctx);
++
++	return rc;
++
++err_handler_free:
++	v4l2_ctrl_handler_free(&jctx->ctrl_hdl);
++err_fh_exit:
++	v4l2_fh_exit(&jctx->fh);
++err_jctx_free:
++	atomic_dec_return(&jenc->ref_count);
++	kfree(jctx);
++
++	return rc;
++}
++
++static int op_jenc_file_release(struct file *file)
++{
++	struct jpeg_encoder *jenc = video_drvdata(file);
++	struct jenc_context *jctx = jenc_file2ctx(file);
++
++	if (!atomic_dec_if_positive(&jenc->ref_count))
++		jenc_hal_release(jctx);
++
++	v4l2_fh_del(&jctx->fh);
++	v4l2_fh_exit(&jctx->fh);
++	v4l2_ctrl_handler_free(&jctx->ctrl_hdl);
++	mutex_lock(&jenc->dev_mutex);
++	v4l2_m2m_ctx_release(jctx->fh.m2m_ctx);
++	mutex_unlock(&jenc->dev_mutex);
++
++	dev_dbg(jctx->dev, "Releasing instance %p\n", jctx);
++
++	kfree(jctx);
++
++	return 0;
++}
++
++static const struct v4l2_file_operations jenc_v4l2_file_ops = {
++	.owner		= THIS_MODULE,
++	.open		= op_jenc_file_open,
++	.release	= op_jenc_file_release,
++
++	.poll		= v4l2_m2m_fop_poll,
++	.mmap		= v4l2_m2m_fop_mmap,
++
++	.unlocked_ioctl = video_ioctl2,
++};
++
++static void op_jenc_vdev_release(struct video_device *vdev)
++{
++	struct jpeg_encoder *jenc = container_of(vdev, struct jpeg_encoder,
++						 vfd);
++
++	v4l2_device_unregister(&jenc->v4l2_dev);
++	v4l2_m2m_release(jenc->m2m_dev);
++#ifdef CONFIG_MEDIA_CONTROLLER
++	media_device_cleanup(&jenc->mdev);
++#endif
++	kfree(jenc);
++}
++
++static const struct video_device jenc_v4l2_vdev_ops = {
++	.name		= CAM_JPEC_ENC_NAME,
++	.vfl_dir	= VFL_DIR_M2M,
++	.fops		= &jenc_v4l2_file_ops,
++	.ioctl_ops	= &jenc_v4l2_ioctl_ops,
++	.minor		= -1,
++	.release	= op_jenc_vdev_release,
++	.device_caps	= V4L2_CAP_STREAMING		|
++			  V4L2_CAP_VIDEO_M2M_MPLANE
++};
++
++static const struct media_device_ops jenc_v4l2_mdev_ops = {
++	.req_validate = vb2_request_validate,
++	.req_queue = v4l2_m2m_request_queue,
++};
++
++int jenc_v4l2_device_create(struct jpeg_encoder *jenc)
++{
++	struct video_device *vfd;
++	int rc;
++
++	mutex_lock(&jenc->dev_mutex);
++
++	rc = v4l2_device_register(jenc->dev, &jenc->v4l2_dev);
++	if (rc)
++		goto err_mutex_unlock;
++
++	jenc->vfd = jenc_v4l2_vdev_ops;
++	vfd = &jenc->vfd;
++	vfd->lock = &jenc->dev_mutex;
++	vfd->v4l2_dev = &jenc->v4l2_dev;
++
++	rc = video_register_device(vfd, VFL_TYPE_VIDEO, 0);
++	if (rc) {
++		dev_err(jenc->dev, "Failed to register video device\n");
++		goto err_v4l2_unregister;
++	}
++
++	jenc->m2m_dev = v4l2_m2m_init(&jenc_v4l2_m2m_ops);
++	if (IS_ERR(jenc->m2m_dev)) {
++		dev_err(jenc->dev, "Failed to init mem2mem device\n");
++		rc = PTR_ERR(jenc->m2m_dev);
++		jenc->m2m_dev = NULL;
++		goto err_vdev_unregister;
++	}
++
++#ifdef CONFIG_MEDIA_CONTROLLER
++	jenc->mdev.dev = jenc->dev;
++	strscpy(jenc->mdev.model, CAM_JPEC_ENC_NAME,
++		sizeof(jenc->mdev.model));
++	strscpy(jenc->mdev.bus_info, "platform:" CAM_JPEC_ENC_NAME,
++		sizeof(jenc->mdev.bus_info));
++	media_device_init(&jenc->mdev);
++	jenc->mdev.ops = &jenc_v4l2_mdev_ops;
++	jenc->v4l2_dev.mdev = &jenc->mdev;
++
++	rc = v4l2_m2m_register_media_controller(jenc->m2m_dev, vfd,
++						JENC_MEDIA_ENT);
++	if (rc) {
++		dev_err(jenc->dev, "Failed to init m2m media controller\n");
++		goto err_m2m_release;
++	}
++
++	rc = media_device_register(&jenc->mdev);
++	if (rc) {
++		dev_err(jenc->dev, "Failed to register m2m media device\n");
++		goto err_mc_unregister;
++	}
++#endif
++	video_set_drvdata(vfd, jenc);
++
++	mutex_unlock(&jenc->dev_mutex);
++
++	dev_info(jenc->dev, "Device registered as /jenc/video%d\n", vfd->num);
++
++	return rc;
++
++#ifdef CONFIG_MEDIA_CONTROLLER
++err_mc_unregister:
++	v4l2_m2m_unregister_media_controller(jenc->m2m_dev);
++err_m2m_release:
++	v4l2_m2m_release(jenc->m2m_dev);
++	media_device_cleanup(&jenc->mdev);
++#endif
++err_vdev_unregister:
++	video_unregister_device(&jenc->vfd);
++err_v4l2_unregister:
++	v4l2_device_unregister(&jenc->v4l2_dev);
++err_mutex_unlock:
++	mutex_unlock(&jenc->dev_mutex);
++	mutex_destroy(&jenc->dev_mutex);
++
++	return rc;
++}
++
++void jenc_v4l2_device_destroy(struct jpeg_encoder *jenc)
++{
++#ifdef CONFIG_MEDIA_CONTROLLER
++	v4l2_m2m_unregister_media_controller(jenc->m2m_dev);
++	media_device_unregister(&jenc->mdev);
++	media_device_cleanup(&jenc->mdev);
++#endif
++	v4l2_m2m_release(jenc->m2m_dev);
++	video_unregister_device(&jenc->vfd);
++	v4l2_device_unregister(&jenc->v4l2_dev);
++}
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.c b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.c
+new file mode 100644
+index 000000000000..5be6191b9903
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.c
+@@ -0,0 +1,309 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2021-2022, MM Solutions EAD. All rights reserved.
++ *	Author: Atanas Filipov <afilipov@mm-sol.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <media/v4l2-common.h>
++#include <media/videobuf2-v4l2.h>
++#include <media/v4l2-mem2mem.h>
++
++#include "cam_jenc_v4l2_hal.h"
++#include "cam_jenc_v4l2_common.h"
++
++struct jenc_v4l2_format {
++	u32 type;
++	u32 fourcc;
++	u8  deept[JENC_HW_MAX_PLANES];
++	u8  x_div[JENC_HW_MAX_PLANES];
++	u8  y_div[JENC_HW_MAX_PLANES];
++	enum jenc_vid_id id;
++};
++
++static const struct jenc_v4l2_format jenc_src_formats[] = {
++	{
++		.fourcc	= V4L2_PIX_FMT_NV12,
++		.type	= V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
++		.id	= JENC_SRC_ID,
++		.deept	= { 8, 8 },
++		.x_div	= { 1, 1 },
++		.y_div	= { 1, 2 }
++	}, {
++		.fourcc	= V4L2_PIX_FMT_NV21,
++		.type	= V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
++		.id	= JENC_SRC_ID,
++		.deept	= { 8, 8 },
++		.x_div	= { 1, 1 },
++		.y_div	= { 1, 2 }
++	}
++};
++
++#define JENC_NUM_OF_SRC_FORMATS ARRAY_SIZE(jenc_src_formats)
++
++static const struct jenc_v4l2_format jenc_dst_formats[] = {
++	{
++		.fourcc	= V4L2_PIX_FMT_JPEG,
++		.type	= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE,
++		.id	= JENC_DST_ID,
++		.deept	= { 24 },
++		.x_div	= { 1 },
++		.y_div	= { 1 }
++	}
++};
++
++#define JENC_NUM_OF_DST_FORMATS ARRAY_SIZE(jenc_dst_formats)
++
++static const struct v4l2_frmsizeenum jenc_fsizes = {
++	.stepwise = {
++		.min_width	= JENC_HW_MIN_WIDTH,
++		.max_width	= JENC_HW_MAX_WIDTH,
++		.step_width	= JENC_HW_SRC_WALIGN,
++		.min_height	= JENC_HW_MIN_HEIGHT,
++		.max_height	= JENC_HW_MAX_HEIGHT,
++		.step_height	= JENC_HW_SRC_HALIGN,
++	},
++	.type = V4L2_FRMSIZE_TYPE_STEPWISE
++};
++
++static const struct jenc_v4l2_format *jenc_find_pix_format(enum jenc_vid_id id,
++							   u32 fourcc)
++{
++	const struct jenc_v4l2_format *jf;
++	unsigned int i, count;
++
++	if (JENC_IS_SRC(id)) {
++		count = JENC_NUM_OF_SRC_FORMATS;
++		jf = jenc_src_formats;
++	} else {
++		count = JENC_NUM_OF_DST_FORMATS;
++		jf = jenc_dst_formats;
++	}
++
++	for (i = 0; i < count; i++) {
++		if (jf[i].fourcc == fourcc)
++			return &jf[i];
++	}
++
++	return NULL;
++}
++
++static  size_t jenc_count_planes(struct jenc_context *jctx, enum jenc_vid_id id)
++{
++	return JENC_IS_SRC(id) ? 2 : 1;
++}
++
++static void jenc_update_planes(struct jenc_context *jctx,
++			       const struct jenc_v4l2_format *jf,
++			       struct v4l2_pix_format_mplane *pix_mp,
++			       u32 width, u32 height)
++{
++	struct v4l2_plane_pix_format *pfmt = pix_mp->plane_fmt;
++	int i;
++
++	memset(pfmt, 0, sizeof(struct v4l2_plane_pix_format));
++
++	for (i = 0; i < pix_mp->num_planes; i++) {
++		pfmt[i].bytesperline = width * jf->deept[i] / jf->x_div[i] /
++				       BITS_PER_BYTE;
++		pfmt[i].sizeimage = pfmt[i].bytesperline * height /
++				    jf->y_div[i];
++	}
++}
++
++int jenc_v4l2_enum_fmt_src(struct v4l2_fmtdesc *f)
++{
++	if (f->index >= JENC_NUM_OF_SRC_FORMATS)
++		return -EINVAL;
++
++	f->pixelformat = jenc_src_formats[f->index].fourcc;
++
++	return 0;
++}
++
++int jenc_v4l2_enum_fmt_dst(struct v4l2_fmtdesc *f)
++{
++	if (f->index >= JENC_NUM_OF_DST_FORMATS)
++		return -EINVAL;
++
++	f->pixelformat = jenc_dst_formats[f->index].fourcc;
++
++	return 0;
++}
++
++int jenc_v4l2_enum_framesizes(struct file *file, void *priv,
++			      struct v4l2_frmsizeenum *fsize)
++{
++	const struct jenc_v4l2_format *jf;
++	int i;
++
++	if (fsize->index != 0)
++		return -EINVAL;
++
++	for (i = JENC_SRC_ID; i < JENC_MAX_ID; i++) {
++		jf = jenc_find_pix_format(i, fsize->pixel_format);
++		if (jf)
++			break;
++	}
++
++	if (!jf)
++		return -EINVAL;
++
++	fsize->type = jenc_fsizes.type;
++	fsize->stepwise = jenc_fsizes.stepwise;
++
++	return 0;
++}
++
++int jenc_v4l2_try_format(struct jenc_context *jctx, struct v4l2_format *f)
++{
++	const struct jenc_v4l2_format *jf;
++	struct v4l2_pix_format_mplane *mp = &f->fmt.pix_mp;
++	int i;
++
++	if (V4L2_TYPE_IS_OUTPUT(f->type)) {
++		jf = jenc_find_pix_format(JENC_SRC_ID,
++					  f->fmt.pix_mp.pixelformat);
++		if (!jf)
++			jf = jenc_src_formats;
++
++		f->fmt.pix_mp.num_planes = jenc_count_planes(jctx, JENC_SRC_ID);
++	} else {
++		jf = jenc_find_pix_format(JENC_DST_ID,
++					  f->fmt.pix_mp.pixelformat);
++		if (!jf)
++			jf = jenc_dst_formats;
++		f->fmt.pix_mp.num_planes = jenc_count_planes(jctx, JENC_DST_ID);
++	}
++
++	f->fmt.pix_mp.field = V4L2_FIELD_NONE;
++
++	if (!v4l2_is_colorspace_valid(mp->colorspace))
++		mp->colorspace = V4L2_COLORSPACE_DEFAULT;
++
++	if (!v4l2_is_xfer_func_valid(mp->xfer_func))
++		mp->xfer_func = V4L2_MAP_XFER_FUNC_DEFAULT(mp->colorspace);
++
++	if (!v4l2_is_ycbcr_enc_valid(mp->ycbcr_enc))
++		mp->ycbcr_enc = V4L2_MAP_YCBCR_ENC_DEFAULT(mp->colorspace);
++
++	if (!v4l2_is_quant_valid(mp->quantization))
++		mp->quantization = V4L2_MAP_QUANTIZATION_DEFAULT(false,
++								 mp->colorspace,
++								 mp->ycbcr_enc);
++
++	v4l2_apply_frmsize_constraints(&f->fmt.pix_mp.width, &f->fmt.pix_mp.height,
++				       &jenc_fsizes.stepwise);
++
++	for (i = 0; i < f->fmt.pix_mp.num_planes; i++)
++		f->fmt.pix_mp.pixelformat = jf->fourcc;
++
++	jenc_update_planes(jctx, jf, &f->fmt.pix_mp, f->fmt.pix_mp.width,
++			   f->fmt.pix_mp.height);
++
++	return 0;
++}
++
++int jenc_v4l2_set_format(struct jenc_context *jctx, struct v4l2_format *f)
++{
++	struct jenc_bufq *bq = jenc_hal_get_bufq(jctx, TYPE2ID(f->type));
++	struct jenc_bufq *dq = jenc_hal_get_bufq(jctx, JENC_DST_ID);
++	struct vb2_queue *vq;
++	int i;
++
++	vq = v4l2_m2m_get_vq(jctx->fh.m2m_ctx, f->type);
++	if (!vq) {
++		dev_err(jctx->dev, "Cannot get video queue\n");
++		return -EINVAL;
++	}
++
++	if (vb2_is_busy(vq)) {
++		dev_err(jctx->dev, "The queue is busy\n");
++		return -EBUSY;
++	}
++
++	jenc_v4l2_try_format(jctx, f);
++
++	if (V4L2_TYPE_IS_OUTPUT(f->type)) {
++		dq->vf.fmt.pix_mp.colorspace   = f->fmt.pix_mp.colorspace;
++		dq->vf.fmt.pix_mp.ycbcr_enc    = f->fmt.pix_mp.ycbcr_enc;
++		dq->vf.fmt.pix_mp.quantization = f->fmt.pix_mp.quantization;
++		dq->vf.fmt.pix_mp.xfer_func    = f->fmt.pix_mp.xfer_func;
++
++		jctx->sel.r.left   = 0;
++		jctx->sel.r.top	   = 0;
++		jctx->sel.r.width  = f->fmt.pix_mp.width;
++		jctx->sel.r.height = f->fmt.pix_mp.height;
++	}
++
++	for (i = 0; i < f->fmt.pix_mp.num_planes; i++) {
++		dev_dbg(jctx->dev, "type:%d %dx%d[%d] %c%c%c%c bpl:%d sz:%d\n",
++			f->type, f->fmt.pix_mp.width, f->fmt.pix_mp.height, i,
++			(f->fmt.pix_mp.pixelformat >>  0) & 0xff,
++			(f->fmt.pix_mp.pixelformat >>  8) & 0xff,
++			(f->fmt.pix_mp.pixelformat >> 16) & 0xff,
++			(f->fmt.pix_mp.pixelformat >> 24) & 0xff,
++			f->fmt.pix_mp.plane_fmt[i].bytesperline,
++			f->fmt.pix_mp.plane_fmt[i].sizeimage);
++	}
++
++	bq->vf = *f;
++
++	if (V4L2_TYPE_IS_OUTPUT(f->type)) {
++		bq->vf.fmt.pix_mp.width = dq->vf.fmt.pix_mp.width;
++		bq->vf.fmt.pix_mp.height = dq->vf.fmt.pix_mp.height;
++	}
++
++	return 0;
++}
++
++int jenc_v4l2_get_format(struct jenc_context *jctx, struct v4l2_format *f)
++{
++	struct jenc_bufq *bq = jenc_hal_get_bufq(jctx, TYPE2ID(f->type));
++	struct jenc_bufq *dq = jenc_hal_get_bufq(jctx, JENC_DST_ID);
++
++	*f = bq->vf;
++
++	if (V4L2_TYPE_IS_CAPTURE(f->type)) {
++		f->fmt.pix_mp.colorspace   = dq->vf.fmt.pix_mp.colorspace;
++		f->fmt.pix_mp.ycbcr_enc    = dq->vf.fmt.pix_mp.ycbcr_enc;
++		f->fmt.pix_mp.quantization = dq->vf.fmt.pix_mp.quantization;
++		f->fmt.pix_mp.xfer_func    = dq->vf.fmt.pix_mp.xfer_func;
++	}
++
++	return 0;
++}
++
++u32 jenc_v4l2_set_sequence(struct jenc_context *jctx, enum v4l2_buf_type type,
++			   u32 sequence)
++{
++	struct jenc_bufq *bq = jenc_hal_get_bufq(jctx, TYPE2ID(type));
++
++	if (!jctx)
++		return -EINVAL;
++
++	return bq->sequence = sequence;
++}
++
++void jenc_v4l2_set_defaults(struct jenc_context *jctx)
++{
++	struct jenc_bufq *s = jenc_hal_get_bufq(jctx, JENC_SRC_ID);
++	struct jenc_bufq *d = jenc_hal_get_bufq(jctx, JENC_DST_ID);
++	struct v4l2_format f = {0};
++
++	f.type			 = jenc_src_formats->type;
++	f.fmt.pix_mp.pixelformat = jenc_src_formats->fourcc;
++	jenc_v4l2_try_format(jctx, &f);	s->vf = f;
++
++	f.type			 = jenc_dst_formats->type;
++	f.fmt.pix_mp.pixelformat = jenc_dst_formats->fourcc;
++	jenc_v4l2_try_format(jctx, &f);	d->vf = f;
++}
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.h b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.h
+new file mode 100644
+index 000000000000..cb9d9cedbd53
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_common.h
+@@ -0,0 +1,72 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2021-2022, MM Solutions EAD. All rights reserved.
++ *	Author: Atanas Filipov <afilipov@mm-sol.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#ifndef CAM_JENC_V4L2_COMMON_H_
++#define CAM_JENC_V4L2_COMMON_H_
++
++#include <linux/types.h>
++#include <linux/videodev2.h>
++
++/* Maximum number of planes supported by HW */
++#define JENC_HW_MAX_PLANES	3
++
++#define JENC_HW_MAX_WIDTH	3264
++#define JENC_HW_MAX_HEIGHT	2448
++
++#define JENC_HW_MIN_WIDTH	ALIGN(JENC_HW_MAX_WIDTH  >> 4, 16)
++#define JENC_HW_MIN_HEIGHT	ALIGN(JENC_HW_MAX_HEIGHT >> 4, 16)
++
++#define JENC_HW_DST_DEF_WIDTH	640
++#define JENC_HW_DST_DEF_HEIGHT	480
++#define JENC_HW_DST_WALIGN	16
++#define JENC_HW_DST_HALIGN	2
++
++#define JENC_HW_SRC_DEF_WIDTH	2592
++#define JENC_HW_SRC_DEF_HEIGHT	1944
++#define JENC_HW_SRC_WALIGN	16
++#define JENC_HW_SRC_HALIGN	2
++
++enum jenc_vid_id {
++	JENC_SRC_ID = 0,
++	JENC_DST_ID,
++	JENC_MAX_ID
++};
++
++#define TYPE2ID(t) (V4L2_TYPE_IS_OUTPUT(t) ? JENC_SRC_ID : JENC_DST_ID)
++
++#define JENC_IS_SRC(t) ((t) == JENC_SRC_ID)
++#define JENC_IS_DST(t) ((t) == JENC_DST_ID)
++
++struct jenc_context;
++
++int jenc_v4l2_enum_fmt_src(struct v4l2_fmtdesc *f);
++
++int jenc_v4l2_enum_fmt_dst(struct v4l2_fmtdesc *f);
++
++int jenc_v4l2_try_format(struct jenc_context *jctx, struct v4l2_format *f);
++
++int jenc_v4l2_set_format(struct jenc_context *jctx, struct v4l2_format *f);
++
++int jenc_v4l2_get_format(struct jenc_context *jctx, struct v4l2_format *f);
++
++int jenc_v4l2_enum_framesizes(struct file *file, void *priv,
++			      struct v4l2_frmsizeenum *fsize);
++
++u32 jenc_v4l2_set_sequence(struct jenc_context *jctx, enum v4l2_buf_type type,
++			   u32 sequence);
++
++void jenc_v4l2_set_defaults(struct jenc_context *jctx);
++
++#endif /* CAM_JENC_V4L2_COMMON_H_*/
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_defs.h b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_defs.h
+new file mode 100644
+index 000000000000..13b41dc6e1ed
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_defs.h
+@@ -0,0 +1,1429 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2021-2022, MM Solutions EAD. All rights reserved.
++ *	Author: Atanas Filipov <afilipov@mm-sol.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#ifndef JENC_V4L2_HW_DEFS_H_
++#define JENC_V4L2_HW_DEFS_H_
++
++#define JENC_HW_VER_REG 0x0
++#define JENC_HW_VER_STEP_MASK 0xffff
++#define JENC_HW_VER_STEP_SHIFT 0x0
++#define JENC_HW_VER_MINOR_MASK 0xfff0000
++#define JENC_HW_VER_MINOR_SHIFT 0x10
++#define JENC_HW_VER_MAJOR_MASK 0xf0000000
++#define JENC_HW_VER_MAJOR_SHIFT 0x1c
++
++#define JENC_HW_CAP_REG 0x4
++#define JENC_HW_CAP_ENCODE_MASK 0x1
++#define JENC_HW_CAP_ENCODE_SHIFT 0x0
++#define JENC_HW_CAP_DECODE_MASK 0x2
++#define JENC_HW_CAP_DECODE_SHIFT 0x1
++#define JENC_HW_CAP_UPSCALE_MASK 0x70
++#define JENC_HW_CAP_DOWNSCALE_MASK 0x700
++#define JENC_HW_CAP_DOWNSCALE_SHIFT 0x8
++
++#define JENC_RST_CMD_REG 0x8
++#define JENC_RST_CMD_FE_RESET_MASK 0x1
++#define JENC_RST_CMD_FE_RESET_SHIFT 0x0
++#define JENC_RST_CMD_WE_RESET_MASK 0x2
++#define JENC_RST_CMD_WE_RESET_SHIFT 0x1
++#define JENC_RST_CMD_ENCODER_RESET_MASK 0x10
++#define JENC_RST_CMD_ENCODER_RESET_SHIFT 0x4
++#define JENC_RST_CMD_DECODER_RESET_MASK 0x20
++#define JENC_RST_CMD_DECODER_RESET_SHIFT 0x5
++#define JENC_RST_CMD_BLOCK_FORMATTER_RESET_MASK 0x40
++#define JENC_RST_CMD_BLOCK_FORMATTER_RESET_SHIFT 0x6
++#define JENC_RST_CMD_SCALE_RESET_MASK 0x80
++#define JENC_RST_CMD_SCALE_RESET_SHIFT 0x7
++#define JENC_RST_CMD_REGISTER_RESET_MASK 0x2000
++#define JENC_RST_CMD_REGISTER_RESET_SHIFT 0xd
++#define JENC_RST_CMD_MISR_RESET_MASK 0x10000
++#define JENC_RST_CMD_MISR_RESET_SHIFT 0x10
++#define JENC_RST_CMD_CORE_RESET_MASK 0x20000
++#define JENC_RST_CMD_CORE_RESET_SHIFT 0x11
++#define JENC_RST_CMD_JPEG_DOMAIN_RESET_MASK 0x20000000
++#define JENC_RST_CMD_JPEG_DOMAIN_RESET_SHIFT 0x1d
++#define JENC_RST_CMD_RESET_BYPASS_MASK 0x80000000
++#define JENC_RST_CMD_RESET_BYPASS_SHIFT 0x1f
++
++#define JENC_CORE_CFG_REG 0xc
++#define JENC_CORE_CFG_FE_ENABLE_MASK 0x1
++#define JENC_CORE_CFG_FE_ENABLE_SHIFT 0x0
++#define JENC_CORE_CFG_WE_ENABLE_MASK 0x2
++#define JENC_CORE_CFG_WE_ENABLE_SHIFT 0x1
++#define JENC_CORE_CFG_JPEG_ENCODE_ENABLE_MASK 0x10
++#define JENC_CORE_CFG_JPEG_ENCODE_ENABLE_SHIFT 0x4
++#define JENC_CORE_CFG_SCALE_ENABLE_MASK 0x80
++#define JENC_CORE_CFG_SCALE_ENABLE_SHIFT 0x7
++#define JENC_CORE_CFG_TESTBUS_ENABLE_MASK 0x80000
++#define JENC_CORE_CFG_TESTBUS_ENABLE_SHIFT 0x13
++#define JENC_CORE_CFG_MODE_MASK 0x7000000
++#define JENC_CORE_CFG_MODE_SHIFT 0x18
++#define JENC_CORE_CFG_CGC_DISABLE_MASK 0x80000000
++#define JENC_CORE_CFG_CGC_DISABLE_SHIFT 0x1f
++
++#define JENC_CMD_REG 0x10
++#define JENC_CMD_HW_START_MASK 0x1
++#define JENC_CMD_HW_START_SHIFT 0x0
++#define JENC_CMD_HW_STOP_MASK 0x2
++#define JENC_CMD_HW_STOP_SHIFT 0x1
++#define JENC_CMD_CLEAR_RD_PLN0_QUEUE_MASK 0x10
++#define JENC_CMD_CLEAR_RD_PLN0_QUEUE_SHIFT 0x4
++#define JENC_CMD_CLEAR_RD_PLN1_QUEUE_MASK 0x20
++#define JENC_CMD_CLEAR_RD_PLN1_QUEUE_SHIFT 0x5
++#define JENC_CMD_CLEAR_RD_PLN2_QUEUE_MASK 0x40
++#define JENC_CMD_CLEAR_RD_PLN2_QUEUE_SHIFT 0x6
++#define JENC_CMD_CLEAR_WR_PLN0_QUEUE_MASK 0x100
++#define JENC_CMD_CLEAR_WR_PLN0_QUEUE_SHIFT 0x8
++#define JENC_CMD_CLEAR_WR_PLN1_QUEUE_MASK 0x200
++#define JENC_CMD_CLEAR_WR_PLN1_QUEUE_SHIFT 0x9
++#define JENC_CMD_CLEAR_WR_PLN2_QUEUE_MASK 0x400
++#define JENC_CMD_CLEAR_WR_PLN2_QUEUE_SHIFT 0xa
++#define JENC_CMD_APPLY_SWC_RD_PARAMS_MASK 0x800
++#define JENC_CMD_APPLY_SWC_RD_PARAMS_SHIFT 0xb
++
++#define JENC_CORE_STAT_REG 0x14
++#define JENC_CORE_STAT_ENCODE_STATE_MASK 0x1
++#define JENC_CORE_STAT_ENCODE_STATE_SHIFT 0x0
++#define JENC_CORE_STAT_SCALE_STATE_MASK 0x4
++#define JENC_CORE_STAT_SCALE_STATE_SHIFT 0x2
++#define JENC_CORE_STAT_REALTIME_STATE_MASK 0x10
++#define JENC_CORE_STAT_REALTIME_STATE_SHIFT 0x4
++#define JENC_CORE_STAT_BUS_STATE_MASK 0x100
++#define JENC_CORE_STAT_BUS_STATE_SHIFT 0x8
++#define JENC_CORE_STAT_TOP_LVL_CGC_STATE_MASK 0x200
++#define JENC_CORE_STAT_TOP_LVL_CGC_STATE_SHIFT 0x9
++
++#define JENC_IRQ_MASK_REG 0x18
++#define JENC_IRQ_MASK_MASK_MASK 0xffffffff
++#define JENC_IRQ_MASK_MASK_SHIFT 0x0
++
++#define JENC_IRQ_CLEAR_REG 0x1c
++#define JENC_IRQ_CLEAR_CLEAR_MASK 0xffffffff
++#define JENC_IRQ_CLEAR_CLEAR_SHIFT 0x0
++
++#define JENC_IRQ_STATUS_REG 0x20
++#define JENC_IRQ_STATUS_STATUS_MASK 0xffffffff
++#define JENC_IRQ_STATUS_STATUS_SHIFT 0x0
++
++#define JENC_FE_CFG_REG 0x24
++#define JENC_FE_CFG_BYTE_ORDERING_MASK 0xf
++#define JENC_FE_CFG_BYTE_ORDERING_SHIFT 0x0
++#define JENC_FE_CFG_BURST_LENGTH_MAX_MASK 0xf0
++#define JENC_FE_CFG_BURST_LENGTH_MAX_SHIFT 0x4
++#define JENC_FE_CFG_MEMORY_FORMAT_MASK 0x300
++#define JENC_FE_CFG_MEMORY_FORMAT_SHIFT 0x8
++#define JENC_FE_CFG_CBCR_ORDER_MASK 0x1000
++#define JENC_FE_CFG_CBCR_ORDER_SHIFT 0xc
++#define JENC_FE_CFG_BOTTOM_VPAD_EN_MASK 0x2000
++#define JENC_FE_CFG_BOTTOM_VPAD_EN_SHIFT 0xd
++#define JENC_FE_CFG_PLN0_EN_MASK 0x10000
++#define JENC_FE_CFG_PLN0_EN_SHIFT 0x10
++#define JENC_FE_CFG_PLN1_EN_MASK 0x20000
++#define JENC_FE_CFG_PLN1_EN_SHIFT 0x11
++#define JENC_FE_CFG_PLN2_EN_MASK 0x40000
++#define JENC_FE_CFG_PLN2_EN_SHIFT 0x12
++#define JENC_FE_CFG_SIXTEEN_MCU_EN_MASK 0x200000
++#define JENC_FE_CFG_SIXTEEN_MCU_EN_SHIFT 0x15
++#define JENC_FE_CFG_MCUS_PER_BLOCK_MASK 0xc00000
++#define JENC_FE_CFG_MCUS_PER_BLOCK_SHIFT 0x16
++#define JENC_FE_CFG_MAL_BOUNDARY_MASK 0x7000000
++#define JENC_FE_CFG_MAL_BOUNDARY_SHIFT 0x18
++#define JENC_FE_CFG_MAL_EN_MASK 0x8000000
++#define JENC_FE_CFG_MAL_EN_SHIFT 0x1b
++
++#define JENC_FE_QOS_CFG_REG 0x28
++#define JENC_FE_QOS_CFG_PRIORITY_MASK 0xf
++#define JENC_FE_QOS_CFG_PRIORITY_SHIFT 0x0
++
++#define JENC_PLN0_RD_PNTR_REG 0x38
++#define JENC_PLN0_RD_PNTR_PNTR_MASK 0xffffffff
++#define JENC_PLN0_RD_PNTR_PNTR_SHIFT 0x0
++
++#define JENC_PLN0_RD_OFFSET_REG 0x3c
++#define JENC_PLN0_RD_OFFSET_OFFSET_MASK 0x1fffffff
++#define JENC_PLN0_RD_OFFSET_OFFSET_SHIFT 0x0
++
++#define JENC_PLN0_RD_PNTR_CNSMD_REG 0x40
++#define JENC_PLN0_RD_PNTR_CNSMD_PNTR_CNSMD_MASK 0xffffffff
++#define JENC_PLN0_RD_PNTR_CNSMD_PNTR_CNSMD_SHIFT 0x0
++
++#define JENC_PLN1_RD_PNTR_REG 0x44
++#define JENC_PLN1_RD_PNTR_PNTR_MASK 0xffffffff
++#define JENC_PLN1_RD_PNTR_PNTR_SHIFT 0x0
++
++#define JENC_PLN1_RD_OFFSET_REG 0x48
++#define JENC_PLN1_RD_OFFSET_OFFSET_MASK 0x1fffffff
++#define JENC_PLN1_RD_OFFSET_OFFSET_SHIFT 0x0
++
++#define JENC_PLN1_RD_PNTR_CNSMD_REG 0x4c
++#define JENC_PLN1_RD_PNTR_CNSMD_PNTR_CNSMD_MASK 0xffffffff
++#define JENC_PLN1_RD_PNTR_CNSMD_PNTR_CNSMD_SHIFT 0x0
++
++#define JENC_PLN2_RD_PNTR_REG 0x50
++#define JENC_PLN2_RD_PNTR_PNTR_MASK 0xffffffff
++#define JENC_PLN2_RD_PNTR_PNTR_SHIFT 0x0
++
++#define JENC_PLN2_RD_OFFSET_REG 0x54
++#define JENC_PLN2_RD_OFFSET_OFFSET_MASK 0x1fffffff
++#define JENC_PLN2_RD_OFFSET_OFFSET_SHIFT 0x0
++
++#define JENC_PLN2_RD_PNTR_CNSMD_REG 0x58
++#define JENC_PLN2_RD_PNTR_CNSMD_PNTR_CNSMD_MASK 0xffffffff
++#define JENC_PLN2_RD_PNTR_CNSMD_PNTR_CNSMD_SHIFT 0x0
++
++#define JENC_RD_PNTR_CNT_REG 0x5c
++#define JENC_RD_PNTR_CNT_PLN0_PNTR_CNT_MASK 0x7
++#define JENC_RD_PNTR_CNT_PLN0_PNTR_CNT_SHIFT 0x0
++#define JENC_RD_PNTR_CNT_PLN1_PNTR_CNT_MASK 0x70
++#define JENC_RD_PNTR_CNT_PLN1_PNTR_CNT_SHIFT 0x4
++#define JENC_RD_PNTR_CNT_PLN2_PNTR_CNT_MASK 0x700
++#define JENC_RD_PNTR_CNT_PLN2_PNTR_CNT_SHIFT 0x8
++
++#define JENC_PLN0_RD_BUFFER_SIZE_REG 0x60
++#define JENC_PLN0_RD_BUFFER_SIZE_WIDTH_MASK 0xffff
++#define JENC_PLN0_RD_BUFFER_SIZE_WIDTH_SHIFT 0x0
++#define JENC_PLN0_RD_BUFFER_SIZE_HEIGHT_MASK 0xffff0000
++#define JENC_PLN0_RD_BUFFER_SIZE_HEIGHT_SHIFT 0x10
++
++#define JENC_PLN0_RD_STRIDE_REG 0x64
++#define JENC_PLN0_RD_STRIDE_STRIDE_MASK 0xffff
++#define JENC_PLN0_RD_STRIDE_STRIDE_SHIFT 0x0
++
++#define JENC_PLN1_RD_BUFFER_SIZE_REG 0x68
++#define JENC_PLN1_RD_BUFFER_SIZE_WIDTH_MASK 0xffff
++#define JENC_PLN1_RD_BUFFER_SIZE_WIDTH_SHIFT 0x0
++#define JENC_PLN1_RD_BUFFER_SIZE_HEIGHT_MASK 0xffff0000
++#define JENC_PLN1_RD_BUFFER_SIZE_HEIGHT_SHIFT 0x10
++
++#define JENC_PLN1_RD_STRIDE_REG 0x6c
++#define JENC_PLN1_RD_STRIDE_STRIDE_MASK 0xffff
++#define JENC_PLN1_RD_STRIDE_STRIDE_SHIFT 0x0
++
++#define JENC_PLN2_RD_BUFFER_SIZE_REG 0x70
++#define JENC_PLN2_RD_BUFFER_SIZE_WIDTH_MASK 0xffff
++#define JENC_PLN2_RD_BUFFER_SIZE_WIDTH_SHIFT 0x0
++#define JENC_PLN2_RD_BUFFER_SIZE_HEIGHT_MASK 0xffff0000
++#define JENC_PLN2_RD_BUFFER_SIZE_HEIGHT_SHIFT 0x10
++
++#define JENC_PLN0_RD_HINIT_REG 0x74
++#define JENC_PLN0_RD_HINIT_FRACTIONAL_MASK 0x1fffff
++#define JENC_PLN0_RD_HINIT_FRACTIONAL_SHIFT 0x0
++
++#define JENC_PLN1_RD_HINIT_REG 0x78
++#define JENC_PLN1_RD_HINIT_FRACTIONAL_MASK 0x1fffff
++#define JENC_PLN1_RD_HINIT_FRACTIONAL_SHIFT 0x0
++
++#define JENC_PLN2_RD_HINIT_REG 0x7c
++#define JENC_PLN2_RD_HINIT_FRACTIONAL_MASK 0x1fffff
++#define JENC_PLN2_RD_HINIT_FRACTIONAL_SHIFT 0x0
++
++#define JENC_PLN0_RD_VINIT_REG 0x80
++#define JENC_PLN0_RD_VINIT_FRACTIONAL_MASK 0x1fffff
++#define JENC_PLN0_RD_VINIT_FRACTIONAL_SHIFT 0x0
++
++#define JENC_PLN1_RD_VINIT_REG 0x84
++#define JENC_PLN1_RD_VINIT_FRACTIONAL_MASK 0x1fffff
++#define JENC_PLN1_RD_VINIT_FRACTIONAL_SHIFT 0x0
++
++#define JENC_PLN2_RD_VINIT_REG 0x88
++#define JENC_PLN2_RD_VINIT_FRACTIONAL_MASK 0x1fffff
++#define JENC_PLN2_RD_VINIT_FRACTIONAL_SHIFT 0x0
++
++#define JENC_PLN2_RD_STRIDE_REG 0x8c
++#define JENC_PLN2_RD_STRIDE_STRIDE_MASK 0xffff
++#define JENC_PLN2_RD_STRIDE_STRIDE_SHIFT 0x0
++
++#define JENC_WE_CFG_REG 0xc0
++#define JENC_WE_CFG_BYTE_ORDERING_MASK 0xf
++#define JENC_WE_CFG_BYTE_ORDERING_SHIFT 0x0
++#define JENC_WE_CFG_BURST_LENGTH_MAX_MASK 0xf0
++#define JENC_WE_CFG_BURST_LENGTH_MAX_SHIFT 0x4
++#define JENC_WE_CFG_MEMORY_FORMAT_MASK 0x300
++#define JENC_WE_CFG_MEMORY_FORMAT_SHIFT 0x8
++#define JENC_WE_CFG_CBCR_ORDER_MASK 0x1000
++#define JENC_WE_CFG_CBCR_ORDER_SHIFT 0xc
++#define JENC_WE_CFG_PLN0_EN_MASK 0x10000
++#define JENC_WE_CFG_PLN0_EN_SHIFT 0x10
++#define JENC_WE_CFG_PLN1_EN_MASK 0x20000
++#define JENC_WE_CFG_PLN1_EN_SHIFT 0x11
++#define JENC_WE_CFG_PLN2_EN_MASK 0x40000
++#define JENC_WE_CFG_PLN2_EN_SHIFT 0x12
++#define JENC_WE_CFG_MAL_BOUNDARY_MASK 0x7000000
++#define JENC_WE_CFG_MAL_BOUNDARY_SHIFT 0x18
++#define JENC_WE_CFG_MAL_EN_MASK 0x8000000
++#define JENC_WE_CFG_MAL_EN_SHIFT 0x1b
++#define JENC_WE_CFG_POP_BUFF_ON_EOS_MASK 0x10000000
++#define JENC_WE_CFG_POP_BUFF_ON_EOS_SHIFT 0x1c
++
++#define JENC_WE_QOS_CFG_REG 0xc8
++#define JENC_WE_QOS_CFG_PRIORITY_000_MASK 0xf
++#define JENC_WE_QOS_CFG_PRIORITY_000_SHIFT 0x0
++#define JENC_WE_QOS_CFG_PRIORITY_001_MASK 0xf0
++#define JENC_WE_QOS_CFG_PRIORITY_001_SHIFT 0x4
++#define JENC_WE_QOS_CFG_PRIORITY_010_MASK 0xf00
++#define JENC_WE_QOS_CFG_PRIORITY_010_SHIFT 0x8
++#define JENC_WE_QOS_CFG_PRIORITY_011_MASK 0xf000
++#define JENC_WE_QOS_CFG_PRIORITY_011_SHIFT 0xc
++#define JENC_WE_QOS_CFG_PRIORITY_100_MASK 0xf0000
++#define JENC_WE_QOS_CFG_PRIORITY_100_SHIFT 0x10
++#define JENC_WE_QOS_CFG_PRIORITY_101_MASK 0xf00000
++#define JENC_WE_QOS_CFG_PRIORITY_101_SHIFT 0x14
++#define JENC_WE_QOS_CFG_PRIORITY_110_MASK 0xf000000
++#define JENC_WE_QOS_CFG_PRIORITY_110_SHIFT 0x18
++#define JENC_WE_QOS_CFG_PRIORITY_111_MASK 0xf0000000
++#define JENC_WE_QOS_CFG_PRIORITY_111_SHIFT 0x1c
++
++#define JENC_PLN0_WR_PNTR_REG 0xcc
++#define JENC_PLN0_WR_PNTR_PNTR_MASK 0xffffffff
++#define JENC_PLN0_WR_PNTR_PNTR_SHIFT 0x0
++
++#define JENC_PLN1_WR_PNTR_REG 0xd0
++#define JENC_PLN1_WR_PNTR_PNTR_MASK 0xffffffff
++#define JENC_PLN1_WR_PNTR_PNTR_SHIFT 0x0
++
++#define JENC_PLN2_WR_PNTR_REG 0xd4
++#define JENC_PLN2_WR_PNTR_PNTR_MASK 0xffffffff
++#define JENC_PLN2_WR_PNTR_PNTR_SHIFT 0x0
++
++#define JENC_PLN0_WR_PNTR_CNSMD_REG 0xd8
++#define JENC_PLN0_WR_PNTR_CNSMD_PNTR_CNSMD_MASK 0xffffffff
++#define JENC_PLN0_WR_PNTR_CNSMD_PNTR_CNSMD_SHIFT 0x0
++
++#define JENC_PLN1_WR_PNTR_CNSMD_REG 0xdc
++#define JENC_PLN1_WR_PNTR_CNSMD_PNTR_CNSMD_MASK 0xffffffff
++#define JENC_PLN1_WR_PNTR_CNSMD_PNTR_CNSMD_SHIFT 0x0
++
++#define JENC_PLN2_WR_PNTR_CNSMD_REG 0xe0
++#define JENC_PLN2_WR_PNTR_CNSMD_PNTR_CNSMD_MASK 0xffffffff
++#define JENC_PLN2_WR_PNTR_CNSMD_PNTR_CNSMD_SHIFT 0x0
++
++#define JENC_WR_PNTR_CNT_REG 0xe4
++#define JENC_WR_PNTR_CNT_PLN0_PNTR_CNT_MASK 0xf
++#define JENC_WR_PNTR_CNT_PLN0_PNTR_CNT_SHIFT 0x0
++#define JENC_WR_PNTR_CNT_PLN1_PNTR_CNT_MASK 0xf0
++#define JENC_WR_PNTR_CNT_PLN1_PNTR_CNT_SHIFT 0x4
++#define JENC_WR_PNTR_CNT_PLN2_PNTR_CNT_MASK 0xf00
++#define JENC_WR_PNTR_CNT_PLN2_PNTR_CNT_SHIFT 0x8
++
++#define JENC_PLN0_WR_BUFFER_SIZE_REG 0xe8
++#define JENC_PLN0_WR_BUFFER_SIZE_WIDTH_MASK 0xffff
++#define JENC_PLN0_WR_BUFFER_SIZE_WIDTH_SHIFT 0x0
++#define JENC_PLN0_WR_BUFFER_SIZE_HEIGHT_MASK 0xffff0000
++#define JENC_PLN0_WR_BUFFER_SIZE_HEIGHT_SHIFT 0x10
++
++#define JENC_PLN1_WR_BUFFER_SIZE_REG 0xec
++#define JENC_PLN1_WR_BUFFER_SIZE_WIDTH_MASK 0xffff
++#define JENC_PLN1_WR_BUFFER_SIZE_WIDTH_SHIFT 0x0
++#define JENC_PLN1_WR_BUFFER_SIZE_HEIGHT_MASK 0xffff0000
++#define JENC_PLN1_WR_BUFFER_SIZE_HEIGHT_SHIFT 0x10
++
++#define JENC_PLN2_WR_BUFFER_SIZE_REG 0xf0
++#define JENC_PLN2_WR_BUFFER_SIZE_WIDTH_MASK 0xffff
++#define JENC_PLN2_WR_BUFFER_SIZE_WIDTH_SHIFT 0x0
++#define JENC_PLN2_WR_BUFFER_SIZE_HEIGHT_MASK 0xffff0000
++#define JENC_PLN2_WR_BUFFER_SIZE_HEIGHT_SHIFT 0x10
++
++#define JENC_PLN0_WR_STRIDE_REG 0xf4
++#define JENC_PLN0_WR_STRIDE_STRIDE_MASK 0xffff
++#define JENC_PLN0_WR_STRIDE_STRIDE_SHIFT 0x0
++
++#define JENC_PLN1_WR_STRIDE_REG 0xf8
++#define JENC_PLN1_WR_STRIDE_STRIDE_MASK 0xffff
++#define JENC_PLN1_WR_STRIDE_STRIDE_SHIFT 0x0
++
++#define JENC_PLN2_WR_STRIDE_REG 0xfc
++#define JENC_PLN2_WR_STRIDE_STRIDE_MASK 0xffff
++#define JENC_PLN2_WR_STRIDE_STRIDE_SHIFT 0x0
++
++#define JENC_PLN0_WR_HINIT_REG 0x100
++#define JENC_PLN0_WR_HINIT_INTEGER_MASK 0xffff
++#define JENC_PLN0_WR_HINIT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN1_WR_HINIT_REG 0x104
++#define JENC_PLN1_WR_HINIT_INTEGER_MASK 0xffff
++#define JENC_PLN1_WR_HINIT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN2_WR_HINIT_REG 0x108
++#define JENC_PLN2_WR_HINIT_INTEGER_MASK 0xffff
++#define JENC_PLN2_WR_HINIT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN0_WR_VINIT_REG 0x10c
++#define JENC_PLN0_WR_VINIT_INTEGER_MASK 0xffff
++#define JENC_PLN0_WR_VINIT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN1_WR_VINIT_REG 0x110
++#define JENC_PLN1_WR_VINIT_INTEGER_MASK 0xffff
++#define JENC_PLN1_WR_VINIT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN2_WR_VINIT_REG 0x114
++#define JENC_PLN2_WR_VINIT_INTEGER_MASK 0xffff
++#define JENC_PLN2_WR_VINIT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN0_WR_HSTEP_REG 0x118
++#define JENC_PLN0_WR_HSTEP_INTEGER_MASK 0x1ffff
++#define JENC_PLN0_WR_HSTEP_INTEGER_SHIFT 0x0
++
++#define JENC_PLN1_WR_HSTEP_REG 0x11c
++#define JENC_PLN1_WR_HSTEP_INTEGER_MASK 0x1ffff
++#define JENC_PLN1_WR_HSTEP_INTEGER_SHIFT 0x0
++
++#define JENC_PLN2_WR_HSTEP_REG 0x120
++#define JENC_PLN2_WR_HSTEP_INTEGER_MASK 0x1ffff
++#define JENC_PLN2_WR_HSTEP_INTEGER_SHIFT 0x0
++
++#define JENC_PLN0_WR_VSTEP_REG 0x124
++#define JENC_PLN0_WR_VSTEP_INTEGER_MASK 0x1ffff
++#define JENC_PLN0_WR_VSTEP_INTEGER_SHIFT 0x0
++
++#define JENC_PLN1_WR_VSTEP_REG 0x128
++#define JENC_PLN1_WR_VSTEP_INTEGER_MASK 0x1ffff
++#define JENC_PLN1_WR_VSTEP_INTEGER_SHIFT 0x0
++
++#define JENC_PLN2_WR_VSTEP_REG 0x12c
++#define JENC_PLN2_WR_VSTEP_INTEGER_MASK 0x1ffff
++#define JENC_PLN2_WR_VSTEP_INTEGER_SHIFT 0x0
++
++#define JENC_PLN0_WR_BLOCK_CFG_REG 0x130
++#define JENC_PLN0_WR_BLOCK_CFG_BLOCKS_PER_COL_MASK 0xffff
++#define JENC_PLN0_WR_BLOCK_CFG_BLOCKS_PER_COL_SHIFT 0x0
++#define JENC_PLN0_WR_BLOCK_CFG_BLOCKS_PER_ROW_MASK 0xffff0000
++#define JENC_PLN0_WR_BLOCK_CFG_BLOCKS_PER_ROW_SHIFT 0x10
++
++#define JENC_PLN1_WR_BLOCK_CFG_REG 0x134
++#define JENC_PLN1_WR_BLOCK_CFG_BLOCKS_PER_COL_MASK 0xffff
++#define JENC_PLN1_WR_BLOCK_CFG_BLOCKS_PER_COL_SHIFT 0x0
++#define JENC_PLN1_WR_BLOCK_CFG_BLOCKS_PER_ROW_MASK 0xffff0000
++#define JENC_PLN1_WR_BLOCK_CFG_BLOCKS_PER_ROW_SHIFT 0x10
++
++#define JENC_PLN2_WR_BLOCK_CFG_REG 0x138
++#define JENC_PLN2_WR_BLOCK_CFG_BLOCKS_PER_COL_MASK 0xffff
++#define JENC_PLN2_WR_BLOCK_CFG_BLOCKS_PER_COL_SHIFT 0x0
++#define JENC_PLN2_WR_BLOCK_CFG_BLOCKS_PER_ROW_MASK 0xffff0000
++#define JENC_PLN2_WR_BLOCK_CFG_BLOCKS_PER_ROW_SHIFT 0x10
++
++#define JENC_CFG_REG 0x13c
++#define JENC_CFG_IMAGE_FORMAT_MASK 0x7
++#define JENC_CFG_IMAGE_FORMAT_SHIFT 0x0
++#define JENC_CFG_APPLY_EOI_MASK 0x80
++#define JENC_CFG_APPLY_EOI_SHIFT 0x7
++#define JENC_CFG_HUFFMAN_SEL_MASK 0x100
++#define JENC_CFG_HUFFMAN_SEL_SHIFT 0x8
++#define JENC_CFG_FSC_ENABLE_MASK 0x800
++#define JENC_CFG_FSC_ENABLE_SHIFT 0xb
++#define JENC_CFG_OUTPUT_DISABLE_MASK 0x8000
++#define JENC_CFG_OUTPUT_DISABLE_SHIFT 0xf
++#define JENC_CFG_RST_MARKER_PERIOD_MASK 0xffff0000
++#define JENC_CFG_RST_MARKER_PERIOD_SHIFT 0x10
++
++#define JENC_IMAGE_SIZE_REG 0x140
++#define JENC_IMAGE_SIZE_ENCODE_IMAGE_WIDTH_MASK 0x1fff
++#define JENC_IMAGE_SIZE_ENCODE_IMAGE_WIDTH_SHIFT 0x0
++#define JENC_IMAGE_SIZE_ENCODE_IMAGE_HEIGHT_MASK 0x1fff0000
++#define JENC_IMAGE_SIZE_ENCODE_IMAGE_HEIGHT_SHIFT 0x10
++
++#define JENC_FSC_REGION_SIZE_REG 0x14c
++#define JENC_FSC_REGION_SIZE_REGION_SIZE_MASK 0x1f
++#define JENC_FSC_REGION_SIZE_REGION_SIZE_SHIFT 0x0
++#define JENC_FSC_REGION_SIZE_HV_REGION_MASK 0x100
++#define JENC_FSC_REGION_SIZE_HV_REGION_SHIFT 0x8
++
++#define JENC_FSC_BUDGET_0_REG 0x150
++#define JENC_FSC_BUDGET_0_BUDGET_REGION0_MASK 0xff
++#define JENC_FSC_BUDGET_0_BUDGET_REGION0_SHIFT 0x0
++#define JENC_FSC_BUDGET_0_BUDGET_REGION1_MASK 0xff00
++#define JENC_FSC_BUDGET_0_BUDGET_REGION1_SHIFT 0x8
++#define JENC_FSC_BUDGET_0_BUDGET_REGION2_MASK 0xff0000
++#define JENC_FSC_BUDGET_0_BUDGET_REGION2_SHIFT 0x10
++#define JENC_FSC_BUDGET_0_BUDGET_REGION3_MASK 0xff000000
++#define JENC_FSC_BUDGET_0_BUDGET_REGION3_SHIFT 0x18
++
++#define JENC_FSC_BUDGET_1_REG 0x154
++#define JENC_FSC_BUDGET_1_BUDGET_REGION4_MASK 0xff
++#define JENC_FSC_BUDGET_1_BUDGET_REGION4_SHIFT 0x0
++#define JENC_FSC_BUDGET_1_BUDGET_REGION5_MASK 0xff00
++#define JENC_FSC_BUDGET_1_BUDGET_REGION5_SHIFT 0x8
++#define JENC_FSC_BUDGET_1_BUDGET_REGION6_MASK 0xff0000
++#define JENC_FSC_BUDGET_1_BUDGET_REGION6_SHIFT 0x10
++#define JENC_FSC_BUDGET_1_BUDGET_REGION7_MASK 0xff000000
++#define JENC_FSC_BUDGET_1_BUDGET_REGION7_SHIFT 0x18
++
++#define JENC_FSC_BUDGET_2_REG 0x158
++#define JENC_FSC_BUDGET_2_BUDGET_REGION8_MASK 0xff
++#define JENC_FSC_BUDGET_2_BUDGET_REGION8_SHIFT 0x0
++#define JENC_FSC_BUDGET_2_BUDGET_REGION9_MASK 0xff00
++#define JENC_FSC_BUDGET_2_BUDGET_REGION9_SHIFT 0x8
++#define JENC_FSC_BUDGET_2_BUDGET_REGION10_MASK 0xff0000
++#define JENC_FSC_BUDGET_2_BUDGET_REGION10_SHIFT 0x10
++#define JENC_FSC_BUDGET_2_BUDGET_REGION11_MASK 0xff000000
++#define JENC_FSC_BUDGET_2_BUDGET_REGION11_SHIFT 0x18
++
++#define JENC_FSC_BUDGET_3_REG 0x15c
++#define JENC_FSC_BUDGET_3_BUDGET_REGION12_MASK 0xff
++#define JENC_FSC_BUDGET_3_BUDGET_REGION12_SHIFT 0x0
++#define JENC_FSC_BUDGET_3_BUDGET_REGION13_MASK 0xff00
++#define JENC_FSC_BUDGET_3_BUDGET_REGION13_SHIFT 0x8
++#define JENC_FSC_BUDGET_3_BUDGET_REGION14_MASK 0xff0000
++#define JENC_FSC_BUDGET_3_BUDGET_REGION14_SHIFT 0x10
++#define JENC_FSC_BUDGET_3_BUDGET_REGION15_MASK 0xff000000
++#define JENC_FSC_BUDGET_3_BUDGET_REGION15_SHIFT 0x18
++
++#define JENC_PREDICTION_Y_STATE_REG 0x160
++#define JENC_PREDICTION_Y_STATE_PREDICTION_Y_STATE_MASK 0x7ff
++#define JENC_PREDICTION_Y_STATE_PREDICTION_Y_STATE_SHIFT 0x0
++
++#define JENC_PREDICTION_C_STATE_REG 0x164
++#define JENC_PREDICTION_C_STATE_PREDICTION_CB_STATE_MASK 0x7ff
++#define JENC_PREDICTION_C_STATE_PREDICTION_CB_STATE_SHIFT 0x0
++#define JENC_PREDICTION_C_STATE_PREDICTION_CR_STATE_MASK 0x7ff0000
++#define JENC_PREDICTION_C_STATE_PREDICTION_CR_STATE_SHIFT 0x10
++
++#define JENC_RSM_STATE_REG 0x168
++#define JENC_RSM_STATE_RST_MARKER_MCU_COUNT_MASK 0xffff
++#define JENC_RSM_STATE_RST_MARKER_MCU_COUNT_SHIFT 0x0
++#define JENC_RSM_STATE_RST_MARKER_VALUE_MASK 0x70000
++#define JENC_RSM_STATE_RST_MARKER_VALUE_SHIFT 0x10
++
++#define JENC_PACK_STATE_REG 0x16c
++#define JENC_PACKER_STATE_BIT_COUNT_MASK 0x7
++#define JENC_PACKER_STATE_BIT_COUNT_SHIFT 0x0
++#define JENC_PACKER_STATE_BYTE_PACKER_LENGTH_MASK 0x7f0
++#define JENC_PACKER_STATE_BYTE_PACKER_LENGTH_SHIFT 0x4
++
++#define JENC_BYTE_PACK_W0_STATE_REG 0x170
++#define JENC_BYTE_PACKER_WORD0_STATE_BYTE_PACKER_WORD0_MASK 0xffffffff
++#define JENC_BYTE_PACKER_WORD0_STATE_BYTE_PACKER_WORD0_SHIFT 0x0
++
++#define JENC_BYTE_PACK_W1_STATE_REG 0x174
++#define JENC_BYTE_PACKER_WORD1_STATE_BYTE_PACKER_WORD1_MASK 0xffffffff
++#define JENC_BYTE_PACKER_WORD1_STATE_BYTE_PACKER_WORD1_SHIFT 0x0
++
++#define JENC_BYTE_PACK_W2_STATE_REG 0x178
++#define JENC_BYTE_PACKER_WORD2_STATE_BYTE_PACKER_WORD2_MASK 0xffffffff
++#define JENC_BYTE_PACKER_WORD2_STATE_BYTE_PACKER_WORD2_SHIFT 0x0
++
++#define JENC_BYTE_PACK_W3_STATE_REG 0x17c
++#define JENC_BYTE_PACKER_WORD3_STATE_BYTE_PACKER_WORD3_MASK 0xffffffff
++#define JENC_BYTE_PACKER_WORD3_STATE_BYTE_PACKER_WORD3_SHIFT 0x0
++
++#define JENC_OUTPUT_SIZE_STATUS_REG 0x180
++#define JENC_OUTPUT_SIZE_STATUS_OUTPUT_SIZE_BYTES_MASK 0x1fffffff
++#define JENC_OUTPUT_SIZE_STATUS_OUTPUT_SIZE_BYTES_SHIFT 0x0
++
++#define JENC_SCALE_CFG_REG 0x26c
++#define JENC_SCALE_CFG_HSCALE_ENABLE_MASK 0x10
++#define JENC_SCALE_CFG_HSCALE_ENABLE_SHIFT 0x4
++#define JENC_SCALE_CFG_VSCALE_ENABLE_MASK 0x20
++#define JENC_SCALE_CFG_VSCALE_ENABLE_SHIFT 0x5
++#define JENC_SCALE_CFG_UPSAMPLE_EN_MASK 0x40
++#define JENC_SCALE_CFG_UPSAMPLE_EN_SHIFT 0x6
++#define JENC_SCALE_CFG_SUBSAMPLE_EN_MASK 0x80
++#define JENC_SCALE_CFG_SUBSAMPLE_EN_SHIFT 0x7
++#define JENC_SCALE_CFG_HSCALE_ALGORITHM_MASK 0x100
++#define JENC_SCALE_CFG_HSCALE_ALGORITHM_SHIFT 0x8
++#define JENC_SCALE_CFG_VSCALE_ALGORITHM_MASK 0x200
++#define JENC_SCALE_CFG_VSCALE_ALGORITHM_SHIFT 0x9
++#define JENC_SCALE_CFG_H_SCALE_FIR_ALGORITHM_MASK 0x3000
++#define JENC_SCALE_CFG_H_SCALE_FIR_ALGORITHM_SHIFT 0xc
++#define JENC_SCALE_CFG_V_SCALE_FIR_ALGORITHM_MASK 0x30000
++#define JENC_SCALE_CFG_V_SCALE_FIR_ALGORITHM_SHIFT 0x10
++
++#define JENC_SCALE_PLN0_OUT_CFG_REG 0x270
++#define JENC_SCALE_PLN0_OUTPUT_CFG_BLOCK_WIDTH_MASK 0xff
++#define JENC_SCALE_PLN0_OUTPUT_CFG_BLOCK_WIDTH_SHIFT 0x0
++#define JENC_SCALE_PLN0_OUTPUT_CFG_BLOCK_HEIGHT_MASK 0xf0000
++#define JENC_SCALE_PLN0_OUTPUT_CFG_BLOCK_HEIGHT_SHIFT 0x10
++
++#define JENC_SCALE_PLN1_OUT_CFG_REG 0x274
++#define JENC_SCALE_PLN1_OUTPUT_CFG_BLOCK_WIDTH_MASK 0xff
++#define JENC_SCALE_PLN1_OUTPUT_CFG_BLOCK_WIDTH_SHIFT 0x0
++#define JENC_SCALE_PLN1_OUTPUT_CFG_BLOCK_HEIGHT_MASK 0xf0000
++#define JENC_SCALE_PLN1_OUTPUT_CFG_BLOCK_HEIGHT_SHIFT 0x10
++
++#define JENC_SCALE_PLN2_OUT_CFG_REG 0x278
++#define JENC_SCALE_PLN2_OUTPUT_CFG_BLOCK_WIDTH_MASK 0xff
++#define JENC_SCALE_PLN2_OUTPUT_CFG_BLOCK_WIDTH_SHIFT 0x0
++#define JENC_SCALE_PLN2_OUTPUT_CFG_BLOCK_HEIGHT_MASK 0xf0000
++#define JENC_SCALE_PLN2_OUTPUT_CFG_BLOCK_HEIGHT_SHIFT 0x10
++
++#define JENC_SCALE_PLN0_HSTEP_REG 0x27c
++#define JENC_SCALE_PLN0_HSTEP_FRACTIONAL_MASK 0x1fffff
++#define JENC_SCALE_PLN0_HSTEP_FRACTIONAL_SHIFT 0x0
++#define JENC_SCALE_PLN0_HSTEP_INTEGER_MASK 0x7e00000
++#define JENC_SCALE_PLN0_HSTEP_INTEGER_SHIFT 0x15
++
++#define JENC_SCALE_PLN1_HSTEP_REG 0x280
++#define JENC_SCALE_PLN1_HSTEP_FRACTIONAL_MASK 0x1fffff
++#define JENC_SCALE_PLN1_HSTEP_FRACTIONAL_SHIFT 0x0
++#define JENC_SCALE_PLN1_HSTEP_INTEGER_MASK 0x7e00000
++#define JENC_SCALE_PLN1_HSTEP_INTEGER_SHIFT 0x15
++
++#define JENC_SCALE_PLN2_HSTEP_REG 0x284
++#define JENC_SCALE_PLN2_HSTEP_FRACTIONAL_MASK 0x1fffff
++#define JENC_SCALE_PLN2_HSTEP_FRACTIONAL_SHIFT 0x0
++#define JENC_SCALE_PLN2_HSTEP_INTEGER_MASK 0x7e00000
++#define JENC_SCALE_PLN2_HSTEP_INTEGER_SHIFT 0x15
++
++#define JENC_SCALE_PLN0_VSTEP_REG 0x28c
++#define JENC_SCALE_PLN0_VSTEP_FRACTIONAL_MASK 0x1fffff
++#define JENC_SCALE_PLN0_VSTEP_FRACTIONAL_SHIFT 0x0
++#define JENC_SCALE_PLN0_VSTEP_INTEGER_MASK 0x7e00000
++#define JENC_SCALE_PLN0_VSTEP_INTEGER_SHIFT 0x15
++
++#define JENC_SCALE_PLN1_VSTEP_REG 0x290
++#define JENC_SCALE_PLN1_VSTEP_FRACTIONAL_MASK 0x1fffff
++#define JENC_SCALE_PLN1_VSTEP_FRACTIONAL_SHIFT 0x0
++#define JENC_SCALE_PLN1_VSTEP_INTEGER_MASK 0x7e00000
++#define JENC_SCALE_PLN1_VSTEP_INTEGER_SHIFT 0x15
++
++#define JENC_SCALE_PLN2_VSTEP_REG 0x294
++#define JENC_SCALE_PLN2_VSTEP_FRACTIONAL_MASK 0x1fffff
++#define JENC_SCALE_PLN2_VSTEP_FRACTIONAL_SHIFT 0x0
++#define JENC_SCALE_PLN2_VSTEP_INTEGER_MASK 0x7e00000
++#define JENC_SCALE_PLN2_VSTEP_INTEGER_SHIFT 0x15
++
++#define JENC_DMI_CFG_REG 0x298
++#define JENC_DMI_CFG_DMI_MEM_SEL_MASK 0x7
++#define JENC_DMI_CFG_DMI_MEM_SEL_SHIFT 0x0
++#define JENC_DMI_CFG_AUTO_INC_EN_MASK 0x10
++#define JENC_DMI_CFG_AUTO_INC_EN_SHIFT 0x4
++
++#define JENC_DMI_ADDR_REG 0x29c
++#define JENC_DMI_ADDR_DMI_ADDR_MASK 0x3ff
++#define JENC_DMI_ADDR_DMI_ADDR_SHIFT 0x0
++
++#define JENC_DMI_DATA_REG 0x2a0
++#define JENC_DMI_DATA_DMI_DATA_MASK 0xffffffff
++#define JENC_DMI_DATA_DMI_DATA_SHIFT 0x0
++
++#define JENC_TESTBUS_CFG_REG 0x2b0
++#define JENC_TESTBUS_CFG_BUS_SEL_MASK 0x3f
++#define JENC_TESTBUS_CFG_BUS_SEL_SHIFT 0x0
++
++#define JENC_MISR_CFG_REG 0x2b4
++#define JENC_MISR_CFG_MISR0_EN_MASK 0x1
++#define JENC_MISR_CFG_MISR0_EN_SHIFT 0x0
++#define JENC_MISR_CFG_MISR1_EN_MASK 0x2
++#define JENC_MISR_CFG_MISR1_EN_SHIFT 0x1
++#define JENC_MISR_CFG_MISR2_EN_MASK 0x4
++#define JENC_MISR_CFG_MISR2_EN_SHIFT 0x2
++
++#define JENC_MISR0_RD0_REG 0x2b8
++#define JENC_MISR0_RD0_VALUE_MASK 0xffffffff
++#define JENC_MISR0_RD0_VALUE_SHIFT 0x0
++
++#define JENC_MISR0_RD1_REG 0x2bc
++#define JENC_MISR0_RD1_VALUE_MASK 0xffffffff
++#define JENC_MISR0_RD1_VALUE_SHIFT 0x0
++
++#define JENC_MISR0_RD2_REG 0x2c0
++#define JENC_MISR0_RD2_VALUE_MASK 0xffffffff
++#define JENC_MISR0_RD2_VALUE_SHIFT 0x0
++
++#define JENC_MISR0_RD3_REG 0x2c4
++#define JENC_MISR0_RD3_VALUE_MASK 0xffffffff
++#define JENC_MISR0_RD3_VALUE_SHIFT 0x0
++
++#define JENC_MISR1_RD0_REG 0x2c8
++#define JENC_MISR1_RD0_VALUE_MASK 0xffffffff
++#define JENC_MISR1_RD0_VALUE_SHIFT 0x0
++
++#define JENC_MISR1_RD1_REG 0x2cc
++#define JENC_MISR1_RD1_VALUE_MASK 0xffffffff
++#define JENC_MISR1_RD1_VALUE_SHIFT 0x0
++
++#define JENC_MISR1_RD2_REG 0x2d0
++#define JENC_MISR1_RD2_VALUE_MASK 0xffffffff
++#define JENC_MISR1_RD2_VALUE_SHIFT 0x0
++
++#define JENC_MISR1_RD3_REG 0x2d4
++#define JENC_MISR1_RD3_VALUE_MASK 0xffffffff
++#define JENC_MISR1_RD3_VALUE_SHIFT 0x0
++
++#define JENC_MISR2_RD0_REG 0x2d8
++#define JENC_MISR2_RD0_VALUE_MASK 0xffffffff
++#define JENC_MISR2_RD0_VALUE_SHIFT 0x0
++
++#define JENC_MISR2_RD1_REG 0x2dc
++#define JENC_MISR2_RD1_VALUE_MASK 0xffffffff
++#define JENC_MISR2_RD1_VALUE_SHIFT 0x0
++
++#define JENC_MISR2_RD2_REG 0x2e0
++#define JENC_MISR2_RD2_VALUE_MASK 0xffffffff
++#define JENC_MISR2_RD2_VALUE_SHIFT 0x0
++
++#define JENC_MISR2_RD3_REG 0x2e4
++#define JENC_MISR2_RD3_VALUE_MASK 0xffffffff
++#define JENC_MISR2_RD3_VALUE_SHIFT 0x0
++
++#define JENC_FE_VBPAD_REG 0x2e8
++#define JENC_FE_VBPAD_BLOCK_ROW_MASK 0x1fff
++#define JENC_FE_VBPAD_BLOCK_ROW_SHIFT 0x0
++
++#define JENC_PLN0_RD_HINIT_INT_REG 0x2ec
++#define JENC_PLN0_RD_HINIT_INT_INTEGER_MASK 0x1ffff
++#define JENC_PLN0_RD_HINIT_INT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN1_RD_HINIT_INT_REG 0x2f0
++#define JENC_PLN1_RD_HINIT_INT_INTEGER_MASK 0x1ffff
++#define JENC_PLN1_RD_HINIT_INT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN2_RD_HINIT_INT_REG 0x2f4
++#define JENC_PLN2_RD_HINIT_INT_INTEGER_MASK 0x1ffff
++#define JENC_PLN2_RD_HINIT_INT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN0_RD_VINIT_INT_REG 0x2f8
++#define JENC_PLN0_RD_VINIT_INT_INTEGER_MASK 0x1ffff
++#define JENC_PLN0_RD_VINIT_INT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN1_RD_VINIT_INT_REG 0x2fc
++#define JENC_PLN1_RD_VINIT_INT_INTEGER_MASK 0x1ffff
++#define JENC_PLN1_RD_VINIT_INT_INTEGER_SHIFT 0x0
++
++#define JENC_PLN2_RD_VINIT_INT_REG 0x300
++#define JENC_PLN2_RD_VINIT_INT_INTEGER_MASK 0x1ffff
++#define JENC_PLN2_RD_VINIT_INT_INTEGER_SHIFT 0x0
++
++#define JENC_SPARE_REG 0x308
++#define JENC_SPARE_VALUE_MASK 0xffffffff
++#define JENC_SPARE_VALUE_SHIFT 0x0
++
++#define JENC_S0_S3_MMU_PF_CNTL_REG 0x30c
++#define JENC_S0_S3_MMU_PF_CNTL_S0_L1_MMU_PREFETCH_EN_MASK 0x1
++#define JENC_S0_S3_MMU_PF_CNTL_S0_L1_MMU_PREFETCH_EN_SHIFT 0x0
++#define JENC_S0_S3_MMU_PF_CNTL_S0_L1_PERIOD_MASK 0x2
++#define JENC_S0_S3_MMU_PF_CNTL_S0_L1_PERIOD_SHIFT 0x1
++#define JENC_S0_S3_MMU_PF_CNTL_S0_L1_DIRECTION_MASK 0x4
++#define JENC_S0_S3_MMU_PF_CNTL_S0_L1_DIRECTION_SHIFT 0x2
++#define JENC_S0_S3_MMU_PF_CNTL_S1_L1_MMU_PREFETCH_EN_MASK 0x10
++#define JENC_S0_S3_MMU_PF_CNTL_S1_L1_MMU_PREFETCH_EN_SHIFT 0x4
++#define JENC_S0_S3_MMU_PF_CNTL_S1_L1_PERIOD_MASK 0x20
++#define JENC_S0_S3_MMU_PF_CNTL_S1_L1_PERIOD_SHIFT 0x5
++#define JENC_S0_S3_MMU_PF_CNTL_S1_L1_DIRECTION_MASK 0x40
++#define JENC_S0_S3_MMU_PF_CNTL_S1_L1_DIRECTION_SHIFT 0x6
++#define JENC_S0_S3_MMU_PF_CNTL_S2_L1_MMU_PREFETCH_EN_MASK 0x100
++#define JENC_S0_S3_MMU_PF_CNTL_S2_L1_MMU_PREFETCH_EN_SHIFT 0x8
++#define JENC_S0_S3_MMU_PF_CNTL_S2_L1_PERIOD_MASK 0x200
++#define JENC_S0_S3_MMU_PF_CNTL_S2_L1_PERIOD_SHIFT 0x9
++#define JENC_S0_S3_MMU_PF_CNTL_S2_L1_DIRECTION_MASK 0x400
++#define JENC_S0_S3_MMU_PF_CNTL_S2_L1_DIRECTION_SHIFT 0xa
++#define JENC_S0_S3_MMU_PF_CNTL_S3_L1_MMU_PREFETCH_EN_MASK 0x1000
++#define JENC_S0_S3_MMU_PF_CNTL_S3_L1_MMU_PREFETCH_EN_SHIFT 0xc
++#define JENC_S0_S3_MMU_PF_CNTL_S3_L1_PERIOD_MASK 0x2000
++#define JENC_S0_S3_MMU_PF_CNTL_S3_L1_PERIOD_SHIFT 0xd
++#define JENC_S0_S3_MMU_PF_CNTL_S3_L1_DIRECTION_MASK 0x4000
++#define JENC_S0_S3_MMU_PF_CNTL_S3_L1_DIRECTION_SHIFT 0xe
++
++#define JENC_S0_MMU_PF_ADDR_MIN_REG 0x310
++#define JENC_S0_MMU_PF_ADDR_MIN_PF_ADDR_MIN_MASK 0xffffffff
++#define JENC_S0_MMU_PF_ADDR_MIN_PF_ADDR_MIN_SHIFT 0x0
++
++#define JENC_S0_MMU_PF_ADDR_MAX_REG 0x314
++#define JENC_S0_MMU_PF_ADDR_MAX_PF_ADDR_MAX_MASK 0xffffffff
++#define JENC_S0_MMU_PF_ADDR_MAX_PF_ADDR_MAX_SHIFT 0x0
++
++#define JENC_S0_MMU_PF_CTL_L1_FILTER_REG 0x318
++#define JENC_S0_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_MASK 0x1
++#define JENC_S0_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_SHIFT 0x0
++#define JENC_S0_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_MASK 0x70
++#define JENC_S0_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_SHIFT 0x4
++
++#define JENC_S1_MMU_PF_ADDR_MIN_REG 0x31c
++#define JENC_S1_MMU_PF_ADDR_MIN_PF_ADDR_MIN_MASK 0xffffffff
++#define JENC_S1_MMU_PF_ADDR_MIN_PF_ADDR_MIN_SHIFT 0x0
++
++#define JENC_S1_MMU_PF_ADDR_MAX_REG 0x320
++#define JENC_S1_MMU_PF_ADDR_MAX_PF_ADDR_MAX_MASK 0xffffffff
++#define JENC_S1_MMU_PF_ADDR_MAX_PF_ADDR_MAX_SHIFT 0x0
++
++#define JENC_S1_MMU_PF_CTL_L1_FILTER_REG 0x324
++#define JENC_S1_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_MASK 0x1
++#define JENC_S1_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_SHIFT 0x0
++#define JENC_S1_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_MASK 0x70
++#define JENC_S1_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_SHIFT 0x4
++
++#define JENC_S2_MMU_PF_ADDR_MIN_REG 0x328
++#define JENC_S2_MMU_PF_ADDR_MIN_PF_ADDR_MIN_MASK 0xffffffff
++#define JENC_S2_MMU_PF_ADDR_MIN_PF_ADDR_MIN_SHIFT 0x0
++
++#define JENC_S2_MMU_PF_ADDR_MAX_REG 0x32c
++#define JENC_S2_MMU_PF_ADDR_MAX_PF_ADDR_MAX_MASK 0xffffffff
++#define JENC_S2_MMU_PF_ADDR_MAX_PF_ADDR_MAX_SHIFT 0x0
++
++#define JENC_S2_MMU_PF_CTL_L1_FILTER_REG 0x330
++#define JENC_S2_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_MASK 0x1
++#define JENC_S2_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_SHIFT 0x0
++#define JENC_S2_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_MASK 0x70
++#define JENC_S2_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_SHIFT 0x4
++
++#define JENC_S3_MMU_PF_ADDR_MIN_REG 0x334
++#define JENC_S3_MMU_PF_ADDR_MIN_PF_ADDR_MIN_MASK 0xffffffff
++#define JENC_S3_MMU_PF_ADDR_MIN_PF_ADDR_MIN_SHIFT 0x0
++
++#define JENC_S3_MMU_PF_ADDR_MAX_REG 0x338
++#define JENC_S3_MMU_PF_ADDR_MAX_PF_ADDR_MAX_MASK 0xffffffff
++#define JENC_S3_MMU_PF_ADDR_MAX_PF_ADDR_MAX_SHIFT 0x0
++
++#define JENC_S3_MMU_PF_CTL_L1_FILTER_REG 0x33c
++#define JENC_S3_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_MASK 0x1
++#define JENC_S3_MMU_PF_CTL_L1_FILTER_L1_FILTER_EN_SHIFT 0x0
++#define JENC_S3_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_MASK 0x70
++#define JENC_S3_MMU_PF_CTL_L1_FILTER_L1_FILTER_DEPTH_SHIFT 0x4
++
++#define JENC_CORE_CFG_FE_DISABLE	0x0
++#define JENC_CORE_CFG_FE_ENABLE		0x1
++
++#define JENC_CORE_CFG_WE_DISABLE	0x0
++#define JENC_CORE_CFG_WE_ENABLE		0x1
++
++#define JENC_CORE_CFG_ENC_DISABLE	0x0
++#define JENC_CORE_CFG_ENC_ENABLE	0x1
++
++#define JENC_CORE_CFG_SCALE_DISABLE	0x0
++#define JENC_CORE_CFG_SCALE_ENABLE	0x1
++
++#define JENC_CORE_CFG_TESTBUS_DISABLE	0x0
++#define JENC_CORE_CFG_TESTBUS_ENABLE	0x1
++
++#define JENC_CORE_CFG_CGC_ENABLE	0x0
++#define JENC_CORE_CFG_CGC_DISABLE	0x1
++
++#define JENC_CFG_FSC_DISABLE		0x0
++#define JENC_CFG_FSC_ENABLE		0x1
++
++#define JENC_CFG_OUT_ENABLE		0x0
++#define JENC_CFG_OUT_DIASBLE		0x1
++
++#define JENC_SCALE_CFG_UPSMPL_DISABLE	0x0
++#define JENC_SCALE_CFG_UPSMPL_ENABLE	0x1
++
++#define JENC_SCALE_CFG_SUBSMPL_DISABLE	0x0
++#define JENC_SCALE_CFG_SUBSMPL_ENABLE	0x1
++
++#define JENC_CORE_CFG_OFFLINE_ENCODE	0x1
++
++enum jenc_fe_cfg_mem_fmt {
++	JENC_FE_CFG_MEM_FAT_PLANAR	= 0x0,
++	JENC_FE_CFG_MEM_FMT_PPLANAR	= 0x1,
++	JENC_FE_CFG_MEM_FMT_MONO	= 0x2,
++	JENC_FE_CFG_MEM_FMT_COEFFICIENT	= 0x3
++};
++
++enum jenc_fe_cfg_mcus_per_blk {
++	JENC_FE_CFG_MCUS_PER_BLK_1MCU  = 0x0,
++	JENC_FE_CFG_MCUS_PER_BLK_2MCU  = 0x1,
++	JENC_FE_CFG_MCUS_PER_BLK_4MCU  = 0x2,
++	JENC_FE_CFG_MCUS_PER_BLK_8MCU  = 0x3
++};
++
++enum jenc_fe_cfg_mal_bound {
++	JENC_FE_CFG_MAL_BOUND_MAL_32_BYTES	= 0x0,
++	JENC_FE_CFG_MAL_BOUND_MAL_64_BYTES	= 0x1,
++	JENC_FE_CFG_MAL_BOUND_MAL_128_BYTES	= 0x2,
++	JENC_FE_CFG_MAL_BOUND_MAL_256_BYTES	= 0x3,
++	JENC_FE_CFG_MAL_BOUND_MAL_512_BYTES	= 0x4,
++	JENC_FE_CFG_MAL_BOUND_MAL_1K_BYTES	= 0x5,
++	JENC_FE_CFG_MAL_BOUND_MAL_2K_BYTES	= 0x6,
++	JENC_FE_CFG_MAL_BOUND_MAL_4K_BYTES	= 0x7
++};
++
++enum jenc_we_cfg_mem_fmt {
++	JENC_WE_CFG_MEM_FMT_PLANAR	= 0x0,
++	JENC_WE_CFG_MEM_FMT_PPLANAR	= 0x1,
++	JENC_WE_CFG_MEM_FMT_MONO	= 0x2
++};
++
++enum jenc_we_cfg_mal_bound {
++	JENC_WE_CFG_MAL_BOUND_MAL_32_BYTES	= 0x0,
++	JENC_WE_CFG_MAL_BOUND_MAL_64_BYTES	= 0x1,
++	JENC_WE_CFG_MAL_BOUND_MAL_128_BYTES	= 0x2,
++	JENC_WE_CFG_MAL_BOUND_MAL_256_BYTES	= 0x3,
++	JENC_WE_CFG_MAL_BOUND_MAL_512_BYTES	= 0x4,
++	JENC_WE_CFG_MAL_BOUND_MAL_1K_BYTES	= 0x5,
++	JENC_WE_CFG_MAL_BOUND_MAL_2K_BYTES	= 0x6,
++	JENC_WE_CFG_MAL_BOUND_MAL_4K_BYTES	= 0x7
++};
++
++enum jenc_img_fmt {
++	JENC_CFG_IMG_FMT_H1V1	= 0x0,
++	JENC_CFG_IMG_FMT_H1V2	= 0x1,
++	JENC_CFG_IMG_FMT_H2V1	= 0x2,
++	JENC_CFG_IMG_FMT_H2V2	= 0x3,
++	JENC_CFG_IMG_FMT_MONO	= 0x4
++};
++
++enum jenc_scale_cfg_hscale_algo {
++	JENC_CFG_HSCALE_ALGO_MN_DOWNSCALE	= 0x0,
++	JENC_CFG_HSCALE_ALGO_FIR_UPSCALE	= 0x1
++};
++
++enum jenc_cfg_vscale_algo {
++	JENC_CFG_VSCALE_ALGO_MN_DOWNSCALE	= 0x0,
++	JENC_CFG_VSCALE_ALGO_FIR_UPSCALE	= 0x1
++};
++
++enum jenc_cfg_hscale_fir_algo {
++	JENC_CFG_HSCALE_FIR_ALGO_BILINEAR	= 0x0,
++	JENC_CFG_HSCALE_FIR_ALGO_BICUBIC	= 0x1,
++	JENC_CFG_HSCALE_FIR_ALGO_NEAR_NEIGHBOR  = 0x2
++};
++
++enum  jenc_cfg_vscale_fir_algo {
++	JENC_CFG_VSCALE_FIR_ALGO_BILINEAR	= 0x0,
++	JENC_CFG_VSCALE_FIR_ALGO_BICUBIC	= 0x1,
++	JENC_CFG_VSCALE_FIR_ALGO_NEAR_NEIGHBOR	= 0x2
++};
++
++enum jenc_cfg_dmi_mem_sel {
++	JENC_CFG_DMI_MEM_SEL_NONE		= 0x0,
++	JENC_CFG_DMI_MEM_SEL_QUANT_LUT		= 0x1,
++	JENC_CFG_DMI_MEM_SEL_HUFFMAN_LUT	= 0x2
++};
++
++union jenc_hw_ver {
++	struct {
++		u32 step	: 16; /* 15:0 */
++		u32 minor	: 12; /* 27:16 */
++		u32 major	: 4; /* 31:28 */
++	};
++	u32 w32;
++};
++
++union  jenc_hw_cap {
++	struct {
++		u32 encode	: 1; /* 0:0 */
++		u32 decode	: 1; /* 1:1 */
++		u32 unused0	: 2; /* 3:2 */
++		u32 upscale	: 3; /* 6:4 */
++		u32 unused1	: 1; /* 7:7 */
++		u32 downscale	: 3; /* 10:8 */
++		u32 unused2	: 21; /* 31:11 */
++	};
++	u32 w32;
++};
++
++union jenc_rst_cmd {
++	struct {
++		u32 fe_reset		: 1; /* 0:0 */
++		u32 we_reset		: 1; /* 1:1 */
++		u32 unused0		: 2; /* 3:2 */
++		u32 encoder_reset	: 1; /* 4:4 */
++		u32 decoder_reset	: 1; /* 5:5 */
++		u32 block_formatter_rst	: 1; /* 6:6 */
++		u32 scale_reset		: 1; /* 7:7 */
++		u32 unused1		: 5; /* 12:8 */
++		u32 register_reset	: 1; /* 13:13 */
++		u32 unused2		: 2; /* 15:14 */
++		u32 misr_reset		: 1; /* 16:16 */
++		u32 core_reset		: 1; /* 17:17 */
++		u32 unused3		: 11; /* 28:18 */
++		u32 jpeg_domain_reset	: 1; /* 29:29 */
++		u32 unused4		: 1; /* 30:30 */
++		u32 reset_bypass	: 1; /* 31:31 */
++	};
++	u32 w32;
++};
++
++union jenc_core_cfg {
++	struct {
++		u32 fe_enable		: 1; /* 0:0 */
++		u32 we_enable		: 1; /* 1:1 */
++		u32 unused0		: 2; /* 3:2 */
++		u32 enc_enable		: 1; /* 4:4 */
++		u32 unused1		: 2; /* 6:5 */
++		u32 scale_enable	: 1; /* 7:7 */
++		u32 unused2		: 11; /* 18:8 */
++		u32 testbus_enable	: 1; /* 19:19 */
++		u32 unused3		: 4; /* 23:20 */
++		u32 mode		: 3; /* 26:24 */
++		u32 unused4		: 4; /* 30:27 */
++		u32 cgc_disable		: 1; /* 31:31 */
++	};
++	u32 w32;
++};
++
++union jenc_cmd {
++	struct {
++		u32 hw_start		: 1; /* 0:0 */
++		u32 hw_stop		: 1; /* 1:1 */
++		u32 unused0		: 2; /* 3:2 */
++		u32 clr_rd_pln0_queue	: 1; /* 4:4 */
++		u32 clr_rd_pln1_queue	: 1; /* 5:5 */
++		u32 clr_rd_pln2_queue	: 1; /* 6:6 */
++		u32 unused1		: 1; /* 7:7 */
++		u32 clr_wr_pln0_queue	: 1; /* 8:8 */
++		u32 clr_wr_pln1_queue	: 1; /* 9:9 */
++		u32 clr_wr_pln2_queue	: 1; /* 10:10 */
++		u32 apply_swc_rd_params	: 1; /* 11:11 */
++		u32 unused2		: 20; /* 31:12 */
++	};
++	u32 w32;
++};
++
++union jenc_core_state_status {
++	struct {
++		u32 encode_state	: 1; /* 0:0 */
++		u32 unused0		: 1; /* 1:1 */
++		u32 scale_state		: 1; /* 2:2 */
++		u32 unused1		: 1; /* 3:3 */
++		u32 realtime_state	: 1; /* 4:4 */
++		u32 unused2		: 3; /* 7:5 */
++		u32 bus_state		: 1; /* 8:8 */
++		u32 top_lvl_cgc_state	: 1; /* 9:9 */
++		u32 unused3		: 22; /* 31:10 */
++	};
++	u32 w32;
++};
++
++union jenc_fe_cfg {
++	struct {
++		u32 byte_ordering	: 4; /* 3:0 */
++		u32 burst_length_max	: 4; /* 7:4 */
++		u32 memory_format	: 2; /* 9:8 */
++		u32 unused0		: 2; /* 11:10 */
++		u32 cbcr_order		: 1; /* 12:12 */
++		u32 bottom_vpad_en	: 1; /* 13:13 */
++		u32 unused1		: 2; /* 15:14 */
++		u32 pln0_en		: 1; /* 16:16 */
++		u32 pln1_en		: 1; /* 17:17 */
++		u32 pln2_en		: 1; /* 18:18 */
++		u32 unused2		: 2; /* 20:19 */
++		u32 sixteen_mcu_en	: 1; /* 21:21 */
++		u32 mcus_per_block	: 2; /* 23:22 */
++		u32 mal_boundary	: 3; /* 26:24 */
++		u32 mal_en		: 1; /* 27:27 */
++		u32 unused3		: 4; /* 31:28 */
++	};
++	u32 w32;
++};
++
++union jenc_fe_qos_cfg {
++	struct {
++		u32 priority	: 4; /* 3:0 */
++		u32 unused0	: 28; /* 31:4 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_offs {
++	struct {
++		u32 offset	: 29; /* 28:0 */
++		u32 unused0	: 3; /* 31:29 */
++	};
++	u32 w32;
++};
++
++union jenc_rd_pntr_cnt {
++	struct {
++		u32 pln0_pntr_cnt	: 3; /* 2:0 */
++		u32 unused0		: 1; /* 3:3 */
++		u32 pln1_pntr_cnt	: 3; /* 6:4 */
++		u32 unused1		: 1; /* 7:7 */
++		u32 pln2_pntr_cnt	: 3; /* 10:8 */
++		u32 unused2		: 21; /* 31:11 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_buff_size {
++	struct {
++		u32 width	: 16; /* 15:0 */
++		u32 height	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_stride {
++	struct {
++		u32 stride	: 16; /* 15:0 */
++		u32 unused0	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_hinit {
++	struct {
++		u32 fractional	: 21; /* 20:0 */
++		u32 unused0	: 11; /* 31:21 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_vinit {
++	struct {
++		u32 fractional	: 21; /* 20:0 */
++		u32 unused0	: 11; /* 31:21 */
++	};
++	u32 w32;
++};
++
++union jenc_we_cfg {
++	struct {
++		u32 byte_ordering	: 4; /* 3:0 */
++		u32 burst_length_max	: 4; /* 7:4 */
++		u32 memory_format	: 2; /* 9:8 */
++		u32 unused0		: 2; /* 11:10 */
++		u32 cbcr_order		: 1; /* 12:12 */
++		u32 unused1		: 3; /* 15:13 */
++		u32 pln0_en		: 1; /* 16:16 */
++		u32 pln1_en		: 1; /* 17:17 */
++		u32 pln2_en		: 1; /* 18:18 */
++		u32 unused2		: 5; /* 23:19 */
++		u32 mal_boundary	: 3; /* 26:24 */
++		u32 mal_en		: 1; /* 27:27 */
++		u32 pop_buff_on_eos	: 1; /* 28:28 */
++		u32 unused3		: 3; /* 31:29 */
++	};
++	u32 w32;
++};
++
++union jenc_we_qos_cfg {
++	struct {
++		u32 priority_000	: 4; /* 3:0 */
++		u32 priority_001	: 4; /* 7:4 */
++		u32 priority_010	: 4; /* 11:8 */
++		u32 priority_011	: 4; /* 15:12 */
++		u32 priority_100	: 4; /* 19:16 */
++		u32 priority_101	: 4; /* 23:20 */
++		u32 priority_110	: 4; /* 27:24 */
++		u32 priority_111	: 4; /* 31:28 */
++	};
++	u32 w32;
++};
++
++union jenc_wr_pntr_cnt {
++	struct {
++		u32 pln0_pntr_cnt	: 4; /* 3:0 */
++		u32 pln1_pntr_cnt	: 4; /* 7:4 */
++		u32 pln2_pntr_cnt	: 4; /* 11:8 */
++		u32 unused0		: 20; /* 31:12 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_buff_size {
++	struct {
++		u32 width	: 16; /* 15:0 */
++		u32 height	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_stride {
++	struct {
++		u32 stride	: 16; /* 15:0 */
++		u32 unused0	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_hinit {
++	struct {
++		u32 integer	: 16; /* 15:0 */
++		u32 unused0	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_vinit {
++	struct {
++		u32 integer	: 16; /* 15:0 */
++		u32 unused0	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_hstep {
++	struct {
++		u32 integer	: 17; /* 16:0 */
++		u32 unused0	: 15; /* 31:17 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_vstep {
++	struct {
++		u32 integer	: 17; /* 16:0 */
++		u32 unused0	: 15; /* 31:17 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_wr_blk_cfg {
++	struct {
++		u32 blocks_per_col	: 16; /* 15:0 */
++		u32 blocks_per_row	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_cfg {
++	struct {
++		u32 image_format	: 3; /* 2:0 */
++		u32 unused0		: 4; /* 6:3 */
++		u32 apply_eoi		: 1; /* 7:7 */
++		u32 huffman_sel		: 1; /* 8:8 */
++		u32 unused1		: 2; /* 10:9 */
++		u32 fsc_enable		: 1; /* 11:11 */
++		u32 unused2		: 3; /* 14:12 */
++		u32 output_disable	: 1; /* 15:15 */
++		u32 rst_marker_period	: 16; /* 31:16 */
++	};
++	u32 w32;
++};
++
++union jenc_img_size {
++	struct {
++		u32 encode_width	: 13; /* 12:0 */
++		u32 unused0		: 3; /* 15:13 */
++		u32 encode_height	: 13; /* 28:16 */
++		u32 unused1		: 3; /* 31:29 */
++	};
++	u32 w32;
++};
++
++union jenc_fsc_region_size {
++	struct {
++		u32 region_size	: 5; /* 4:0 */
++		u32 unused0	: 3; /* 7:5 */
++		u32 hv_region	: 1; /* 8:8 */
++		u32 unused1	: 23; /* 31:9 */
++	};
++	u32 w32;
++};
++
++union jenc_fsc_budget {
++	struct {
++		u32 budget_region0	: 8; /* 7:0 */
++		u32 budget_region1	: 8; /* 15:8 */
++		u32 budget_region2	: 8; /* 23:16 */
++		u32 budget_region3	: 8; /* 31:24 */
++	};
++	u32 w32;
++};
++
++union jenc_pred_y_state {
++	struct {
++		u32 predict_y_state	: 11; /* 10:0 */
++		u32 unused0		: 21; /* 31:11 */
++	};
++	u32 w32;
++};
++
++union jenc_pred_c_state {
++	struct {
++		u32 prediction_cb_state	: 11; /* 10:0 */
++		u32 unused0		: 5; /* 15:11 */
++		u32 prediction_cr_state	: 11; /* 26:16 */
++		u32 unused1		: 5; /* 31:27 */
++	};
++	u32 w32;
++};
++
++union jenc_rsm_state {
++	struct {
++		u32 rst_marker_mcu_cnt	: 16; /* 15:0 */
++		u32 rst_marker_value	: 3; /* 18:16 */
++		u32 unused0		: 13; /* 31:19 */
++	};
++	u32 w32;
++};
++
++union jenc_packer_state {
++	struct {
++		u32 bit_count		: 3; /* 2:0 */
++		u32 unused0		: 1; /* 3:3 */
++		u32 byte_packer_len	: 7; /* 10:4 */
++		u32 unused1		: 21; /* 31:11 */
++	};
++	u32 w32;
++};
++
++union jenc_output_size_status {
++	struct {
++		u32 out_size_bytes	: 29; /* 28:0 */
++		u32 unused0		: 3; /* 31:29 */
++	};
++	u32 w32;
++};
++
++union jenc_scale_cfg {
++	struct {
++		u32 unused0		: 4; /* 3:0 */
++		u32 hscale_enable	: 1; /* 4:4 */
++		u32 vscale_enable	: 1; /* 5:5 */
++		u32 upsample_en		: 1; /* 6:6 */
++		u32 subsample_en	: 1; /* 7:7 */
++		u32 hscale_algo		: 1; /* 8:8 */
++		u32 vscale_algo		: 1; /* 9:9 */
++		u32 unused1		: 2; /* 11:10 */
++		u32 h_scale_fir_algo	: 2; /* 13:12 */
++		u32 unused2		: 2; /* 15:14 */
++		u32 v_scale_fir_algo	: 2; /* 17:16 */
++		u32 unused3		: 14; /* 31:18 */
++	};
++	u32 w32;
++};
++
++union jenc_scale_pln_out_cfg {
++	struct {
++		u32 block_width		: 8; /* 7:0 */
++		u32 unused0		: 8; /* 15:8 */
++		u32 block_height	: 4; /* 19:16 */
++		u32 unused1		: 12; /* 31:20 */
++	};
++	u32 w32;
++};
++
++union jenc_scale_pln_hstep {
++	struct {
++		u32 fractional	: 21; /* 20:0 */
++		u32 integer	: 6; /* 26:21 */
++		u32 unused0	: 5; /* 31:27 */
++	};
++	u32 w32;
++};
++
++union jenc_scale_pln_vstep {
++	struct {
++		u32 fractional	: 21; /* 20:0 */
++		u32 integer	: 6; /* 26:21 */
++		u32 unused0	: 5; /* 31:27 */
++	};
++	u32 w32;
++};
++
++union jenc_dmi_cfg {
++	struct {
++		u32 mem_sel	: 3; /* 2:0 */
++		u32 unused0	: 1; /* 3:3 */
++		u32 auto_inc_en	: 1; /* 4:4 */
++		u32 unused1	: 27; /* 31:5 */
++	};
++	u32 w32;
++};
++
++union jenc_dmi_addr {
++	struct {
++		u32 addr	: 10; /* 9:0 */
++		u32 unused0	: 22; /* 31:10 */
++	};
++	u32 w32;
++};
++
++union jenc_testbus_cfg {
++	struct {
++		u32 bus_sel	: 6; /* 5:0 */
++		u32 unused0	: 26; /* 31:6 */
++	};
++	u32 w32;
++};
++
++union jenc_misr_cfg {
++	struct {
++		u32 misr0_en	: 1; /* 0:0 */
++		u32 misr1_en	: 1; /* 1:1 */
++		u32 misr2_en	: 1; /* 2:2 */
++		u32 unused0	: 29; /* 31:3 */
++	};
++	u32 w32;
++};
++
++union jenc_fe_vbpad_cfg {
++	struct {
++		u32 block_row	: 13; /* 12:0 */
++		u32 unused0	: 19; /* 31:13 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_hinit_int {
++	struct {
++		u32 integer	: 17; /* 16:0 */
++		u32 unused0	: 15; /* 31:17 */
++	};
++	u32 w32;
++};
++
++union jenc_pln_rd_vinit_int {
++	struct {
++		u32 integer	: 17; /* 16:0 */
++		u32 unused0	: 15; /* 31:17 */
++	};
++	u32 w32;
++};
++
++union jenc_s0_s3_mmu_pf_cntl {
++	struct {
++		u32 s0_l1_mmu_prefetch_en	: 1; /* 0:0 */
++		u32 s0_l1_period		: 1; /* 1:1 */
++		u32 s0_l1_direction		: 1; /* 2:2 */
++		u32 unused0			: 1; /* 3:3 */
++		u32 s1_l1_mmu_prefetch_en	: 1; /* 4:4 */
++		u32 s1_l1_period		: 1; /* 5:5 */
++		u32 s1_l1_direction		: 1; /* 6:6 */
++		u32 unused1			: 1; /* 7:7 */
++		u32 s2_l1_mmu_prefetch_en	: 1; /* 8:8 */
++		u32 s2_l1_period		: 1; /* 9:9 */
++		u32 s2_l1_direction		: 1; /* 10:10 */
++		u32 unused2			: 1; /* 11:11 */
++		u32 s3_l1_mmu_prefetch_en	: 1; /* 12:12 */
++		u32 s3_l1_period		: 1; /* 13:13 */
++		u32 s3_l1_direction		: 1; /* 14:14 */
++		u32 unused3			: 17; /* 31:15 */
++	};
++	u32 w32;
++};
++
++union jenc_s0_mmu_pf_ctl_l1_filter {
++	struct {
++		u32 l1_filter_en	: 1; /* 0:0 */
++		u32 unused0		: 3; /* 3:1 */
++		u32 l1_filter_depth	: 3; /* 6:4 */
++		u32 unused1		: 25; /* 31:7 */
++	};
++	u32 w32;
++};
++
++union jenc_s1_mmu_pf_ctl_l1_filter {
++	struct {
++		u32 l1_filter_en	: 1; /* 0:0 */
++		u32 unused0		: 3; /* 3:1 */
++		u32 l1_filter_depth	: 3; /* 6:4 */
++		u32 unused1		: 25; /* 31:7 */
++	};
++	u32 w32;
++};
++
++union jenc_s2_mmu_pf_ctl_l1_filter {
++	struct {
++		u32 l1_filter_en	: 1; /* 0:0 */
++		u32 unused0		: 3; /* 3:1 */
++		u32 l1_filter_depth	: 3; /* 6:4 */
++		u32 unused1		: 25; /* 31:7 */
++	};
++	u32 w32;
++};
++
++union jenc_s3_mmu_pf_ctl_l1_filter {
++	struct {
++		u32 l1_filter_en	: 1; /* 0:0 */
++		u32 unused0		: 3; /* 3:1 */
++		u32 l1_filter_depth	: 3; /* 6:4 */
++		u32 unused1		: 25; /* 31:7 */
++	};
++	u32 w32;
++};
++
++#endif /* JENC_V4L2_HW_DEFS_H_ */
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.c b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.c
+new file mode 100644
+index 000000000000..2f4892f86af3
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.c
+@@ -0,0 +1,1350 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2021-2022, MM Solutions EAD. All rights reserved.
++ *	Author: Atanas Filipov <afilipov@mm-sol.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <asm/div64.h>
++#include <media/v4l2-mem2mem.h>
++#include <media/videobuf2-dma-sg.h>
++
++#include "jpeg_enc_core.h"
++#include "cam_mem_mgr.h"
++#include "cam_jpeg_hw_mgr.h"
++#include "cam_jpeg_dev.h"
++#include "cam_jenc_v4l2_defs.h"
++#include "cam_jenc_v4l2_hal.h"
++#include "cam_smmu_api.h"
++
++#define JENC_FE_CFG_BURST_LENGTH 7
++#define JENC_WE_CFG_BURST_LENGTH 3
++
++#define JPEG_ENC_HBLOCK_16	16
++#define JPEG_ENC_WBLOCK_16	16
++#define JPEG_ENC_HBLOCK_8	8
++#define JPEG_ENC_WBLOCK_8	8
++
++#define JENC_REG_SCALE_DEFAULT_STEP 0x200000
++
++// QC JFIF Header and definition
++struct qc_jfif {
++	u8 soi_marker[2];
++
++	u8 dqt_marker[2];
++	u8 dqt_length[2];
++
++	u8 dqt_id1[1];
++	u8 dqt_table1[64];
++	u8 dqt_id2[1];
++	u8 dqt_table2[64];
++
++	u8 sof0_marker[2];
++
++	u8 sof0_component_length[2];
++	u8 sof0_precision[1];
++
++	u8 sof0_height[2];
++	u8 sof0_width[2];
++
++	u8 sof_0_number_components[1];
++
++	u8 sof0_component_luma_id[1];
++	u8 sof0_component_luma_subsample_factor[1];
++	u8 sof0_component_luma_quantization_selector[1];
++
++	u8 sof0_component_cb_id[1];
++	u8 sof0_component_cb_subsample_factor[1];
++	u8 sof0_component_cb_quantization_selector[1];
++
++	u8 sof0_component_cr_id[1];
++	u8 sof0_component_cr_subsample_factor[1];
++	u8 sof0_component_cr_quantization_selector[1];
++
++	u8 dht_marker[2];
++	u8 dht_length[2];
++
++	u8 dht_luma_dc_index[1];
++	u8 dht_luma_dc_bits[16];
++	u8 dht_luma_dc_values[12];
++
++	u8 dht_luma_ac_index[1];
++	u8 dht_luma_ac_bits[16];
++	u8 dht_luma_ac_values[162];
++
++	u8 dht_chroma_dc_index[1];
++	u8 dht_chrome_dc_bits[16];
++	u8 dht_chrome_dc_values[12];
++
++	u8 dht_chroma_ac_index[1];
++	u8 dht_chroma_ac_bits[16];
++	u8 dht_chroma_ac_values[162];
++
++	u8 sos_marker[2];
++	u8 sos_length[2];
++
++	u8 sos_number_components[1];
++
++	u8 sos_luma_dc_ac_table_indexes[2];
++	u8 sos_cb_dc_ac_table_indexes[2];
++	u8 sos_cr_dc_ac_table_indexes[2];
++
++	u8 sos_subsampling[2];
++	u8 sos_dummy[1];
++};
++
++static const struct qc_jfif jfif = {
++	.soi_marker = { 0xff, 0xd8 },
++
++	.dqt_marker = { 0xff, 0xdb },
++	.dqt_length = { 0, 0x84 },
++
++	.dqt_id1 = { 0 },
++	.dqt_table1 = {
++		0x02, 0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x01,
++		0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x04,
++		0x03, 0x02, 0x02, 0x02, 0x02, 0x05, 0x04, 0x04,
++		0x03, 0x04, 0x06, 0x05, 0x06, 0x06, 0x06, 0x05,
++		0x06, 0x06, 0x06, 0x07, 0x09, 0x08, 0x06, 0x07,
++		0x09, 0x07, 0x06, 0x06, 0x08, 0x0b, 0x08, 0x09,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x06, 0x08, 0x0b,
++		0x0c, 0x0b, 0x0a, 0x0c, 0x09, 0x0a, 0x0a, 0x0a,
++	},
++
++	.dqt_id2 = { 1 },
++	.dqt_table2 = {
++		0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x05, 0x03,
++		0x03, 0x05, 0x0a, 0x07, 0x06, 0x07, 0x0a, 0x0a,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
++		0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a
++	},
++
++	.sof0_marker = { 0xff, 0xc0 },
++
++	.sof0_component_length = { 0, 0x11 },
++	.sof0_precision = { 8 },
++
++	.sof0_height = { 0 },
++	.sof0_width = { 0 },
++
++	.sof_0_number_components = { 3 },
++
++	.sof0_component_luma_id = { 1 },
++	.sof0_component_luma_subsample_factor = { 0x22 },
++	.sof0_component_luma_quantization_selector  = { 0x0 },
++
++	.sof0_component_cb_id = { 2 },
++	.sof0_component_cb_subsample_factor = { 0x11 },
++	.sof0_component_cb_quantization_selector = { 0x1 },
++
++	.sof0_component_cr_id = { 3 },
++	.sof0_component_cr_subsample_factor = { 0x11 },
++	.sof0_component_cr_quantization_selector = { 0x1 },
++
++	.dht_marker = { 0xff, 0xc4 },
++
++	.dht_length = { 1, 0xa2 },
++
++	.dht_luma_dc_index = { 0 },
++	.dht_luma_dc_bits = {
++		0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0
++	},
++	.dht_luma_dc_values = {
++		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
++	},
++	.dht_luma_ac_index = { 0x10 },
++	.dht_luma_ac_bits = {
++		0, 2, 1, 3, 3, 2, 4, 3, 5, 5, 4, 4, 0, 0, 1, 0x7d
++	},
++	.dht_luma_ac_values = {
++		0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12,
++		0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
++		0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08,
++		0x23, 0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0,
++		0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16,
++		0x17, 0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28,
++		0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
++		0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
++		0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
++		0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
++		0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79,
++		0x7a, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
++		0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98,
++		0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7,
++		0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6,
++		0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5,
++		0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4,
++		0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2,
++		0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea,
++		0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
++		0xf9, 0xfa
++	},
++
++	.dht_chroma_dc_index = { 1 },
++	.dht_chrome_dc_bits = {
++		0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0
++	},
++	.dht_chrome_dc_values = {
++		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
++	},
++	.dht_chroma_ac_index = { 0x11 },
++	.dht_chroma_ac_bits = {
++		0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77
++	},
++	.dht_chroma_ac_values = {
++		0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21,
++		0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71,
++		0x13, 0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91,
++		0xa1, 0xb1, 0xc1, 0x09, 0x23, 0x33, 0x52, 0xf0,
++		0x15, 0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24, 0x34,
++		0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26,
++		0x27, 0x28, 0x29, 0x2a, 0x35, 0x36, 0x37, 0x38,
++		0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48,
++		0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58,
++		0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
++		0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78,
++		0x79, 0x7a, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
++		0x88, 0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96,
++		0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5,
++		0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4,
++		0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3,
++		0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2,
++		0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda,
++		0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9,
++		0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8,
++		0xf9, 0xfa
++	},
++
++	.sos_marker = { 0xff, 0xda },
++
++	.sos_length =  { 0, 0xc },
++	.sos_number_components = { 3 },
++
++	.sos_luma_dc_ac_table_indexes = { 1, 0 },
++
++	.sos_cb_dc_ac_table_indexes = { 0x2, 0x11 },
++	.sos_cr_dc_ac_table_indexes = { 0x3, 0x11 },
++	.sos_subsampling = { 0, 0x3f },
++	.sos_dummy = { 0 },
++};
++
++struct jenc_reg_info {
++	u32 offs;
++	u32 mask;
++	u32 shift;
++};
++
++static const u32 jenc_quant_table[] = {
++	0x8000, 0xffff, 0xffff, 0x8000, 0x8000, 0x4000, 0x3333, 0x2aaa,
++	0xffff, 0xffff, 0xffff, 0x8000, 0x5555, 0x2aaa, 0x2aaa, 0x2aaa,
++	0xffff, 0xffff, 0x8000, 0x8000, 0x4000, 0x2aaa, 0x2492, 0x2aaa,
++	0xffff, 0x8000, 0x8000, 0x5555, 0x3333, 0x1c71, 0x2000, 0x2aaa,
++	0x8000, 0x8000, 0x4000, 0x2aaa, 0x2492, 0x1745, 0x1999, 0x2000,
++	0x8000, 0x4000, 0x2aaa, 0x2aaa, 0x2000, 0x1999, 0x1745, 0x1c71,
++	0x3333, 0x2aaa, 0x2000, 0x1c71, 0x1999, 0x1555, 0x1555, 0x1999,
++	0x2492, 0x1c71, 0x1999, 0x1999, 0x1745, 0x1999, 0x1999, 0x1999,
++	0x8000, 0x8000, 0x8000, 0x3333, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x8000, 0x8000, 0x5555, 0x2492, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x8000, 0x5555, 0x2aaa, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x3333, 0x2492, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999,
++	0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999
++};
++
++static int jenc_hal_dma_buffer_put(struct jenc_context *jctx,
++				   struct vb2_buffer *vb2)
++{
++	struct jenc_bufq *bq = &jctx->bufq[TYPE2ID(vb2->type)];
++	int rc, pln;
++
++	for (pln = 0; pln < vb2->num_planes; pln++) {
++		if (bq->mapped[pln].iova && bq->mapped[pln].length) {
++			rc = cam_smmu_unmap_ext_buff(jctx->iommu_hdl,
++						     bq->mapped[pln].iova,
++						     bq->mapped[pln].length,
++						     bq->mapped[pln].reg_id);
++			bq->mapped[pln].iova   = 0;
++			bq->mapped[pln].length = 0;
++			bq->mapped[pln].reg_id = 0;
++			if (rc) {
++				dev_err(jctx->dev, "Unmap ext buff failed");
++				return rc;
++			}
++		}
++	}
++
++	return 0;
++}
++
++static int jenc_hal_dma_buffer_get(struct jenc_context *jctx,
++				   struct vb2_buffer *vb2, int plane,
++				   dma_addr_t *dma_addr)
++{
++	struct jenc_bufq *bq = &jctx->bufq[TYPE2ID(vb2->type)];
++	struct sg_table *sgt;
++	size_t length;
++	union {
++		dma_addr_t iova;
++		u32 *mptr;
++	} addr;
++
++	addr.mptr = vb2_plane_vaddr(vb2, plane);
++	if (!addr.mptr) {
++		dev_err(jctx->dev, "Get plane vaddr failed\n");
++		return -EINVAL;
++	}
++
++	sgt = vb2_dma_sg_plane_desc(vb2, plane);
++	if (!sgt) {
++		dev_err(jctx->dev, "Get plane sgt descriptor failed\n");
++		return -ENODEV;
++	}
++
++	cam_smmu_map_ext_buff(sgt, jctx->iommu_hdl, &addr.iova, &length,
++			      CAM_SMMU_REGION_IO);
++	if (!length)
++		return -EINVAL;
++
++	bq->mapped[plane].reg_id = CAM_SMMU_REGION_IO;
++	bq->mapped[plane].iova	 = addr.iova;
++	bq->mapped[plane].length = length;
++
++	*dma_addr = addr.iova;
++
++	return 0;
++}
++
++static const struct jenc_reg_info fe_pl_ptr[] = {
++	{
++		JENC_PLN0_RD_PNTR_REG,
++		JENC_PLN0_RD_PNTR_PNTR_MASK,
++		JENC_PLN0_RD_PNTR_PNTR_SHIFT
++	},
++	{
++		JENC_PLN1_RD_PNTR_REG,
++		JENC_PLN1_RD_PNTR_PNTR_MASK,
++		JENC_PLN1_RD_PNTR_PNTR_SHIFT
++	},
++	{
++		JENC_PLN2_RD_PNTR_REG,
++		JENC_PLN2_RD_PNTR_PNTR_MASK,
++		JENC_PLN2_RD_PNTR_PNTR_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_int_hinit[] = {
++	{
++		JENC_PLN0_RD_HINIT_INT_REG,
++		JENC_PLN0_RD_HINIT_INT_INTEGER_MASK,
++		JENC_PLN0_RD_HINIT_INT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN1_RD_HINIT_INT_REG,
++		JENC_PLN1_RD_HINIT_INT_INTEGER_MASK,
++		JENC_PLN1_RD_HINIT_INT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN2_RD_HINIT_INT_REG,
++		JENC_PLN2_RD_HINIT_INT_INTEGER_MASK,
++		JENC_PLN2_RD_HINIT_INT_INTEGER_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_frac_hinit[] = {
++	{
++		JENC_PLN0_RD_HINIT_REG,
++		JENC_PLN0_RD_HINIT_FRACTIONAL_MASK,
++		JENC_PLN0_RD_HINIT_FRACTIONAL_SHIFT
++	},
++	{
++		JENC_PLN1_RD_HINIT_REG,
++		JENC_PLN1_RD_HINIT_FRACTIONAL_MASK,
++		JENC_PLN1_RD_HINIT_FRACTIONAL_SHIFT
++	},
++	{
++		JENC_PLN2_RD_HINIT_REG,
++		JENC_PLN2_RD_HINIT_FRACTIONAL_MASK,
++		JENC_PLN2_RD_HINIT_FRACTIONAL_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_int_vinit[] = {
++	{
++		JENC_PLN0_RD_VINIT_INT_REG,
++		JENC_PLN0_RD_VINIT_INT_INTEGER_MASK,
++		JENC_PLN0_RD_VINIT_INT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN1_RD_VINIT_INT_REG,
++		JENC_PLN1_RD_VINIT_INT_INTEGER_MASK,
++		JENC_PLN1_RD_VINIT_INT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN2_RD_VINIT_INT_REG,
++		JENC_PLN2_RD_VINIT_INT_INTEGER_MASK,
++		JENC_PLN2_RD_VINIT_INT_INTEGER_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_frac_vinit[] = {
++	{
++		JENC_PLN0_RD_VINIT_REG,
++		JENC_PLN0_RD_VINIT_FRACTIONAL_MASK,
++		JENC_PLN0_RD_VINIT_FRACTIONAL_SHIFT
++	},
++	{
++		JENC_PLN1_RD_VINIT_REG,
++		JENC_PLN1_RD_VINIT_FRACTIONAL_MASK,
++		JENC_PLN1_RD_VINIT_FRACTIONAL_SHIFT
++	},
++	{
++		JENC_PLN2_RD_VINIT_REG,
++		JENC_PLN2_RD_VINIT_FRACTIONAL_MASK,
++		JENC_PLN2_RD_VINIT_FRACTIONAL_SHIFT
++	},
++};
++
++static const struct jenc_reg_info fe_buff_width[] = {
++	{
++		JENC_PLN0_RD_BUFFER_SIZE_REG,
++		JENC_PLN0_RD_BUFFER_SIZE_WIDTH_MASK,
++		JENC_PLN0_RD_BUFFER_SIZE_WIDTH_SHIFT
++	},
++	{
++		JENC_PLN1_RD_BUFFER_SIZE_REG,
++		JENC_PLN1_RD_BUFFER_SIZE_WIDTH_MASK,
++		JENC_PLN1_RD_BUFFER_SIZE_WIDTH_SHIFT
++	},
++	{
++		JENC_PLN2_RD_BUFFER_SIZE_REG,
++		JENC_PLN2_RD_BUFFER_SIZE_WIDTH_MASK,
++		JENC_PLN2_RD_BUFFER_SIZE_WIDTH_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_buff_height[] = {
++	{
++		JENC_PLN0_RD_BUFFER_SIZE_REG,
++		JENC_PLN0_RD_BUFFER_SIZE_HEIGHT_MASK,
++		JENC_PLN0_RD_BUFFER_SIZE_HEIGHT_SHIFT
++	},
++	{
++		JENC_PLN1_RD_BUFFER_SIZE_REG,
++		JENC_PLN1_RD_BUFFER_SIZE_HEIGHT_MASK,
++		JENC_PLN1_RD_BUFFER_SIZE_HEIGHT_SHIFT
++	},
++	{
++		JENC_PLN2_RD_BUFFER_SIZE_REG,
++		JENC_PLN2_RD_BUFFER_SIZE_HEIGHT_MASK,
++		JENC_PLN2_RD_BUFFER_SIZE_HEIGHT_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_stride[] = {
++	{
++		JENC_PLN0_RD_STRIDE_REG,
++		JENC_PLN0_RD_STRIDE_STRIDE_MASK,
++		JENC_PLN0_RD_STRIDE_STRIDE_SHIFT
++	},
++	{
++		JENC_PLN1_RD_STRIDE_REG,
++		JENC_PLN1_RD_STRIDE_STRIDE_MASK,
++		JENC_PLN1_RD_STRIDE_STRIDE_SHIFT
++	},
++	{
++		JENC_PLN2_RD_STRIDE_REG,
++		JENC_PLN2_RD_STRIDE_STRIDE_MASK,
++		JENC_PLN2_RD_STRIDE_STRIDE_SHIFT
++	}
++};
++
++static const struct jenc_reg_info fe_cfg_planes[] = {
++	{
++		JENC_FE_CFG_REG,
++		JENC_FE_CFG_PLN0_EN_MASK,
++		JENC_FE_CFG_PLN0_EN_SHIFT
++	},
++	{
++		JENC_FE_CFG_REG,
++		JENC_FE_CFG_PLN1_EN_MASK,
++		JENC_FE_CFG_PLN1_EN_SHIFT
++	},
++	{
++		JENC_FE_CFG_REG,
++		JENC_FE_CFG_PLN2_EN_MASK,
++		JENC_FE_CFG_PLN2_EN_SHIFT
++	},
++};
++
++static const struct jenc_reg_info fe_clr_planes_queue[] = {
++	{
++		JENC_CMD_REG,
++		JENC_CMD_CLEAR_RD_PLN0_QUEUE_MASK,
++		JENC_CMD_CLEAR_RD_PLN0_QUEUE_SHIFT
++	},
++	{
++		JENC_CMD_REG,
++		JENC_CMD_CLEAR_RD_PLN1_QUEUE_MASK,
++		JENC_CMD_CLEAR_RD_PLN1_QUEUE_SHIFT
++	},
++	{
++		JENC_CMD_REG,
++		JENC_CMD_CLEAR_RD_PLN2_QUEUE_MASK,
++		JENC_CMD_CLEAR_RD_PLN2_QUEUE_SHIFT
++	},
++};
++
++static int jenc_hal_setup_fe_addr(struct jenc_context *jctx,
++				  struct vb2_buffer *vb2)
++{
++	dma_addr_t dma;
++	int rc, pln = 0;
++
++	rc = jenc_hal_dma_buffer_get(jctx, vb2, pln, &dma);
++	if (rc) {
++		dev_err(jctx->dev, "Buffer mapping failed rc:%d\n", rc);
++		return rc;
++	}
++
++	jctx->rmap[fe_pl_ptr[pln].offs] = (dma << fe_pl_ptr[pln].shift) &
++					  fe_pl_ptr[pln].mask;
++	pln++;
++
++	dma += vb2->planes[pln].data_offset;
++	jctx->rmap[fe_pl_ptr[pln].offs] = (dma << fe_pl_ptr[pln].shift) &
++					  fe_pl_ptr[pln].mask;
++
++	return 0;
++}
++
++static void jenc_hal_setup_fe_crop(struct jenc_context *jctx,
++				   struct jenc_bufq *bq)
++{
++	struct v4l2_pix_format_mplane *spx = &bq->vf.fmt.pix_mp;
++	int i;
++
++	for (i = 0; i < CAM_PACKET_MAX_PLANES; i++) {
++		jctx->rmap[fe_int_hinit[i].offs]  = 0;
++		jctx->rmap[fe_frac_hinit[i].offs] = 0;
++	}
++
++	if (jctx->sel.r.width != spx->width) {
++		for (i = 0; i < spx->num_planes; i++) {
++			u64 hinit = jctx->sel.r.left << (fe_int_hinit[i].shift +
++				    fe_frac_hinit[i].shift);
++			u32 hfrac = do_div(hinit, spx->width);
++
++			jctx->rmap[fe_int_hinit[i].offs] =
++				(hfrac << fe_int_hinit[i].shift) &
++				fe_int_hinit[i].mask;
++
++			jctx->rmap[fe_frac_hinit[i].offs] |=
++				(hfrac << fe_frac_hinit[i].shift) &
++				fe_frac_hinit[i].mask;
++		}
++	}
++
++	for (i = 0; i < CAM_PACKET_MAX_PLANES; i++) {
++		jctx->rmap[fe_int_vinit[i].offs]  = 0;
++		jctx->rmap[fe_frac_vinit[i].offs] = 0;
++	}
++
++	if (jctx->sel.r.height != spx->height) {
++		for (i = 0; i < spx->num_planes; i++) {
++			u64 vinit = jctx->sel.r.left << (fe_int_vinit[i].shift +
++				    fe_frac_vinit[i].shift);
++			u32 vfrac = do_div(vinit, spx->width);
++
++			jctx->rmap[fe_int_vinit[i].offs] =
++				(vfrac << fe_int_vinit[i].shift) &
++				fe_int_vinit[i].mask;
++
++			jctx->rmap[fe_frac_vinit[i].offs] |=
++				(vfrac << fe_frac_vinit[i].shift) &
++				fe_frac_vinit[i].mask;
++		}
++	}
++}
++
++static void jenc_hal_setup_fe_size(struct jenc_context *jctx,
++				   struct jenc_bufq *bq)
++{
++	struct v4l2_pix_format_mplane *mpx = &bq->vf.fmt.pix_mp;
++	u32 width, height, stride;
++	int i;
++
++	for (i = 0; i < mpx->num_planes; i++) {
++		width = (mpx->width - 1);
++		jctx->rmap[fe_buff_width[i].offs] =
++			(width << fe_buff_width[i].shift) &
++			fe_buff_width[i].mask;
++
++		height = (mpx->height >> i) - 1;
++		jctx->rmap[fe_buff_height[i].offs] |=
++			(height << fe_buff_height[i].shift) &
++			fe_buff_height[i].mask;
++
++		stride = mpx->plane_fmt[i].bytesperline;
++		jctx->rmap[fe_stride[i].offs] = (stride <<
++			fe_stride[i].shift) & fe_stride[i].mask;
++
++		dev_dbg(jctx->dev, "%s ctx:%p plane:%d, W:0x%x H:0x%x\n",
++			__func__, jctx, i,
++			(jctx->rmap[fe_buff_width[i].offs] &
++			fe_buff_width[i].mask) >> fe_buff_width[i].shift,
++			(jctx->rmap[fe_buff_height[i].offs] &
++			fe_buff_height[i].mask) >> fe_buff_height[i].shift);
++	}
++}
++
++void jenc_hal_setup_fe_engine(struct jenc_context *jctx, struct jenc_bufq *bq)
++{
++	struct v4l2_pix_format_mplane *mpx = &bq->vf.fmt.pix_mp;
++	union jenc_cmd pcmd_reg;
++	union jenc_core_cfg core_cfg;
++	union jenc_fe_cfg fe_cfg;
++	int i;
++
++	jenc_hal_setup_fe_crop(jctx, bq);
++
++	jenc_hal_setup_fe_size(jctx, bq);
++
++	fe_cfg.w32		= jctx->rmap[JENC_FE_CFG_REG];
++	fe_cfg.memory_format	= JENC_FE_CFG_MEM_FMT_PPLANAR;
++	fe_cfg.mal_boundary	= JENC_FE_CFG_MAL_BOUND_MAL_128_BYTES;
++	fe_cfg.sixteen_mcu_en	= 1;
++	fe_cfg.mcus_per_block	= 0;
++
++	if (mpx->pixelformat == V4L2_PIX_FMT_NV21)
++		fe_cfg.cbcr_order = 1;
++
++	pcmd_reg.w32		= jctx->rmap[JENC_CMD_REG];
++
++	for (i = 0; i < mpx->num_planes; i++) {
++		fe_cfg.w32   |= fe_cfg_planes[i].mask;
++		pcmd_reg.w32 |= fe_clr_planes_queue[i].mask;
++	}
++
++	jctx->rmap[JENC_FE_CFG_REG] = fe_cfg.w32;
++	jctx->rmap[JENC_CMD_REG]    = pcmd_reg.w32;
++
++	core_cfg.w32	   = jctx->rmap[JENC_CORE_CFG_REG];
++	core_cfg.fe_enable = 1;
++
++	jctx->rmap[JENC_CORE_CFG_REG] = core_cfg.w32;
++}
++
++static const struct jenc_reg_info we_pl_ptr[] = {
++	{
++		JENC_PLN0_WR_PNTR_REG,
++		JENC_PLN0_WR_PNTR_PNTR_MASK,
++		JENC_PLN0_WR_PNTR_PNTR_SHIFT
++	},
++	{
++		JENC_PLN1_WR_PNTR_REG,
++		JENC_PLN1_WR_PNTR_PNTR_MASK,
++		JENC_PLN1_WR_PNTR_PNTR_SHIFT
++	},
++	{
++		JENC_PLN2_WR_PNTR_REG,
++		JENC_PLN2_WR_PNTR_PNTR_MASK,
++		JENC_PLN2_WR_PNTR_PNTR_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_int_hinit[] = {
++	{
++		JENC_PLN0_WR_HINIT_REG,
++		JENC_PLN0_WR_HINIT_INTEGER_MASK,
++		JENC_PLN0_WR_HINIT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN1_WR_HINIT_REG,
++		JENC_PLN1_WR_HINIT_INTEGER_MASK,
++		JENC_PLN1_WR_HINIT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN2_WR_HINIT_REG,
++		JENC_PLN2_WR_HINIT_INTEGER_MASK,
++		JENC_PLN2_WR_HINIT_INTEGER_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_int_hstep[] = {
++	{
++		JENC_PLN0_WR_HSTEP_REG,
++		JENC_PLN0_WR_HSTEP_INTEGER_MASK,
++		JENC_PLN0_WR_HSTEP_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN1_WR_HSTEP_REG,
++		JENC_PLN1_WR_HSTEP_INTEGER_MASK,
++		JENC_PLN1_WR_HSTEP_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN2_WR_HSTEP_REG,
++		JENC_PLN2_WR_HSTEP_INTEGER_MASK,
++		JENC_PLN2_WR_HSTEP_INTEGER_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_int_vinit[] = {
++	{
++		JENC_PLN0_WR_VINIT_REG,
++		JENC_PLN0_WR_VINIT_INTEGER_MASK,
++		JENC_PLN0_WR_VINIT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN1_WR_VINIT_REG,
++		JENC_PLN1_WR_VINIT_INTEGER_MASK,
++		JENC_PLN1_WR_VINIT_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN2_WR_VINIT_REG,
++		JENC_PLN2_WR_VINIT_INTEGER_MASK,
++		JENC_PLN2_WR_VINIT_INTEGER_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_int_vstep[] = {
++	{
++		JENC_PLN0_WR_VSTEP_REG,
++		JENC_PLN0_WR_VSTEP_INTEGER_MASK,
++		JENC_PLN0_WR_VSTEP_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN1_WR_VSTEP_REG,
++		JENC_PLN1_WR_VSTEP_INTEGER_MASK,
++		JENC_PLN1_WR_VSTEP_INTEGER_SHIFT
++	},
++	{
++		JENC_PLN2_WR_VSTEP_REG,
++		JENC_PLN2_WR_VSTEP_INTEGER_MASK,
++		JENC_PLN2_WR_VSTEP_INTEGER_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_buff_width[] = {
++	{
++		JENC_PLN0_WR_BUFFER_SIZE_REG,
++		JENC_PLN0_WR_BUFFER_SIZE_WIDTH_MASK,
++		JENC_PLN0_WR_BUFFER_SIZE_WIDTH_SHIFT
++	},
++	{
++		JENC_PLN1_WR_BUFFER_SIZE_REG,
++		JENC_PLN1_WR_BUFFER_SIZE_WIDTH_MASK,
++		JENC_PLN1_WR_BUFFER_SIZE_WIDTH_SHIFT
++	},
++	{
++		JENC_PLN2_WR_BUFFER_SIZE_REG,
++		JENC_PLN2_WR_BUFFER_SIZE_WIDTH_MASK,
++		JENC_PLN2_WR_BUFFER_SIZE_WIDTH_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_buff_height[] = {
++	{
++		JENC_PLN0_WR_BUFFER_SIZE_REG,
++		JENC_PLN0_WR_BUFFER_SIZE_HEIGHT_MASK,
++		JENC_PLN0_WR_BUFFER_SIZE_HEIGHT_SHIFT
++	},
++	{
++		JENC_PLN1_WR_BUFFER_SIZE_REG,
++		JENC_PLN1_WR_BUFFER_SIZE_HEIGHT_MASK,
++		JENC_PLN1_WR_BUFFER_SIZE_HEIGHT_SHIFT
++	},
++	{
++		JENC_PLN2_WR_BUFFER_SIZE_REG,
++		JENC_PLN2_WR_BUFFER_SIZE_HEIGHT_MASK,
++		JENC_PLN2_WR_BUFFER_SIZE_HEIGHT_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_stride[] = {
++	{
++		JENC_PLN0_WR_STRIDE_REG,
++		JENC_PLN0_WR_STRIDE_STRIDE_MASK,
++		JENC_PLN0_WR_STRIDE_STRIDE_SHIFT
++	},
++	{
++		JENC_PLN1_WR_STRIDE_REG,
++		JENC_PLN1_WR_STRIDE_STRIDE_MASK,
++		JENC_PLN1_WR_STRIDE_STRIDE_SHIFT
++	},
++	{
++		JENC_PLN2_WR_STRIDE_REG,
++		JENC_PLN2_WR_STRIDE_STRIDE_MASK,
++		JENC_PLN2_WR_STRIDE_STRIDE_SHIFT
++	}
++};
++
++static const struct jenc_reg_info we_cfg_planes[] = {
++	{
++		JENC_WE_CFG_REG,
++		JENC_WE_CFG_PLN0_EN_MASK,
++		JENC_WE_CFG_PLN0_EN_SHIFT
++	},
++	{
++		JENC_WE_CFG_REG,
++		JENC_WE_CFG_PLN1_EN_MASK,
++		JENC_WE_CFG_PLN1_EN_SHIFT
++	},
++	{
++		JENC_WE_CFG_REG,
++		JENC_WE_CFG_PLN2_EN_MASK,
++		JENC_WE_CFG_PLN2_EN_SHIFT
++	},
++};
++
++static const struct jenc_reg_info we_clr_planes_queue[] = {
++	{
++		JENC_CMD_REG,
++		JENC_CMD_CLEAR_WR_PLN0_QUEUE_MASK,
++		JENC_CMD_CLEAR_WR_PLN0_QUEUE_SHIFT
++	},
++	{
++		JENC_CMD_REG,
++		JENC_CMD_CLEAR_WR_PLN1_QUEUE_MASK,
++		JENC_CMD_CLEAR_WR_PLN1_QUEUE_SHIFT
++	},
++	{
++		JENC_CMD_REG,
++		JENC_CMD_CLEAR_WR_PLN2_QUEUE_MASK,
++		JENC_CMD_CLEAR_WR_PLN2_QUEUE_SHIFT
++	},
++};
++
++static int jenc_hal_setup_we_addr(struct jenc_context *jctx,
++				  struct vb2_buffer *vb2)
++{
++	struct jenc_bufq *dbq = &jctx->bufq[JENC_DST_ID];
++	dma_addr_t dma;
++	struct qc_jfif *mptr;
++	int rc, pln = 0;
++
++	rc = jenc_hal_dma_buffer_get(jctx, vb2, pln, &dma);
++	if (rc) {
++		dev_err(jctx->dev, "Buffer mapping failed rc:%d\n", rc);
++		return rc;
++	}
++
++	mptr = vb2_plane_vaddr(vb2, pln);
++	if (!mptr) {
++		dev_err(jctx->dev, "Get plane vaddr failed\n");
++		return -EINVAL;
++	}
++
++	memcpy((void *)mptr, (void *)&jfif, min_t(size_t,
++						  vb2->planes[pln].length,
++						  sizeof(jfif)));
++	mptr->sof0_width[0] = (dbq->vf.fmt.pix_mp.width & 0xFF00) >> 8;
++	mptr->sof0_width[1] = dbq->vf.fmt.pix_mp.width & 0x00FF;
++	mptr->sof0_height[0] = (dbq->vf.fmt.pix_mp.height & 0xFF00) >> 8;
++	mptr->sof0_height[1] = dbq->vf.fmt.pix_mp.height & 0x00FF;
++
++	dma += offsetof(struct qc_jfif, sos_dummy) + sizeof(jfif.sos_dummy);
++
++	jctx->rmap[we_pl_ptr[pln].offs] = (dma << we_pl_ptr[pln].shift) &
++					  we_pl_ptr[pln].mask;
++	return 0;
++}
++
++static void jenc_hal_setup_we_crop(struct jenc_context *jctx,
++				   struct jenc_bufq *bq)
++{
++	struct v4l2_pix_format_mplane *dpx = &bq->vf.fmt.pix_mp;
++	u64 hinit, vinit;
++	u32 hstep, vstep;
++	int i;
++
++	for (i = 0; i < CAM_PACKET_MAX_PLANES; i++) {
++		jctx->rmap[we_int_hinit[i].offs] = 0;
++		jctx->rmap[we_int_hstep[i].offs] = 0;
++	}
++
++	for (i = 0; i < dpx->num_planes; i++) {
++		hinit = 0;
++		jctx->rmap[we_int_hinit[i].offs] =
++			(hinit << we_int_hinit[i].shift) &
++			we_int_hinit[i].mask;
++
++		hstep = dpx->width;
++		jctx->rmap[we_int_hstep[i].offs] =
++			(hstep << we_int_hstep[i].shift) &
++			we_int_hstep[i].mask;
++	}
++
++	for (i = 0; i < CAM_PACKET_MAX_PLANES; i++) {
++		jctx->rmap[we_int_vinit[i].offs] = 0;
++		jctx->rmap[we_int_vstep[i].offs] = 0;
++	}
++
++	for (i = 0; i < dpx->num_planes; i++) {
++		vinit = 0;
++		jctx->rmap[we_int_vinit[i].offs] =
++			(vinit << we_int_vinit[i].shift) &
++			we_int_vinit[i].mask;
++
++		vstep = dpx->height;
++		jctx->rmap[we_int_vstep[i].offs] =
++			(vstep << we_int_vstep[i].shift) &
++			we_int_vstep[i].mask;
++	}
++}
++
++static void jenc_hal_setup_we_size(struct jenc_context *jctx,
++				   struct jenc_bufq *bq)
++{
++	struct v4l2_pix_format_mplane *mpx = &bq->vf.fmt.pix_mp;
++	u32 stride;
++	int i;
++
++	for (i = 0; i < mpx->num_planes; i++) {
++		jctx->rmap[we_buff_width[i].offs] =
++			((mpx->width - 1) << we_buff_width[i].shift) &
++			we_buff_width[i].mask;
++		jctx->rmap[we_buff_height[i].offs] |=
++			((mpx->height - 1) << we_buff_height[i].shift) &
++			we_buff_height[i].mask;
++
++		stride = mpx->plane_fmt[i].bytesperline;
++		jctx->rmap[we_stride[i].offs] = (stride <<
++			we_stride[i].shift) & we_stride[i].mask;
++
++		dev_dbg(jctx->dev, "%s ctx:%p plane:%d, W:0x%x H:0x%x\n",
++			__func__, jctx, i,
++			(jctx->rmap[we_buff_width[i].offs] &
++			we_buff_width[i].mask) >> we_buff_width[i].shift,
++			(jctx->rmap[we_buff_height[i].offs] &
++			we_buff_height[i].mask) >> we_buff_height[i].shift);
++	}
++}
++
++void jenc_hal_setup_we_engine(struct jenc_context *jctx, struct jenc_bufq *bq)
++{
++	struct v4l2_pix_format_mplane *mpx = &bq->vf.fmt.pix_mp;
++	union jenc_cmd pcmd_reg;
++	union jenc_pln_wr_blk_cfg pln_wr_blk_cfg;
++	union jenc_core_cfg core_cfg;
++	union jenc_we_cfg we_cfg;
++	union jenc_cfg cfg;
++	int i;
++
++	jenc_hal_setup_we_crop(jctx, bq);
++
++	jenc_hal_setup_we_size(jctx, bq);
++
++	we_cfg.w32		= jctx->rmap[JENC_WE_CFG_REG];
++	we_cfg.memory_format	= JENC_WE_CFG_MEM_FMT_PLANAR;
++	we_cfg.mal_boundary	= JENC_WE_CFG_MAL_BOUND_MAL_1K_BYTES;
++
++	pcmd_reg.w32		= jctx->rmap[JENC_CMD_REG];
++
++	for (i = 0; i < mpx->num_planes; i++) {
++		we_cfg.w32   |= we_cfg_planes[i].mask;
++		pcmd_reg.w32 |= we_clr_planes_queue[i].mask;
++	}
++
++	jctx->rmap[JENC_WE_CFG_REG] = we_cfg.w32;
++	jctx->rmap[JENC_CMD_REG]    = pcmd_reg.w32;
++
++	core_cfg.w32	    = jctx->rmap[JENC_CORE_CFG_REG];
++	core_cfg.we_enable  = 1;
++	core_cfg.enc_enable = 1;
++	core_cfg.mode	    = 1;
++
++	jctx->rmap[JENC_CORE_CFG_REG] = core_cfg.w32;
++
++	cfg.image_format   = 3;
++	cfg.apply_eoi	   = 1;
++
++	jctx->rmap[JENC_CFG_REG] = cfg.w32;
++
++	pln_wr_blk_cfg.blocks_per_row = ALIGN(mpx->width / 128, 16);
++	pln_wr_blk_cfg.blocks_per_col = ALIGN(mpx->height / 16, 16);
++
++	jctx->rmap[JENC_PLN0_WR_BLOCK_CFG_REG] = pln_wr_blk_cfg.w32;
++}
++
++static const struct jenc_reg_info enc_int_hstep[] = {
++	{
++		JENC_SCALE_PLN0_HSTEP_REG,
++		JENC_SCALE_PLN0_HSTEP_INTEGER_MASK,
++		JENC_SCALE_PLN0_HSTEP_INTEGER_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN1_HSTEP_REG,
++		JENC_SCALE_PLN1_HSTEP_INTEGER_MASK,
++		JENC_SCALE_PLN1_HSTEP_INTEGER_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN2_HSTEP_REG,
++		JENC_SCALE_PLN2_HSTEP_INTEGER_MASK,
++		JENC_SCALE_PLN2_HSTEP_INTEGER_SHIFT,
++	}
++};
++
++static const struct jenc_reg_info enc_frac_hstep[] = {
++	{
++		JENC_SCALE_PLN0_HSTEP_REG,
++		JENC_SCALE_PLN0_HSTEP_FRACTIONAL_MASK,
++		JENC_SCALE_PLN0_HSTEP_FRACTIONAL_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN1_HSTEP_REG,
++		JENC_SCALE_PLN1_HSTEP_FRACTIONAL_MASK,
++		JENC_SCALE_PLN1_HSTEP_FRACTIONAL_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN2_HSTEP_REG,
++		JENC_SCALE_PLN2_HSTEP_FRACTIONAL_MASK,
++		JENC_SCALE_PLN2_HSTEP_FRACTIONAL_SHIFT,
++	}
++};
++
++static const struct jenc_reg_info enc_int_vstep[] = {
++	{
++		JENC_SCALE_PLN0_VSTEP_REG,
++		JENC_SCALE_PLN0_VSTEP_INTEGER_MASK,
++		JENC_SCALE_PLN0_VSTEP_INTEGER_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN1_VSTEP_REG,
++		JENC_SCALE_PLN1_VSTEP_INTEGER_MASK,
++		JENC_SCALE_PLN1_VSTEP_INTEGER_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN2_VSTEP_REG,
++		JENC_SCALE_PLN2_VSTEP_INTEGER_MASK,
++		JENC_SCALE_PLN2_VSTEP_INTEGER_SHIFT,
++	}
++};
++
++static const struct jenc_reg_info enc_frac_vstep[] = {
++	{
++		JENC_SCALE_PLN0_VSTEP_REG,
++		JENC_SCALE_PLN0_VSTEP_FRACTIONAL_MASK,
++		JENC_SCALE_PLN0_VSTEP_FRACTIONAL_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN1_VSTEP_REG,
++		JENC_SCALE_PLN1_VSTEP_FRACTIONAL_MASK,
++		JENC_SCALE_PLN1_VSTEP_FRACTIONAL_SHIFT,
++	},
++	{
++		JENC_SCALE_PLN2_VSTEP_REG,
++		JENC_SCALE_PLN2_VSTEP_FRACTIONAL_MASK,
++		JENC_SCALE_PLN2_VSTEP_FRACTIONAL_SHIFT,
++	}
++};
++
++static void jenc_hal_setup_enc_scale(struct jenc_context *jctx)
++{
++	struct jenc_bufq *sbq = &jctx->bufq[JENC_SRC_ID];
++	struct jenc_bufq *dbq = &jctx->bufq[JENC_DST_ID];
++	struct v4l2_pix_format_mplane *spx = &sbq->vf.fmt.pix_mp;
++	struct v4l2_pix_format_mplane *dpx = &dbq->vf.fmt.pix_mp;
++	union jenc_img_size img_size;
++	union jenc_scale_cfg scale_cfg = {0};
++	union jenc_scale_pln_out_cfg pln_out_cfg = {0};
++	union jenc_fe_vbpad_cfg vbpad_cfg = {0};
++	u32 h_blk, w_blk;
++	int i = 0;
++
++	if (!scale_cfg.hscale_enable && !scale_cfg.vscale_enable) {
++		for (i = 0; i < CAM_PACKET_MAX_PLANES; i++) {
++			jctx->rmap[enc_int_hstep[i].offs] =
++				JENC_REG_SCALE_DEFAULT_STEP;
++			jctx->rmap[enc_int_vstep[i].offs] =
++				JENC_REG_SCALE_DEFAULT_STEP;
++		}
++	} else {
++		if (scale_cfg.hscale_enable) {
++			u64 hratio = jctx->sel.r.width <<
++				(enc_int_hstep[i].shift +
++				 enc_frac_hstep[i].shift);
++
++			do_div(hratio, spx->width);
++			for (i = 0; i < dpx->num_planes; i++) {
++				jctx->rmap[enc_int_hstep[i].offs] =
++					(hratio << enc_int_hstep[i].shift) &
++					enc_int_hstep[i].mask;
++				jctx->rmap[enc_int_hstep[i].offs] =
++					(hratio << enc_frac_hstep[i].shift) &
++					enc_frac_hstep[i].mask;
++			}
++		}
++
++		if (scale_cfg.vscale_enable) {
++			u64 vratio = jctx->sel.r.width <<
++				(enc_int_vstep[i].shift +
++				 enc_frac_vstep[i].shift);
++
++			do_div(vratio, spx->height);
++			for (i = 0; i < dpx->num_planes; i++) {
++				jctx->rmap[enc_int_vstep[i].offs] =
++					(vratio << enc_int_vstep[i].shift) &
++					enc_int_vstep[i].mask;
++				jctx->rmap[enc_int_vstep[i].offs] =
++					(vratio << enc_frac_vstep[i].shift) &
++					enc_frac_vstep[i].mask;
++			}
++		}
++	}
++
++	// H2V2
++	if (spx->pixelformat == V4L2_PIX_FMT_NV12 ||
++	    spx->pixelformat == V4L2_PIX_FMT_NV21) {
++		h_blk = JPEG_ENC_HBLOCK_16;
++		w_blk = JPEG_ENC_WBLOCK_16;
++	} else if (spx->pixelformat == V4L2_PIX_FMT_NV16 ||
++		   spx->pixelformat == V4L2_PIX_FMT_NV61) {
++		h_blk = JPEG_ENC_HBLOCK_8;
++		w_blk = JPEG_ENC_WBLOCK_16;
++	} else {
++		h_blk = JPEG_ENC_HBLOCK_8;
++		w_blk = JPEG_ENC_WBLOCK_8;
++	}
++
++	if (jctx->sel.r.width > dpx->width ||
++	    jctx->sel.r.height > dpx->height)
++		scale_cfg.subsample_en = 1;
++
++	if (jctx->sel.r.width < dpx->width ||
++	    jctx->sel.r.height < dpx->height)
++		scale_cfg.upsample_en = 1;
++
++	jctx->rmap[JENC_SCALE_CFG_REG] = scale_cfg.w32;
++
++	pln_out_cfg.block_width	 = w_blk - 1;
++	pln_out_cfg.block_height = h_blk - 1;
++	jctx->rmap[JENC_SCALE_PLN0_OUT_CFG_REG] = pln_out_cfg.w32;
++
++	pln_out_cfg.block_width  = JPEG_ENC_WBLOCK_8 - 1;
++	pln_out_cfg.block_height = JPEG_ENC_HBLOCK_8 - 1;
++	jctx->rmap[JENC_SCALE_PLN1_OUT_CFG_REG] = pln_out_cfg.w32;
++
++	pln_out_cfg.block_width  = JPEG_ENC_WBLOCK_8 - 1;
++	pln_out_cfg.block_height = JPEG_ENC_HBLOCK_8 - 1;
++	jctx->rmap[JENC_SCALE_PLN2_OUT_CFG_REG] = pln_out_cfg.w32;
++
++	img_size.encode_width  = ALIGN(dpx->width, JPEG_ENC_WBLOCK_16) /
++				 w_blk - 1;
++	img_size.encode_height = ALIGN(dpx->height, JPEG_ENC_HBLOCK_16) /
++				 h_blk - 1;
++
++	jctx->rmap[JENC_IMAGE_SIZE_REG] = img_size.w32;
++
++	vbpad_cfg.block_row = img_size.encode_height;
++	jctx->rmap[JENC_FE_VBPAD_REG] = vbpad_cfg.w32;
++}
++
++static void jenc_hal_apply_settings(struct jenc_context *jctx)
++{
++	u32 rid = JENC_CORE_CFG_REG;
++	struct cam_jpeg_rw_pair wr_pair[1];
++
++	for ( ; rid < ARRAY_SIZE(jctx->rmap); rid += sizeof(jctx->rmap[0])) {
++		if (/*!jctx->rmap[rid] ||*/
++		    (rid >= JENC_DMI_CFG_REG && rid <= JENC_DMI_DATA_REG))
++			continue;
++
++		wr_pair[0].off = rid;
++		wr_pair[0].val = jctx->rmap[rid];
++		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair,
++				       ARRAY_SIZE(wr_pair)))
++			break;
++	}
++}
++
++static void jenc_hal_apply_defaults(struct jenc_context *jctx)
++{
++	jctx->rmap[JENC_HW_CAP_REG] = (JENC_HW_CAP_ENCODE_MASK		<<
++				       JENC_HW_CAP_ENCODE_SHIFT)	|
++				      (JENC_HW_CAP_DECODE_MASK		<<
++				       JENC_HW_CAP_DECODE_SHIFT);
++
++	jctx->rmap[JENC_IRQ_MASK_REG] = JENC_IRQ_MASK_MASK_MASK;
++
++	jctx->rmap[JENC_CORE_CFG_REG] = JENC_CORE_CFG_TESTBUS_ENABLE_MASK;
++
++	jctx->rmap[JENC_FE_CFG_REG] = JENC_FE_CFG_MAL_EN_MASK		  |
++				      JENC_FE_CFG_BOTTOM_VPAD_EN_MASK	  |
++				      ((JENC_FE_CFG_BURST_LENGTH	  <<
++				      JENC_FE_CFG_BURST_LENGTH_MAX_SHIFT) &
++				      JENC_FE_CFG_BURST_LENGTH_MAX_MASK);
++
++	jctx->rmap[JENC_WE_CFG_REG] = JENC_FE_CFG_CBCR_ORDER_MASK	  |
++				      JENC_WE_CFG_POP_BUFF_ON_EOS_MASK	  |
++				      ((JENC_WE_CFG_BURST_LENGTH	  <<
++				      JENC_WE_CFG_BURST_LENGTH_MAX_SHIFT) &
++				      JENC_WE_CFG_BURST_LENGTH_MAX_MASK);
++}
++
++static void jenc_hal_apply_dmi_tables(struct jenc_context *jctx)
++{
++	struct cam_jpeg_rw_pair wr_pair[1];
++	union jenc_dmi_cfg  pcfg = { .w32 = 0x00000011 };
++	union jenc_dmi_addr addr = { .w32 = 0x00000000 };
++	int i;
++
++	// DMI upload start sequence
++	wr_pair[0].off = JENC_DMI_CFG_REG;
++	wr_pair[0].val = pcfg.w32;
++	cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair, ARRAY_SIZE(wr_pair));
++
++	wr_pair[0].off = JENC_DMI_ADDR_REG;
++	wr_pair[0].val = addr.w32;
++	cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair, ARRAY_SIZE(wr_pair));
++
++	// DMI data upload
++	for (i = 0; i < ARRAY_SIZE(jenc_quant_table); i++) {
++		wr_pair[0].off = JENC_DMI_DATA_REG;
++		wr_pair[0].val = jenc_quant_table[i];
++		if (cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair,
++				       ARRAY_SIZE(wr_pair)))
++			break;
++	}
++
++	// DMI upload end sequence
++	wr_pair[0].off = JENC_DMI_ADDR_REG;
++	wr_pair[0].val = pcfg.w32;
++	cam_jpeg_enc_write(jctx->jenc->hw_priv, wr_pair, ARRAY_SIZE(wr_pair));
++}
++
++struct jenc_bufq *jenc_hal_get_bufq(struct jenc_context *jctx,
++				    enum jenc_vid_id id)
++{
++	return &jctx->bufq[id];
++}
++
++void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
++{
++	unsigned long flags;
++	struct cam_jpeg_set_irq_cb irq_cd = {0};
++	struct vb2_v4l2_buffer *src_vb, *dst_vb;
++	enum vb2_buffer_state bstate = (cleanup) ? VB2_BUF_STATE_ERROR :
++						   VB2_BUF_STATE_DONE;
++
++	do {
++		spin_lock_irqsave(&jctx->irqlock, flags);
++		src_vb = v4l2_m2m_src_buf_remove(jctx->fh.m2m_ctx);
++		spin_unlock_irqrestore(&jctx->irqlock, flags);
++		if (!src_vb)
++			break;
++
++		v4l2_m2m_buf_done(src_vb, bstate);
++	} while (cleanup);
++
++	do {
++		spin_lock_irqsave(&jctx->irqlock, flags);
++		dst_vb = v4l2_m2m_dst_buf_remove(jctx->fh.m2m_ctx);
++		spin_unlock_irqrestore(&jctx->irqlock, flags);
++		if (!dst_vb)
++			break;
++
++		v4l2_m2m_buf_done(dst_vb, bstate);
++	} while (cleanup);
++
++	if (bstate == VB2_BUF_STATE_DONE) {
++		jenc_hal_dma_buffer_put(jctx, &src_vb->vb2_buf);
++		jenc_hal_dma_buffer_put(jctx, &dst_vb->vb2_buf);
++	}
++
++	cam_jpeg_enc_process_cmd(jctx->jenc->hw_priv, CAM_JPEG_CMD_SET_IRQ_CB,
++				 &irq_cd, sizeof(irq_cd));
++}
++
++static int32_t jenc_hal_process_irq(u32 irq_status, s32 result_size, void *data)
++{
++	struct jenc_context *jctx = data;
++
++	dev_dbg(jctx->dev, "%s irq:%x size:%d ctx:%p\n", __func__, irq_status,
++		result_size, data);
++
++	jctx->result_size = result_size;
++
++	jenc_hal_process_done(jctx, false);
++
++	v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
++
++	return 0;
++}
++
++int jenc_hal_process_exec(struct jenc_context *jctx,
++			  struct vb2_v4l2_buffer *src_vb,
++			  struct vb2_v4l2_buffer *dst_vb)
++{
++	struct jenc_bufq *sbq = &jctx->bufq[JENC_SRC_ID];
++	struct jenc_bufq *dbq = &jctx->bufq[JENC_DST_ID];
++	struct cam_jpeg_set_irq_cb irq_cd;
++	int rc;
++
++	dev_dbg(jctx->dev, "%s(%d)\n", __func__, __LINE__);
++
++	rc = jenc_hal_setup_fe_addr(jctx, &src_vb->vb2_buf);
++	if (rc)
++		return rc;
++
++	jenc_hal_setup_fe_engine(jctx, sbq);
++
++	rc = jenc_hal_setup_we_addr(jctx, &dst_vb->vb2_buf);
++	if (rc)
++		return rc;
++
++	jenc_hal_setup_we_engine(jctx, dbq);
++
++	jenc_hal_setup_enc_scale(jctx);
++
++	jenc_hal_apply_settings(jctx);
++	irq_cd.jpeg_hw_mgr_cb = jenc_hal_process_irq;
++	irq_cd.data	      = jctx;
++	irq_cd.b_set_cb	      = 1;
++	rc = cam_jpeg_enc_process_cmd(jctx->jenc->hw_priv,
++				      CAM_JPEG_CMD_SET_IRQ_CB, &irq_cd,
++				      sizeof(irq_cd));
++	if (rc)
++		return rc;
++
++	return cam_jpeg_enc_start_hw(jctx->jenc->hw_priv, NULL, 0);
++}
++
++int jenc_hal_prepare(struct jenc_context *jctx, bool hw_reset)
++{
++	int rc = 0;
++
++	if (hw_reset) {
++		rc = cam_jpeg_enc_init_hw(jctx->jenc->hw_priv, NULL, 0);
++		if (rc)
++			return rc;
++
++		rc = cam_jpeg_enc_reset_hw(jctx->jenc->hw_priv, NULL, 0);
++		if (rc)
++			return rc;
++	}
++
++	jenc_hal_apply_defaults(jctx);
++
++	jenc_hal_apply_dmi_tables(jctx);
++
++	return rc;
++}
++
++void jenc_hal_release(struct jenc_context *jctx)
++{
++	cam_jpeg_enc_deinit_hw(jctx->jenc->hw_priv, NULL, 0);
++}
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.h b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.h
+new file mode 100644
+index 000000000000..61e2af39685f
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/cam_jenc_v4l2_hal.h
+@@ -0,0 +1,82 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2021-2022, MM Solutions EAD. All rights reserved.
++ *	Author: Atanas Filipov <afilipov@mm-sol.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#ifndef CAM_JENC_V4L2_HAL_H_
++#define CAM_JENC_V4L2_HAL_H_
++
++#include <linux/types.h>
++#include <linux/videodev2.h>
++#include <media/videobuf2-v4l2.h>
++#include <media/v4l2-fh.h>
++
++#include <media/v4l2-ctrls.h>
++#include <media/cam_jpeg.h>
++
++#include "cam_hw.h"
++#include "cam_hw_intf.h"
++#include "cam_context.h"
++#include "cam_context_utils.h"
++#include "cam_packet_util.h"
++
++#include "cam_jpeg_dev.h"
++#include "cam_jenc_v4l2_defs.h"
++#include "cam_jenc_v4l2_common.h"
++
++#define JENC_PAYLOAD_DIV 3 // Chrome: Maximum payload of jpeg buffer
++
++struct jenc_bufq {
++	struct v4l2_format vf;
++	u32 sequence;
++	struct {
++		dma_addr_t iova;
++		size_t length;
++		u8 reg_id;
++	} mapped[CAM_PACKET_MAX_PLANES];
++};
++
++struct jenc_context {
++	struct device *dev;
++	struct jpeg_encoder *jenc;
++	struct v4l2_fh fh;
++	struct mutex vb_mutex;
++	spinlock_t irqlock;
++	struct jenc_bufq bufq[JENC_MAX_ID];
++	struct v4l2_ctrl_handler ctrl_hdl;
++	struct v4l2_ctrl *quality_ctl;
++	u32 quality;
++	struct v4l2_selection sel;
++	u32 rmap[JENC_S3_MMU_PF_CTL_L1_FILTER_REG];
++	s32 iommu_hdl;
++	size_t result_size;
++};
++
++void jenc_hal_setup_fe_engine(struct jenc_context *jctx, struct jenc_bufq *bq);
++
++void jenc_hal_setup_we_engine(struct jenc_context *jctx, struct jenc_bufq *bq);
++
++struct jenc_bufq *jenc_hal_get_bufq(struct jenc_context *jctx,
++				    enum jenc_vid_id id);
++
++int jenc_hal_process_exec(struct jenc_context *jctx,
++			  struct vb2_v4l2_buffer *src_vb,
++			  struct vb2_v4l2_buffer *dst_vb);
++
++void jenc_hal_process_done(struct jenc_context *jctx, bool status);
++
++int jenc_hal_prepare(struct jenc_context *jctx, bool hw_reset);
++
++void jenc_hal_release(struct jenc_context *jctx);
++
++#endif /* CAM_JENC_V4L2_HAL_H_*/
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.c b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.c
+index 2bab91861494..2237c32006d0 100644
+--- a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.c
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.c
+@@ -210,9 +210,9 @@ irqreturn_t cam_jpeg_enc_irq(int irq_num, void *data)
+ 				CAM_ERR(CAM_JPEG, "unexpected done, no cb");
+ 			}
+ 		} else {
++			core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
+ 			CAM_ERR(CAM_JPEG, "unexpected done irq");
+ 		}
+-		core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
+ 		spin_unlock(&jpeg_enc_dev->hw_lock);
+ 	}
+ 	if (CAM_JPEG_HW_IRQ_IS_RESET_ACK(irq_status, hw_info)) {
+@@ -404,8 +404,13 @@ int cam_jpeg_enc_stop_hw(void *data,
+ 		CAM_JPEG_ENC_RESET_TIMEOUT);
+ 	if (!rem_jiffies) {
+ 		CAM_ERR(CAM_JPEG, "error Reset Timeout");
++		spin_lock(&jpeg_enc_dev->hw_lock);
+ 		core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
++		spin_unlock(&jpeg_enc_dev->hw_lock);
+ 	}
++	spin_lock(&jpeg_enc_dev->hw_lock);
++	core_info->core_state = CAM_JPEG_ENC_CORE_READY;
++	spin_unlock(&jpeg_enc_dev->hw_lock);
+ 
+ 	mutex_unlock(&core_info->core_mutex);
+ 	return 0;
+@@ -468,6 +473,51 @@ static int cam_jpeg_enc_hw_dump(struct cam_hw_info *jpeg_enc_dev,
+ 	return 0;
+ }
+ 
++int cam_jpeg_enc_write(void *hw_priv, void *write_args, uint32_t args_count)
++{
++	struct cam_hw_info *jpeg_enc_dev = hw_priv;
++	struct cam_jpeg_enc_device_core_info *core_info;
++	struct cam_hw_soc_info *soc_info;
++	void __iomem *mem_base;
++	struct cam_jpeg_rw_pair *wr_data = write_args;
++	int rc;
++
++	if (!jpeg_enc_dev) {
++		CAM_ERR(CAM_JPEG, "Invalid args");
++		return -EINVAL;
++	}
++
++	soc_info = &jpeg_enc_dev->soc_info;
++	core_info = jpeg_enc_dev->core_info;
++	mem_base = soc_info->reg_map[0].mem_base;
++
++	mutex_lock(&core_info->core_mutex);
++
++	spin_lock(&jpeg_enc_dev->hw_lock);
++	if (jpeg_enc_dev->hw_state == CAM_HW_STATE_POWER_DOWN ||
++	    core_info->core_state != CAM_JPEG_ENC_CORE_READY) {
++		CAM_ERR(CAM_JPEG, "JPEG HW is in wrong state");
++		rc = -EINVAL;
++		goto err_spin_unlock;
++	}
++	spin_unlock(&jpeg_enc_dev->hw_lock);
++
++	while (args_count--) {
++		cam_io_w_mb(wr_data->val, mem_base + wr_data->off);
++		wr_data++;
++	}
++
++	mutex_unlock(&core_info->core_mutex);
++
++	return 0;
++
++err_spin_unlock:
++	spin_unlock(&jpeg_enc_dev->hw_lock);
++	mutex_unlock(&core_info->core_mutex);
++
++	return rc;
++}
++
+ int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,
+ 	void *cmd_args, uint32_t arg_size)
+ {
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.h b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.h
+index 9e02bba0f17c..538515b72a18 100644
+--- a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.h
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_core.h
+@@ -22,6 +22,11 @@
+ 
+ #include "cam_jpeg_hw_intf.h"
+ 
++struct cam_jpeg_rw_pair {
++	u32 off;
++	u32 val;
++};
++
+ struct cam_jpeg_enc_reg_offsets {
+ 	uint32_t hw_version;
+ 	uint32_t int_status;
+@@ -91,4 +96,6 @@ int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,
+ 	void *cmd_args, uint32_t arg_size);
+ irqreturn_t cam_jpeg_enc_irq(int irq_num, void *data);
+ 
++int cam_jpeg_enc_write(void *hw_priv, void *write_args, uint32_t arg_size);
++
+ #endif /* CAM_JPEG_ENC_CORE_H */
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.c b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.c
+index 9f597a57e7f2..3228619aaf0d 100644
+--- a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.c
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.c
+@@ -27,6 +27,8 @@
+ #include "cam_cpas_api.h"
+ #include "cam_debug_util.h"
+ #include "cam_jpeg_enc_hw_info_ver_4_2_0.h"
++#include "cam_jpeg_dev.h"
++#include "cam_smmu_api.h"
+ 
+ static int cam_jpeg_enc_register_cpas(struct cam_hw_soc_info *soc_info,
+ 	struct cam_jpeg_enc_device_core_info *core_info,
+@@ -68,7 +70,7 @@ static int cam_jpeg_enc_unregister_cpas(
+ static int cam_jpeg_enc_remove(struct platform_device *pdev)
+ {
+ 	struct cam_hw_info *jpeg_enc_dev = NULL;
+-	struct cam_hw_intf *jpeg_enc_dev_intf = NULL;
++	struct jpeg_encoder *jpeg_enc_dev_intf = NULL;
+ 	struct cam_jpeg_enc_device_core_info *core_info = NULL;
+ 	int rc;
+ 
+@@ -77,6 +79,7 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
+ 		CAM_ERR(CAM_JPEG, "error No data in pdev");
+ 		return -EINVAL;
+ 	}
++	put_device(jpeg_enc_dev_intf->smmu);
+ 
+ 	jpeg_enc_dev = jpeg_enc_dev_intf->hw_priv;
+ 	if (!jpeg_enc_dev) {
+@@ -85,6 +88,8 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
+ 		goto free_jpeg_hw_intf;
+ 	}
+ 
++	jenc_v4l2_device_destroy(jpeg_enc_dev_intf);
++
+ 	core_info = (struct cam_jpeg_enc_device_core_info *)
+ 		jpeg_enc_dev->core_info;
+ 	if (!core_info) {
+@@ -96,6 +101,7 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
+ 	if (rc)
+ 		CAM_ERR(CAM_JPEG, " unreg failed to reg cpas %d", rc);
+ 
++	mutex_destroy(&jpeg_enc_dev_intf->dev_mutex);
+ 	mutex_destroy(&core_info->core_mutex);
+ 	kfree(core_info);
+ 
+@@ -115,16 +121,33 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
+ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ {
+ 	struct cam_hw_info *jpeg_enc_dev = NULL;
+-	struct cam_hw_intf *jpeg_enc_dev_intf = NULL;
++	struct jpeg_encoder *jpeg_enc_dev_intf = NULL;
+ 	const struct of_device_id *match_dev = NULL;
+ 	struct cam_jpeg_enc_device_core_info *core_info = NULL;
+ 	struct cam_jpeg_enc_device_hw_info *hw_info = NULL;
++	struct device_node *smmu_intf;
++	struct platform_device *smmu_pdev;
+ 	int rc;
+ 
+-	jpeg_enc_dev_intf = kzalloc(sizeof(struct cam_hw_intf), GFP_KERNEL);
++	/* Get device to use for the default allocation context */
++	smmu_intf = of_parse_phandle(pdev->dev.of_node, "smmu_intf", 0);
++	if (!smmu_intf) {
++		CAM_ERR(CAM_JPEG, "The SMMU node isn't available");
++		return -ENODEV;
++	}
++	smmu_pdev = of_find_device_by_node(smmu_intf);
++	if (!smmu_pdev || !smmu_pdev->dev.driver) {
++		CAM_DBG(CAM_JPEG, "Probe deferred, until SMMU become ready");
++		put_device(&smmu_pdev->dev);
++		return -EPROBE_DEFER;
++	}
++
++	jpeg_enc_dev_intf = kzalloc(sizeof(*jpeg_enc_dev_intf), GFP_KERNEL);
+ 	if (!jpeg_enc_dev_intf)
+ 		return -ENOMEM;
+ 
++	mutex_init(&jpeg_enc_dev_intf->dev_mutex);
++
+ 	of_property_read_u32(pdev->dev.of_node,
+ 		"cell-index", &jpeg_enc_dev_intf->hw_idx);
+ 
+@@ -133,9 +156,18 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ 		rc = -ENOMEM;
+ 		goto error_alloc_dev;
+ 	}
++
++	mutex_init(&jpeg_enc_dev->hw_mutex);
++	spin_lock_init(&jpeg_enc_dev->hw_lock);
++	init_completion(&jpeg_enc_dev->hw_complete);
++
++	mutex_lock(&jpeg_enc_dev->hw_mutex);
++
+ 	jpeg_enc_dev->soc_info.pdev = pdev;
+ 	jpeg_enc_dev->soc_info.dev = &pdev->dev;
+ 	jpeg_enc_dev->soc_info.dev_name = pdev->name;
++	jpeg_enc_dev_intf->dev = &pdev->dev;
++	jpeg_enc_dev_intf->smmu = &smmu_pdev->dev;
+ 	jpeg_enc_dev_intf->hw_priv = jpeg_enc_dev;
+ 	jpeg_enc_dev_intf->hw_ops.init = cam_jpeg_enc_init_hw;
+ 	jpeg_enc_dev_intf->hw_ops.deinit = cam_jpeg_enc_deinit_hw;
+@@ -143,9 +175,9 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ 	jpeg_enc_dev_intf->hw_ops.stop = cam_jpeg_enc_stop_hw;
+ 	jpeg_enc_dev_intf->hw_ops.reset = cam_jpeg_enc_reset_hw;
+ 	jpeg_enc_dev_intf->hw_ops.process_cmd = cam_jpeg_enc_process_cmd;
++	jpeg_enc_dev_intf->hw_ops.write = cam_jpeg_enc_write;
+ 	jpeg_enc_dev_intf->hw_type = CAM_JPEG_DEV_ENC;
+ 
+-	platform_set_drvdata(pdev, jpeg_enc_dev_intf);
+ 	jpeg_enc_dev->core_info =
+ 		kzalloc(sizeof(struct cam_jpeg_enc_device_core_info),
+ 			GFP_KERNEL);
+@@ -155,6 +187,7 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ 	}
+ 	core_info = (struct cam_jpeg_enc_device_core_info *)
+ 		jpeg_enc_dev->core_info;
++	mutex_init(&core_info->core_mutex);
+ 
+ 	match_dev = of_match_device(pdev->dev.driver->of_match_table,
+ 		&pdev->dev);
+@@ -166,7 +199,6 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ 	hw_info = (struct cam_jpeg_enc_device_hw_info *)match_dev->data;
+ 	core_info->jpeg_enc_hw_info = hw_info;
+ 	core_info->core_state = CAM_JPEG_ENC_CORE_NOT_READY;
+-	mutex_init(&core_info->core_mutex);
+ 
+ 	rc = cam_jpeg_enc_init_soc_resources(&jpeg_enc_dev->soc_info,
+ 		cam_jpeg_enc_irq,
+@@ -183,9 +215,14 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ 		goto error_reg_cpas;
+ 	}
+ 	jpeg_enc_dev->hw_state = CAM_HW_STATE_POWER_DOWN;
+-	mutex_init(&jpeg_enc_dev->hw_mutex);
+-	spin_lock_init(&jpeg_enc_dev->hw_lock);
+-	init_completion(&jpeg_enc_dev->hw_complete);
++
++	rc = jenc_v4l2_device_create(jpeg_enc_dev_intf);
++	if (rc)
++		goto error_reg_cpas;
++
++	platform_set_drvdata(pdev, jpeg_enc_dev_intf);
++
++	mutex_unlock(&jpeg_enc_dev->hw_mutex);
+ 
+ 	return rc;
+ 
+@@ -196,6 +233,8 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
+ error_match_dev:
+ 	kfree(jpeg_enc_dev->core_info);
+ error_alloc_core:
++	mutex_unlock(&jpeg_enc_dev->hw_mutex);
++	mutex_destroy(&jpeg_enc_dev->hw_mutex);
+ 	kfree(jpeg_enc_dev);
+ error_alloc_dev:
+ 	kfree(jpeg_enc_dev_intf);
+diff --git a/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.h b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.h
+new file mode 100644
+index 000000000000..37cbc03209a9
+--- /dev/null
++++ b/drivers/media/platform/camx/cam_jpeg/jpeg_hw/jpeg_enc_hw/jpeg_enc_dev.h
+@@ -0,0 +1,25 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/* Copyright (c) 2021-2022, The Linux Foundation. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#ifndef _CAM_JPEG_ENC_DEV_H_
++#define _CAM_JPEG_ENC_DEV_H_
++
++#include <media/v4l2-device.h>
++
++#include "cam_hw.h"
++#include "cam_hw_intf.h"
++#include "cam_jenc_v4l2_defs.h"
++
++#define CAM_JPEC_ENC_NAME "cam-jpeg-enc"
++
++#endif /* _CAM_JPEG_ENC_DEV_H_*/
+diff --git a/drivers/media/platform/camx/cam_smmu/cam_smmu_api.c b/drivers/media/platform/camx/cam_smmu/cam_smmu_api.c
+index c159c788fea7..d857953a2afa 100644
+--- a/drivers/media/platform/camx/cam_smmu/cam_smmu_api.c
++++ b/drivers/media/platform/camx/cam_smmu/cam_smmu_api.c
+@@ -1401,6 +1401,73 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
+ 	return rc;
+ }
+ 
++static struct cam_context_bank_info *cam_smmu_get_cbank(int handle)
++{
++	int idx;
++
++	idx = GET_SMMU_TABLE_IDX(handle);
++	if (idx < 0 || idx >= iommu_cb_set.cb_num) {
++		CAM_ERR(CAM_SMMU, "Error: Index invalid. idx = %d hdl = %x",
++			idx, handle);
++		return NULL;
++	}
++
++	return &iommu_cb_set.cb_info[idx];
++}
++
++int cam_smmu_map_ext_buff(struct sg_table *table, int handle,
++			  dma_addr_t *paddr_ptr, size_t *len_ptr,
++			  enum cam_smmu_region_id region_id)
++{
++	struct cam_context_bank_info *cb;
++	struct gen_pool *pool;
++	int rc;
++
++	cb = cam_smmu_get_cbank(handle);
++	if (!cb)
++		return -EINVAL;
++
++	pool = cam_smmu_get_pool_for_region(cb, region_id);
++	if (!pool) {
++		CAM_ERR(CAM_SMMU, "Error: Wrong region requested");
++		return -EINVAL;
++	}
++
++	rc = cam_smmu_map_to_pool(cb->domain, pool, table, paddr_ptr, len_ptr);
++	if (rc < 0) {
++		CAM_ERR(CAM_SMMU,
++			"Buffer map failed, region_id=%u, size=%zu, handle=%d",
++			region_id, *len_ptr, handle);
++		return rc;
++	}
++
++	CAM_DBG(CAM_SMMU, "dev=%pK, paddr=%pK, len=%u", cb->dev,
++		(void *)*paddr_ptr, (unsigned int)*len_ptr);
++
++	return 0;
++}
++
++int cam_smmu_unmap_ext_buff(int handle,  dma_addr_t iova, size_t length,
++			    enum cam_smmu_region_id region_id)
++{
++	struct cam_context_bank_info *cb;
++	struct gen_pool *pool;
++
++	cb = cam_smmu_get_cbank(handle);
++	if (!cb)
++		return -EINVAL;
++
++	pool = cam_smmu_get_pool_for_region(cb, region_id);
++	if (!pool) {
++		CAM_ERR(CAM_SMMU, "Error: Wrong region requested");
++		return -EINVAL;
++	}
++
++	cam_smmu_unmap_from_pool(cb->domain, pool, iova, length);
++
++	return 0;
++}
++
+ static int cam_smmu_map_buffer_and_add_to_list(int idx, int dma_fd,
+ 	 enum dma_data_direction dma_dir, dma_addr_t *paddr_ptr,
+ 	 size_t *len_ptr, enum cam_smmu_region_id region_id)
+diff --git a/drivers/media/platform/camx/cam_smmu/cam_smmu_api.h b/drivers/media/platform/camx/cam_smmu/cam_smmu_api.h
+index f6ab77de5c2b..9a1e4cc07413 100644
+--- a/drivers/media/platform/camx/cam_smmu/cam_smmu_api.h
++++ b/drivers/media/platform/camx/cam_smmu/cam_smmu_api.h
+@@ -291,4 +291,11 @@ int cam_smmu_dealloc_qdss(int32_t smmu_hdl);
+ int cam_smmu_get_io_region_info(int32_t smmu_hdl,
+ 	dma_addr_t *iova, size_t *len);
+ 
++int cam_smmu_map_ext_buff(struct sg_table *table, int handle,
++			  dma_addr_t *paddr_ptr, size_t *len_ptr,
++			  enum cam_smmu_region_id region_id);
++
++int cam_smmu_unmap_ext_buff(int handle,  dma_addr_t iova, size_t length,
++			    enum cam_smmu_region_id region_id);
++
+ #endif /* _CAM_SMMU_API_H_ */
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

@@ -1,0 +1,128 @@
+From fcade87d0a30e6060814337c1db6b783bd46491c Mon Sep 17 00:00:00 2001
+From: Michael Sun <michaelfsun@google.com>
+Date: Fri, 6 Aug 2021 16:57:43 -0700
+Subject: [PATCH] CHROMIUM: Bluetooth: Optimize the LE connection sequence
+
+This reland commit 0c7eb78f64e63eef2b0fea218c0960d30d9cf1ab.
+
+Diff: move the skip to connect logic after the existence check of the
+`conn` object to avoid repeatedly connecting to the same device.
+
+Original change's description:
+> CHROMIUM: Bluetooth: Optimize the LE connection sequence
+>
+> This patch allows the extra scan when connecting to LE devices to be
+> skipped if the following conditions are met:
+>
+> 1. A device doesn't use an Irk, so a new adv sample is not necessary.
+> 2. A recent adv sample has been received in the last 2 seconds implying
+> that an rpa is likely to be current.
+>
+> A manual inspection has demonstrated a ~300ms improvement to the
+> connection latency of the smart lock and tethering features.  This patch
+> is submitted as a chromium patch to gether additional field data through
+> metrics before suggesting upstream.
+>
+> BUG=b:191003297
+> TEST=Manually validated using bluetoothctl and ConnectLE as well as
+> bluetooth_AdapterQuickHealth
+>
+> Signed-off-by: Alain Michaud <alainm@chromium.org>
+> Change-Id: Icac3f49f9fe209193439e48d6109e183fd3c789e
+> Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/2964735
+> Reviewed-by: Miao-chen Chou <mcchou@chromium.org>
+
+BUG=b:191003297, b:191805908
+TEST=CTSV:Bluetooth LE CoC Insecure Client Test
+
+Disallow-Recycled-Builds: test-failures
+Change-Id: Ie5d3b57d7da3cf0697581e2b2aad54ff6e650609
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3078981
+Tested-by: Michael Sun <michaelfsun@google.com>
+Reviewed-by: Miao-chen Chou <mcchou@chromium.org>
+Commit-Queue: Michael Sun <michaelfsun@google.com>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: Bluetooth: Optimize the LE connection sequence
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    38c4d800f081a1eb21fdf2aee40af6b2385e64f6
+    38518240a20eebc5db3e793938983a0049d84a32
+
+ include/net/bluetooth/hci_core.h |  1 +
+ net/bluetooth/hci_conn.c         | 15 +++++++++++++++
+ net/bluetooth/hci_core.c         |  2 ++
+ 3 files changed, 18 insertions(+)
+
+diff --git a/include/net/bluetooth/hci_core.h b/include/net/bluetooth/hci_core.h
+index 6f4ced553fef..75d2fcbfd427 100644
+--- a/include/net/bluetooth/hci_core.h
++++ b/include/net/bluetooth/hci_core.h
+@@ -208,6 +208,7 @@ struct smp_irk {
+ 	struct list_head list;
+ 	struct rcu_head rcu;
+ 	bdaddr_t rpa;
++	__u32 rpa_timestamp;
+ 	bdaddr_t bdaddr;
+ 	u8 addr_type;
+ 	u8 val[16];
+diff --git a/net/bluetooth/hci_conn.c b/net/bluetooth/hci_conn.c
+index a6c12863a253..0854fe074af7 100644
+--- a/net/bluetooth/hci_conn.c
++++ b/net/bluetooth/hci_conn.c
+@@ -1490,6 +1490,7 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
+ 				     enum conn_reasons conn_reason)
+ {
+ 	struct hci_conn *conn;
++	struct smp_irk *irk;
+ 
+ 	/* Let's make sure that le is enabled.*/
+ 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED)) {
+@@ -1515,6 +1516,20 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
+ 		goto done;
+ 	}
+ 
++	/* If we don't have an Irk or that we have a recent rpa, skip the extra
++	 * scan and try to connect immediately.
++	 */
++	irk = hci_find_irk_by_addr(hdev, dst, dst_type);
++	if (!irk ||
++	    time_before(jiffies, irk->rpa_timestamp + msecs_to_jiffies(2000))) {
++		bt_dev_info(hdev, "Skipping le scan before connect");
++
++		return hci_connect_le(hdev, dst, dst_type,
++				sec_level, false,
++				HCI_LE_CONN_TIMEOUT,
++				HCI_ROLE_MASTER);
++	}
++
+ 	BT_DBG("requesting refresh of dst_addr");
+ 
+ 	conn = hci_conn_add(hdev, LE_LINK, dst, HCI_ROLE_MASTER);
+diff --git a/net/bluetooth/hci_core.c b/net/bluetooth/hci_core.c
+index 0540555b3704..34dc68de566e 100644
+--- a/net/bluetooth/hci_core.c
++++ b/net/bluetooth/hci_core.c
+@@ -1248,6 +1248,7 @@ struct smp_irk *hci_find_irk_by_rpa(struct hci_dev *hdev, bdaddr_t *rpa)
+ 	list_for_each_entry_rcu(irk, &hdev->identity_resolving_keys, list) {
+ 		if (smp_irk_matches(hdev, irk->val, rpa)) {
+ 			bacpy(&irk->rpa, rpa);
++			irk->rpa_timestamp = jiffies;
+ 			irk_to_return = irk;
+ 			goto done;
+ 		}
+@@ -1394,6 +1395,7 @@ struct smp_irk *hci_add_irk(struct hci_dev *hdev, bdaddr_t *bdaddr,
+ 
+ 	memcpy(irk->val, val, 16);
+ 	bacpy(&irk->rpa, rpa);
++	irk->rpa_timestamp = jiffies;
+ 
+ 	return irk;
+ }
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

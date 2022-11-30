@@ -1,0 +1,129 @@
+From 32409dad883d613c675b00a9d6f419c55f1552f8 Mon Sep 17 00:00:00 2001
+From: Pin-yen Lin <treapking@chromium.org>
+Date: Mon, 19 Sep 2022 22:17:52 +0800
+Subject: [PATCH] FROMLIST: drm/bridge: it6505: Add typec_mux_set callback
+ function
+
+Add the callback function when the driver receives state changes of the
+Type-C ports. The callback function configures the lane_swap state and
+ends up updating the lane swap registers of it6505 bridge chip.
+
+Signed-off-by: Pin-yen Lin <treapking@chromium.org>
+Signed-off-by: Prashant Malani <pmalani@chromium.org>
+(am from https://patches.linaro.org/project/linux-usb/patch/20220622173605.1168416-10-pmalani@chromium.org//)
+(also found at https://lore.kernel.org/r/20220622173605.1168416-10-pmalani@chromium.org)
+
+BUG=b:212382669
+TEST=Check external displays on Kingler/Krabby
+UPSTREAM-TASK=b:247731050
+
+Change-Id: Ie5acad0f2599c5dcdfbfe998517c7a9776eef27e
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3904832
+Tested-by: Pin-yen Lin <treapking@chromium.org>
+Reviewed-by: Sean Paul <sean@poorly.run>
+Reviewed-by: Radoslaw Biernacki <biernacki@google.com>
+Commit-Queue: Pin-yen Lin <treapking@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: FROMLIST: drm/bridge: it6505: Add typec_mux_set callback function
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    fbe6f440ea3d48562bf04efced166fc4a05f2830
+    8d60a1786e52a2123a11ce8773ed01dd61a7bd47
+
+ drivers/gpu/drm/bridge/ite-it6505.c | 58 +++++++++++++++++++++++++++++
+ 1 file changed, 58 insertions(+)
+
+diff --git a/drivers/gpu/drm/bridge/ite-it6505.c b/drivers/gpu/drm/bridge/ite-it6505.c
+index 08691a359bfa..64ba550fe816 100644
+--- a/drivers/gpu/drm/bridge/ite-it6505.c
++++ b/drivers/gpu/drm/bridge/ite-it6505.c
+@@ -17,6 +17,7 @@
+ #include <linux/regmap.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/types.h>
++#include <linux/usb/typec_dp.h>
+ #include <linux/usb/typec_mux.h>
+ #include <linux/wait.h>
+ 
+@@ -404,6 +405,7 @@ struct debugfs_entries {
+ };
+ 
+ struct it6505_port_data {
++	bool dp_connected;
+ 	struct typec_mux_dev *typec_mux;
+ 	struct it6505 *it6505;
+ };
+@@ -3345,9 +3347,65 @@ static void it6505_shutdown(struct i2c_client *client)
+ 		it6505_lane_off(it6505);
+ }
+ 
++static void it6505_typec_ports_update(struct it6505 *it6505)
++{
++	usleep_range(3000, 4000);
++
++	if (it6505->typec_ports[0].dp_connected && it6505->typec_ports[1].dp_connected)
++		/* Both ports available, do nothing to retain the current one. */
++		return;
++	else if (it6505->typec_ports[0].dp_connected)
++		it6505->lane_swap = false;
++	else if (it6505->typec_ports[1].dp_connected)
++		it6505->lane_swap = true;
++
++	usleep_range(3000, 4000);
++}
++
+ static int it6505_typec_mux_set(struct typec_mux_dev *mux,
+ 				struct typec_mux_state *state)
+ {
++	struct it6505_port_data *data = typec_mux_get_drvdata(mux);
++	struct it6505 *it6505 = data->it6505;
++	struct device *dev = &it6505->client->dev;
++	bool old_dp_connected, new_dp_connected;
++
++	if (it6505->num_typec_switches == 1)
++		return 0;
++
++	mutex_lock(&it6505->extcon_lock);
++
++	old_dp_connected = it6505->typec_ports[0].dp_connected ||
++			   it6505->typec_ports[1].dp_connected;
++
++	data->dp_connected = (state->alt && state->alt->svid == USB_TYPEC_DP_SID &&
++			      state->alt->mode == USB_TYPEC_DP_MODE);
++
++	dev_dbg(dev, "mux_set dp_connected: c0=%d, c1=%d\n",
++		it6505->typec_ports[0].dp_connected, it6505->typec_ports[1].dp_connected);
++
++	new_dp_connected = it6505->typec_ports[0].dp_connected ||
++			   it6505->typec_ports[1].dp_connected;
++
++	if (it6505->enable_drv_hold) {
++		dev_dbg(dev, "enable driver hold");
++		goto unlock;
++	}
++
++	it6505_typec_ports_update(it6505);
++
++	if (!old_dp_connected && new_dp_connected)
++		pm_runtime_get_sync(dev);
++
++	if (old_dp_connected && !new_dp_connected) {
++		pm_runtime_put_sync(dev);
++		if (it6505->bridge.dev)
++			drm_helper_hpd_irq_event(it6505->bridge.dev);
++		memset(it6505->dpcd, 0, sizeof(it6505->dpcd));
++	}
++
++unlock:
++	mutex_unlock(&it6505->extcon_lock);
+ 	return 0;
+ }
+ 
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
