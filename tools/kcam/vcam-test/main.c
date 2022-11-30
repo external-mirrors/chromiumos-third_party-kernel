@@ -1118,14 +1118,8 @@ static int test_add_invalid_operations(struct libkc *cam)
 		goto out;
 	}
 
-	ret = read_operations_completion_events(cam, 1);
-	if (ret != 1) {
-		pr_err("FATAL: first operation should complete\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
 	ret = 0;
+
 out:
 	libkc_operation_put(lco);
 	return ret;

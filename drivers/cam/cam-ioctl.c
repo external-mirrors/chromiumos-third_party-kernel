@@ -185,30 +185,64 @@ static int cam_ioctl_operation_result_copy(struct cam_operation __user *payload,
 	return ret;
 }
 
-static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
-				     struct cam_header *hdr, void __user *uarg)
+/*
+ * This will cancel successfully prepared OPs. Note that these OPs should not
+ * be submitted.
+ *
+ * We need to cancel prepared OPs in reverse order, because tail OPs may have
+ * dependencies on head OPs and hold their ref-counters.
+ */
+static int cam_ioctl_operation_cancel(struct cam_fh *fh,
+				      struct cam_header *hdr,
+				      struct cam_operation __user *payload,
+				      u32 error_num)
 {
-	struct cam_operation __user *payload;
 	u32 num_op;
-	int ret = 0;
 
-	if (!is_valid_ioctlcmd_size(cmd, hdr, sizeof(struct cam_operation)))
-		return -EINVAL;
+	/* Move payload to point to the last OP */
+	payload += hdr->num_queries - 1;
+	num_op = hdr->num_queries - 1;
 
-	payload = uarg + sizeof(struct cam_header);
+	while (1) {
+		struct cam_operation op;
+
+		if (copy_from_user(&op, payload, sizeof(op)))
+			return -EFAULT;
+
+		switch (op.operation_type) {
+		case CAM_OPERATION_TYPE_ADD:
+			cam_pipeline_enqueue_cancel(&fh->pipeline,
+						    &op.operation_add);
+			break;
+		}
+
+		if (num_op == error_num)
+			break;
+
+		payload--;
+		num_op--;
+	}
+
+	return 0;
+}
+
+static int cam_ioctl_operation_prepare(struct cam_fh *fh,
+				       struct cam_header *hdr,
+				       struct cam_operation __user *payload)
+{
+	u32 num_op;
+	int ret;
 
 	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
 		struct cam_operation op;
 
-		if (copy_from_user(&op, payload, sizeof(op))) {
-			hdr->error = num_op;
+		if (copy_from_user(&op, payload, sizeof(op)))
 			return -EFAULT;
-		}
 
 		switch (op.operation_type) {
 		case CAM_OPERATION_TYPE_ADD:
-			ret = cam_pipeline_enqueue(&fh->pipeline,
-						   &op.operation_add);
+			ret = cam_pipeline_enqueue_prepare(&fh->pipeline,
+							   &op.operation_add);
 			break;
 		case CAM_OPERATION_TYPE_REMOVE:
 			ret = cam_pipeline_dequeue(&fh->pipeline,
@@ -226,6 +260,78 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 		payload++;
 	}
 
+	return 0;
+}
+
+static int cam_ioctl_operation_submit(struct cam_fh *fh,
+				      struct cam_header *hdr,
+				      struct cam_operation __user *payload)
+{
+	u32 num_op;
+	int ret;
+
+	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
+		struct cam_operation op;
+
+		if (copy_from_user(&op, payload, sizeof(op)))
+			return -EFAULT;
+
+		switch (op.operation_type) {
+		case CAM_OPERATION_TYPE_ADD:
+			ret = cam_pipeline_enqueue_submit(&fh->pipeline,
+							  &op.operation_add);
+			break;
+		case CAM_OPERATION_TYPE_REMOVE:
+			ret = 0;
+			break;
+		default:
+			ret = -EINVAL;
+		}
+
+		if (ret) {
+			hdr->error = num_op;
+			return ret;
+		}
+
+		payload++;
+	}
+
+	return ret;
+}
+
+static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
+				     struct cam_header *hdr, void __user *uarg)
+{
+	struct cam_operation __user *payload;
+	int ret;
+
+	if (!is_valid_ioctlcmd_size(cmd, hdr, sizeof(struct cam_operation)))
+		return -EINVAL;
+
+	payload = uarg + sizeof(struct cam_header);
+	ret = cam_ioctl_operation_prepare(fh, hdr, payload);
+	if (ret) {
+		/*
+		 * We failed at prepare() stage. All OPs in this IOCTL
+		 * can be cancelled as none of them have been submitted
+		 * yet.
+		 */
+		payload = uarg + sizeof(struct cam_header);
+		cam_ioctl_operation_cancel(fh, hdr, payload, 0);
+		return ret;
+	}
+
+	payload = uarg + sizeof(struct cam_header);
+	ret = cam_ioctl_operation_submit(fh, hdr, payload);
+	if (ret) {
+		/*
+		 * We failed at submit() stage. Only unsubmitted OPs
+		 * can be cancelled as it may be too late to cancel
+		 * the submitted ones.
+		 */
+		payload = uarg + sizeof(struct cam_header);
+		cam_ioctl_operation_cancel(fh, hdr, payload, hdr->error);
+	}
 	return ret;
 }
 ALLOW_ERROR_INJECTION(cam_ioctl_parse_operation, ERRNO);

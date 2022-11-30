@@ -137,8 +137,12 @@ struct cam_operation_query;
 int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 			 struct cam_operation_remove *op);
 
-int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
-			 struct cam_operation_add *op);
+int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
+				 struct cam_operation_add *op);
+int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
+				struct cam_operation_add *op);
+int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
+				struct cam_operation_add *op);
 
 int cam_pipeline_query(struct cam_pipeline *pipeline,
 		       struct cam_query_operations *query,

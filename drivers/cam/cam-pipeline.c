@@ -1125,23 +1125,21 @@ error:
 }
 
 /**
- * cam_pipeline_enqueue() - Create and enqueue an operation
+ * cam_pipeline_enqueue_prepare() - Create an operation
  * @pipeline: pointer to CAM pipeline
  * @req: add request from user-space
  *
  * This creates an operation and adds dependencies to it based on the
- * user-space request.
- * After that the operation will be enqueued immediately if it has no
- * dependencies or all its dependencies are EXECUTED or DELETED.
+ * user-space request. The operation is not enqueued at this point as
+ * this is only a preparation step.
  *
  * Return: 0 on success or a negative error code otherwise.
  */
-int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
-			 struct cam_operation_add *req)
+int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
+				 struct cam_operation_add *req)
 {
 	struct cam_obj_op *op;
-	bool execute;
-	int i;
+	int i, ret;
 
 	op = kzalloc(sizeof(struct cam_obj_op), GFP_KERNEL);
 	if (!op)
@@ -1172,6 +1170,7 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 		return -EINVAL;
 	}
 
+	ret = 0;
 	/*
 	 * This adds all dependencies (if any) into operation's pending list.
 	 * None are activated at this point. We do it this way because some
@@ -1187,7 +1186,6 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 	 */
 	for (i = 0; i < CAM_MAX_DEPENDENCIES; i++) {
 		struct cam_dependency *dep = &req->deps[i];
-		int ret;
 
 		if (dep->type == CAM_DEPENDENCY_NONE)
 			break;
@@ -1205,14 +1203,38 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 		}
 
 		if (ret)
-			goto error;
+			break;
 	}
 
-	execute = false;
+	if (!ret)
+		trace_cam_operation_add(op);
+	return ret;
+}
+ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_prepare, ERRNO);
+
+/**
+ * cam_pipeline_enqueue_submit() - Submit an operation
+ * @pipeline: pointer to CAM pipeline
+ * @req: add request from user-space
+ *
+ * This activates operation dependencies and enqueues operation for execution
+ * if it has no blockers.
+ *
+ * Return: 0 on success or a negative error code otherwise.
+ */
+int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
+				struct cam_operation_add *req)
+{
+	struct cam_obj_op *op;
+	bool execute = false;
 
 	/* Check pipeline status as late as possible */
 	if (!cam_pipeline_is_active(pipeline))
-		goto error;
+		return -EINVAL;
+
+	op = cam_op_lookup(&pipeline->ns, req->id);
+	if (!op)
+		return -EINVAL;
 
 	/*
 	 * Based on the dependency mode this will attempt to activate required
@@ -1227,8 +1249,6 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 			execute = true;
 	}
 
-	trace_cam_operation_add(op);
-
 	/*
 	 * Not blocked on any signals. Note, the object may already be in
 	 * CAM_OPERATION_STATE_DELETED at this point.
@@ -1236,27 +1256,38 @@ int cam_pipeline_enqueue(struct cam_pipeline *pipeline,
 	if (execute)
 		cam_op_enqueue(op);
 
+	cam_op_put(op);
 	return 0;
+}
+ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_submit, ERRNO);
 
-error:
-	/*
-	 * OP was properly initialized and inserted into the pipeline,
-	 * we are here because OP had unmet dependency requirements
-	 * (one or more).
-	 */
+/**
+ * cam_pipeline_enqueue_cancel() - Cancel an operation
+ * @pipeline: pointer to CAM pipeline
+ * @req: add request from user-space
+ *
+ * This drains an operation which we failed to prepare.
+ *
+ * Return: 0 on success or a negative error code otherwise.
+ */
+int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
+				struct cam_operation_add *req)
+{
+	struct cam_obj_op *op = cam_op_lookup(&pipeline->ns, req->id);
 
-	/*
-	 * Mark it as non-executable (just in case) and make it invisible
-	 * to query ioctl
-	 */
+	if (!op)
+		return 0;
+
 	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
 	cam_flush_op_dependencies(op);
+	/* drop lookup ref-count */
+	cam_op_put(op);
 	/* Now release the object */
 	cam_obj_remove(&op->nsobj);
 	cam_obj_deinit(&op->nsobj);
-	return -EINVAL;
+	return 0;
 }
-ALLOW_ERROR_INJECTION(cam_pipeline_enqueue, ERRNO);
+ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_cancel, ERRNO);
 
 /*
  * This function is called under RCU, so it cannot sleep.
