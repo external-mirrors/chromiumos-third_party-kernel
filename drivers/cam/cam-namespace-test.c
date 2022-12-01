@@ -11,7 +11,6 @@ static void ns_init(struct kunit *test)
 	int ret;
 	enum cam_id_policy policy[] = {
 		CAM_NS_POL_UNIQUE_ID,
-		CAM_NS_POL_REUSE_ID,
 		CAM_NS_POL_USER_ID };
 	int i;
 
@@ -22,7 +21,7 @@ static void ns_init(struct kunit *test)
 		cam_ns_release(&ns);
 
 	/* Only one id policy can be used */
-	ret = cam_ns_init(&ns, CAM_NS_POL_USER_ID | CAM_NS_POL_REUSE_ID);
+	ret = cam_ns_init(&ns, CAM_NS_POL_USER_ID | CAM_NS_POL_UNIQUE_ID);
 	KUNIT_EXPECT_NE(test, ret, 0);
 	if (!ret)
 		cam_ns_release(&ns);
@@ -62,9 +61,6 @@ static void ns_release(struct kunit *test)
 
 	//Invalid
 	cam_ns_release(NULL);
-
-	//Non initialised
-	cam_ns_release(&ns);
 
 	//Release and free
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
@@ -189,7 +185,7 @@ static void id_set_get(struct kunit *test)
 	cam_obj_deinit(obj);
 	cam_ns_release(&ns);
 
-	ret = cam_ns_init(&ns, CAM_NS_POL_REUSE_ID);
+	ret = cam_ns_init(&ns, CAM_NS_POL_UNIQUE_ID);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
@@ -212,8 +208,6 @@ static void id_set_get(struct kunit *test)
 static void ids_checks(struct kunit *test)
 {
 	KUNIT_EXPECT_LT(test, CAM_NS_UNIQUE_ID_START, CAM_NS_UNIQUE_ID_END);
-	KUNIT_EXPECT_LT(test, CAM_NS_REUSE_ID_START, CAM_NS_REUSE_ID_END);
-	KUNIT_EXPECT_LT(test, CAM_NS_UNIQUE_ID_END, CAM_NS_REUSE_ID_START);
 }
 
 static void obj_add_user(struct kunit *test)
@@ -253,47 +247,6 @@ static void obj_add_user(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 1UL, id);
 
 	cam_obj_deinit(obj);
-	cam_ns_release(&ns);
-}
-
-static void obj_add_reuse(struct kunit *test)
-{
-	struct cam_obj *obj, *obj2;
-	unsigned long id;
-	struct cam_ns ns;
-	int ret;
-
-	ret = cam_ns_init(&ns, CAM_NS_POL_REUSE_ID);
-	KUNIT_ASSERT_EQ(test, ret, 0);
-
-	//Move object 0 and remove it
-	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
-	KUNIT_ASSERT_PTR_NE(test, obj, (struct cam_obj *)NULL);
-	cam_obj_init(obj, CAM_OBJ_TYPE_ENTITY, obj_release, &ns);
-	ret = cam_obj_insert(obj);
-	KUNIT_EXPECT_EQ(test, 0, ret);
-	KUNIT_EXPECT_EQ(test, CAM_NS_REUSE_ID_START, cam_obj_id(obj));
-	cam_obj_remove(obj);
-	cam_obj_deinit(obj);
-
-	//Move object 0 again into the ns
-	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
-	KUNIT_ASSERT_PTR_NE(test, obj, (struct cam_obj *)NULL);
-	cam_obj_init(obj, CAM_OBJ_TYPE_ENTITY, obj_release, &ns);
-	ret = cam_obj_set_id(obj, 42UL);
-	KUNIT_EXPECT_NE(test, 0, ret);
-	ret = cam_obj_move(obj, &id);
-	KUNIT_EXPECT_EQ(test, 0, ret);
-	KUNIT_EXPECT_EQ(test, CAM_NS_REUSE_ID_START, id);
-
-	//Move object 1 into the ns
-	obj2 = kzalloc(sizeof(*obj), GFP_KERNEL);
-	KUNIT_ASSERT_PTR_NE(test, obj2, (struct cam_obj *)NULL);
-	cam_obj_init(obj2, CAM_OBJ_TYPE_ENTITY, obj_release, &ns);
-	ret = cam_obj_move(obj2, &id);
-	KUNIT_EXPECT_EQ(test, 0, ret);
-	KUNIT_EXPECT_EQ(test, CAM_NS_REUSE_ID_START + 1, id);
-
 	cam_ns_release(&ns);
 }
 
@@ -403,7 +356,7 @@ static void obj_remove(struct kunit *test)
 	// remove not initialised object
 	cam_obj_remove(obj);
 
-	ret = cam_ns_init(&ns, CAM_NS_POL_REUSE_ID);
+	ret = cam_ns_init(&ns, CAM_NS_POL_UNIQUE_ID);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	// remove not added object
@@ -424,7 +377,7 @@ static void obj_remove(struct kunit *test)
 	cam_obj_remove(obj);
 	cam_obj_deinit(obj);
 	KUNIT_EXPECT_TRUE(test, release_flag);
-	pobj = cam_obj_lookup(&ns, CAM_OBJ_TYPE_ENTITY, CAM_NS_REUSE_ID_START);
+	pobj = cam_obj_lookup(&ns, CAM_OBJ_TYPE_ENTITY, CAM_NS_UNIQUE_ID_END);
 	KUNIT_EXPECT_PTR_EQ(test, (struct cam_obj *)NULL, pobj);
 
 	cam_ns_release(&ns);
@@ -441,7 +394,7 @@ static void obj_remove_id(struct kunit *test)
 	ret = cam_obj_remove_id(NULL, CAM_OBJ_TYPE_ENTITY, 42);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
-	ret = cam_ns_init(&ns, CAM_NS_POL_REUSE_ID);
+	ret = cam_ns_init(&ns, CAM_NS_POL_UNIQUE_ID);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	// remove non existent obj
@@ -602,7 +555,7 @@ static void ns_for_each(struct kunit *test)
 	// Invalid calls
 	cam_ns_for_each(NULL, NULL);
 
-	ret = cam_ns_init(&ns, CAM_NS_POL_REUSE_ID);
+	ret = cam_ns_init(&ns, CAM_NS_POL_UNIQUE_ID);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	// Invalid calls
@@ -641,42 +594,6 @@ static void ns_for_each(struct kunit *test)
 	cam_ns_release(&ns);
 }
 
-static void alloc_unique_id_loop(struct kunit *test)
-{
-	struct cam_obj *obj;
-	struct cam_ns ns;
-	int ret;
-
-	ret = cam_ns_init(&ns, CAM_NS_POL_UNIQUE_ID);
-	KUNIT_ASSERT_EQ(test, ret, 0);
-
-	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
-	KUNIT_ASSERT_PTR_NE(test, obj, (struct cam_obj *)NULL);
-	cam_obj_init(obj, CAM_OBJ_TYPE_ENTITY, obj_release, &ns);
-	ret = cam_obj_insert(obj);
-	KUNIT_ASSERT_EQ(test, ret, 0);
-
-	KUNIT_EXPECT_EQ(test, CAM_NS_UNIQUE_ID_START, cam_obj_id(obj));
-
-	cam_obj_remove(obj);
-	cam_obj_deinit(obj);
-
-	ret = id_ops_alloc_unique_id(&ns);
-	KUNIT_EXPECT_EQ(test, (int) CAM_NS_UNIQUE_ID_START + 1, ret);
-
-	while (true) {
-		ret = id_ops_alloc_unique_id(&ns);
-		KUNIT_ASSERT_TRUE(test, ret >= 0);
-		if (ret == CAM_NS_UNIQUE_ID_START)
-			break;
-	}
-
-	ret = id_ops_alloc_unique_id(&ns);
-	KUNIT_EXPECT_EQ(test, ret, -ENOSPC);
-
-	cam_ns_release(&ns);
-}
-
 static struct kunit_case cam_namespace_test_cases[] = {
 	KUNIT_CASE(ns_init),
 	KUNIT_CASE(ns_release),
@@ -686,7 +603,6 @@ static struct kunit_case cam_namespace_test_cases[] = {
 	KUNIT_CASE(obj_put),
 	KUNIT_CASE(id_set_get),
 	KUNIT_CASE(obj_add_user),
-	KUNIT_CASE(obj_add_reuse),
 	KUNIT_CASE(obj_add_unique),
 	KUNIT_CASE(obj_add_invalid),
 	KUNIT_CASE(obj_lookup),
@@ -695,7 +611,6 @@ static struct kunit_case cam_namespace_test_cases[] = {
 	KUNIT_CASE(obj_move),
 	KUNIT_CASE(obj_insert),
 	KUNIT_CASE(ns_for_each),
-	KUNIT_CASE(alloc_unique_id_loop),
 	{}
 };
 

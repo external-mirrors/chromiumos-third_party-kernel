@@ -14,107 +14,11 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 
-/*
- * Statically defined object ID ranges for different types of namespaces.
- * This is useful for several things:
- *  1) different namespaces can have different ID allocation policies:
- *     either re-use freed IDs immediately or always allocate 'next' ID
- *     and re-use IDs only if the counter wraps around
- *  2) as a quick way to distinguish user-space created objects and CAM
- *     internal objects
- */
-#define CAM_NS_UNIQUE_ID_START		0x00000000UL
-#define CAM_NS_UNIQUE_ID_END		0x0001ffffUL
-#define CAM_NS_REUSE_ID_START		0x01000000UL
-#define CAM_NS_REUSE_ID_END		0x01ffffffUL
-
 /* Set when object holds an allocated IDA ID */
 #define CAM_OBJ_FLAG_ACTIVE		BIT(0)
 
-static const struct rhashtable_params nsobj_params = {
-	.key_offset		= offsetof(struct cam_obj, id),
-	.head_offset		= offsetof(struct cam_obj, node),
-	.key_len		= sizeof(unsigned long),
-	.automatic_shrinking	= true,
-};
-
-static int id_ops_alloc_unique_id(struct cam_ns *ns)
-{
-	int ret;
-
-	ret = ida_alloc_range(&ns->ids, ns->next_id,
-			      CAM_NS_UNIQUE_ID_END, GFP_KERNEL);
-	if (ret == -ENOSPC) {
-		ns->next_id = CAM_NS_UNIQUE_ID_START;
-		ret = ida_alloc_range(&ns->ids, ns->next_id,
-				      CAM_NS_UNIQUE_ID_END, GFP_KERNEL);
-	}
-
-	if (ret == CAM_NS_UNIQUE_ID_END)
-		ns->next_id = CAM_NS_UNIQUE_ID_START;
-	else if (ret >= 0)
-		ns->next_id = ret + 1;
-
-	return ret;
-}
-
-static int id_create(struct cam_obj *nsobj)
-{
-	struct cam_ns *ns = nsobj->ns;
-	int ret;
-
-	if (WARN_ON(in_atomic()))
-		return -EINVAL;
-
-	switch (ns->id_pol) {
-	case CAM_NS_POL_UNIQUE_ID:
-		ret = id_ops_alloc_unique_id(ns);
-		break;
-	case CAM_NS_POL_REUSE_ID:
-		ret = ida_alloc_range(&ns->ids, CAM_NS_REUSE_ID_START,
-				      CAM_NS_REUSE_ID_END, GFP_KERNEL);
-		break;
-	case CAM_NS_POL_USER_ID:
-		ret = cam_obj_id(nsobj);
-		break;
-	}
-
-	if (ret < 0)
-		return ret;
-
-	nsobj->flags |= CAM_OBJ_FLAG_ACTIVE;
-	nsobj->id = ret;
-	return 0;
-}
-
-static void id_ops_release_unique_id(struct cam_obj *nsobj)
-{
-	struct cam_ns *ns = nsobj->ns;
-	int id = cam_obj_id(nsobj);
-
-	ida_free(&ns->ids, id);
-}
-
-static void id_release(struct cam_obj *nsobj)
-{
-	struct cam_ns *ns = nsobj->ns;
-
-	if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
-		return;
-
-	switch (ns->id_pol) {
-	case CAM_NS_POL_UNIQUE_ID:
-		id_ops_release_unique_id(nsobj);
-		break;
-	case CAM_NS_POL_REUSE_ID:
-		ida_free(&ns->ids, cam_obj_id(nsobj));
-		break;
-	case CAM_NS_POL_USER_ID:
-		break;
-	}
-
-	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
-}
+#define CAM_NS_UNIQUE_ID_START		0x00000000UL
+#define CAM_NS_UNIQUE_ID_END		0x01ffffffUL
 
 /*
  * Namespace does not keep released objects. All objects are removed
@@ -126,7 +30,6 @@ static void cam_obj_final_put(struct kref *kref)
 {
 	struct cam_obj *nsobj = container_of(kref, struct cam_obj, kref);
 
-	id_release(nsobj);
 	/* This should kfree() the namespace object */
 	nsobj->release(nsobj);
 }
@@ -171,25 +74,46 @@ int cam_obj_insert(struct cam_obj *nsobj)
 	if (WARN_ON(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
 		return -EEXIST;
 
-	ret = id_create(nsobj);
-	if (ret < 0)
-		return ret;
-
 	/*
 	 * Increment the refcount before we make the object
 	 * publicly available.
 	 */
 	cam_obj_get(nsobj);
+	nsobj->flags |= CAM_OBJ_FLAG_ACTIVE;
 
-	ret = rhashtable_lookup_insert_fast(&ns->objs,
-					    &nsobj->node,
-					    nsobj_params);
+	down_write(&ns->lock);
+	switch (ns->id_pol) {
+	case CAM_NS_POL_UNIQUE_ID:
+		ret = idr_alloc_u32(&ns->objs, nsobj, &ns->next_id,
+				    CAM_NS_UNIQUE_ID_END, GFP_KERNEL);
+		if (!ret) {
+			nsobj->id = ns->next_id;
+			ns->next_id++;
+			if (ns->next_id > CAM_NS_UNIQUE_ID_END)
+				ns->next_id = CAM_NS_UNIQUE_ID_START;
+		}
+		break;
+	case CAM_NS_POL_USER_ID:
+		ns->next_id = cam_obj_id(nsobj);
+		ret = idr_alloc_u32(&ns->objs, nsobj, &ns->next_id,
+				    cam_obj_id(nsobj), GFP_KERNEL);
+		/*
+		 * Unify error codes for double insert case. See
+		 * CAM_OBJ_FLAG_ACTIVE branch earlier.
+		 */
+		if (ret == -ENOSPC)
+			ret = -EEXIST;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+	up_write(&ns->lock);
+
 	if (!ret)
 		return 0;
 
+	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
 	cam_obj_put(nsobj);
-	id_release(nsobj);
-
 	return ret;
 }
 ALLOW_ERROR_INJECTION(cam_obj_insert, ERRNO);
@@ -219,7 +143,6 @@ int cam_obj_move(struct cam_obj *nsobj, unsigned long *id)
 		*id = cam_obj_id(nsobj);
 
 	cam_obj_put(nsobj);
-
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_obj_move, ERRNO);
@@ -235,7 +158,7 @@ static struct cam_obj *__cam_obj_lookup(struct cam_ns *ns,
 	 * object's refcounter. The caller of this function should do it
 	 * when needed.
 	 */
-	nsobj = rhashtable_lookup(&ns->objs, &id, nsobj_params);
+	nsobj = idr_find(&ns->objs, id);
 	if (!nsobj)
 		return NULL;
 	if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
@@ -267,11 +190,11 @@ struct cam_obj *cam_obj_lookup(struct cam_ns *ns,
 {
 	struct cam_obj *nsobj;
 
-	rcu_read_lock();
+	down_read(&ns->lock);
 	nsobj = __cam_obj_lookup(ns, type, id);
 	if (nsobj && !kref_get_unless_zero(&nsobj->kref))
 		nsobj = NULL;
-	rcu_read_unlock();
+	up_read(&ns->lock);
 
 	return nsobj;
 }
@@ -291,9 +214,11 @@ void cam_obj_remove(struct cam_obj *nsobj)
 	if (WARN_ON(!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE)))
 		return;
 
-	rhashtable_remove_fast(&ns->objs, &nsobj->node, nsobj_params);
-	synchronize_rcu();
+	down_write(&ns->lock);
+	idr_remove(&ns->objs, cam_obj_id(nsobj));
+	up_write(&ns->lock);
 
+	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
 	cam_obj_put(nsobj);
 }
 
@@ -320,17 +245,16 @@ int cam_obj_remove_id(struct cam_ns *ns, enum cam_obj_type type,
 	if (WARN_ON(ns == NULL))
 		return -EINVAL;
 
-	rcu_read_lock();
+	down_write(&ns->lock);
 	nsobj = __cam_obj_lookup(ns, type, id);
 	if (nsobj) {
-		rhashtable_remove_fast(&ns->objs, &nsobj->node, nsobj_params);
+		idr_remove(&ns->objs, id);
 		ret = 0;
 	} else {
 		ret = -EINVAL;
 	}
-	rcu_read_unlock();
+	up_write(&ns->lock);
 
-	synchronize_rcu();
 	if (nsobj)
 		cam_obj_put(nsobj);
 	return ret;
@@ -354,17 +278,22 @@ bool cam_obj_check_type(struct cam_obj *nsobj, enum cam_obj_type type)
 
 /**
  * cam_obj_get() - Increments refcounter of a valid NS object.
- * @nsobj: namespace object to do the unsafe and wrong action on.
+ * @nsobj: namespace object.
  *
  * Return: NULL if the object's refcounter was not incremented.
  */
 struct cam_obj *cam_obj_get(struct cam_obj *nsobj)
 {
+	struct cam_ns *ns = nsobj->ns;
 	bool ret;
 
-	rcu_read_lock();
+	if (WARN_ON(!ns))
+		return NULL;
+
+	/*
+	 * @FIXME: maybe take ns read lock here
+	 */
 	ret = kref_get_unless_zero(&nsobj->kref);
-	rcu_read_unlock();
 
 	if (!ret)
 		return NULL;
@@ -452,8 +381,8 @@ void cam_obj_deinit(struct cam_obj *nsobj)
  */
 void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 {
-	struct rhashtable_iter iter;
 	struct cam_obj *nsobj;
+	u32 id;
 
 	if (WARN_ON(!ns))
 		return;
@@ -464,10 +393,9 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 	if (!ctl->cb)
 		return;
 
-	rhashtable_walk_enter(&ns->objs, &iter);
-	rhashtable_walk_start(&iter);
-	while ((nsobj = rhashtable_walk_next(&iter))) {
-		if (IS_ERR(nsobj))
+	down_read(&ns->lock);
+	idr_for_each_entry(&ns->objs, nsobj, id) {
+		if (IS_ERR_OR_NULL(nsobj))
 			continue;
 		if (!kref_get_unless_zero(&nsobj->kref))
 			continue;
@@ -475,8 +403,7 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 			ctl->cb(nsobj, ctl);
 		cam_obj_put(nsobj);
 	}
-	rhashtable_walk_stop(&iter);
-	rhashtable_walk_exit(&iter);
+	up_read(&ns->lock);
 }
 
 /**
@@ -488,48 +415,18 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
  */
 int cam_ns_init(struct cam_ns *ns, enum cam_id_policy id_policy)
 {
-	int ret;
-
 	memset(ns, 0, sizeof(*ns));
-
-	switch (id_policy) {
-	case CAM_NS_POL_UNIQUE_ID:
-		ns->next_id = CAM_NS_UNIQUE_ID_START;
-		ida_init(&ns->ids);
-		break;
-	case CAM_NS_POL_REUSE_ID:
-		ida_init(&ns->ids);
-		break;
-	case CAM_NS_POL_USER_ID:
-		break;
-	default:
+	if (id_policy != CAM_NS_POL_UNIQUE_ID &&
+	    id_policy != CAM_NS_POL_USER_ID) {
 		pr_err("Unknown namespace id policy: %u\n", id_policy);
 		return -EINVAL;
 	}
 
-	ret = rhashtable_init(&ns->objs, &nsobj_params);
-	if (!ret) {
-		ns->id_pol = id_policy;
-		return 0;
-	}
-
-	if (id_policy != CAM_NS_POL_USER_ID)
-		ida_destroy(&ns->ids);
-
-	return ret;
-}
-
-static void ns_objs_cleanup(void *ptr, void *arg)
-{
-	struct cam_obj *nsobj = ptr;
-
-	/*
-	 * Deactivate dangling objects: we are about to destroy the
-	 * namespace so release() function, which can be called after
-	 * cam_ns_release(), cannot access IDA.
-	 */
-	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
-	cam_obj_put(nsobj);
+	init_rwsem(&ns->lock);
+	idr_init(&ns->objs);
+	ns->next_id	= CAM_NS_UNIQUE_ID_START;
+	ns->id_pol	= id_policy;
+	return 0;
 }
 
 /**
@@ -538,15 +435,28 @@ static void ns_objs_cleanup(void *ptr, void *arg)
  */
 void cam_ns_release(struct cam_ns *ns)
 {
+	struct cam_obj *nsobj;
+	u32 id;
+
 	if (WARN_ON(!ns))
 		return;
 
-	if (WARN_ON(!ns->id_pol))
-		return;
-
-	rhashtable_free_and_destroy(&ns->objs, ns_objs_cleanup, NULL);
-	if (ns->id_pol != CAM_NS_POL_USER_ID)
-		ida_destroy(&ns->ids);
+	down_read(&ns->lock);
+	idr_for_each_entry(&ns->objs, nsobj, id) {
+		if (IS_ERR_OR_NULL(nsobj))
+			continue;
+		if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
+			continue;
+		/*
+		 * Deactivate dangling objects: we are about to destroy the
+		 * namespace so release() function, which can be called after
+		 * cam_ns_release(), cannot access IDA.
+		 */
+		nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
+		cam_obj_put(nsobj);
+	}
+	up_read(&ns->lock);
+	idr_destroy(&ns->objs);
 }
 
 #ifdef CONFIG_CAM_KUNIT_TESTS

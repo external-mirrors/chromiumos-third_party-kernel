@@ -9,8 +9,7 @@
 #define __LINUX_CAM_NAMESPACE_H__
 
 #include <linux/cam/cam-graph.h>
-#include <linux/rhashtable.h>
-#include <linux/mutex.h>
+#include <linux/rwsem.h>
 #include <linux/types.h>
 #include <linux/kref.h>
 #include <linux/idr.h>
@@ -78,27 +77,25 @@ enum cam_obj_type {
  * enum cam_ns_policy - ID allocation policy
  *
  * @CAM_NS_POL_REUSE_ID:	Reuses released IDs immediately
- * @CAM_NS_POL_UNIQUE_ID:	Only reuse IDs after wrap-around
  * @CAM_NS_POL_USER_ID:		Use user-supplied ID
  */
 enum cam_id_policy {
-	CAM_NS_POL_REUSE_ID	= BIT(0),
-	CAM_NS_POL_UNIQUE_ID	= BIT(1),
-	CAM_NS_POL_USER_ID	= BIT(2),
+	CAM_NS_POL_UNIQUE_ID	= BIT(0),
+	CAM_NS_POL_USER_ID	= BIT(1),
 };
 
 /**
  * cam_ns - CAM file handle namespace
  */
 struct cam_ns {
-	/** @objs: hash table to lookup namespace objects in */
-	struct rhashtable	objs;
+	/** @objs: IDR to lookup namespace objects in */
+	struct idr		objs;
+	/** @lock: IDR lock */
+	struct rw_semaphore	lock;
 	/** @id_pol: ID Allocation policy */
 	enum cam_id_policy	id_pol;
-	/** @ids: IDA of allocated IDs */
-	struct ida		ids;
 	/** @next_id: Next id to be used for unique ids */
-	unsigned long		next_id;
+	u32			next_id;
 };
 
 /**
