@@ -8,7 +8,7 @@
 #ifndef __LINUX_CAM_GRAPH_H__
 #define __LINUX_CAM_GRAPH_H__
 
-#include <linux/spinlock.h>
+#include <linux/rwsem.h>
 
 struct cam_ns;
 struct cam_obj;
@@ -26,11 +26,11 @@ struct cam_graph_node {
 	 * @lock: any manipulations to any other fields in this struct should
 	 *        be protected by this lock
 	 */
-	spinlock_t		lock;
-	/** @parent_entry: the entry to be added to the parent's @children */
-	struct list_head	parent_entry;
-	/** @children: the list of children node */
-	struct list_head	children;
+	struct rw_semaphore	lock;
+	/** @link_entry: our entry in target (parent) objects links list */
+	struct list_head	link_entry;
+	/** @links: the list of objects linked to us  */
+	struct list_head	links;
 };
 
 struct cam_device;
@@ -44,10 +44,10 @@ void cam_graph_node_unlink(struct cam_obj *nsobj);
 
 u32 cam_graph_node_link_id(struct cam_obj *nsobj);
 
-#define cam_graph_for_each_child_rcu(child, obj)	\
-	list_for_each_entry_rcu(child,			\
-				&(obj)->gnode.children,	\
-				gnode.parent_entry)
+#define cam_obj_for_each_link(link, obj)		\
+	list_for_each_entry((link),			\
+			    &(obj)->gnode.links,	\
+			    gnode.link_entry)
 
 /*
  * CAM object graph traversal

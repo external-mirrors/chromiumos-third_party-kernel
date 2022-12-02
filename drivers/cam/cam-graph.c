@@ -14,7 +14,6 @@
 #include <linux/cam/cam-namespace.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/rculist.h>
 #include <linux/slab.h>
 
 /**
@@ -26,9 +25,9 @@ void cam_graph_node_init(struct cam_obj *nsobj)
 	struct cam_graph_node *node = &nsobj->gnode;
 
 	node->parent = NULL;
-	spin_lock_init(&node->lock);
-	INIT_LIST_HEAD_RCU(&node->parent_entry);
-	INIT_LIST_HEAD(&node->children);
+	init_rwsem(&node->lock);
+	INIT_LIST_HEAD(&node->link_entry);
+	INIT_LIST_HEAD(&node->links);
 }
 
 /**
@@ -69,10 +68,9 @@ int cam_graph_node_link(struct cam_device *cam,
 	parent = &entity->nsobj.gnode;
 	child->parent = &entity->nsobj;
 
-	spin_lock(&parent->lock);
-	list_add_rcu(&child->parent_entry, &parent->children);
-	spin_unlock(&parent->lock);
-	synchronize_rcu();
+	down_write(&parent->lock);
+	list_add(&child->link_entry, &parent->links);
+	up_write(&parent->lock);
 
 	return 0;
 }
@@ -93,10 +91,9 @@ void cam_graph_node_unlink(struct cam_obj *nsobj)
 	parent = child->parent;
 	child->parent = NULL;
 
-	spin_lock(&parent->gnode.lock);
-	list_del_rcu(&child->parent_entry);
-	spin_unlock(&parent->gnode.lock);
-	synchronize_rcu();
+	down_write(&parent->gnode.lock);
+	list_del(&child->link_entry);
+	up_write(&parent->gnode.lock);
 
 	cam_obj_put(parent);
 }
@@ -278,8 +275,8 @@ int cam_enum_graph_objects(struct cam_graph_walk *ctl,
 			abort = true;
 		}
 
-		rcu_read_lock();
-		cam_graph_for_each_child_rcu(child, nsobj) {
+		down_read(&nsobj->gnode.lock);
+		cam_obj_for_each_link(child, nsobj) {
 			if (abort)
 				continue;
 			/*
@@ -298,7 +295,7 @@ int cam_enum_graph_objects(struct cam_graph_walk *ctl,
 				abort = true;
 			}
 		}
-		rcu_read_unlock();
+		up_read(&nsobj->gnode.lock);
 		cam_obj_put(nsobj);
 	}
 
