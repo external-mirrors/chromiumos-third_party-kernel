@@ -121,11 +121,6 @@ struct cam_obj_op {
 	 * See comment in cam_pipeline_enqueue().
 	 */
 	struct list_head		notify_pending_chain;
-	/**
-	 * @out_syncfile: Exported DMA fence that we need to notify after
-	 * OP is executed.
-	 */
-	struct cam_obj_syncfile		*out_syncfile;
 };
 
 struct cam_device;

@@ -314,6 +314,12 @@ unsigned long cam_obj_id(struct cam_obj *nsobj)
 	return nsobj->id;
 }
 
+enum cam_obj_type cam_obj_type(struct cam_obj *nsobj)
+{
+	WARN_ON(!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE));
+	return nsobj->type;
+}
+
 /**
  * cam_obj_set_id() - Set object ID
  * @nsobj: namespace object

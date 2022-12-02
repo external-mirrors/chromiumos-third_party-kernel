@@ -47,6 +47,12 @@ u32 cam_obj_link_id(struct cam_obj *nsobj);
 			    &(obj)->gnode.links,	\
 			    gnode.link_entry)
 
+#define cam_obj_for_each_link_safe(link, tmp, obj)	\
+	list_for_each_entry_safe((link),		\
+				 (tmp),			\
+				 &(obj)->gnode.links,	\
+				 gnode.link_entry)
+
 /*
  * CAM object graph traversal
  */

@@ -9,6 +9,7 @@
 
 #include <linux/cam/cam-device.h>
 #include <linux/cam/cam-entity.h>
+#include <linux/cam/cam-graph.h>
 #include <linux/cam/cam-output.h>
 #include <linux/cam/cam-pipeline.h>
 #include <linux/cam/cam-ringbuffer.h>
@@ -423,6 +424,28 @@ void cam_drain_active_signals(struct list_head *notify_active_chain)
 	drain_notify_chain(notify_active_chain);
 }
 
+static void cam_drain_op_syncfiles(struct cam_obj_op *op)
+{
+	struct cam_obj *link;
+	struct cam_obj *save;
+
+	cam_obj_for_each_link_safe(link, save, &op->nsobj) {
+		switch (cam_obj_type(link)) {
+		case CAM_OBJ_TYPE_IN_SYNCFILE:
+			cam_drain_in_syncfile(link);
+			cam_in_syncfile_unregister(link);
+			break;
+		case CAM_OBJ_TYPE_OUT_SYNCFILE:
+			cam_fire_out_syncfile_signal(link);
+			cam_out_syncfile_unregister(link);
+			break;
+		default:
+			pr_err("Unknown link object type: %d\n",
+			       cam_obj_type(link));
+		}
+	}
+}
+
 static void cam_drain_op_callback(struct cam_obj *nsobj,
 				  struct cam_ns_walk_control *ctl)
 {
@@ -432,13 +455,14 @@ static void cam_drain_op_callback(struct cam_obj *nsobj,
 	if (WARN_ON(!op))
 		return;
 
+	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
+
 	/*
 	 * OPs have pending and active signals chains, all of which
 	 * need to be drained becuase they hold refcounters.
 	 */
 	drain_notify_chain(&op->notify_active_chain);
 	drain_notify_chain(&op->notify_pending_chain);
-	cam_drain_out_syncfile(op->out_syncfile);
 
 	/*
 	 * Note we cannot remove OP from namespace here, because we are
@@ -479,6 +503,7 @@ static void cam_flush_ops(struct cam_pipeline *pipeline)
 				      io_queue_entry);
 		list_del(&op->io_queue_entry);
 
+		cam_drain_op_syncfiles(op);
 		cam_obj_remove(&op->nsobj);
 		cam_obj_deinit(&op->nsobj);
 	}
@@ -501,7 +526,7 @@ static void cam_op_fire_signals(struct cam_obj_op *op)
 	 * Famous last words.
 	 */
 	cam_fire_active_signals(&op->notify_active_chain);
-	cam_fire_out_syncfile_signal(op->out_syncfile);
+	cam_drain_op_syncfiles(op);
 }
 
 /**
@@ -754,7 +779,6 @@ static int cam_pipeline_io_worker(void *data)
 	 * OPs.
 	 */
 	cam_drain_events(pipeline->cam);
-	cam_drain_in_syncfiles(pipeline->cam);
 	cam_drain_ops(pipeline);
 	cam_flush_ops(pipeline);
 
@@ -917,28 +941,20 @@ static int cam_fence_in_dependency_add(struct cam_pipeline *pipeline,
 				       struct cam_dependency *req,
 				       struct cam_obj_op *op)
 {
-	struct cam_obj_syncfile *syncfile;
+	struct cam_obj_syncfile *sf;
 	int ret;
 
-	syncfile = cam_in_syncfile_register(pipeline->cam,
-					    req->id,
-					    "in-fence-%d",
-					    req->id);
-	if (!syncfile) {
-		ret = -EINVAL;
-		goto error;
-	}
+	/*
+	 * We store syncfile pointer indirectly: syncfile is linked to this
+	 * OP.
+	 */
+	sf = cam_in_syncfile_register(pipeline->cam, op, req->id,
+				      "in-fence-%d", req->id);
+	if (!sf)
+		return -EINVAL;
 
-	ret = cam_op_add_pending_signal(&syncfile->nsobj, op,
+	ret = cam_op_add_pending_signal(&sf->nsobj, op,
 					cam_in_syncfile_activate_signal);
-	if (ret)
-		goto error;
-
-	return 0;
-
-error:
-	if (syncfile)
-		cam_syncfile_unregister(syncfile);
 	return ret;
 }
 
@@ -954,16 +970,18 @@ static int cam_fence_out_dependency_add(struct cam_pipeline *pipeline,
 					struct cam_operation_add *req,
 					struct cam_obj_op *op)
 {
-	u32 id;
+	struct cam_obj_syncfile *sf;
 
-	id = cam_obj_id(&op->nsobj);
-	op->out_syncfile = cam_out_syncfile_register(pipeline->cam,
-						     "out-fence-%d",
-						     id);
-	if (!op->out_syncfile)
+	/*
+	 * We store syncfile pointer indirectly: syncfile is linked to this
+	 * OP.
+	 */
+	sf = cam_out_syncfile_register(pipeline->cam, op, "out-fence-%d",
+				       cam_obj_id(&op->nsobj));
+	if (!sf)
 		return -EINVAL;
 
-	req->fence_out = cam_out_syncfile_fd(op->out_syncfile);
+	req->fence_out = cam_out_syncfile_fd(sf);
 	return 0;
 }
 
@@ -1048,10 +1066,10 @@ static bool cam_activate_weak_dependency_mode(struct cam_obj_op *op)
 }
 
 /**
- * cam_flush_op_dependencies() - Flush operation dependencies
+ * cam_drain_op_dependencies() - Drain operation dependencies
  * @op: pointer to CAM operation
  */
-static void cam_flush_op_dependencies(struct cam_obj_op *op)
+static void cam_drain_op_dependencies(struct cam_obj_op *op)
 {
 	drain_notify_chain(&op->notify_pending_chain);
 }
@@ -1279,8 +1297,8 @@ int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 		return 0;
 
 	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
-	cam_flush_op_dependencies(op);
-	cam_drain_out_syncfile(op->out_syncfile);
+	cam_drain_op_dependencies(op);
+	cam_drain_op_syncfiles(op);
 	/* drop lookup ref-count */
 	cam_op_put(op);
 	/* Now release the object */

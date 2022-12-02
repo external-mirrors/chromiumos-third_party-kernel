@@ -143,6 +143,7 @@ struct cam_obj {
 };
 
 unsigned long cam_obj_id(struct cam_obj *nsobj);
+enum cam_obj_type cam_obj_type(struct cam_obj *nsobj);
 int cam_obj_set_id(struct cam_obj *nsobj, unsigned long id);
 
 void cam_obj_init(struct cam_obj *nsobj,
