@@ -252,7 +252,7 @@ int cam_enum_graph_objects(struct cam_graph_walk *ctl,
 	abort = false;
 
 	while (!abort && !cam_graph_stack_empty(&st)) {
-		struct cam_obj *child;
+		struct cam_obj *link;
 
 		nsobj = cam_graph_stack_front(&st);
 		cam_graph_stack_pop(&st);
@@ -276,22 +276,22 @@ int cam_enum_graph_objects(struct cam_graph_walk *ctl,
 		}
 
 		down_read(&nsobj->gnode.lock);
-		cam_obj_for_each_link(child, nsobj) {
+		cam_obj_for_each_link(link, nsobj) {
 			if (abort)
 				continue;
 			/*
 			 * Do not add objects that have mismatching type
 			 * or/and mismatching ID.
 			 */
-			if (!cam_graph_walk_match_obj(child, ctl))
+			if (!cam_graph_walk_match_obj(link, ctl))
 				continue;
 
-			if (!cam_obj_get(child))
+			if (!cam_obj_get(link))
 				continue;
 
-			ret =  cam_graph_stack_push(&st, child);
+			ret = cam_graph_stack_push(&st, link);
 			if (ret) {
-				cam_obj_put(child);
+				cam_obj_put(link);
 				abort = true;
 			}
 		}
