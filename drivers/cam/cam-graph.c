@@ -31,30 +31,27 @@ void cam_graph_node_init(struct cam_obj *nsobj)
 }
 
 /**
- * cam_obj_link() - Link namespace object to (linked_to) entity
+ * cam_obj_link() - Link two namespace objects
  * @cam: CAM device
  * @nsobj: namespace object to link
- * @parent_id: ID of linked_to entity object
+ * @link: namespace object to link to
  *
  * Return: 0 on success or error value otherwise
  */
 int cam_obj_link(struct cam_device *cam,
 		 struct cam_obj *nsobj,
-		 u32 parent_id)
+		 struct cam_obj *link)
 {
-	struct cam_graph_node *child = &nsobj->gnode;
-	struct cam_obj_entity *entity;
-	struct cam_graph_node *linked_to;
+	struct cam_graph_node *curr_node = &nsobj->gnode;
+	struct cam_graph_node *link_node;
 
-	if (WARN_ON(child->linked_to))
+	if (WARN_ON(curr_node->linked_to))
 		return -EINVAL;
 
-	/*
-	 * At this point, child can be of any type,
-	 * linked_to - only of CAM_OBJ_TYPE_ENTITY.
-	 */
-	entity = cam_entity_lookup(cam, parent_id);
-	if (!entity)
+	if (!link)
+		return -EINVAL;
+
+	if (!cam_obj_get(link))
 		return -EINVAL;
 
 	/*
@@ -65,37 +62,39 @@ int cam_obj_link(struct cam_device *cam,
 	 *
 	 * So we should not race with anything.
 	 */
-	linked_to = &entity->nsobj.gnode;
-	child->linked_to = &entity->nsobj;
+	link_node = &link->gnode;
+	curr_node->linked_to = link;
 
-	down_write(&linked_to->lock);
-	list_add(&child->link_entry, &linked_to->links);
-	up_write(&linked_to->lock);
+	down_write(&link_node->lock);
+	list_add(&curr_node->link_entry, &link_node->links);
+	up_write(&link_node->lock);
 
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_obj_link, ERRNO);
 
 /**
- * cam_obj_unlink() - Unlink objects (remove from linked_tos child list)
+ * cam_obj_unlink() - Unlink objects
  * @nsobj: object to unlink
  */
 void cam_obj_unlink(struct cam_obj *nsobj)
 {
-	struct cam_graph_node *child = &nsobj->gnode;
-	struct cam_obj *linked_to;
+	struct cam_graph_node *curr_node = &nsobj->gnode;
+	struct cam_graph_node *link_node;
+	struct cam_obj *link;
 
-	if (!child->linked_to)
+	if (!curr_node->linked_to)
 		return;
 
-	linked_to = child->linked_to;
-	child->linked_to = NULL;
+	link = curr_node->linked_to;
+	curr_node->linked_to = NULL;
+	link_node = &link->gnode;
 
-	down_write(&linked_to->gnode.lock);
-	list_del(&child->link_entry);
-	up_write(&linked_to->gnode.lock);
+	down_write(&link_node->lock);
+	list_del(&curr_node->link_entry);
+	up_write(&link_node->lock);
 
-	cam_obj_put(linked_to);
+	cam_obj_put(link);
 }
 
 /**
@@ -106,15 +105,15 @@ void cam_obj_unlink(struct cam_obj *nsobj)
  */
 u32 cam_obj_link_id(struct cam_obj *nsobj)
 {
-	struct cam_graph_node *child = &nsobj->gnode;
+	struct cam_graph_node *curr_node = &nsobj->gnode;
 	u32 pair_id = CAM_OBJ_ID_ROOT;
 
 	/*
 	 * If this object is not paired with anything explicitly then return
 	 * CAM_OBJ_ID_ROOT.
 	 */
-	if (child->linked_to)
-		pair_id = cam_obj_id(child->linked_to);
+	if (curr_node->linked_to)
+		pair_id = cam_obj_id(curr_node->linked_to);
 	return pair_id;
 }
 

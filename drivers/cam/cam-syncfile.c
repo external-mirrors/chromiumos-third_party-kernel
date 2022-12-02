@@ -101,6 +101,7 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 						  ...)
 {
 	char name[CAM_SYNCFILE_NAME_SZ];
+	struct cam_obj_entity *link;
 	struct cam_obj_syncfile *sf;
 	va_list args;
 	int ret;
@@ -108,6 +109,10 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	sf = kzalloc(sizeof(*sf), GFP_KERNEL);
 	if (!sf)
 		return NULL;
+
+	link = cam_entity_lookup(cam, CAM_OBJ_ID_ROOT);
+	if (!link)
+		goto error;
 
 	va_start(args, namefmt);
 	vsnprintf(name, sizeof(name), namefmt, args);
@@ -133,8 +138,11 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	if (ret && ret != -ENOENT)
 		goto error;
 
-	if (cam_obj_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
+	if (cam_obj_link(cam, &sf->nsobj, &link->nsobj))
 		goto error;
+
+	/* Link increments ref-counter of the object we link to */
+	cam_entity_put(link);
 
 	if (cam_obj_insert(&sf->nsobj))
 		goto error;
@@ -142,6 +150,7 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	return sf;
 
 error:
+	cam_entity_put(link);
 	cam_in_syncfile_release(&sf->nsobj);
 	return NULL;
 }
@@ -238,14 +247,19 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 						   const char *namefmt,
 						   ...)
 {
-	char name[CAM_SYNCFILE_NAME_SZ];
-	struct cam_obj_syncfile *sf;
 	struct sync_file *syncfile = NULL;
+	char name[CAM_SYNCFILE_NAME_SZ];
+	struct cam_obj_entity *link;
+	struct cam_obj_syncfile *sf;
 	va_list args;
 
 	sf = kzalloc(sizeof(*sf), GFP_KERNEL);
 	if (!sf)
 		return NULL;
+
+	link = cam_entity_lookup(cam, CAM_OBJ_ID_ROOT);
+	if (!link)
+		goto error;
 
 	va_start(args, namefmt);
 	vsnprintf(name, sizeof(name), namefmt, args);
@@ -275,8 +289,11 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 	if (!syncfile)
 		goto error;
 
-	if (cam_obj_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
+	if (cam_obj_link(cam, &sf->nsobj, &link->nsobj))
 		goto error;
+
+	/* Link increments ref-counter of the object we link to */
+	cam_entity_put(link);
 
 	if (cam_obj_insert(&sf->nsobj))
 		goto error;
@@ -289,6 +306,7 @@ error:
 		put_unused_fd(sf->out.fd);
 	if (syncfile)
 		fput(syncfile->file);
+	cam_entity_put(link);
 	cam_out_syncfile_release(&sf->nsobj);
 	return NULL;
 }

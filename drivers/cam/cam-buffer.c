@@ -77,10 +77,15 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 					   u32 fd)
 {
 	struct cam_obj_buffer *buffer;
+	struct cam_obj_entity *link;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
 		return NULL;
+
+	link = cam_entity_lookup(cam, parent_id);
+	if (!link)
+		goto error;
 
 	cam_obj_init(&buffer->nsobj,
 		     CAM_OBJ_TYPE_BUFFER,
@@ -103,8 +108,11 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
 	buffer->va = sg_virt(buffer->dma_sgt->sgl);
 
-	if (cam_obj_link(cam, &buffer->nsobj, parent_id))
+	if (cam_obj_link(cam, &buffer->nsobj, &link->nsobj))
 		goto error;
+
+	/* Link increments ref-counter of the object we link to */
+	cam_entity_put(link);
 
 	if (cam_obj_insert(&buffer->nsobj))
 		goto error;
@@ -112,6 +120,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 	return buffer;
 
 error:
+	cam_entity_put(link);
 	cam_buffer_release(&buffer->nsobj);
 	return NULL;
 }

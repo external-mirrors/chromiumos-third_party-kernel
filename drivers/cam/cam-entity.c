@@ -146,6 +146,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 {
 	char name[CAM_ENTITY_NAME_SZ];
 	struct cam_obj_entity *entity;
+	struct cam_obj_entity *link;
 	va_list args;
 
 	if (WARN_ON(!ops))
@@ -160,6 +161,10 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	if (!entity)
 		return NULL;
 
+	link = cam_entity_lookup(cam, parent_id);
+	if (!link)
+		goto error;
+
 	va_start(args, namefmt);
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
@@ -170,8 +175,11 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
 		     &cam->ns);
 
-	if (cam_obj_link(cam, &entity->nsobj, parent_id))
+	if (cam_obj_link(cam, &entity->nsobj, &link->nsobj))
 		goto error;
+
+	/* Link increments ref-counter of the object we link to */
+	cam_entity_put(link);
 
 	if (cam_obj_insert(&entity->nsobj))
 		goto error;
@@ -179,6 +187,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	return entity;
 
 error:
+	cam_entity_put(link);
 	cam_entity_release(&entity->nsobj);
 	return NULL;
 }
@@ -371,6 +380,7 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 					 const char *namefmt,
 					 ...)
 {
+	struct cam_obj_entity *entity;
 	char name[CAM_EVENT_NAME_SZ];
 	struct cam_obj_event *event;
 	va_list args;
@@ -378,6 +388,10 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	event = kzalloc(sizeof(*event), GFP_KERNEL);
 	if (!event)
 		return NULL;
+
+	entity = cam_entity_lookup(cam, entity_id);
+	if (!entity)
+		goto error;
 
 	va_start(args, namefmt);
 	vsnprintf(name, sizeof(name), namefmt, args);
@@ -389,8 +403,11 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	cam_obj_init(&event->nsobj, CAM_OBJ_TYPE_EVENT, cam_event_release,
 		     &cam->ns);
 
-	if (cam_obj_link(cam, &event->nsobj, entity_id))
+	if (cam_obj_link(cam, &event->nsobj, &entity->nsobj))
 		goto error;
+
+	/* Link increments ref-counter of the object we link to */
+	cam_entity_put(entity);
 
 	if (cam_obj_insert(&event->nsobj))
 		goto error;
@@ -398,6 +415,7 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	return event;
 
 error:
+	cam_entity_put(entity);
 	cam_event_release(&event->nsobj);
 	return NULL;
 }
