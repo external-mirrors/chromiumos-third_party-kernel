@@ -487,7 +487,8 @@ global_clear(struct intel_migrate *migrate, u32 sz, struct rnd_state *prng)
 
 static int live_migrate_copy(void *arg)
 {
-	struct intel_migrate *migrate = arg;
+	struct intel_gt *gt = arg;
+	struct intel_migrate *migrate = &gt->migrate;
 	struct drm_i915_private *i915 = migrate->context->engine->i915;
 	I915_RND_STATE(prng);
 	int i;
@@ -508,7 +509,8 @@ static int live_migrate_copy(void *arg)
 
 static int live_migrate_clear(void *arg)
 {
-	struct intel_migrate *migrate = arg;
+	struct intel_gt *gt = arg;
+	struct intel_migrate *migrate = &gt->migrate;
 	struct drm_i915_private *i915 = migrate->context->engine->i915;
 	I915_RND_STATE(prng);
 	int i;
@@ -737,7 +739,10 @@ static int __thread_migrate_copy(void *arg)
 
 static int thread_migrate_copy(void *arg)
 {
-	return threaded_migrate(arg, __thread_migrate_copy, 0);
+	struct intel_gt *gt = arg;
+	struct intel_migrate *migrate = &gt->migrate;
+
+	return threaded_migrate(migrate, __thread_migrate_copy, 0);
 }
 
 static int __thread_global_copy(void *arg)
@@ -749,7 +754,10 @@ static int __thread_global_copy(void *arg)
 
 static int thread_global_copy(void *arg)
 {
-	return threaded_migrate(arg, __thread_global_copy, 0);
+	struct intel_gt *gt = arg;
+	struct intel_migrate *migrate = &gt->migrate;
+
+	return threaded_migrate(migrate, __thread_global_copy, 0);
 }
 
 static int __thread_migrate_clear(void *arg)
@@ -768,12 +776,18 @@ static int __thread_global_clear(void *arg)
 
 static int thread_migrate_clear(void *arg)
 {
-	return threaded_migrate(arg, __thread_migrate_clear, 0);
+	struct intel_gt *gt = arg;
+	struct intel_migrate *migrate = &gt->migrate;
+
+	return threaded_migrate(migrate, __thread_migrate_clear, 0);
 }
 
 static int thread_global_clear(void *arg)
 {
-	return threaded_migrate(arg, __thread_global_clear, 0);
+	struct intel_gt *gt = arg;
+	struct intel_migrate *migrate = &gt->migrate;
+
+	return threaded_migrate(migrate, __thread_global_clear, 0);
 }
 
 int intel_migrate_live_selftests(struct drm_i915_private *i915)
@@ -792,7 +806,7 @@ int intel_migrate_live_selftests(struct drm_i915_private *i915)
 	if (!gt->migrate.context)
 		return 0;
 
-	return i915_subtests(tests, &gt->migrate);
+	return intel_gt_live_subtests(tests, gt);
 }
 
 static struct drm_i915_gem_object *
