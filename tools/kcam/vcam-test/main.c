@@ -2140,7 +2140,6 @@ static void *thread_fn(void *arg)
 	struct libkc *cam;
 	const char *cam_path = "/dev/cam";
 	int ret;
-	int id;
 
 	cam = libkc_open(cam_path);
 	if (!cam) {
