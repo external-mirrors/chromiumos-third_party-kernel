@@ -24,17 +24,17 @@ void cam_graph_node_init(struct cam_obj *nsobj)
 {
 	struct cam_graph_node *node = &nsobj->gnode;
 
-	node->parent = NULL;
+	node->linked_to = NULL;
 	init_rwsem(&node->lock);
 	INIT_LIST_HEAD(&node->link_entry);
 	INIT_LIST_HEAD(&node->links);
 }
 
 /**
- * cam_graph_node_link() - Link namespace object to (parent) entity
+ * cam_graph_node_link() - Link namespace object to (linked_to) entity
  * @cam: CAM device
  * @nsobj: namespace object to link
- * @parent_id: ID of parent entity object
+ * @linked_to_id: ID of linked_to entity object
  *
  * Return: 0 on success or error value otherwise
  */
@@ -44,65 +44,65 @@ int cam_graph_node_link(struct cam_device *cam,
 {
 	struct cam_graph_node *child = &nsobj->gnode;
 	struct cam_obj_entity *entity;
-	struct cam_graph_node *parent;
+	struct cam_graph_node *linked_to;
 
-	if (WARN_ON(child->parent))
+	if (WARN_ON(child->linked_to))
 		return -EINVAL;
 
 	/*
 	 * At this point, child can be of any type,
-	 * parent - only of CAM_OBJ_TYPE_ENTITY.
+	 * linked_to - only of CAM_OBJ_TYPE_ENTITY.
 	 */
 	entity = cam_entity_lookup(cam, parent_id);
 	if (!entity)
 		return -EINVAL;
 
 	/*
-	 * We don't need to protect ->parent assignment as it should be done
+	 * We don't need to protect ->linked_to assignment as it should be done
 	 * when object is created and before it's inserted into namespace and
 	 * it's cleared from object ->release() path when object has 0 ref
 	 * counter.
 	 *
 	 * So we should not race with anything.
 	 */
-	parent = &entity->nsobj.gnode;
-	child->parent = &entity->nsobj;
+	linked_to = &entity->nsobj.gnode;
+	child->linked_to = &entity->nsobj;
 
-	down_write(&parent->lock);
-	list_add(&child->link_entry, &parent->links);
-	up_write(&parent->lock);
+	down_write(&linked_to->lock);
+	list_add(&child->link_entry, &linked_to->links);
+	up_write(&linked_to->lock);
 
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_graph_node_link, ERRNO);
 
 /**
- * cam_graph_node_unlink() - Unlink objects (remove from parents child list)
+ * cam_graph_node_unlink() - Unlink objects (remove from linked_tos child list)
  * @nsobj: object to unlink
  */
 void cam_graph_node_unlink(struct cam_obj *nsobj)
 {
 	struct cam_graph_node *child = &nsobj->gnode;
-	struct cam_obj *parent;
+	struct cam_obj *linked_to;
 
-	if (!child->parent)
+	if (!child->linked_to)
 		return;
 
-	parent = child->parent;
-	child->parent = NULL;
+	linked_to = child->linked_to;
+	child->linked_to = NULL;
 
-	down_write(&parent->gnode.lock);
+	down_write(&linked_to->gnode.lock);
 	list_del(&child->link_entry);
-	up_write(&parent->gnode.lock);
+	up_write(&linked_to->gnode.lock);
 
-	cam_obj_put(parent);
+	cam_obj_put(linked_to);
 }
 
 /**
- * cam_graph_node_link_id() - ID of the parent object
- * @nsobj: object to get parent ID of
+ * cam_graph_node_link_id() - ID of the linked_to object
+ * @nsobj: object to get linked_to ID of
  *
- * Return: ID of the parent object.
+ * Return: ID of the linked_to object.
  */
 u32 cam_graph_node_link_id(struct cam_obj *nsobj)
 {
@@ -113,8 +113,8 @@ u32 cam_graph_node_link_id(struct cam_obj *nsobj)
 	 * If this object is not paired with anything explicitly then return
 	 * CAM_OBJ_ID_ROOT.
 	 */
-	if (child->parent)
-		pair_id = cam_obj_id(child->parent);
+	if (child->linked_to)
+		pair_id = cam_obj_id(child->linked_to);
 	return pair_id;
 }
 

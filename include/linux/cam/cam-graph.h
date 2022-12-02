@@ -20,14 +20,14 @@ struct cam_obj;
  * in which this structure is embedded.
  */
 struct cam_graph_node {
-	/** @parent: the parent of this node */
-	struct cam_obj		*parent;
+	/** @linked_to: the parent of this node */
+	struct cam_obj		*linked_to;
 	/**
 	 * @lock: any manipulations to any other fields in this struct should
 	 *        be protected by this lock
 	 */
 	struct rw_semaphore	lock;
-	/** @link_entry: our entry in target (parent) objects links list */
+	/** @link_entry: our entry in linked object's links list */
 	struct list_head	link_entry;
 	/** @links: the list of objects linked to us  */
 	struct list_head	links;
