@@ -84,7 +84,7 @@ static void cam_entity_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_entity *entity = nsobj_to_cam_entity(nsobj);
 
-	cam_graph_node_unlink(nsobj);
+	cam_obj_unlink(nsobj);
 	kfree(entity);
 }
 
@@ -170,7 +170,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
 		     &cam->ns);
 
-	if (cam_graph_node_link(cam, &entity->nsobj, parent_id))
+	if (cam_obj_link(cam, &entity->nsobj, parent_id))
 		goto error;
 
 	if (cam_obj_insert(&entity->nsobj))
@@ -270,7 +270,7 @@ static void cam_event_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_event *event = nsobj_to_cam_event(nsobj);
 
-	cam_graph_node_unlink(nsobj);
+	cam_obj_unlink(nsobj);
 	kfree(event);
 }
 
@@ -389,7 +389,7 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	cam_obj_init(&event->nsobj, CAM_OBJ_TYPE_EVENT, cam_event_release,
 		     &cam->ns);
 
-	if (cam_graph_node_link(cam, &event->nsobj, entity_id))
+	if (cam_obj_link(cam, &event->nsobj, entity_id))
 		goto error;
 
 	if (cam_obj_insert(&event->nsobj))
@@ -439,7 +439,7 @@ static bool enum_entity(struct cam_obj *nsobj, struct cam_graph_walk *ctl)
 	if (copy_to_user(&qent->name, entity->name, strlen(entity->name)))
 		return false;
 
-	if (put_user(cam_graph_node_link_id(nsobj), &qent->parent))
+	if (put_user(cam_obj_link_id(nsobj), &qent->parent))
 		return false;
 
 out:

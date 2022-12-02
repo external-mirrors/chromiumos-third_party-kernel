@@ -37,12 +37,9 @@ struct cam_device;
 
 void cam_graph_node_init(struct cam_obj *nsobj);
 
-int cam_graph_node_link(struct cam_device *cam,
-			struct cam_obj *nsobj,
-			u32 parent_id);
-void cam_graph_node_unlink(struct cam_obj *nsobj);
-
-u32 cam_graph_node_link_id(struct cam_obj *nsobj);
+int cam_obj_link(struct cam_device *cam, struct cam_obj *nsobj, u32 parent_id);
+void cam_obj_unlink(struct cam_obj *nsobj);
+u32 cam_obj_link_id(struct cam_obj *nsobj);
 
 #define cam_obj_for_each_link(link, obj)		\
 	list_for_each_entry((link),			\

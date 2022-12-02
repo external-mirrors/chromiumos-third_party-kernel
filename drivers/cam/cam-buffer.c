@@ -42,7 +42,7 @@ static void cam_buffer_release(struct cam_obj *nsobj)
 	if (!buffer)
 		return;
 
-	cam_graph_node_unlink(nsobj);
+	cam_obj_unlink(nsobj);
 
 	if (!IS_ERR_OR_NULL(buffer->dma_sgt)) {
 		dma_buf_unmap_attachment(buffer->dma_attach,
@@ -103,7 +103,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
 	buffer->va = sg_virt(buffer->dma_sgt->sgl);
 
-	if (cam_graph_node_link(cam, &buffer->nsobj, parent_id))
+	if (cam_obj_link(cam, &buffer->nsobj, parent_id))
 		goto error;
 
 	if (cam_obj_insert(&buffer->nsobj))

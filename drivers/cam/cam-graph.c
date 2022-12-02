@@ -31,16 +31,16 @@ void cam_graph_node_init(struct cam_obj *nsobj)
 }
 
 /**
- * cam_graph_node_link() - Link namespace object to (linked_to) entity
+ * cam_obj_link() - Link namespace object to (linked_to) entity
  * @cam: CAM device
  * @nsobj: namespace object to link
- * @linked_to_id: ID of linked_to entity object
+ * @parent_id: ID of linked_to entity object
  *
  * Return: 0 on success or error value otherwise
  */
-int cam_graph_node_link(struct cam_device *cam,
-			struct cam_obj *nsobj,
-			u32 parent_id)
+int cam_obj_link(struct cam_device *cam,
+		 struct cam_obj *nsobj,
+		 u32 parent_id)
 {
 	struct cam_graph_node *child = &nsobj->gnode;
 	struct cam_obj_entity *entity;
@@ -74,13 +74,13 @@ int cam_graph_node_link(struct cam_device *cam,
 
 	return 0;
 }
-ALLOW_ERROR_INJECTION(cam_graph_node_link, ERRNO);
+ALLOW_ERROR_INJECTION(cam_obj_link, ERRNO);
 
 /**
- * cam_graph_node_unlink() - Unlink objects (remove from linked_tos child list)
+ * cam_obj_unlink() - Unlink objects (remove from linked_tos child list)
  * @nsobj: object to unlink
  */
-void cam_graph_node_unlink(struct cam_obj *nsobj)
+void cam_obj_unlink(struct cam_obj *nsobj)
 {
 	struct cam_graph_node *child = &nsobj->gnode;
 	struct cam_obj *linked_to;
@@ -104,7 +104,7 @@ void cam_graph_node_unlink(struct cam_obj *nsobj)
  *
  * Return: ID of the linked_to object.
  */
-u32 cam_graph_node_link_id(struct cam_obj *nsobj)
+u32 cam_obj_link_id(struct cam_obj *nsobj)
 {
 	struct cam_graph_node *child = &nsobj->gnode;
 	u32 pair_id = CAM_OBJ_ID_ROOT;

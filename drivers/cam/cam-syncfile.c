@@ -63,7 +63,7 @@ static void cam_in_syncfile_release(struct cam_obj *nsobj)
 	if (sf->in.fence)
 		dma_fence_remove_callback(sf->in.fence, &sf->in.cb);
 	dma_fence_put(sf->in.fence);
-	cam_graph_node_unlink(nsobj);
+	cam_obj_unlink(nsobj);
 	kfree(sf);
 }
 
@@ -133,7 +133,7 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	if (ret && ret != -ENOENT)
 		goto error;
 
-	if (cam_graph_node_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
+	if (cam_obj_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
 		goto error;
 
 	if (cam_obj_insert(&sf->nsobj))
@@ -205,7 +205,7 @@ static void cam_out_syncfile_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_syncfile *sf = nsobj_to_cam_out_syncfile(nsobj);
 
-	cam_graph_node_unlink(nsobj);
+	cam_obj_unlink(nsobj);
 	kfree(sf);
 }
 
@@ -275,7 +275,7 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 	if (!syncfile)
 		goto error;
 
-	if (cam_graph_node_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
+	if (cam_obj_link(cam, &sf->nsobj, CAM_OBJ_ID_ROOT))
 		goto error;
 
 	if (cam_obj_insert(&sf->nsobj))
