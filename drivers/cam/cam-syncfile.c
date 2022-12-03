@@ -200,7 +200,7 @@ void cam_drain_in_syncfile(struct cam_obj *nsobj)
 	dma_fence_remove_callback(sf->in.fence, &sf->in.cb);
 
 	write_lock_irqsave(&sf->in.notify_lock, flags);
-	cam_drain_active_signals(&sf->in.notify_active_chain);
+	cam_drain_active_signals(&sf->in.notify_active_chain, NULL);
 	write_unlock_irqrestore(&sf->in.notify_lock, flags);
 }
 

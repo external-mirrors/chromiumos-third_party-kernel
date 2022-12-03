@@ -144,7 +144,8 @@ int cam_pipeline_query(struct cam_pipeline *pipeline,
 		       struct cam_koutput *output);
 
 void cam_fire_active_signals(struct list_head *notify_active_chain);
-void cam_drain_active_signals(struct list_head *notify_active_chain);
+void cam_drain_active_signals(struct list_head *notify_active_chain,
+			      struct cam_pipeline *pipeline);
 
 int cam_pipeline_io_setup(struct cam_pipeline *pipeline);
 int cam_pipeline_io_release(struct cam_pipeline *pipeline);

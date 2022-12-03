@@ -109,5 +109,7 @@ int cam_enum_events(struct cam_device *cam,
 		    struct cam_query_events *query,
 		    struct cam_koutput *output);
 
-int cam_drain_events(struct cam_device *cam);
+struct cam_pipeline;
+
+int cam_drain_events(struct cam_pipeline *pipeline);
 #endif /* __LINUX_CAM_ENTITY_H__ */

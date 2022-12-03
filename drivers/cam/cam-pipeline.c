@@ -415,13 +415,37 @@ static void drain_notify_chain(struct list_head *notify_chain)
 /**
  * cam_drain_active_signals() - Drain all signals from an active notify chain
  * @notify_active_chain: operation notify chain with signals
+ * @pipeline: pipeline that is being destroyed
  *
  * Unlike cam_fire_active_signals(), this simply removes and releases the
- * signals without running their callbacks.
+ * signals without running their callbacks. We also need to release signals
+ * only to operations that belong to a pipeline that we are currently
+ * destroying. Events are global and can contain signals to operations from
+ * different pipelines.
  */
-void cam_drain_active_signals(struct list_head *notify_active_chain)
+void cam_drain_active_signals(struct list_head *notify_active_chain,
+			      struct cam_pipeline *pipeline)
 {
-	drain_notify_chain(notify_active_chain);
+	struct cam_op_signal *sig;
+	struct cam_op_signal *save;
+
+	if (list_empty(notify_active_chain))
+		return;
+
+	list_for_each_entry_safe(sig, save, notify_active_chain, entry) {
+		struct cam_obj_op *op;
+
+		/* Target should be operation */
+		op = nsobj_to_cam_op(sig->target);
+		if (WARN_ON(!op))
+			continue;
+
+		if (pipeline && op->pipeline != pipeline)
+			continue;
+
+		list_del_init(&sig->entry);
+		release_signal(sig);
+	}
 }
 
 static void cam_drain_op_syncfiles(struct cam_obj_op *op)
@@ -778,7 +802,7 @@ static int cam_pipeline_io_worker(void *data)
 	 * and active ones) of all the OPs. Lastly remove and deinit drained
 	 * OPs.
 	 */
-	cam_drain_events(pipeline->cam);
+	cam_drain_events(pipeline);
 	cam_drain_ops(pipeline);
 	cam_flush_ops(pipeline);
 

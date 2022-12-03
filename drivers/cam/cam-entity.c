@@ -611,7 +611,7 @@ static void cam_drain_event_callback(struct cam_obj *nsobj,
 		return;
 
 	write_lock_irqsave(&event->notify_lock, flags);
-	cam_drain_active_signals(&event->notify_active_chain);
+	cam_drain_active_signals(&event->notify_active_chain, ctl->data);
 	write_unlock_irqrestore(&event->notify_lock, flags);
 }
 
@@ -621,11 +621,12 @@ static void cam_drain_event_callback(struct cam_obj *nsobj,
  *
  * Return: 0 on success.
  */
-int cam_drain_events(struct cam_device *cam)
+int cam_drain_events(struct cam_pipeline *pipeline)
 {
 	struct cam_ns_walk_control ctl = {};
 
+	ctl.data	= pipeline;
 	ctl.cb		= cam_drain_event_callback;
-	cam_ns_for_each(&cam->ns, &ctl);
+	cam_ns_for_each(&pipeline->cam->ns, &ctl);
 	return 0;
 }
