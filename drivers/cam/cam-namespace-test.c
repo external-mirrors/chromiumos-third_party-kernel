@@ -334,6 +334,7 @@ static void obj_lookup(struct kunit *test)
 	KUNIT_ASSERT_EQ(test, id, 42UL);
 	pobj = cam_obj_lookup(&ns, CAM_OBJ_TYPE_ENTITY, 42);
 	KUNIT_EXPECT_PTR_EQ(test, pobj, obj);
+	cam_obj_put(pobj);
 	cam_obj_remove(obj);
 
 	// lookup removed id
