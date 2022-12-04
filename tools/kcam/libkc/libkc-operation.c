@@ -106,5 +106,9 @@ int libkc_operation_ioctl(struct libkc *cam, struct libkc_operation *lco)
 
 	sz = sizeof(struct cam_header) +
 		lco->hdr.num_queries * sizeof(struct cam_operation);
+
+	if ((sz & _IOC_SIZEMASK) != sz)
+		pr_err("IOCTL payload size overflow: %u\n", sz);
+
 	return libkc_ioctl(cam, CAM_IOC_OPERATION(sz), lco);
 }
