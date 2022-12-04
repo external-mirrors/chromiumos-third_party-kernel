@@ -2160,14 +2160,14 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_add_instant_operations(cam, TEST_NUM_OPERATIONS);
+	ret = test_add_instant_operations(cam, 32 * TEST_NUM_OPERATIONS);
 	if (ret) {
 		pr_err("FATAL: failure test_add_instant_operations()\n");
 		goto out;
 	}
 
-	ret = read_operations_completion_events(cam, TEST_NUM_OPERATIONS);
-	if (ret != TEST_NUM_OPERATIONS) {
+	ret = read_operations_completion_events(cam, 32 * TEST_NUM_OPERATIONS);
+	if (ret != 32 * TEST_NUM_OPERATIONS) {
 		pr_err("FATAL: read_operations_completion_events() failed\n");
 		goto out;
 	}
