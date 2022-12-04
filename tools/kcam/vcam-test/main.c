@@ -1719,6 +1719,13 @@ static int test_operations(struct libkc *cam)
 		return ret;
 	}
 
+	ret = test_add_instant_operations(cam, 4096 * TEST_NUM_OPERATIONS);
+	if (!ret) {
+		pr_err("FATAL: very large IOCTL payload should fail\n");
+		ret = -EINVAL;
+		return ret;
+	}
+
 	ret = test_add_instant_operations(cam, TEST_NUM_OPERATIONS);
 	if (ret) {
 		pr_err("FATAL: failure test_add_instant_operations()\n");
