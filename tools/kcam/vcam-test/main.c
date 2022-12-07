@@ -842,6 +842,13 @@ static int read_operations_completion_events(struct libkc *cam, u32 num_events)
 		pr_info("Completion seqno: %llu id: %u\n",
 			completion->seqno,
 			completion->id);
+		if (completion->seqno - cam->completion_seqno > 1) {
+			pr_err("Lost %llu completion events\n",
+			       completion->seqno - cam->completion_seqno);
+			ret = -EINVAL;
+			goto out;
+		}
+		cam->completion_seqno++;
 		ret++;
 	}
 

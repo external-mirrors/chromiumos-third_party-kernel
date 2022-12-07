@@ -70,6 +70,7 @@ struct libkc *libkc_open(const char *dev)
 		goto error;
 	}
 
+	cam->completion_seqno = 0;
 	return cam;
 
 error:

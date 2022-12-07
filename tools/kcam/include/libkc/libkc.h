@@ -36,6 +36,7 @@ struct libkc {
 	int32_t			fd;
 	int32_t			mem_fd;
 	int32_t			udmabuf_fd;
+	uint64_t		completion_seqno;
 };
 
 struct libkc *libkc_open(const char *dev);
