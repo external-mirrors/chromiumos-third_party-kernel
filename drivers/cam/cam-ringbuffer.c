@@ -17,20 +17,19 @@
 
 bool cam_ringbuffer_has_entry(struct cam_ringbuffer *rb)
 {
-	off_t head, tail;
+	bool entries;
 
-	head = smp_load_acquire(&rb->head);
-	tail = rb->tail;
+	spin_lock(&rb->lock);
+	entries = (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) >= rb->entry_sz);
+	spin_unlock(&rb->lock);
 
-	return CIRC_CNT(head, tail, rb->buffer_sz) >= rb->entry_sz;
+	return entries;
 }
 
 int cam_ringbuffer_read(struct cam_ringbuffer *rb,
 			struct cam_completion *completion,
 			u32 flags)
 {
-	off_t tail;
-
 	if (flags & IOCB_NOWAIT) {
 		if (!cam_ringbuffer_has_entry(rb))
 			return -EAGAIN;
@@ -41,11 +40,10 @@ int cam_ringbuffer_read(struct cam_ringbuffer *rb,
 	}
 
 	spin_lock(&rb->lock);
-	tail = rb->tail;
-	memcpy(completion, &rb->buffer[tail], rb->entry_sz);
-	smp_store_release(&rb->tail,
-			  (tail + rb->entry_sz) & (rb->buffer_sz - 1));
+	memcpy(completion, &rb->buffer[rb->tail], rb->entry_sz);
+	rb->tail = (rb->tail + rb->entry_sz) & (rb->buffer_sz - 1);
 	spin_unlock(&rb->lock);
+
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_ringbuffer_read, ERRNO);
@@ -53,31 +51,25 @@ ALLOW_ERROR_INJECTION(cam_ringbuffer_read, ERRNO);
 int cam_ringbuffer_write(struct cam_ringbuffer *rb,
 			 struct cam_completion *completion)
 {
-	off_t head, tail;
-
 	spin_lock(&rb->lock);
-	head = rb->head;
-	tail = READ_ONCE(rb->tail);
-
 	completion->seqno = atomic64_read(&rb->seqno);
 	atomic64_inc(&rb->seqno);
 
-	if (CIRC_SPACE(head, tail, rb->buffer_sz) <= rb->entry_sz) {
+	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) <= rb->entry_sz) {
 		/*
 		 * We just move ahead, user-space should consume completions
 		 * and see a gap in seqno
 		 */
-		smp_store_release(&rb->tail,
-				  (tail + rb->entry_sz) & (rb->buffer_sz - 1));
+		rb->tail = (rb->tail + rb->entry_sz) & (rb->buffer_sz - 1);
 	}
 
-	memcpy(&rb->buffer[head], completion, rb->entry_sz);
-	smp_store_release(&rb->head,
-			  (head + rb->entry_sz) & (rb->buffer_sz - 1));
+	memcpy(&rb->buffer[rb->head], completion, rb->entry_sz);
+	rb->head = (rb->head + rb->entry_sz) & (rb->buffer_sz - 1);
 	spin_unlock(&rb->lock);
 
 	if (waitqueue_active(&rb->wait))
 		wake_up(&rb->wait);
+
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_ringbuffer_write, ERRNO);
@@ -110,6 +102,7 @@ int cam_ringbuffer_init(struct cam_ringbuffer *rb,
 	rb->entry_sz = entry_size;
 	rb->buffer_sz = buffer_size;
 	spin_lock_init(&rb->lock);
+
 	return 0;
 }
 
