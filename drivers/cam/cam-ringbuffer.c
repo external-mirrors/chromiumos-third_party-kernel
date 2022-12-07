@@ -40,10 +40,12 @@ int cam_ringbuffer_read(struct cam_ringbuffer *rb,
 			return -EINTR;
 	}
 
+	spin_lock(&rb->lock);
 	tail = rb->tail;
 	memcpy(completion, &rb->buffer[tail], rb->entry_sz);
 	smp_store_release(&rb->tail,
 			  (tail + rb->entry_sz) & (rb->buffer_sz - 1));
+	spin_unlock(&rb->lock);
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_ringbuffer_read, ERRNO);
@@ -57,22 +59,25 @@ int cam_ringbuffer_write(struct cam_ringbuffer *rb,
 	head = rb->head;
 	tail = READ_ONCE(rb->tail);
 
-	if (CIRC_SPACE(head, tail, rb->buffer_sz) <= rb->entry_sz)
-		completion->type = CAM_COMPLETION_TYPE_BUFFER_OVERFLOW;
+	completion->seqno = atomic64_read(&rb->seqno);
+	atomic64_inc(&rb->seqno);
+
+	if (CIRC_SPACE(head, tail, rb->buffer_sz) <= rb->entry_sz) {
+		/*
+		 * We just move ahead, user-space should consume completions
+		 * and see a gap in seqno
+		 */
+		smp_store_release(&rb->tail,
+				  (tail + rb->entry_sz) & (rb->buffer_sz - 1));
+	}
 
 	memcpy(&rb->buffer[head], completion, rb->entry_sz);
-	/* Write only one buffer overflow entry */
-	if (completion->type != CAM_COMPLETION_TYPE_BUFFER_OVERFLOW)
-		smp_store_release(&rb->head,
-				  (head + rb->entry_sz) & (rb->buffer_sz - 1));
+	smp_store_release(&rb->head,
+			  (head + rb->entry_sz) & (rb->buffer_sz - 1));
 	spin_unlock(&rb->lock);
 
 	if (waitqueue_active(&rb->wait))
 		wake_up(&rb->wait);
-
-	if (completion->type == CAM_COMPLETION_TYPE_BUFFER_OVERFLOW)
-		return -ENOSPC;
-
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_ringbuffer_write, ERRNO);
@@ -95,6 +100,7 @@ int cam_ringbuffer_init(struct cam_ringbuffer *rb,
 
 	rb->head = 0;
 	rb->tail = 0;
+	atomic64_set(&rb->seqno, 0);
 	init_waitqueue_head(&rb->wait);
 
 	rb->buffer = kvzalloc(buffer_size, GFP_KERNEL);

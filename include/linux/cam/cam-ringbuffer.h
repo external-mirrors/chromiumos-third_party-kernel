@@ -26,15 +26,14 @@ struct cam_ringbuffer {
 	size_t			buffer_sz;
 	/** @entry_sz: the entry size */
 	size_t			entry_sz;
-
 	/** @head: buffer head */
 	off_t			head;
 	/** @tail: buffer tail */
 	off_t			tail;
-
+	/** @seqno: a sequential number of the entry */
+	atomic64_t		seqno;
 	/** @lock: spin lock to protect buffer operations */
 	spinlock_t		lock;
-
 	/** @wait: the wait queue object */
 	wait_queue_head_t	wait;
 };

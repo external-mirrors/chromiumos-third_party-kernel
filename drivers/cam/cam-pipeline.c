@@ -605,7 +605,6 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 {
 	struct cam_completion completion = {};
 
-	completion.ts = ktime_to_ns(ktime_get());
 	completion.id = cam_obj_id(&op->nsobj);
 
 	/*

@@ -35,6 +35,7 @@ static void ringbuffer_write(struct kunit *test)
 	struct cam_ringbuffer rb;
 	struct cam_completion objs[ENTRY_CNT];
 	int i, ret;
+	off_t head;
 
 	ret = cam_ringbuffer_init(&rb, sizeof(struct cam_completion),
 				  sizeof(struct cam_completion) * ENTRY_CNT);
@@ -52,9 +53,12 @@ static void ringbuffer_write(struct kunit *test)
 		KUNIT_EXPECT_EQ(test, ret, 0);
 	}
 
+	head = rb.head;
 	 /* Now the buffer is full */
 	ret = cam_ringbuffer_write(&rb, &objs[0]);
-	KUNIT_EXPECT_EQ(test, ret, -ENOSPC);
+	KUNIT_EXPECT_EQ(test, ret, 0);
+	/* Ringbuffer head is supposed to advance */
+	KUNIT_EXPECT_NE(test, head, rb.head);
 
 	cam_ringbuffer_release(&rb);
 }

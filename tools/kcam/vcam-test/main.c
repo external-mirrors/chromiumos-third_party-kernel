@@ -839,8 +839,8 @@ static int read_operations_completion_events(struct libkc *cam, u32 num_events)
 		goto out;
 
 	for_each_cam_completion(lcc, i, completion) {
-		pr_info("Completion event timestamp: %llu id: %u\n",
-			completion->ts,
+		pr_info("Completion seqno: %llu id: %u\n",
+			completion->seqno,
 			completion->id);
 		ret++;
 	}

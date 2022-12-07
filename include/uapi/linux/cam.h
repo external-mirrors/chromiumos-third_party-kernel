@@ -455,12 +455,10 @@ enum cam_obj_id {
  *
  * CAM_COMPLETION_TYPE_EXECUTED:		Operation executed
  * CAM_COMPLETION_TYPE_DELETED:			Operation deleted
- * CAM_COMPLETION_TYPE_BUFFER_OVERFLOW:		Completion ringbuffer overflow
  */
 enum cam_completion_type {
 	CAM_COMPLETION_TYPE_EXECUTED,
 	CAM_COMPLETION_TYPE_DELETED,
-	CAM_COMPLETION_TYPE_BUFFER_OVERFLOW,
 };
 
 /**
@@ -471,7 +469,7 @@ enum cam_completion_type {
  * @type:		Type of event (executed, deleted, buffer overflow)
  */
 struct cam_completion {
-	__u64		ts;
+	__u64		seqno;
 	__u32		id;
 	__u8		type;
 	union {
