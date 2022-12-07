@@ -260,7 +260,7 @@ static void cam_op_enqueue(struct cam_obj_op *op)
 	spin_unlock_irqrestore(&pipeline->io_queue_lock, flags);
 
 	if (cam_pipeline_is_active(pipeline))
-		wake_up_process(pipeline->io_thread);
+		wake_up(&pipeline->io_queue_wait);
 }
 
 /**
@@ -747,6 +747,23 @@ done:
 	cam_op_put(op);
 }
 
+static bool io_queue_status(struct cam_pipeline *pipeline)
+{
+	unsigned long flags;
+	bool pending_ops;
+
+	if (test_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state))
+		return true;
+	if (signal_pending(current))
+		return true;
+
+	spin_lock_irqsave(&pipeline->io_queue_lock, flags);
+	pending_ops = !list_empty(&pipeline->io_queue);
+	spin_unlock_irqrestore(&pipeline->io_queue_lock, flags);
+
+	return pending_ops;
+}
+
 /**
  * cam_pipeline_io_worker() - IO-thread worker that consumes the pipeline queue
  * @data: pointer to CAM pipeline
@@ -789,9 +806,8 @@ static int cam_pipeline_io_worker(void *data)
 		if (op) {
 			cam_op_run(op);
 		} else {
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule();
-			set_current_state(TASK_RUNNING);
+			wait_event_interruptible(pipeline->io_queue_wait,
+						 io_queue_status(pipeline));
 		}
 	}
 
@@ -1506,6 +1522,7 @@ int cam_pipeline_io_setup(struct cam_pipeline *pipeline)
 		return -EINVAL;
 	}
 
+	init_waitqueue_head(&pipeline->io_queue_wait);
 	pipeline->io_thread->flags |= PF_NO_SETAFFINITY;
 	set_bit(CAM_PIPELINE_IO_ACTIVE, &pipeline->io_state);
 	wake_up_new_task(pipeline->io_thread);
@@ -1526,7 +1543,7 @@ int cam_pipeline_io_release(struct cam_pipeline *pipeline)
 
 	mutex_lock(&pipeline->io_release_lock);
 	if (pipeline->io_thread)
-		wake_up_process(pipeline->io_thread);
+		wake_up(&pipeline->io_queue_wait);
 	mutex_unlock(&pipeline->io_release_lock);
 
 	while (test_bit(CAM_PIPELINE_IO_EXITING, &pipeline->io_state))

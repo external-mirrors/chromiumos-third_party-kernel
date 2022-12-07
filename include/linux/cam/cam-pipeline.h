@@ -28,12 +28,14 @@ struct cam_pipeline {
 	struct cam_device	*cam;
 	/** @event_buffer: notifications for user-space */
 	struct cam_ringbuffer	event_buffer;
-	/** @io_thread: IO thread that handles OPs execution */
-	struct task_struct	*io_thread;
 	/** @io_queue_lock: Spinlock to protect IO queue */
 	spinlock_t		io_queue_lock;
 	/** @io_queue: A queue of OPs */
 	struct list_head	io_queue;
+	/** @io_thread: IO thread that handles OPs execution */
+	struct task_struct	*io_thread;
+	/** @io_queue_wait: IO-queue wait_queue */
+	wait_queue_head_t	io_queue_wait;
 	/** @io_state: IO queue/thread state flags */
 	unsigned long		io_state;
 	/** @io_relase_lock: Lock to protect IO-thread release */
