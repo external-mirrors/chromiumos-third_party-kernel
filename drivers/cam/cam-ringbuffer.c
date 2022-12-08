@@ -62,7 +62,7 @@ int cam_ringbuffer_write(struct cam_ringbuffer *rb,
 	completion->seqno = atomic64_read(&rb->seqno);
 	atomic64_inc(&rb->seqno);
 
-	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) <= rb->entry_sz) {
+	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) < rb->entry_sz) {
 		/*
 		 * We just move ahead, user-space should consume completions
 		 * and see a gap in seqno
