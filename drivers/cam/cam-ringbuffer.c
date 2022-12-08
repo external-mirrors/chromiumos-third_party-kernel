@@ -83,8 +83,10 @@ ALLOW_ERROR_INJECTION(cam_ringbuffer_write, ERRNO);
 
 void cam_ringbuffer_release(struct cam_ringbuffer *rb)
 {
-	if (WARN_ON(waitqueue_active(&rb->wait)))
-		wake_up(&rb->wait);
+	smp_mb();
+	/* This really should not happen */
+	WARN_ON(waitqueue_active(&rb->wait));
+
 	kvfree(rb->buffer);
 }
 
