@@ -15,6 +15,9 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 
+#define CIRC_ADD(rb, pos)			\
+	((pos) + (rb)->entry_sz) & ((rb)->buffer_sz - 1)
+
 bool cam_ringbuffer_has_entry(struct cam_ringbuffer *rb)
 {
 	bool entries;
@@ -45,7 +48,7 @@ int cam_ringbuffer_read(struct cam_ringbuffer *rb,
 	}
 
 	memcpy(completion, &rb->buffer[rb->tail], rb->entry_sz);
-	rb->tail = (rb->tail + rb->entry_sz) & (rb->buffer_sz - 1);
+	rb->tail = CIRC_ADD(rb, rb->tail);
 	spin_unlock(&rb->lock);
 
 	return 0;
@@ -64,11 +67,11 @@ int cam_ringbuffer_write(struct cam_ringbuffer *rb,
 		 * We just move ahead, user-space should consume completions
 		 * and see a gap in seqno
 		 */
-		rb->tail = (rb->tail + rb->entry_sz) & (rb->buffer_sz - 1);
+		rb->tail = CIRC_ADD(rb, rb->tail);
 	}
 
 	memcpy(&rb->buffer[rb->head], completion, rb->entry_sz);
-	rb->head = (rb->head + rb->entry_sz) & (rb->buffer_sz - 1);
+	rb->head = CIRC_ADD(rb, rb->head);
 	spin_unlock(&rb->lock);
 
 	if (waitqueue_active(&rb->wait))
