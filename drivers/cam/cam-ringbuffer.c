@@ -30,16 +30,20 @@ int cam_ringbuffer_read(struct cam_ringbuffer *rb,
 			struct cam_completion *completion,
 			u32 flags)
 {
-	if (flags & IOCB_NOWAIT) {
-		if (!cam_ringbuffer_has_entry(rb))
+	spin_lock(&rb->lock);
+	while (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) < rb->entry_sz) {
+		if (flags & IOCB_NOWAIT) {
+			spin_unlock(&rb->lock);
 			return -EAGAIN;
-	} else {
+		}
+
+		spin_unlock(&rb->lock);
 		if (wait_event_interruptible(rb->wait,
 					     cam_ringbuffer_has_entry(rb)))
 			return -EINTR;
+		spin_lock(&rb->lock);
 	}
 
-	spin_lock(&rb->lock);
 	memcpy(completion, &rb->buffer[rb->tail], rb->entry_sz);
 	rb->tail = (rb->tail + rb->entry_sz) & (rb->buffer_sz - 1);
 	spin_unlock(&rb->lock);
