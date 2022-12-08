@@ -74,8 +74,7 @@ int cam_ringbuffer_write(struct cam_ringbuffer *rb,
 	rb->head = CIRC_ADD(rb, rb->head);
 	spin_unlock(&rb->lock);
 
-	if (waitqueue_active(&rb->wait))
-		wake_up(&rb->wait);
+	wake_up(&rb->wait);
 
 	return 0;
 }
