@@ -2360,4 +2360,5 @@ static inline u64 vcpu_suspend_time_injected(struct kvm_vcpu *vcpu)
 }
 #endif /* CONFIG_KVM_VIRT_SUSPEND_TIMING */
 
+int kvm_arch_add_device_to_pkvm(struct kvm *kvm, struct iommu_group *grp);
 #endif
