@@ -304,7 +304,6 @@ static ssize_t ps8640_aux_transfer_msg(struct drm_dp_aux *aux,
 	}
 
 	switch (data & SWAUX_STATUS_MASK) {
-	/* Ignore the DEFER cases as they are already handled in hardware */
 	case SWAUX_STATUS_NACK:
 	case SWAUX_STATUS_I2C_NACK:
 		/*
@@ -319,6 +318,14 @@ static ssize_t ps8640_aux_transfer_msg(struct drm_dp_aux *aux,
 
 		fallthrough;
 	case SWAUX_STATUS_ACKM:
+		len = data & SWAUX_M_MASK;
+		break;
+	case SWAUX_STATUS_DEFER:
+	case SWAUX_STATUS_I2C_DEFER:
+		if (is_native_aux)
+			msg->reply |= DP_AUX_NATIVE_REPLY_DEFER;
+		else
+			msg->reply |= DP_AUX_I2C_REPLY_DEFER;
 		len = data & SWAUX_M_MASK;
 		break;
 	case SWAUX_STATUS_INVALID:
@@ -727,13 +734,13 @@ static int ps8640_probe(struct i2c_client *client)
 	pm_runtime_enable(dev);
 	/*
 	 * Powering on ps8640 takes ~300ms. To avoid wasting time on power
-	 * cycling ps8640 too often, set autosuspend_delay to 1000ms to ensure
+	 * cycling ps8640 too often, set autosuspend_delay to 2000ms to ensure
 	 * the bridge wouldn't suspend in between each _aux_transfer_msg() call
 	 * during EDID read (~20ms in my experiment) and in between the last
 	 * _aux_transfer_msg() call during EDID read and the _pre_enable() call
 	 * (~100ms in my experiment).
 	 */
-	pm_runtime_set_autosuspend_delay(dev, 1000);
+	pm_runtime_set_autosuspend_delay(dev, 2000);
 	pm_runtime_use_autosuspend(dev);
 	pm_suspend_ignore_children(dev, true);
 	ret = devm_add_action_or_reset(dev, ps8640_runtime_disable, dev);
