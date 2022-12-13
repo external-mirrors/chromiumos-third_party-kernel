@@ -2767,13 +2767,11 @@ static int create_gang(struct intel_engine_cs *engine,
 	rq->batch = i915_vma_get(vma);
 	i915_request_get(rq);
 
-	i915_vma_lock(vma);
-	err = i915_vma_move_to_active(vma, rq, 0);
+	err = igt_vma_move_to_active_unlocked(vma, rq, 0);
 	if (!err)
 		err = rq->engine->emit_bb_start(rq,
 						i915_vma_offset(vma),
 						PAGE_SIZE, 0);
-	i915_vma_unlock(vma);
 	i915_request_add(rq);
 	if (err)
 		goto err_rq;
@@ -3181,9 +3179,7 @@ create_gpr_client(struct intel_engine_cs *engine,
 		goto out_batch;
 	}
 
-	i915_vma_lock(vma);
-	err = i915_vma_move_to_active(vma, rq, 0);
-	i915_vma_unlock(vma);
+	err = igt_vma_move_to_active_unlocked(vma, rq, 0);
 
 	i915_vma_lock(batch);
 	if (!err)
@@ -3518,13 +3514,11 @@ static int smoke_submit(struct preempt_smoke *smoke,
 	}
 
 	if (vma) {
-		i915_vma_lock(vma);
-		err = i915_vma_move_to_active(vma, rq, 0);
+		err = igt_vma_move_to_active_unlocked(vma, rq, 0);
 		if (!err)
 			err = rq->engine->emit_bb_start(rq,
 							i915_vma_offset(vma),
 							PAGE_SIZE, 0);
-		i915_vma_unlock(vma);
 	}
 
 	i915_request_add(rq);
