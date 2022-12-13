@@ -13,6 +13,7 @@
 #include "pmk8350.dtsi"
 
 #include "sc7280-chrome-common.dtsi"
+#include "sc7280-herobrine-lte-sku.dtsi"
 
 / {
 	aliases {
@@ -546,6 +547,7 @@
 		pinctrl-0 = <&bt_en>, <&sw_ctrl>;
 		enable-gpios = <&tlmm 85 GPIO_ACTIVE_HIGH>;
 		swctrl-gpios = <&tlmm 86 GPIO_ACTIVE_HIGH>;
+		wlan-gpio = <&tlmm 84 GPIO_ACTIVE_HIGH>;
 		vddaon-supply = <&vreg_s7b_0p9>;
 		vddbtcxmx-supply = <&vreg_s7b_0p9>;
 		vddrfacmn-supply = <&vreg_s7b_0p9>;
@@ -569,10 +571,6 @@
 	bias-disable;
 };
 
-&lpass_dmic01_clk_sleep {
-	drive-strength = <2>;
-};
-
 &lpass_dmic01_data {
 	bias-pull-down;
 };
@@ -580,10 +578,6 @@
 &lpass_dmic23_clk {
 	drive-strength = <8>;
 	bias-disable;
-};
-
-&lpass_dmic23_clk_sleep {
-	drive-strength = <2>;
 };
 
 &lpass_dmic23_data {
@@ -596,28 +590,16 @@
 	bias-disable;
 };
 
-&lpass_rx_swr_clk_sleep {
-	bias-pull-down;
-};
-
 &lpass_rx_swr_data {
 	drive-strength = <2>;
 	slew-rate = <1>;
 	bias-bus-hold;
 };
 
-&lpass_rx_swr_data_sleep {
-	bias-pull-down;
-};
-
 &lpass_tx_swr_clk {
 	drive-strength = <2>;
 	slew-rate = <1>;
 	bias-disable;
-};
-
-&lpass_tx_swr_clk_sleep {
-	bias-pull-down;
 };
 
 &lpass_tx_swr_data {
@@ -747,24 +729,24 @@
 };
 
 &tlmm {
-	amp_en: amp-en {
+	amp_en: amp-en-state {
 		pins = "gpio63";
 		bias-pull-down;
 		drive-strength = <2>;
 	};
 
-	bt_en: bt-en-pins {
+	bt_en: bt-en-state {
 		pins = "gpio85";
 		function = "gpio";
 		output-low;
 		bias-disable;
 	};
 
-	nvme_pwren: nvme-pwren-pins {
+	nvme_pwren: nvme-pwren-state {
 		function = "gpio";
 	};
 
-	pcie1_reset_n: pcie1-reset-n-pins {
+	pcie1_reset_n: pcie1-reset-n-state {
 		pins = "gpio2";
 		function = "gpio";
 
@@ -773,7 +755,7 @@
 		bias-disable;
 	};
 
-	pcie1_wake_n: pcie1-wake-n-pins {
+	pcie1_wake_n: pcie1-wake-n-state {
 		pins = "gpio3";
 		function = "gpio";
 
@@ -781,7 +763,7 @@
 		bias-pull-up;
 	};
 
-	qup_uart7_sleep_cts: qup-uart7-sleep-cts-pins {
+	qup_uart7_sleep_cts: qup-uart7-sleep-cts-state {
 		pins = "gpio28";
 		function = "gpio";
 		/*
@@ -794,7 +776,7 @@
 		bias-bus-hold;
 	};
 
-	qup_uart7_sleep_rts: qup-uart7-sleep-rts-pins {
+	qup_uart7_sleep_rts: qup-uart7-sleep-rts-state {
 		pins = "gpio29";
 		function = "gpio";
 		/*
@@ -806,7 +788,7 @@
 		bias-pull-down;
 	};
 
-	qup_uart7_sleep_tx: qup-uart7-sleep-tx-pins {
+	qup_uart7_sleep_tx: qup-uart7-sleep-tx-state {
 		pins = "gpio30";
 		function = "gpio";
 		/*
@@ -816,7 +798,7 @@
 		bias-pull-up;
 	};
 
-	qup_uart7_sleep_rx: qup-uart7-sleep-rx-pins {
+	qup_uart7_sleep_rx: qup-uart7-sleep-rx-state {
 		pins = "gpio31";
 		function = "gpio";
 		/*
@@ -827,25 +809,25 @@
 		bias-pull-up;
 	};
 
-	sd_cd: sd-cd-pins {
+	sd_cd: sd-cd-state {
 		pins = "gpio91";
 		function = "gpio";
 		bias-pull-up;
 	};
 
-	sw_ctrl: sw-ctrl-pins {
+	sw_ctrl: sw-ctrl-state {
 		pins = "gpio86";
 		function = "gpio";
 		bias-pull-down;
 	};
 
-	wcd_reset_n: wcd-reset-n {
+	wcd_reset_n: wcd-reset-n-state {
 		pins = "gpio83";
 		function = "gpio";
 		drive-strength = <8>;
 	};
 
-	wcd_reset_n_sleep: wcd-reset-n-sleep {
+	wcd_reset_n_sleep: wcd-reset-n-sleep-state {
 		pins = "gpio83";
 		function = "gpio";
 		drive-strength = <8>;
