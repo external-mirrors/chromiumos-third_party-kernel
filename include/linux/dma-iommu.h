@@ -49,7 +49,7 @@ dma_addr_t __iommu_dma_alloc_iova(struct iommu_domain *domain,
 				  size_t size, u64 dma_limit,
 				  struct device *dev);
 void __iommu_dma_free_iova(struct iommu_dma_cookie *cookie,
-		dma_addr_t iova, size_t size, struct page *freelist);
+		dma_addr_t iova, size_t size, struct iommu_iotlb_gather *gather);
 
 #else /* CONFIG_IOMMU_DMA */
 
