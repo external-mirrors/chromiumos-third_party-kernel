@@ -2321,6 +2321,14 @@
 			#clock-cells = <1>;
 		};
 
+		camisp: camisp@16000000 {
+			compatible = "mediatek,camisp";
+			reg = <0 0x16000000 0 0x1000>;
+			reg-names = "base";
+			mediatek,scp = <&scp_dual>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_MAIN>;
+		};
+
 		larb13: larb@16001000 {
 			compatible = "mediatek,mt8188-smi-larb";
 			reg = <0 0x16001000 0 0x1000>;
@@ -2409,10 +2417,119 @@
 			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_SUBB>;
 		};
 
+		seninf_top: seninf-top@16010000 {
+			compatible = "mediatek,seninf-core";
+			reg = <0 0x16010000 0 0x8000>,
+			      <0 0x11ed0000 0 0xc000>;
+			reg-names = "base", "ana-rx";
+			mtk_csi_phy_ver = "mtk_csi_phy_2_0";
+			interrupts = <GIC_SPI 316 IRQ_TYPE_LEVEL_HIGH 0>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_CSIRX_TOP>,
+					<&spm MT8188_POWER_DOMAIN_CAM_VCORE>,
+					<&spm MT8188_POWER_DOMAIN_CAM_MAIN>;
+			clocks = <&camsys CLK_CAM_MAIN_SENINF>,
+				 <&topckgen CLK_TOP_SENINF>,
+				 <&topckgen CLK_TOP_SENINF1>,
+				 <&topckgen CLK_TOP_CAMTM>;
+			clock-names = "clk_cam_seninf",
+				      "clk_top_seninf",
+				      "clk_top_seninf1",
+				      "clk_top_camtm";
+		};
+
+		cam-raw-a@16030000 {
+			compatible = "mediatek,cam-raw";
+			reg = <0 0x16030000 0 0x8000>,
+			      <0 0x16038000 0 0x8000>;
+			reg-names = "base", "inner_base";
+			mediatek,cam-id = <0>;
+			mediatek,larbs = <&larb16a>;
+			interrupts = <GIC_SPI 300 IRQ_TYPE_LEVEL_HIGH 0>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_SUBA>;
+			clocks = <&camsys CLK_CAM_MAIN_CAM2MM0_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2MM1_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2SYS_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM>,
+				 <&camsys CLK_CAM_MAIN_CAMTG>,
+				 <&camsys_rawa CLK_CAM_RAWA_LARBX>,
+				 <&camsys_rawa CLK_CAM_RAWA_CAM>,
+				 <&camsys_rawa CLK_CAM_RAWA_CAMTG>,
+				 <&topckgen CLK_TOP_CAM>,
+				 <&topckgen CLK_TOP_CAMTG>,
+				 <&topckgen CLK_TOP_CAMTM>;
+			clock-names = "camsys_cam2mm0_cgpdn",
+				      "camsys_cam2mm1_cgpdn",
+				      "camsys_cam2sys_cgpdn",
+				      "camsys_cam_cgpdn",
+				      "camsys_camtg_cgpdn",
+				      "camsys_rawa_larbx_cgpdn",
+				      "camsys_rawa_cam_cgpdn",
+				      "camsys_rawa_camtg_cgpdn",
+				      "topckgen_top_cam",
+				      "topckgen_top_camtg",
+				      "topckgen_top_camtm";
+			assigned-clocks = <&topckgen CLK_TOP_CAM>;
+			assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL_D5>;
+			iommus = <&vpp_iommu M4U_PORT_L16A_IMGO_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_CQI_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_CQI_R2>,
+				 <&vpp_iommu M4U_PORT_L16A_BPCI_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_LSCI_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_RAWI_R2>,
+				 <&vpp_iommu M4U_PORT_L16A_RAWI_R3>,
+				 <&vpp_iommu M4U_PORT_L16A_UFDI_R2>,
+				 <&vpp_iommu M4U_PORT_L16A_UFDI_R3>,
+				 <&vpp_iommu M4U_PORT_L16A_RAWI_R4>,
+				 <&vpp_iommu M4U_PORT_L16A_RAWI_R5>,
+				 <&vpp_iommu M4U_PORT_L16A_AAI_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_UFDI_R5>,
+				 <&vpp_iommu M4U_PORT_L16A_FHO_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_AAO_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_TSFSO_R1>,
+				 <&vpp_iommu M4U_PORT_L16A_FLKO_R1>;
+		};
+
 		camsys_rawa: clock-controller@1604f000 {
 			compatible = "mediatek,mt8188-camsys-rawa";
 			reg = <0 0x1604f000 0 0x1000>;
 			#clock-cells = <1>;
+		};
+
+		cam-yuv-a@16050000 {
+			compatible = "mediatek,cam-yuv";
+			reg = <0 0x16050000 0 0x8000>;
+			reg-names = "base";
+			mediatek,cam-id = <0>;
+			mediatek,larbs = <&larb17a>;
+			interrupts = <GIC_SPI 301 IRQ_TYPE_LEVEL_HIGH 0>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_SUBA>;
+			clocks = <&camsys CLK_CAM_MAIN_CAM2MM0_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2MM1_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2SYS_GALS>,
+				 <&camsys_yuva CLK_CAM_YUVA_LARBX>,
+				 <&camsys_yuva CLK_CAM_YUVA_CAM>,
+				 <&camsys_yuva CLK_CAM_YUVA_CAMTG>;
+			clock-names = "camsys_cam2mm0_cgpdn",
+				      "camsys_cam2mm1_cgpdn",
+				      "camsys_cam2sys_cgpdn",
+				      "camsys_yuva_larbx_cgpdn",
+				      "camsys_yuva_cam_cgpdn",
+				      "camsys_yuva_camtg_cgpdn";
+			assigned-clocks = <&topckgen CLK_TOP_CAM>;
+			assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL_D5>;
+			iommus = <&vpp_iommu M4U_PORT_L17A_YUVO_R1>,
+				 <&vpp_iommu M4U_PORT_L17A_YUVO_R3>,
+				 <&vpp_iommu M4U_PORT_L17A_YUVCO_R1>,
+				 <&vpp_iommu M4U_PORT_L17A_YUVO_R2>,
+				 <&vpp_iommu M4U_PORT_L17A_RZH1N2TO_R1>,
+				 <&vpp_iommu M4U_PORT_L17A_DRZS4NO_R1>,
+				 <&vpp_iommu M4U_PORT_L17A_TNCSO_R1>;
 		};
 
 		camsys_yuva: clock-controller@1606f000 {
@@ -2421,10 +2538,99 @@
 			#clock-cells = <1>;
 		};
 
+		cam-raw-b@16070000 {
+			compatible = "mediatek,cam-raw";
+			reg = <0 0x16070000 0 0x8000>,
+			      <0 0x16078000 0 0x8000>;
+			reg-names = "base", "inner_base";
+			mediatek,cam-id = <1>;
+			mediatek,larbs = <&larb16b>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			interrupts = <GIC_SPI 302 IRQ_TYPE_LEVEL_HIGH 0>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_SUBB>;
+			clocks = <&camsys CLK_CAM_MAIN_CAM2MM0_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2MM1_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2SYS_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM>,
+				 <&camsys CLK_CAM_MAIN_CAMTG>,
+				 <&camsys_rawb CLK_CAM_RAWB_LARBX>,
+				 <&camsys_rawb CLK_CAM_RAWB_CAM>,
+				 <&camsys_rawb CLK_CAM_RAWB_CAMTG>,
+				 <&topckgen CLK_TOP_CAM>,
+				 <&topckgen CLK_TOP_CAMTG>,
+				 <&topckgen CLK_TOP_CAMTM>;
+			clock-names = "camsys_cam2mm0_cgpdn",
+				 "camsys_cam2mm1_cgpdn",
+				 "camsys_cam2sys_cgpdn",
+				 "camsys_cam_cgpdn",
+				 "camsys_camtg_cgpdn",
+				 "camsys_rawb_larbx_cgpdn",
+				 "camsys_rawb_cam_cgpdn",
+				 "camsys_rawb_camtg_cgpdn",
+				 "topckgen_top_cam",
+				 "topckgen_top_camtg",
+				 "topckgen_top_camtm";
+			assigned-clocks = <&topckgen CLK_TOP_CAM>;
+			assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL_D5>;
+			iommus = <&vdo_iommu M4U_PORT_L16B_IMGO_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_CQI_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_CQI_R2>,
+				 <&vdo_iommu M4U_PORT_L16B_BPCI_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_LSCI_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_RAWI_R2>,
+				 <&vdo_iommu M4U_PORT_L16B_RAWI_R3>,
+				 <&vdo_iommu M4U_PORT_L16B_UFDI_R2>,
+				 <&vdo_iommu M4U_PORT_L16B_UFDI_R3>,
+				 <&vdo_iommu M4U_PORT_L16B_RAWI_R4>,
+				 <&vdo_iommu M4U_PORT_L16B_RAWI_R5>,
+				 <&vdo_iommu M4U_PORT_L16B_AAI_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_UFDI_R5>,
+				 <&vdo_iommu M4U_PORT_L16B_FHO_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_AAO_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_TSFSO_R1>,
+				 <&vdo_iommu M4U_PORT_L16B_FLKO_R1>;
+		};
+
 		camsys_rawb: clock-controller@1608f000 {
 			compatible = "mediatek,mt8188-camsys-rawb";
 			reg = <0 0x1608f000 0 0x1000>;
 			#clock-cells = <1>;
+		};
+
+		cam-yuv-b@16090000 {
+			compatible = "mediatek,cam-yuv";
+			reg = <0 0x16090000 0 0x8000>;
+			reg-names = "base";
+			mediatek,cam-id = <1>;
+			mediatek,larbs = <&larb17b>;
+			interrupts = <GIC_SPI 303 IRQ_TYPE_LEVEL_HIGH 0>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_SUBB>;
+			clocks = <&camsys CLK_CAM_MAIN_CAM2MM0_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2MM1_GALS>,
+				 <&camsys CLK_CAM_MAIN_CAM2SYS_GALS>,
+				 <&camsys_yuvb CLK_CAM_YUVB_LARBX>,
+				 <&camsys_yuvb CLK_CAM_YUVB_CAM>,
+				 <&camsys_yuvb CLK_CAM_YUVB_CAMTG>;
+			clock-names = "camsys_cam2mm0_cgpdn",
+				      "camsys_cam2mm1_cgpdn",
+				      "camsys_cam2sys_cgpdn",
+				      "camsys_yuvb_larbx_cgpdn",
+				      "camsys_yuvb_cam_cgpdn",
+				      "camsys_yuvb_camtg_cgpdn";
+			assigned-clocks = <&topckgen CLK_TOP_CAM>;
+			assigned-clock-parents = <&topckgen CLK_TOP_UNIVPLL_D5>;
+			iommus = <&vdo_iommu M4U_PORT_L17B_YUVO_R1>,
+				 <&vdo_iommu M4U_PORT_L17B_YUVO_R3>,
+				 <&vdo_iommu M4U_PORT_L17B_YUVCO_R1>,
+				 <&vdo_iommu M4U_PORT_L17B_YUVO_R2>,
+				 <&vdo_iommu M4U_PORT_L17B_RZH1N2TO_R1>,
+				 <&vdo_iommu M4U_PORT_L17B_DRZS4NO_R1>,
+				 <&vdo_iommu M4U_PORT_L17B_TNCSO_R1>;
 		};
 
 		camsys_yuvb: clock-controller@160af000 {
