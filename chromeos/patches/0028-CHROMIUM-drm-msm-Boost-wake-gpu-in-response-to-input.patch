@@ -1,0 +1,289 @@
+From 648970cac27e9bd0df72e68351a8ac9c2f077150 Mon Sep 17 00:00:00 2001
+From: Rob Clark <robdclark@chromium.org>
+Date: Wed, 27 Jan 2021 12:42:00 -0800
+Subject: [PATCH] CHROMIUM: drm/msm: Boost/wake gpu in response to input events
+
+Pipeline the GPU "boot up" sequence with userspace handling of input
+events.
+
+The long-term solution should be a userspace component triggering
+CPU/GPU boost.  In particular, the kernel doesn't properly know which
+keys to boost on keypress vs keyrelease.  (See b/178726466, b/165621854)
+
+BUG=b:193221885
+TEST=test latency from window switcher keypress to first frame of
+     animation
+
+Change-Id: Ic8724139b480acaf5618c1caddb12f59b7db627c
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/2654074
+Reviewed-by: Douglas Anderson <dianders@chromium.org>
+Commit-Queue: Douglas Anderson <dianders@chromium.org>
+(cherry picked from commit 0e4c14d5dca879e2b7e335e5d7f3c43dcf585858)
+Signed-off-by: Matt Turner <msturner@google.com>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3564090
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: drm/msm: Boost/wake gpu in response to input events
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    2facca5ce5f40e6b2b37d8453dbd480a36c8431d
+    49078307ed2c4c65233f66ccf28dcba9395731fa
+
+ drivers/gpu/drm/msm/Kconfig         |   1 +
+ drivers/gpu/drm/msm/msm_gpu.c       | 149 ++++++++++++++++++++++++++++
+ drivers/gpu/drm/msm/msm_gpu.h       |   5 +
+ drivers/gpu/drm/msm/msm_gpu_trace.h |  17 ++++
+ 4 files changed, 172 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/Kconfig b/drivers/gpu/drm/msm/Kconfig
+index 3c9dfdb0b328..61ca0c0757bc 100644
+--- a/drivers/gpu/drm/msm/Kconfig
++++ b/drivers/gpu/drm/msm/Kconfig
+@@ -9,6 +9,7 @@ config DRM_MSM
+ 	depends on QCOM_OCMEM || QCOM_OCMEM=n
+ 	depends on QCOM_LLCC || QCOM_LLCC=n
+ 	depends on QCOM_COMMAND_DB || QCOM_COMMAND_DB=n
++	depends on INPUT
+ 	select IOMMU_IO_PGTABLE
+ 	select QCOM_MDT_LOADER if ARCH_QCOM
+ 	select REGULATOR
+diff --git a/drivers/gpu/drm/msm/msm_gpu.c b/drivers/gpu/drm/msm/msm_gpu.c
+index 74db9918892a..510f75ef0e49 100644
+--- a/drivers/gpu/drm/msm/msm_gpu.c
++++ b/drivers/gpu/drm/msm/msm_gpu.c
+@@ -19,6 +19,150 @@
+ #include <linux/reset.h>
+ #include <linux/sched/task.h>
+ 
++/*
++ * gpu-boost, get notified of input events to get a head start on booting
++ * up the GPU
++ */
++
++static bool gpuboost = true;
++MODULE_PARM_DESC(gpuboost, "Enable GPU boost");
++module_param(gpuboost, bool, 0600);
++
++static void boost_worker(struct kthread_work *work)
++{
++	struct msm_gpu *gpu = container_of(work, struct msm_gpu, boost_work);
++
++	pm_runtime_get_sync(&gpu->pdev->dev);
++	pm_runtime_mark_last_busy(&gpu->pdev->dev);
++	pm_runtime_put_autosuspend(&gpu->pdev->dev);
++}
++
++static void msm_gpuboost_input_event(struct input_handle *handle,
++					unsigned int type, unsigned int code,
++					int value)
++{
++	struct input_handler *handler = handle->handler;
++	struct msm_gpu *gpu = container_of(handler, struct msm_gpu, boost_handler);
++	int ret;
++
++	if (!gpuboost)
++		return;
++
++	/* This is something we can do from irq context, to avoid scheduling
++	 * a worker if the GPU is already ticking
++	 */
++	ret = pm_runtime_get_if_in_use(&gpu->pdev->dev);
++	if (ret == 0) {
++		trace_msm_gpu_boost(type, code, value);
++		kthread_queue_work(gpu->worker, &gpu->boost_work);
++		return;
++	}
++
++	pm_runtime_mark_last_busy(&gpu->pdev->dev);
++	pm_runtime_put_autosuspend(&gpu->pdev->dev);
++}
++
++static int msm_gpuboost_input_connect(struct input_handler *handler,
++					struct input_dev *dev,
++					const struct input_device_id *id)
++{
++	struct input_handle *handle;
++	int error;
++
++	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
++	if (!handle)
++		return -ENOMEM;
++
++	handle->dev = dev;
++	handle->handler = handler;
++	handle->name = "msm-gpu-boost";
++
++	error = input_register_handle(handle);
++	if (error)
++		goto err2;
++
++	error = input_open_device(handle);
++	if (error)
++		goto err1;
++
++	return 0;
++
++err1:
++	input_unregister_handle(handle);
++err2:
++	kfree(handle);
++	return error;
++}
++
++static void msm_gpuboost_input_disconnect(struct input_handle *handle)
++{
++	input_close_device(handle);
++	input_unregister_handle(handle);
++	kfree(handle);
++}
++
++static const struct input_device_id msm_gpuboost_ids[] = {
++	{
++		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
++			 INPUT_DEVICE_ID_MATCH_ABSBIT,
++		.evbit = { BIT_MASK(EV_ABS) },
++		.absbit = { [BIT_WORD(ABS_MT_POSITION_X)] =
++			    BIT_MASK(ABS_MT_POSITION_X) |
++			    BIT_MASK(ABS_MT_POSITION_Y) },
++	}, /* multi-touch touchscreen */
++	{
++		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
++		.evbit = { BIT_MASK(EV_ABS) },
++		.absbit = { [BIT_WORD(ABS_X)] = BIT_MASK(ABS_X) }
++
++	}, /* stylus or joystick device */
++	{
++		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
++		.evbit = { BIT_MASK(EV_KEY) },
++		.keybit = { [BIT_WORD(BTN_LEFT)] = BIT_MASK(BTN_LEFT) },
++	}, /* pointer (e.g. trackpad, mouse) */
++	{
++		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
++		.evbit = { BIT_MASK(EV_KEY) },
++		.keybit = { [BIT_WORD(KEY_ESC)] = BIT_MASK(KEY_ESC) },
++	}, /* keyboard */
++	{
++		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
++				INPUT_DEVICE_ID_MATCH_KEYBIT,
++		.evbit = { BIT_MASK(EV_KEY) },
++		.keybit = {[BIT_WORD(BTN_JOYSTICK)] = BIT_MASK(BTN_JOYSTICK) },
++	}, /* joysticks not caught by ABS_X above */
++	{
++		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
++				INPUT_DEVICE_ID_MATCH_KEYBIT,
++		.evbit = { BIT_MASK(EV_KEY) },
++		.keybit = { [BIT_WORD(BTN_GAMEPAD)] = BIT_MASK(BTN_GAMEPAD) },
++	}, /* gamepad */
++	{ },
++};
++
++static void msm_gpuboost_init(struct msm_gpu *gpu)
++{
++	struct input_handler *handler = &gpu->boost_handler;
++	int ret;
++
++	handler->event      = msm_gpuboost_input_event;
++	handler->connect    = msm_gpuboost_input_connect;
++	handler->disconnect = msm_gpuboost_input_disconnect;
++	handler->name       = "msm-gpu-boost";
++	handler->id_table   = msm_gpuboost_ids;
++
++	ret = input_register_handler(handler);
++	if (ret) {
++		DRM_DEV_ERROR(gpu->dev->dev, "failed to register input handler: %d\n", ret);
++	}
++}
++
++static void msm_gpuboost_cleanup(struct msm_gpu *gpu)
++{
++	input_unregister_handler(&gpu->boost_handler);
++}
++
+ /*
+  * Power Management:
+  */
+@@ -863,6 +1007,7 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
+ 	mutex_init(&gpu->active_lock);
+ 	mutex_init(&gpu->lock);
+ 	init_waitqueue_head(&gpu->retire_event);
++	kthread_init_work(&gpu->boost_work, boost_worker);
+ 	kthread_init_work(&gpu->retire_work, retire_worker);
+ 	kthread_init_work(&gpu->recover_work, recover_worker);
+ 	kthread_init_work(&gpu->fault_work, fault_worker);
+@@ -970,6 +1115,8 @@ int msm_gpu_init(struct drm_device *drm, struct platform_device *pdev,
+ 
+ 	refcount_set(&gpu->sysprof_active, 1);
+ 
++	msm_gpuboost_init(gpu);
++
+ 	return 0;
+ 
+ fail:
+@@ -990,6 +1137,8 @@ void msm_gpu_cleanup(struct msm_gpu *gpu)
+ 
+ 	DBG("%s", gpu->name);
+ 
++	msm_gpuboost_cleanup(gpu);
++
+ 	for (i = 0; i < ARRAY_SIZE(gpu->rb); i++) {
+ 		msm_ringbuffer_destroy(gpu->rb[i]);
+ 		gpu->rb[i] = NULL;
+diff --git a/drivers/gpu/drm/msm/msm_gpu.h b/drivers/gpu/drm/msm/msm_gpu.h
+index 26e3d2dd0726..590677574639 100644
+--- a/drivers/gpu/drm/msm/msm_gpu.h
++++ b/drivers/gpu/drm/msm/msm_gpu.h
+@@ -10,6 +10,7 @@
+ #include <linux/adreno-smmu-priv.h>
+ #include <linux/clk.h>
+ #include <linux/devfreq.h>
++#include <linux/input.h>
+ #include <linux/interconnect.h>
+ #include <linux/pm_opp.h>
+ #include <linux/regulator/consumer.h>
+@@ -247,6 +248,10 @@ struct msm_gpu {
+ #define DRM_MSM_HANGCHECK_DEFAULT_PERIOD 500 /* in ms */
+ 	struct timer_list hangcheck_timer;
+ 
++	/* work for waking GPU on input: */
++	struct kthread_work boost_work;
++	struct input_handler boost_handler;
++
+ 	/* Fault info for most recent iova fault: */
+ 	struct msm_gpu_fault_info fault_info;
+ 
+diff --git a/drivers/gpu/drm/msm/msm_gpu_trace.h b/drivers/gpu/drm/msm/msm_gpu_trace.h
+index ac40d857bc45..c6032215ae50 100644
+--- a/drivers/gpu/drm/msm/msm_gpu_trace.h
++++ b/drivers/gpu/drm/msm/msm_gpu_trace.h
+@@ -177,6 +177,23 @@ TRACE_EVENT(msm_gpu_resume,
+ 		TP_printk("%u", __entry->dummy)
+ );
+ 
++
++TRACE_EVENT(msm_gpu_boost,
++		TP_PROTO(unsigned int type, unsigned int code, int value),
++		TP_ARGS(type, code, value),
++		TP_STRUCT__entry(
++			__field(u32, type)
++			__field(u32, code)
++			__field(int, value)
++			),
++		TP_fast_assign(
++			__entry->type = type;
++			__entry->code = code;
++			__entry->value = value;
++			),
++		TP_printk("type=%u, code=%u, value=%d", __entry->type, __entry->code, __entry->value)
++);
++
+ #endif
+ 
+ #undef TRACE_INCLUDE_PATH
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

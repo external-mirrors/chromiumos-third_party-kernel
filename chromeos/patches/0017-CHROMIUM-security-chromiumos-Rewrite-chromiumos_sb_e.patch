@@ -1,0 +1,118 @@
+From c0af0b7b17ad59cec1e21a54ca5510de239dfe7c Mon Sep 17 00:00:00 2001
+From: Guenter Roeck <groeck@chromium.org>
+Date: Fri, 6 Nov 2020 11:44:17 -0800
+Subject: [PATCH] CHROMIUM: security: chromiumos: Rewrite
+ chromiumos_sb_eat_lsm_opts
+
+Re-implement chromiumos_sb_eat_lsm_opts to avoid separate copies.
+Use memmove in place to copy non-LSM options while skipping nosymfollow.
+Don't return an error if multiple nosymfollow options are encountered;
+just drop all of them.
+
+Follow guidance from similar rewrites in selinux and smack.
+
+BUG=b:171715474
+TEST=Boot
+
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase515(groeck):
+    squashed:
+	FIXUP: CHROMIUM: security: chromiumos: Rewrite chromiumos_sb_eat_lsm_opts
+]
+
+Change-Id: Iac4211bf7edbdf53ba4111b4bd2b3abfe6c35bf5
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi): Fixed context conflicts.]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    bc95334b3ffd619cb2e8117fc489c398c9a6d69f
+
+ security/chromiumos/lsm.c | 50 ++++++++++++++++++---------------------
+ 1 file changed, 23 insertions(+), 27 deletions(-)
+
+diff --git a/security/chromiumos/lsm.c b/security/chromiumos/lsm.c
+index 6dd8182c2f64..87b11e450e65 100644
+--- a/security/chromiumos/lsm.c
++++ b/security/chromiumos/lsm.c
+@@ -205,51 +205,47 @@ static int chromiumos_security_file_open(struct file *file)
+ 	return policy == CHROMIUMOS_INODE_POLICY_BLOCK ? -EACCES : 0;
+ }
+ 
+-static int chromiumos_sb_eat_lsm_opts(char *orig, void **mnt_opts)
++static int chromiumos_sb_eat_lsm_opts(char *options, void **mnt_opts)
+ {
+-	char *orig_copy;
+-	char *orig_copy_cur;
+-	char *option;
+-	size_t offset = 0;
++	char *from = options, *to = options;
+ 	bool found = false;
++	bool first = true;
+ 
+-	if (!orig || *orig == 0)
+-		return 0;
+-
+-	orig_copy = (char *)get_zeroed_page(GFP_KERNEL);
+-	if (!orig_copy)
+-		return -ENOMEM;
+-	strncpy(orig_copy, orig, PAGE_SIZE);
++	while (1) {
++		char *next = strchr(from, ',');
++		int len;
+ 
+-	memset(orig, 0, strlen(orig));
++		if (next)
++			len = next - from;
++		else
++			len = strlen(from);
+ 
+-	orig_copy_cur = orig_copy;
+-	while (orig_copy_cur) {
+-		option = strsep(&orig_copy_cur, ",");
+ 		/*
+ 		 * Remove the option so that filesystems won't see it.
+ 		 * do_mount() has already forced the MS_NOSYMFOLLOW flag on
+ 		 * if it found this option, so no other action is needed.
+ 		 */
+-		if (strcmp(option, "nosymfollow") == 0) {
+-			if (found) /* Found multiple times. */
+-				return -EINVAL;
++		if (len == strlen("nosymfollow") && !strncmp(from, "nosymfollow", len)) {
+ 			found = true;
+ 		} else {
+-			if (offset > 0) {
+-				orig[offset] = ',';
+-				offset++;
++			if (!first) {   /* copy with preceding comma */
++				from--;
++				len++;
+ 			}
+-			strcpy(orig + offset, option);
+-			offset += strlen(option);
++			if (to != from)
++				memmove(to, from, len);
++			to += len;
++			first = false;
+ 		}
++		if (!next)
++			break;
++		from += len + 1;
+ 	}
++	*to = '\0';
+ 
+-	if (found) {
++	if (found)
+ 		pr_notice("nosymfollow option should be changed to MS_NOSYMFOLLOW flag.");
+-	}
+ 
+-	free_page((unsigned long)orig_copy);
+ 	return 0;
+ }
+ 
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

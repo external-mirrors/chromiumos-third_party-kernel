@@ -1,0 +1,48 @@
+From a799f64d44ad2b406d73c3c22f94e2a77781f630 Mon Sep 17 00:00:00 2001
+From: Aashish Sharma <shraash@google.com>
+Date: Tue, 8 Nov 2022 18:44:30 +0530
+Subject: [PATCH] FIXUP: CHROMIUM: ChromeOS LSM: add check for BPF_SYSCALL
+
+0-day warning:
+
+>> security/chromiumos/lsm.c:44:19: warning: unused variable 'secagentd'
+[-Wunused-const-variable]
+   static const char secagentd[] = "/usr/sbin/secagentd";
+
+Move variable 'secagentd' to #ifdef CONFIG_BPF_SYSCALL block.
+
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    7c5044c538fb5d0d5a29e5d6ada828ce017b76e4
+
+ security/chromiumos/lsm.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/security/chromiumos/lsm.c b/security/chromiumos/lsm.c
+index 8eb27dc133b6..7e3f4c53d6c0 100644
+--- a/security/chromiumos/lsm.c
++++ b/security/chromiumos/lsm.c
+@@ -41,8 +41,6 @@
+ #include "inode_mark.h"
+ #include "utils.h"
+ 
+-static const char secagentd[] = "/usr/sbin/secagentd";
+-
+ #if defined(CONFIG_SECURITY_CHROMIUMOS_NO_UNPRIVILEGED_UNSAFE_MOUNTS) || \
+ 	defined(CONFIG_SECURITY_CHROMIUMOS_NO_SYMLINK_MOUNT)
+ static void report(const char *origin, const struct path *path, char *operation)
+@@ -276,6 +274,9 @@ static int chromiumos_locked_down(enum lockdown_reason what)
+ }
+ 
+ #ifdef CONFIG_BPF_SYSCALL
++
++static const char secagentd[] = "/usr/sbin/secagentd";
++
+ static int chromiumos_bpf(int cmd, union bpf_attr *attr, unsigned int size)
+ {
+ 	char buf[128];
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
