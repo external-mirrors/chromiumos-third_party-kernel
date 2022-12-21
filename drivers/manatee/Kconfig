@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "ManaTEE driver support"
+	depends on MANATEE
+
+config MANATEE_HYP
+	bool "ManaTEE hypervisor mode"
+	depends on KVM
+	help
+	  Select to indicate the kernel is running as ManaTEE hypervisor.
+
+endmenu

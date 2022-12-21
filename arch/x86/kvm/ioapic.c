@@ -206,15 +206,14 @@ static int ioapic_set_irq(struct kvm_ioapic *ioapic, unsigned int irq,
 		int irq_level, bool line_status)
 {
 	union kvm_ioapic_redirect_entry entry;
-	u32 mask = 1 << irq;
-	u32 old_irr;
+	unsigned char old_irr;
 	int edge, ret;
 
 	entry = ioapic->redirtbl[irq];
 	edge = (entry.fields.trig_mode == IOAPIC_EDGE_TRIG);
 
 	if (!irq_level) {
-		ioapic->irr &= ~mask;
+		ioapic->irr[irq] = false;
 		ret = 1;
 		goto out;
 	}
@@ -245,11 +244,11 @@ static int ioapic_set_irq(struct kvm_ioapic *ioapic, unsigned int irq,
 		goto out;
 	}
 
-	old_irr = ioapic->irr;
-	ioapic->irr |= mask;
+	old_irr = ioapic->irr[irq];
+	ioapic->irr[irq] = true;
 	if (edge) {
-		ioapic->irr_delivered &= ~mask;
-		if (old_irr == ioapic->irr) {
+		ioapic->irr_delivered[irq] = false;
+		if (old_irr == ioapic->irr[irq]) {
 			ret = 0;
 			goto out;
 		}
@@ -368,8 +367,40 @@ static void ioapic_write_indirect(struct kvm_ioapic *ioapic, u32 val)
 		if (mask_before != mask_after)
 			kvm_fire_mask_notifiers(ioapic->kvm, KVM_IRQCHIP_IOAPIC, index, mask_after);
 		if (e->fields.trig_mode == IOAPIC_LEVEL_TRIG
-		    && ioapic->irr & (1 << index))
-			ioapic_service(ioapic, index, false);
+		    && ioapic->irr[index]
+		    && !e->fields.mask
+		    && !e->fields.remote_irr) {
+			/*
+			 * Pending status in irr may be outdated: the IRQ line may have
+			 * already been deasserted by a device while the IRQ was masked.
+			 * This occurs, for instance, if the interrupt is handled in a
+			 * Linux guest as a oneshot interrupt (IRQF_ONESHOT). In this
+			 * case the guest acknowledges the interrupt to the device in
+			 * its threaded irq handler, i.e. after the EOI but before
+			 * unmasking, so at the time of unmasking the IRQ line is
+			 * already down but our pending irr bit is still set. In such
+			 * cases, injecting this pending interrupt to the guest is
+			 * buggy: the guest will receive an extra unwanted interrupt.
+			 *
+			 * So we need to check here if the IRQ is actually still pending.
+			 * As we are generally not able to probe the IRQ line status
+			 * directly, we do it through irqfd resampler. Namely, we clear
+			 * the pending status and notify the resampler that this interrupt
+			 * is done, without actually injecting it into the guest. If the
+			 * IRQ line is actually already deasserted, we are done. If it is
+			 * still asserted, a new interrupt will be shortly triggered
+			 * through irqfd and injected into the guest.
+			 *
+			 * If, however, it's not possible to resample (no irqfd resampler
+			 * registered for this irq), then unconditionally inject this
+			 * pending interrupt into the guest, so the guest will not miss
+			 * an interrupt, although may get an extra unwanted interrupt.
+			 */
+			if (kvm_notify_irqfd_resampler(ioapic->kvm, KVM_IRQCHIP_IOAPIC, index))
+				ioapic->irr[index] = false;
+			else
+				ioapic_service(ioapic, index, false);
+		}
 		if (e->fields.delivery_mode == APIC_DM_FIXED) {
 			struct kvm_lapic_irq irq;
 
@@ -429,7 +460,7 @@ static int ioapic_service(struct kvm_ioapic *ioapic, int irq, bool line_status)
 	irqe.msi_redir_hint = false;
 
 	if (irqe.trig_mode == IOAPIC_EDGE_TRIG)
-		ioapic->irr_delivered |= 1 << irq;
+		ioapic->irr_delivered[irq] = true;
 
 	if (irq == RTC_GSI && line_status) {
 		/*
@@ -490,7 +521,7 @@ static void kvm_ioapic_eoi_inject_work(struct work_struct *work)
 		if (ent->fields.trig_mode != IOAPIC_LEVEL_TRIG)
 			continue;
 
-		if (ioapic->irr & (1 << i) && !ent->fields.remote_irr)
+		if (ioapic->irr[i] && !ent->fields.remote_irr)
 			ioapic_service(ioapic, i, false);
 	}
 	spin_unlock(&ioapic->lock);
@@ -523,7 +554,7 @@ static void kvm_ioapic_update_eoi_one(struct kvm_vcpu *vcpu,
 
 	ASSERT(ent->fields.trig_mode == IOAPIC_LEVEL_TRIG);
 	ent->fields.remote_irr = 0;
-	if (!ent->fields.mask && (ioapic->irr & (1 << pin))) {
+	if (!ent->fields.mask && ioapic->irr[pin]) {
 		++ioapic->irq_eoi[pin];
 		if (ioapic->irq_eoi[pin] == IOAPIC_SUCCESSIVE_IRQ_MAX_COUNT) {
 			/*
@@ -664,12 +695,13 @@ static void kvm_ioapic_reset(struct kvm_ioapic *ioapic)
 	int i;
 
 	cancel_delayed_work_sync(&ioapic->eoi_inject);
-	for (i = 0; i < IOAPIC_NUM_PINS; i++)
+	for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+		ioapic->irr[i] = 0;
+		ioapic->irr_delivered[i] = 0;
 		ioapic->redirtbl[i].fields.mask = 1;
+	}
 	ioapic->base_address = IOAPIC_DEFAULT_BASE_ADDRESS;
 	ioapic->ioregsel = 0;
-	ioapic->irr = 0;
-	ioapic->irr_delivered = 0;
 	ioapic->id = 0;
 	memset(ioapic->irq_eoi, 0x00, sizeof(ioapic->irq_eoi));
 	rtc_irq_eoi_tracking_reset(ioapic);
@@ -726,19 +758,23 @@ void kvm_get_ioapic(struct kvm *kvm, struct kvm_ioapic_state *state)
 	struct kvm_ioapic *ioapic = kvm->arch.vioapic;
 
 	spin_lock(&ioapic->lock);
-	memcpy(state, ioapic, sizeof(struct kvm_ioapic_state));
-	state->irr &= ~ioapic->irr_delivered;
+//	memcpy(state, ioapic, sizeof(struct kvm_ioapic_state));
+//	state->irr &= ~ioapic->irr_delivered;
 	spin_unlock(&ioapic->lock);
+
+	printk(KERN_ERR "Get IOAPIC state not supported!\n");
 }
 
 void kvm_set_ioapic(struct kvm *kvm, struct kvm_ioapic_state *state)
 {
 	struct kvm_ioapic *ioapic = kvm->arch.vioapic;
 
+	printk(KERN_ERR "Set IOAPIC state not supported!\n");
+
 	spin_lock(&ioapic->lock);
-	memcpy(ioapic, state, sizeof(struct kvm_ioapic_state));
-	ioapic->irr = 0;
-	ioapic->irr_delivered = 0;
+//	memcpy(ioapic, state, sizeof(struct kvm_ioapic_state));
+//	ioapic->irr = 0;
+//	ioapic->irr_delivered = 0;
 	kvm_make_scan_ioapic_request(kvm);
 	kvm_ioapic_inject_all(ioapic, state->irr);
 	spin_unlock(&ioapic->lock);

@@ -744,6 +744,7 @@ struct kvm {
 	struct {
 		spinlock_t        lock;
 		struct list_head  items;
+		/* resampler_list update side is protected by resampler_lock. */
 		struct list_head  resampler_list;
 		struct mutex      resampler_lock;
 	} irqfds;
@@ -2016,6 +2017,7 @@ int kvm_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args);
 #ifdef CONFIG_HAVE_KVM_IRQFD
 int kvm_irqfd(struct kvm *kvm, struct kvm_irqfd *args);
 void kvm_irqfd_release(struct kvm *kvm);
+bool kvm_notify_irqfd_resampler(struct kvm *kvm, unsigned irqchip, unsigned pin);
 void kvm_irq_routing_update(struct kvm *);
 #else
 static inline int kvm_irqfd(struct kvm *kvm, struct kvm_irqfd *args)
@@ -2024,6 +2026,13 @@ static inline int kvm_irqfd(struct kvm *kvm, struct kvm_irqfd *args)
 }
 
 static inline void kvm_irqfd_release(struct kvm *kvm) {}
+
+static inline bool kvm_notify_irqfd_resampler(struct kvm *kvm,
+					      unsigned irqchip,
+					      unsigned pin)
+{
+	return false;
+}
 #endif
 
 #else

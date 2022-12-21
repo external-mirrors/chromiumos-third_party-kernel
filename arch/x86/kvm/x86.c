@@ -59,6 +59,8 @@
 #include <linux/mem_encrypt.h>
 #include <linux/entry-kvm.h>
 #include <linux/suspend.h>
+#include <linux/manatee.h>
+#include <linux/plat_irqfd.h>
 
 #include <trace/events/kvm.h>
 
@@ -4419,6 +4421,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	}
 	case KVM_CAP_DISABLE_QUIRKS2:
 		r = KVM_X86_VALID_QUIRKS;
+		break;
+	case KVM_CAP_IOAPIC_NUM_PINS:
+		r = KVM_IOAPIC_NUM_PINS;
 		break;
 	default:
 		break;
@@ -9338,6 +9343,17 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
 		kvm_sched_yield(vcpu, a0);
 		ret = 0;
 		break;
+	case KVM_HC_SYSTEM_S2IDLE:
+		kvm_make_request(KVM_REQ_HV_S2IDLE, vcpu);
+		ret = 0;
+		break;
+	case KVM_HC_SYSTEM_WAKE_IRQ:
+		if (manatee_hyp_domain()) {
+#ifdef CONFIG_PLAT_IRQ_FORWARD
+			ret = plat_irq_forward_set_irq_wake(a0, a1);
+#endif
+		}
+		break;
 	case KVM_HC_MAP_GPA_RANGE: {
 		u64 gpa = a0, npages = a1, attrs = a2;
 
@@ -10253,6 +10269,13 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 
 			vcpu->run->exit_reason = KVM_EXIT_HYPERV;
 			vcpu->run->hyperv = hv_vcpu->exit;
+			r = 0;
+			goto out;
+		}
+		if (kvm_check_request(KVM_REQ_HV_S2IDLE, vcpu)) {
+			vcpu->run->exit_reason = KVM_EXIT_SYSTEM_EVENT;
+			vcpu->run->system_event.type =
+				KVM_SYSTEM_EVENT_S2IDLE;
 			r = 0;
 			goto out;
 		}

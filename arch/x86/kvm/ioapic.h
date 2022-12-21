@@ -75,8 +75,7 @@ struct kvm_ioapic {
 	u64 base_address;
 	u32 ioregsel;
 	u32 id;
-	u32 irr;
-	u32 pad;
+	unsigned char irr[IOAPIC_NUM_PINS];
 	union kvm_ioapic_redirect_entry redirtbl[IOAPIC_NUM_PINS];
 	unsigned long irq_states[IOAPIC_NUM_PINS];
 	struct kvm_io_device dev;
@@ -85,7 +84,7 @@ struct kvm_ioapic {
 	struct rtc_status rtc_status;
 	struct delayed_work eoi_inject;
 	u32 irq_eoi[IOAPIC_NUM_PINS];
-	u32 irr_delivered;
+	unsigned char irr_delivered[IOAPIC_NUM_PINS];
 };
 
 #ifdef DEBUG

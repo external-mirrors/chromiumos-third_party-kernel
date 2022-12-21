@@ -1051,6 +1051,8 @@ void (*acpi_gbl_event_handler) (u32 event_type,
 #define ACPI_EVENT_TYPE_GPE         0
 #define ACPI_EVENT_TYPE_FIXED       1
 
+#define ACPI_EVENT_DISPATCH_RAW_HANDLER   0x01
+
 typedef
 u32(*acpi_event_handler) (void *context);
 

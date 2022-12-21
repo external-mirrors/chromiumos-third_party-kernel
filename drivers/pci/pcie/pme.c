@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/device.h>
 #include <linux/pm_runtime.h>
+#include <linux/timer.h>
 
 #include "../pci.h"
 #include "portdrv.h"
@@ -43,7 +44,20 @@ struct pcie_pme_service_data {
 	struct pcie_device *srv;
 	struct work_struct work;
 	bool noirq; /* If set, keep the PME interrupt disabled. */
+	struct timer_list wa_pme_timer;
+	bool start_timer;
 };
+
+// Hopefully virutal pcie hotplug interrupt could come in 15s
+#define WA_PME_TIMEOUT 15000
+static void wa_pme_timer_handler(struct timer_list *t)
+{
+	struct pcie_pme_service_data *data = from_timer(data, t, wa_pme_timer);
+
+	spin_lock_irq(&data->lock);
+	pm_runtime_put(&data->srv->port->dev);
+	spin_unlock_irq(&data->lock);
+}
 
 /**
  * pcie_pme_interrupt_enable - Enable/disable PCIe PME interrupt generation.
@@ -125,8 +139,9 @@ static bool pcie_pme_from_pci_bridge(struct pci_bus *bus, u8 devfn)
  * pcie_pme_handle_request - Find device that generated PME and handle it.
  * @port: Root port or event collector that generated the PME interrupt.
  * @req_id: PCIe Requester ID of the device that generated the PME.
+ * @start_timer: Whether a timer is needed to start or not after this function.
  */
-static void pcie_pme_handle_request(struct pci_dev *port, u16 req_id)
+static void pcie_pme_handle_request(struct pci_dev *port, u16 req_id, bool *start_timer)
 {
 	u8 busnr = req_id >> 8, devfn = req_id & 0xff;
 	struct pci_bus *bus;
@@ -139,7 +154,8 @@ static void pcie_pme_handle_request(struct pci_dev *port, u16 req_id)
 			port->pme_poll = false;
 
 		if (pci_check_pme_status(port)) {
-			pm_request_resume(&port->dev);
+			pm_runtime_get(&port->dev);
+			*start_timer = true;
 			found = true;
 		} else {
 			/*
@@ -235,7 +251,12 @@ static void pcie_pme_work_fn(struct work_struct *work)
 			pcie_clear_root_pme_status(port);
 
 			spin_unlock_irq(&data->lock);
-			pcie_pme_handle_request(port, rtsta & 0xffff);
+			pcie_pme_handle_request(port, rtsta & 0xffff, &data->start_timer);
+			if (data->start_timer) {
+				mod_timer(&data->wa_pme_timer,
+					  jiffies + msecs_to_jiffies(WA_PME_TIMEOUT));
+				data->start_timer = false;
+			}
 			spin_lock_irq(&data->lock);
 
 			continue;
@@ -355,6 +376,9 @@ static int pcie_pme_probe(struct pcie_device *srv)
 
 	pcie_pme_mark_devices(port);
 	pcie_pme_interrupt_enable(port, true);
+
+	data->start_timer = false;
+	timer_setup(&data->wa_pme_timer, wa_pme_timer_handler, 0);
 	return 0;
 }
 
@@ -445,6 +469,7 @@ static void pcie_pme_remove(struct pcie_device *srv)
 {
 	struct pcie_pme_service_data *data = get_service_data(srv);
 
+	del_timer(&data->wa_pme_timer);
 	pcie_pme_disable_interrupt(srv->port, data);
 	free_irq(srv->irq, srv);
 	cancel_work_sync(&data->work);

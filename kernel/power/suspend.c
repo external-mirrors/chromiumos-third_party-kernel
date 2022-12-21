@@ -31,6 +31,7 @@
 #include <linux/compiler.h>
 #include <linux/moduleparam.h>
 #include <linux/wakeup_reason.h>
+#include <uapi/linux/kvm_para.h>
 
 #include "power.h"
 
@@ -86,7 +87,7 @@ static void s2idle_begin(void)
 	s2idle_state = S2IDLE_STATE_NONE;
 }
 
-static void s2idle_enter(void)
+static bool s2idle_enter(bool notified_hv)
 {
 	trace_suspend_resume(TPS("machine_suspend"), PM_SUSPEND_TO_IDLE, true);
 
@@ -101,6 +102,14 @@ static void s2idle_enter(void)
 
 	/* Push all the CPUs into the idle loop. */
 	wake_up_all_idle_cpus();
+
+#if defined(CONFIG_X86)
+	if (static_cpu_has(X86_FEATURE_HYPERVISOR) && !notified_hv) {
+		notified_hv = true;
+		kvm_hypercall1(KVM_HC_SYSTEM_S2IDLE, 0);
+	}
+#endif
+
 	/* Make the current CPU wait so it can enter the idle loop too. */
 	swait_event_exclusive(s2idle_wait_head,
 		    s2idle_state == S2IDLE_STATE_WAKE);
@@ -114,10 +123,13 @@ static void s2idle_enter(void)
 	raw_spin_unlock_irq(&s2idle_lock);
 
 	trace_suspend_resume(TPS("machine_suspend"), PM_SUSPEND_TO_IDLE, false);
+	return notified_hv;
 }
 
 static void s2idle_loop(void)
 {
+	bool notified_hv = false;
+
 	pm_pr_dbg("suspend-to-idle\n");
 
 	/*
@@ -138,8 +150,7 @@ static void s2idle_loop(void)
 		}
 		clear_wakeup_reasons();
 
-		clear_wakeup_reasons();
-		s2idle_enter();
+		notified_hv = s2idle_enter(notified_hv);
 	}
 
 	pm_pr_dbg("resume from suspend-to-idle\n");

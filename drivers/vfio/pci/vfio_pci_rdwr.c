@@ -209,9 +209,15 @@ static int vfio_pci_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
 	if (vdev->barmap[bar])
 		return 0;
 
-	ret = pci_request_selected_regions(pdev, 1 << bar, "vfio");
-	if (ret)
-		return ret;
+	if (vdev->requested_skipped_barmap[bar]) {
+		// No need to request the bar again. Reset this flag
+		// since the barmap is being initialized now.
+		vdev->requested_skipped_barmap[bar] = false;
+	} else {
+		ret = pci_request_selected_regions(pdev, 1 << bar, "vfio");
+		if (ret)
+			return ret;
+	}
 
 	io = pci_iomap(pdev, bar, 0);
 	if (!io) {

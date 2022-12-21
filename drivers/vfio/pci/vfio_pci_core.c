@@ -15,6 +15,7 @@
 #include <linux/file.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
+#include <linux/manatee.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
@@ -32,13 +33,30 @@
 #define DRIVER_AUTHOR   "Alex Williamson <alex.williamson@redhat.com>"
 #define DRIVER_DESC "core driver for VFIO based PCI devices"
 
-static bool nointxmask;
-static bool disable_vga;
-static bool disable_idle_d3;
-
 /* List of PF's that vfio_pci_core_sriov_configure() has been called on */
 static DEFINE_MUTEX(vfio_pci_sriov_pfs_mutex);
 static LIST_HEAD(vfio_pci_sriov_pfs);
+
+static bool nointxmask;
+module_param_named(nointxmask, nointxmask, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(nointxmask,
+		  "Disable support for PCI 2.3 style INTx masking.  If this resolves problems for specific devices, report lspci -vvvxxx to linux-pci@vger.kernel.org so the device can be fixed automatically via the broken_intx_masking flag.");
+
+#ifdef CONFIG_VFIO_PCI_VGA
+static bool disable_vga;
+module_param(disable_vga, bool, S_IRUGO);
+MODULE_PARM_DESC(disable_vga, "Disable VGA resource access through vfio-pci");
+#endif
+
+static bool disable_idle_d3;
+module_param(disable_idle_d3, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(disable_idle_d3,
+		 "Disable using the PCI D3 low power state for idle, unused devices");
+
+static bool disable_function_reset;
+module_param(disable_function_reset, bool, 0644);
+MODULE_PARM_DESC(disable_function_reset,
+		 "Disable function reset request during device enablement.");
 
 static inline bool vfio_vga_disabled(void)
 {
@@ -290,12 +308,22 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (ret)
 		goto out_power;
 
-	/* If reset fails because of the device lock, fail this path entirely */
-	ret = pci_try_reset_function(pdev);
-	if (ret == -EAGAIN)
-		goto out_disable_device;
+	if (disable_function_reset) {
+		/* Do not issue function reset to the device.
+		 * Use with care.
+		 */
+		vdev->reset_works = 0;
+	} else {
+		/* If reset fails because of the device lock,
+		 * fail this path entirely
+		 */
+		ret = pci_try_reset_function(pdev);
+		if (ret == -EAGAIN)
+			goto out_disable_device;
 
-	vdev->reset_works = !ret;
+		vdev->reset_works = !ret;
+	}
+
 	pci_save_state(pdev);
 	vdev->pci_saved_state = pci_store_saved_state(pdev);
 	if (!vdev->pci_saved_state)
@@ -402,11 +430,13 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 
 	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
 		bar = i + PCI_STD_RESOURCES;
-		if (!vdev->barmap[bar])
+		if (!vdev->barmap[bar] && !vdev->requested_skipped_barmap[bar])
 			continue;
-		pci_iounmap(pdev, vdev->barmap[bar]);
+		if (vdev->barmap[bar])
+			pci_iounmap(pdev, vdev->barmap[bar]);
 		pci_release_selected_regions(pdev, 1 << bar);
 		vdev->barmap[bar] = NULL;
+		vdev->requested_skipped_barmap[bar] = false;
 	}
 
 	list_for_each_entry_safe(dummy_res, tmp,
@@ -1509,21 +1539,32 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	 * Even though we don't make use of the barmap for the mmap,
 	 * we need to request the region and the barmap tracks that.
 	 */
-	if (!vdev->barmap[index]) {
+	if (!manatee_chromeos_domain() && !vdev->barmap[index]) {
 		ret = pci_request_selected_regions(pdev,
 						   1 << index, "vfio-pci");
 		if (ret)
 			return ret;
 
-		vdev->barmap[index] = pci_iomap(pdev, index, 0);
-		if (!vdev->barmap[index]) {
-			pci_release_selected_regions(pdev, 1 << index);
-			return -ENOMEM;
+		// MANATEE: ManaTEE guest only uses this for virtio-vhost-user
+		// mappings, which aren't MMIO/PIO. Skip setting up the barmap
+		// so that sibling memory can be mapped write-back instead of
+		// uncached-minus.
+		if (!manatee_chromeos_domain()) {
+			vdev->barmap[index] = pci_iomap(pdev, index, 0);
+			if (!vdev->barmap[index]) {
+				pci_release_selected_regions(pdev, 1 << index);
+				return -ENOMEM;
+			}
+		} else {
+			vdev->requested_skipped_barmap[index] = true;
 		}
 	}
 
 	vma->vm_private_data = vdev;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	// MANATEE: ManaTEE guest only uses vfio for virtio-vhost-user devices,
+	// whose mappings should be cached.
+	if (!manatee_chromeos_domain())
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	vma->vm_pgoff = (pci_resource_start(pdev, index) >> PAGE_SHIFT) + pgoff;
 
 	/*
@@ -2241,15 +2282,6 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 			pm_runtime_put(&cur->pdev->dev);
 	}
 }
-
-void vfio_pci_core_set_params(bool is_nointxmask, bool is_disable_vga,
-			      bool is_disable_idle_d3)
-{
-	nointxmask = is_nointxmask;
-	disable_vga = is_disable_vga;
-	disable_idle_d3 = is_disable_idle_d3;
-}
-EXPORT_SYMBOL_GPL(vfio_pci_core_set_params);
 
 static void vfio_pci_core_cleanup(void)
 {

@@ -27,6 +27,7 @@
 #include <linux/io-64-nonatomic-lo-hi.h>
 
 #include <linux/dma/idma64.h>
+#include <linux/manatee.h>
 
 #include "intel-lpss.h"
 
@@ -432,7 +433,8 @@ int intel_lpss_probe(struct device *dev,
 	if (ret)
 		goto err_remove_ltr;
 
-	dev_pm_set_driver_flags(dev, DPM_FLAG_SMART_SUSPEND);
+	if (!manatee_domain())
+		dev_pm_set_driver_flags(dev, DPM_FLAG_SMART_SUSPEND);
 
 	return 0;
 

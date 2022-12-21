@@ -43,6 +43,18 @@ void iommu_dma_free_cpu_cached_iovas(unsigned int cpu,
 
 extern bool iommu_dma_forcedac;
 
+struct iommu_dma_cookie;
+
+dma_addr_t __iommu_dma_alloc_iova(struct iommu_domain *domain,
+				  size_t size, u64 dma_limit,
+				  struct device *dev);
+void __iommu_dma_free_iova(struct iommu_dma_cookie *cookie,
+		dma_addr_t iova, size_t size, struct iommu_iotlb_gather *gather);
+u64 __iommu_dma_limit(struct iommu_domain *domain,
+		      struct device *dev, u64 mask);
+
+bool dev_is_untrusted(struct device *dev);
+
 #else /* CONFIG_IOMMU_DMA */
 
 struct iommu_domain;
