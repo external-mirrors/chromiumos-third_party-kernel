@@ -2556,6 +2556,8 @@ static bool can_age_anon_pages(struct pglist_data *pgdat,
 
 #ifdef CONFIG_LRU_GEN
 
+static struct kernfs_node *lru_gen_admin_node;
+
 #ifdef CONFIG_LRU_GEN_ENABLED
 DEFINE_STATIC_KEY_ARRAY_TRUE(lru_gen_caps, NR_LRU_GEN_CAPS);
 #define get_cap(cap)	static_branch_likely(&lru_gen_caps[cap])
@@ -3847,6 +3849,7 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq,
 	struct lru_gen_mm_state *mm_state = get_mm_state(lruvec);
 
 	VM_WARN_ON_ONCE(seq > READ_ONCE(lrugen->max_seq));
+        kernfs_notify(lru_gen_admin_node);
 
 	if (!mm_state)
 		return inc_max_seq(lruvec, seq, can_swap, force_scan);
@@ -5761,11 +5764,14 @@ void lru_gen_exit_memcg(struct mem_cgroup *memcg)
 
 static int __init init_lru_gen(void)
 {
+	struct kernfs_node *tmp;
 	BUILD_BUG_ON(MIN_NR_GENS + 1 >= MAX_NR_GENS);
 	BUILD_BUG_ON(BIT(LRU_GEN_WIDTH) <= MAX_NR_GENS);
 
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
+	tmp = kernfs_find_and_get(mm_kobj->sd, "lru_gen");
+	lru_gen_admin_node = kernfs_find_and_get(tmp, "admin");
 
 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);
