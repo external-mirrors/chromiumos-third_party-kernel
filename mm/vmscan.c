@@ -188,6 +188,8 @@ struct scan_control {
  */
 int vm_swappiness = 60;
 
+struct kernfs_node *lru_gen_admin_node;
+
 int min_filelist_kbytes_handler(struct ctl_table *table, int write,
 				void *buf, size_t *len, loff_t *pos)
 {
@@ -4589,8 +4591,10 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 			walk_mm(lruvec, mm, walk);
 	} while (mm);
 done:
-	if (success)
+	if (success) {
 		inc_max_seq(lruvec, can_swap, force_scan);
+		kernfs_notify(lru_gen_admin_node);
+	}
 
 	return success;
 }
@@ -6456,11 +6460,14 @@ void lru_gen_exit_memcg(struct mem_cgroup *memcg)
 
 static int __init init_lru_gen(void)
 {
+	struct kernfs_node *tmp;
 	BUILD_BUG_ON(MIN_NR_GENS + 1 >= MAX_NR_GENS);
 	BUILD_BUG_ON(BIT(LRU_GEN_WIDTH) <= MAX_NR_GENS);
 
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
+	tmp = kernfs_find_and_get(mm_kobj->sd, "lru_gen");
+	lru_gen_admin_node = kernfs_find_and_get(tmp, "admin");
 
 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);
