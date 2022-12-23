@@ -1,0 +1,21 @@
+1437b8dfed8ea2d7ab31c1afc7db0afada374193 FROMLIST: fuse: Definitions and ioctl for passthrough
+0bdba25c4da489383c0776f2feb4450fd9fa1ba5 REVISIT: ANDROID: power: wakeup_reason: add an API to log wakeup reasons
+e4de1a59fd448f0a64422a6e1df734c1ef5fa198 NOUPSTREAM: ANDROID: net: xfrm: make PF_KEY SHA256 use RFC-compliant truncation.
+564076857a052c83d3bab60675704acdcdba8111 FIXUP: FROMLIST: fuse: Definitions and ioctl for passthrough
+cd12c3d442b26afbb60713b38aded0924e95a57e FIXUP: FROMLIST: drm/bridge: it6505: Add typec_mux_set callback function
+67cc56464a6deb8e7f55994002042b8173033f3c CHROMIUM: soc: mediatek: mmsys: instantiate mdp virtual device from mmsys
+97755adf0a9c966c3f09a19ab4fc386fcbc4684c revert "CHROMIUM: soc: mediatek: mmsys: instantiate mdp virtual device from mmsys"
+3e63c809254f844c46667adb6a24a7c3c8a8e679 FROMLIST: drm/mediatek: init panel orientation property
+c833f520fbedc281eb43754a62af5632c3fd9a6e CHROMIUM: drm/mediatek: revert init panel orientation property
+00881b8a9038796f854409698969d22c5a496bc4 FROMLIST: drm/mediatek: add dsi module reset driver
+afd97a45fc4ed0f69f92e3562b1894ed43a485b4 CHROMIUM: Revert: "FROMLIST: drm/mediatek: add dsi module reset driver"
+f115532481760ddc8443878b4f30de614b13820b Revert "exit: Remove profile_handoff_task"
+104a1eb62b58d9e9d42a1571766614c3c0399ce1 Revert "exit: Remove profile_task_exit & profile_munmap"
+e3b9f0813f4f477a455fcd2a1d992b8b36fd188c ANDROID: uid_cputime: Adds accounting for the cputimes per uid.
+9286834dc81faadf9ddbc48066cd3376845023dd ANDROID: taskstats: track fsync syscalls
+2cef0aeeee51e863f8c1186cc3fb5888682d455d FIXUP: ANDROID: fs: epoll: use freezable blocking call
+8905e1b1d61503ced81d18eefe087040b5e8f711 CHROMIUM: FROMLIST: dt-bindings: gpu: add a power_model optional properties for MALI
+7fdfb88ce46d57be28bd7b3202550b6d1f458d0d CHROMIUM: gpu: mali: add initial drivers
+75c7226c01531f500af58390b758dc8f6d4f5102 UPSTREAM: arm64: dts: mt8183: jacuzzi: Fix bus properties in anx's DSI endpoint
+e359dd1c13912182983858b6666abacf468942a9 CHROMIUM: Undo arm-smmu-qcom.c parts in Merge 'v5.10.4' into chromeos-5.10 and Merge 'v5.10.8' into chromeos-5.10
+76c4b46388fcbd426f147874c40c5844a3eb4506 NOUPSTREAM: ANDROID: cpu-hotplug: Always use real time scheduling when hotplugging a CPU

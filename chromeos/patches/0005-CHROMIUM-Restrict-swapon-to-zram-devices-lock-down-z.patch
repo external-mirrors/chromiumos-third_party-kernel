@@ -1,0 +1,264 @@
+From 0f60018d1bf95b54a4b8d596e6921fa88035e98e Mon Sep 17 00:00:00 2001
+From: Will Drewry <wad@chromium.org>
+Date: Thu, 21 Mar 2013 17:00:53 -0500
+Subject: [PATCH] CHROMIUM: Restrict swapon() to "zram" devices / lock down
+ zram
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This cl contains three distinct changes collapsed into
+one CL as per semenzato's request:
+1. Restrict CONFIG_SWAP to ensure that only zram devices
+   may be used.
+2. Restrict zram to disallow open calls, even from root, if
+   the device is claimed (e.g., by sys_swapon)
+3. Add swapoff fallback when filp_open fails to use the path lookup.
+   I don't believe swapoff needs filp_open() since kern_path()
+   provides the data needed without a file object.
+4. Add an open counter to zram to ensure that it is not opened more
+   times than swapon(2) will claim it -- twice:
+   - blkdev_get and filp_open (for swap_file)
+
+Signed-off-by: Will Drewry <wad@chromium.org>
+TEST=tested on lumpy; swapon, swapoff, change zram during swapon fails, change withotu swapon succeeds.
+BUG=chromium:220974
+
+Change-Id: Ic281a7004a81b2897cf0bf1c5d334351061261f1
+[sonnyrao: 3.8: fixup conflicts]
+Reviewed-on: https://gerrit.chromium.org/gerrit/46168
+Tested-by: Will Drewry <wad@chromium.org>
+Reviewed-by: Luigi Semenzato <semenzato@chromium.org>
+Commit-Queue: Will Drewry <wad@chromium.org>
+Reviewed-on: https://gerrit.chromium.org/gerrit/58780
+Commit-Queue: Sonny Rao <sonnyrao@chromium.org>
+Reviewed-by: Sonny Rao <sonnyrao@chromium.org>
+Tested-by: Sonny Rao <sonnyrao@chromium.org>
+
+[benzh: 3.14 rebase. Squashed a compilation error fix. Also zram driver moved
+from drivers/staging/ to drivers/block/ in upstream]
+Signed-off-by: Ben Zhang <benzh@chromium.org>
+
+[rebase44(filbranden): Adapted the patch to merge our zram_open with the
+ one introduced upstream (between v3.18 and v4.4).
+ Squashed these three commits together:
+ - CHROMIUM: Restrict swapon() to "zram" devices / lock down zram
+ - CHROMIUM: Allow disk-based swap files
+ - CHROMIUM: minor changes to chromium specific open.
+]
+Signed-off-by: Filipe Brandenburger <filbranden@chromium.org>
+
+Conflicts:
+        drivers/block/zram/zram_drv.h
+        kernel/sysctl.c
+
+[rebase412(groeck): Resolved conflicts]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase419(groeck):
+    Squashed commit:
+        CHROMIUM: Fix mismatched mutex_unlock in swapon()
+    Resolved context conflicts]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase54(yuzhao):
+	Restrict access to zram block device by bd_opener. This
+	eliminates the need of an atomic counter and achieves both
+	2 & 4; therefore there is no need to check bd_holder.]
+Signed-off-by: Yu Zhao <yuzhao@google.com>
+[rebase510(groeck): Resolved conflicts]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase515(groeck)
+    Squash:
+	FIXUP: CHROMIUM: Restrict swapon() to "zram" devices / lock down zram
+]
+
+Create fixup.
+
+Signed-off-by: Łukasz Bartosik <ukaszb@google.com>
+Change-Id: I2cd096c1def691bdd72d8d2ed921210876662989
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: Restrict swapon() to "zram" devices / lock down zram
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    1a5515ff46e1fda11a63d24286b54266b5a9640e
+    569cef9b75ec2ba3fab238834f7ee8929983d3a0
+
+ drivers/block/zram/zram_drv.c | 10 ++++++++++
+ include/linux/mm.h            |  2 ++
+ init/Kconfig                  |  9 +++++++++
+ kernel/sysctl.c               | 11 +++++++++++
+ mm/swapfile.c                 | 35 ++++++++++++++++++++++++++++++-----
+ 5 files changed, 62 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 966aab902d19..88e669fa5e91 100644
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -1829,6 +1829,16 @@ static int zram_open(struct block_device *bdev, fmode_t mode)
+ 
+ 	WARN_ON(!mutex_is_locked(&bdev->bd_disk->open_mutex));
+ 
++	/*
++	 * Chromium OS specific behavior:
++	 * sys_swapon opens the device once to populate its swapinfo->swap_file
++	 * and once when it claims the block device (blkdev_get).  By limiting
++	 * the maximum number of opens to 2, we ensure there are no prior open
++	 * references before swap is enabled.
++	 */
++	if (atomic_read(&bdev->bd_openers) > 1)
++		return -EBUSY;
++
+ 	zram = bdev->bd_disk->private_data;
+ 	/* zram was claimed to reset so open request fails */
+ 	if (zram->claim)
+diff --git a/include/linux/mm.h b/include/linux/mm.h
+index 8bbcccbc5565..0e8615f16052 100644
+--- a/include/linux/mm.h
++++ b/include/linux/mm.h
+@@ -204,6 +204,8 @@ extern int sysctl_overcommit_memory;
+ extern int sysctl_overcommit_ratio;
+ extern unsigned long sysctl_overcommit_kbytes;
+ 
++extern int sysctl_disk_based_swap;
++
+ int overcommit_ratio_handler(struct ctl_table *, int, void *, size_t *,
+ 		loff_t *);
+ int overcommit_kbytes_handler(struct ctl_table *, int, void *, size_t *,
+diff --git a/init/Kconfig b/init/Kconfig
+index 07f6958154d4..cec06fdbb26f 100644
+--- a/init/Kconfig
++++ b/init/Kconfig
+@@ -366,6 +366,15 @@ config DEFAULT_HOSTNAME
+ 	  but you may wish to use a different default here to make a minimal
+ 	  system more usable with less configuration.
+ 
++config DISK_BASED_SWAP
++	bool "Allow disk-based swap files in Chromium OS kernels"
++	depends on SWAP
++	default n
++	help
++	  By default, the Chromium OS kernel allows swapping only to
++	  zram devices. This option allows you to use disk-based files
++	  as swap devices too.  If unsure say N.
++
+ config SYSVIPC
+ 	bool "System V IPC"
+ 	help
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index 188c305aeb8b..4cf0086fd90e 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -2462,6 +2462,17 @@ static struct ctl_table vm_table[] = {
+ 		.extra1		= SYSCTL_ZERO,
+ 		.extra2		= SYSCTL_ONE,
+ 	},
++#endif
++#ifdef CONFIG_DISK_BASED_SWAP
++	{
++		.procname	= "disk_based_swap",
++		.data		= &sysctl_disk_based_swap,
++		.maxlen		= sizeof(sysctl_disk_based_swap),
++		.mode		= 0644,
++		.proc_handler	= proc_dointvec_minmax,
++		.extra1		= SYSCTL_ZERO,
++		.extra2		= SYSCTL_ONE,
++	},
+ #endif
+ 	{ }
+ };
+diff --git a/mm/swapfile.c b/mm/swapfile.c
+index 5fc1237a9f21..482fea266c34 100644
+--- a/mm/swapfile.c
++++ b/mm/swapfile.c
+@@ -2390,6 +2390,8 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
+ 	struct filename *pathname;
+ 	int err, found = 0;
+ 	unsigned int old_block_size;
++	struct path path_holder;
++	struct path *victim_path = NULL;
+ 
+ 	if (!capable(CAP_SYS_ADMIN))
+ 		return -EPERM;
+@@ -2402,10 +2404,16 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
+ 
+ 	victim = file_open_name(pathname, O_RDWR|O_LARGEFILE, 0);
+ 	err = PTR_ERR(victim);
+-	if (IS_ERR(victim))
+-		goto out;
+-
+-	mapping = victim->f_mapping;
++	if (IS_ERR(victim)) {
++		/* Fallback to just the inode mapping if possible. */
++		if (kern_path(pathname->name, LOOKUP_FOLLOW, &path_holder))
++			goto out;  /* Propogate the original err. */
++		victim_path = &path_holder;
++		mapping = victim_path->dentry->d_inode->i_mapping;
++		victim = NULL;
++	} else {
++		mapping = victim->f_mapping;
++	}
+ 	spin_lock(&swap_lock);
+ 	plist_for_each_entry(p, &swap_active_head, list) {
+ 		if (p->flags & SWP_WRITEOK) {
+@@ -2553,7 +2561,10 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
+ 	wake_up_interruptible(&proc_poll_wait);
+ 
+ out_dput:
+-	filp_close(victim, NULL);
++	if (victim)
++		filp_close(victim, NULL);
++	if (victim_path)
++		path_put(victim_path);
+ out:
+ 	putname(pathname);
+ 	return err;
+@@ -2756,11 +2767,17 @@ static struct swap_info_struct *alloc_swap_info(void)
+ 	return p;
+ }
+ 
++/* This sysctl is only exposed when CONFIG_DISK_BASED_SWAP is enabled. */
++int sysctl_disk_based_swap;
++
+ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
+ {
+ 	int error;
+ 
++	/* On Chromium OS, we only support zram swap devices. */
+ 	if (S_ISBLK(inode->i_mode)) {
++		char name[BDEVNAME_SIZE];
++
+ 		p->bdev = blkdev_get_by_dev(inode->i_rdev,
+ 				   FMODE_READ | FMODE_WRITE | FMODE_EXCL, p);
+ 		if (IS_ERR(p->bdev)) {
+@@ -2768,6 +2785,12 @@ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
+ 			p->bdev = NULL;
+ 			return error;
+ 		}
++		snprintf(name, sizeof(name), "%pg", p->bdev);
++		if (strncmp(name, "zram", strlen("zram"))) {
++			iput(p->bdev->bd_inode);
++			p->bdev = NULL;
++			return -EINVAL;
++		}
+ 		p->old_block_size = block_size(p->bdev);
+ 		error = set_blocksize(p->bdev, PAGE_SIZE);
+ 		if (error < 0)
+@@ -2781,6 +2804,8 @@ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
+ 			return -EINVAL;
+ 		p->flags |= SWP_BLKDEV;
+ 	} else if (S_ISREG(inode->i_mode)) {
++		if (!sysctl_disk_based_swap)
++			return -EINVAL;
+ 		p->bdev = inode->i_sb->s_bdev;
+ 	}
+ 
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
