@@ -1,0 +1,693 @@
+From ecae2a8163a14f1e94fc9fb31abbaab163bd47a1 Mon Sep 17 00:00:00 2001
+From: Gwendal Grignou <gwendal@chromium.org>
+Date: Fri, 3 May 2019 10:35:02 -0700
+Subject: [PATCH] CHROMIUM: iio: cros_ec_light: Add support for RGB sensor
+
+Allow access of RGB channel of TCS3400 sensors.
+
+BUG=b:129419982
+BUG=b:162013225
+BUG=b:144002158,chromium:1097773
+TEST=In /sys/bus/iio/devices/iio:deviceX/
+All channels are present:
+for i in *raw; do echo -n "$i: " ; cat $i ; done
+in_illuminance_blue_raw: 261
+in_illuminance_green_raw: 376
+in_illuminance_raw: 1038
+in_illuminance_red_raw: 401
+
+Trigger reads are working:
+Assuming iio:devie3 is the sensors, and a sysfs trigger trigger1 exists:
+
+echo 128 > iio:device3/buffer/length
+cat trigger1/name > iio:device3/trigger/current_trigger
+for i in iio:device3/scan_elements/*_en ; do echo 1 > $i ; done
+echo 1 > iio:device3/buffer/enable
+
+"echo 1 > trigger1/trigger_now" reads all channels:
+cat /dev/iio:device3 | od -x
+0000000 03ee 0183 016a 00f9 a855 8445 2651 159c
+0000020 03ee 0183 016a 00f9 cc68 90e5 2652 159c
+0000040 00db 004e 0055 003b 3e10 c6ae 2654 159c << sensor covered
+0000060 03ee 0183 016a 00f9 7989 1789 2656 159c
+0000100 03ee 0183 016a 00f9 c379 ca70 2656 159c
+0000120 03ee 0183 016a 00f9 d8a9 b374 2658 159c
+od idx | C  | R  | G  | B  |  Timestamp        |
+
+Original-Change-Id: I5d3314923374200b106eaa0836de4bab7262d244
+Original-Change-Id: I693fe2a5db675584167ce98c4857d3e5f9841a18
+Signed-off-by: Gwendal Grignou <gwendal@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/1594999
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/1783755
+
+[rebase54(gwendal): Fix missing static declaration.]
+[rebase510(gwendal): Use cros_ec_sensorhub, squash fixes:
+2e7314004301 ("FIXUP: CHROMIUM: iio: cros_ec_light: Add support for RGB sensor")
+bd3364777e0e ("CHROMIUM: iio: cros_ec_light: Add FIFO supportpport for RGB sensor")
+f9d8a2b2eda5 ("CHROMIUM: iio: cros_ec_light: read RGB sensors directlyc [reland]")
+0ac5573b789c ("CHROMIUM: iio: cros_ec_light: use u16 for linux light sensors data]")
+
+[rebase515(groeck):
+    squashed:
+	FIXUP: CHROMIUM: iio: cros_ec_light: Add support for RGB sensor
+]
+
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	CHROMIUM: iio: cros_ec_light: Fix regular and RGB callbacks
+	CHROMIUM: iio: cros_ec_light: Fix illuminance assignment
+	CHROMIUM: iio: light: Fix setting calibration scale
+	CHROMIUM: iio/cros_ec_light_prox : Fix 5.15 merging
+	FIXUP: CHROMIUM: iio/cros_ec_light_prox : Fix 5.15 merging
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    3ac89900caebd187c1665ac5700be3e74abefd73
+    d620673d136ec7815a2923ee46b39631c097e2ff
+    16f68bb9c10fd4fb09d24f6bc34fbcd64a3bfd89
+    db7a7e7c5d421e58accb16c6e30151cc3f23731a
+    04fe9c411d777f1dd9d798103f6837e18b82fc2c
+
+ drivers/iio/light/cros_ec_light_prox.c        | 440 +++++++++++++++---
+ drivers/platform/chrome/cros_ec_sensorhub.c   |   3 +
+ .../linux/iio/common/cros_ec_sensors_core.h   |   1 -
+ .../linux/platform_data/cros_ec_commands.h    |   2 +
+ 4 files changed, 370 insertions(+), 76 deletions(-)
+
+diff --git a/drivers/iio/light/cros_ec_light_prox.c b/drivers/iio/light/cros_ec_light_prox.c
+index 19e529c84e95..522418ec1637 100644
+--- a/drivers/iio/light/cros_ec_light_prox.c
++++ b/drivers/iio/light/cros_ec_light_prox.c
+@@ -18,82 +18,175 @@
+ #include <linux/module.h>
+ #include <linux/platform_data/cros_ec_commands.h>
+ #include <linux/platform_data/cros_ec_proto.h>
++#include <linux/platform_data/cros_ec_sensorhub.h>
+ #include <linux/platform_device.h>
+ #include <linux/slab.h>
+ 
+ /*
+- * We only represent one entry for light or proximity. EC is merging different
+- * light sensors to return the what the eye would see. For proximity, we
+- * currently support only one light source.
++ * At least We only represent one entry for light or  proximity.
++ * For proximity, we currently support only one light source.
++ * For light we support single sensor or 4 channels (C + RGB).
+  */
+-#define CROS_EC_LIGHT_PROX_MAX_CHANNELS (1 + 1)
++#define CROS_EC_LIGHT_PROX_MIN_CHANNELS (1 + 1)
+ 
+ /* State data for ec_sensors iio driver. */
+ struct cros_ec_light_prox_state {
+ 	/* Shared by all sensors */
+ 	struct cros_ec_sensors_core_state core;
++	struct iio_chan_spec *channel;
+ 
+-	struct iio_chan_spec channels[CROS_EC_LIGHT_PROX_MAX_CHANNELS];
++	u16 rgb_space[CROS_EC_SENSOR_MAX_AXIS];
++	struct calib_data rgb_calib[CROS_EC_SENSOR_MAX_AXIS];
+ };
+ 
++static void cros_ec_light_channel_common(struct iio_chan_spec *channel)
++{
++	channel->info_mask_shared_by_all =
++		BIT(IIO_CHAN_INFO_SAMP_FREQ);
++	channel->info_mask_separate =
++		BIT(IIO_CHAN_INFO_RAW) |
++		BIT(IIO_CHAN_INFO_CALIBBIAS) |
++		BIT(IIO_CHAN_INFO_CALIBSCALE);
++	channel->info_mask_shared_by_all_available =
++		BIT(IIO_CHAN_INFO_SAMP_FREQ);
++	channel->scan_type.realbits = CROS_EC_SENSOR_BITS;
++	channel->scan_type.storagebits = CROS_EC_SENSOR_BITS;
++	channel->scan_type.shift = 0;
++	channel->scan_index = 0;
++	channel->ext_info = cros_ec_sensors_ext_info;
++	channel->scan_type.sign = 'u';
++}
++
++static int cros_ec_light_extra_send_host_cmd(
++		struct cros_ec_sensors_core_state *state,
++		int increment,
++		u16 opt_length)
++{
++	uint8_t save_sensor_num = state->param.info.sensor_num;
++	int ret;
++
++	state->param.info.sensor_num += increment;
++	ret = cros_ec_motion_send_host_cmd(state, opt_length);
++	state->param.info.sensor_num = save_sensor_num;
++	return ret;
++}
++
++
++
++static int cros_ec_light_prox_read_data(
++		struct iio_dev *indio_dev,
++		struct iio_chan_spec const *chan,
++		int *val)
++{
++	struct cros_ec_light_prox_state *st = iio_priv(indio_dev);
++	int i, ret;
++	int idx = chan->scan_index;
++
++	st->core.param.cmd = MOTIONSENSE_CMD_DATA;
++
++	/*
++	 * The data coming from the light sensor is
++	 * pre-processed and represents the ambient light
++	 * illuminance reading expressed in lux.
++	 */
++	if (idx == 0) {
++		ret = cros_ec_motion_send_host_cmd(
++				&st->core, sizeof(st->core.resp->data));
++		if (ret)
++			return ret;
++		*val = (u16)st->core.resp->data.data[0];
++	} else {
++		ret = cros_ec_light_extra_send_host_cmd(
++				&st->core, 1, sizeof(st->core.resp->data));
++		if (ret)
++			return ret;
++
++		for (i = 0; i < CROS_EC_SENSOR_MAX_AXIS; i++)
++			st->rgb_space[i] =
++				st->core.resp->data.data[i];
++		*val = st->rgb_space[idx - 1];
++	}
++
++	return IIO_VAL_INT;
++}
++
+ static int cros_ec_light_prox_read(struct iio_dev *indio_dev,
+ 				   struct iio_chan_spec const *chan,
+ 				   int *val, int *val2, long mask)
+ {
+ 	struct cros_ec_light_prox_state *st = iio_priv(indio_dev);
+-	u16 data = 0;
+-	s64 val64;
+-	int ret;
++	int i, ret = IIO_VAL_INT;
+ 	int idx = chan->scan_index;
++	s64 val64;
+ 
+ 	mutex_lock(&st->core.cmd_lock);
+ 
+ 	switch (mask) {
+ 	case IIO_CHAN_INFO_RAW:
+-		if (chan->type == IIO_PROXIMITY) {
+-			ret = cros_ec_sensors_read_cmd(indio_dev, 1 << idx,
+-						     (s16 *)&data);
+-			if (ret)
+-				break;
+-			*val = data;
+-			ret = IIO_VAL_INT;
+-		} else {
+-			ret = -EINVAL;
+-		}
+-		break;
+ 	case IIO_CHAN_INFO_PROCESSED:
+-		if (chan->type == IIO_LIGHT) {
+-			ret = cros_ec_sensors_read_cmd(indio_dev, 1 << idx,
+-						     (s16 *)&data);
+-			if (ret)
+-				break;
+-			/*
+-			 * The data coming from the light sensor is
+-			 * pre-processed and represents the ambient light
+-			 * illuminance reading expressed in lux.
+-			 */
+-			*val = data;
+-			ret = IIO_VAL_INT;
+-		} else {
+-			ret = -EINVAL;
+-		}
++		ret = cros_ec_light_prox_read_data(indio_dev, chan, val);
+ 		break;
+ 	case IIO_CHAN_INFO_CALIBBIAS:
+ 		st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_OFFSET;
+ 		st->core.param.sensor_offset.flags = 0;
+ 
+-		ret = cros_ec_motion_send_host_cmd(&st->core, 0);
++		if (idx == 0)
++			ret = cros_ec_motion_send_host_cmd(&st->core, 0);
++		else
++			ret = cros_ec_light_extra_send_host_cmd(
++					&st->core, 1, 0);
+ 		if (ret)
+ 			break;
+-
+-		/* Save values */
+-		st->core.calib[0].offset =
+-			st->core.resp->sensor_offset.offset[0];
+-
+-		*val = st->core.calib[idx].offset;
++		if (idx == 0) {
++			*val = st->core.calib[0].offset =
++				st->core.resp->sensor_offset.offset[0];
++		} else {
++			for (i = CROS_EC_SENSOR_X; i < CROS_EC_SENSOR_MAX_AXIS;
++			     i++)
++				st->rgb_calib[i].offset =
++					st->core.resp->sensor_offset.offset[i];
++			*val = st->rgb_calib[idx - 1].offset;
++		}
+ 		ret = IIO_VAL_INT;
+ 		break;
+ 	case IIO_CHAN_INFO_CALIBSCALE:
++		if (indio_dev->num_channels > CROS_EC_LIGHT_PROX_MIN_CHANNELS) {
++			u16 scale;
++
++			st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_SCALE;
++			st->core.param.sensor_scale.flags = 0;
++			if (idx == 0)
++				ret = cros_ec_motion_send_host_cmd(
++						&st->core, 0);
++			else
++				ret = cros_ec_light_extra_send_host_cmd(
++						&st->core, 1, 0);
++			if (ret)
++				break;
++			if (idx == 0) {
++				scale = st->core.calib[0].scale =
++					st->core.resp->sensor_scale.scale[0];
++			} else {
++				for (i = CROS_EC_SENSOR_X;
++				     i < CROS_EC_SENSOR_MAX_AXIS;
++				     i++)
++					st->rgb_calib[i].scale =
++					  st->core.resp->sensor_scale.scale[i];
++				scale = st->rgb_calib[idx - 1].scale;
++			}
++			/*
++			 * scale is a number x.y, where x is coded on 1 bit,
++			 * y coded on 15 bits, between 0 and 9999.
++			 */
++			*val = scale >> 15;
++			*val2 = ((scale & 0x7FFF) * 1000000LL) /
++				MOTION_SENSE_DEFAULT_SCALE;
++			ret = IIO_VAL_INT_PLUS_MICRO;
++			break;
++		}
++		/* RANGE is used for calibration in 1 channel sensors. */
++		fallthrough;
++	case IIO_CHAN_INFO_SCALE:
+ 		/*
+ 		 * RANGE is used for calibration
+ 		 * scale is a number x.y, where x is coded on 16 bits,
+@@ -127,24 +220,79 @@ static int cros_ec_light_prox_write(struct iio_dev *indio_dev,
+ 			       int val, int val2, long mask)
+ {
+ 	struct cros_ec_light_prox_state *st = iio_priv(indio_dev);
+-	int ret;
++	int ret, i;
+ 	int idx = chan->scan_index;
+ 
+ 	mutex_lock(&st->core.cmd_lock);
+ 
+ 	switch (mask) {
+-	case IIO_CHAN_INFO_CALIBBIAS:
+-		st->core.calib[idx].offset = val;
++	case IIO_CHAN_INFO_CALIBBIAS:		
+ 		/* Send to EC for each axis, even if not complete */
+ 		st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_OFFSET;
+ 		st->core.param.sensor_offset.flags = MOTION_SENSE_SET_OFFSET;
+-		st->core.param.sensor_offset.offset[0] =
+-			st->core.calib[0].offset;
+ 		st->core.param.sensor_offset.temp =
+ 					EC_MOTION_SENSE_INVALID_CALIB_TEMP;
+-		ret = cros_ec_motion_send_host_cmd(&st->core, 0);
++		if (idx == 0) {
++			st->core.calib[0].offset = val;
++			st->core.param.sensor_offset.offset[0] = val;
++			ret = cros_ec_motion_send_host_cmd(&st->core, 0);
++		} else {
++			st->rgb_calib[idx - 1].offset = val;
++			for (i = CROS_EC_SENSOR_X;
++			     i < CROS_EC_SENSOR_MAX_AXIS;
++			     i++)
++				st->core.param.sensor_offset.offset[i] =
++					st->rgb_calib[i].offset;
++			ret = cros_ec_light_extra_send_host_cmd(
++					&st->core, 1, 0);
++		}
+ 		break;
+ 	case IIO_CHAN_INFO_CALIBSCALE:
++		if (indio_dev->num_channels >
++				CROS_EC_LIGHT_PROX_MIN_CHANNELS) {
++			u16 scale;
++
++			if (val >= 2) {
++				/*
++				 * The user space is sending values already
++				 * multiplied by MOTION_SENSE_DEFAULT_SCALE.
++				 */
++				scale = val;
++			} else {
++				u64 val64 = val2 * MOTION_SENSE_DEFAULT_SCALE;
++
++				do_div(val64, 1000000);
++				scale = (val << 15) | val64;
++			}
++
++			st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_SCALE;
++			st->core.param.sensor_offset.flags =
++				MOTION_SENSE_SET_OFFSET;
++			st->core.param.sensor_offset.temp =
++				EC_MOTION_SENSE_INVALID_CALIB_TEMP;
++			if (idx == 0) {
++				st->core.calib[0].scale = scale;
++				st->core.param.sensor_scale.scale[0] = scale;
++				ret = cros_ec_motion_send_host_cmd(
++						&st->core, 0);
++			} else {
++				st->rgb_calib[idx - 1].scale = scale;
++				for (i = CROS_EC_SENSOR_X;
++				     i < CROS_EC_SENSOR_MAX_AXIS;
++				     i++)
++					st->core.param.sensor_scale.scale[i] =
++						st->rgb_calib[i].scale;
++				ret = cros_ec_light_extra_send_host_cmd(
++						&st->core, 1, 0);
++			}
++			break;
++		}
++		/*
++		 * For sensors with only one channel, _RANGE is used
++		 * instead of _SCALE.
++		 */
++		fallthrough;
++	case IIO_CHAN_INFO_SCALE:
+ 		st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_RANGE;
+ 		st->core.curr_range = (val << 16) | (val2 / 100);
+ 		st->core.param.sensor_range.data = st->core.curr_range;
+@@ -152,6 +300,16 @@ static int cros_ec_light_prox_write(struct iio_dev *indio_dev,
+ 		if (ret == 0)
+ 			st->core.range_updated = true;
+ 		break;
++	case IIO_CHAN_INFO_SAMP_FREQ:
++		ret = cros_ec_sensors_core_write(&st->core, chan, val, val2,
++						 mask);
++		/* Repeat the same command to the RGB sensor. */
++		if (!ret && indio_dev->num_channels >
++			    CROS_EC_LIGHT_PROX_MIN_CHANNELS)
++			ret = cros_ec_light_extra_send_host_cmd(
++					&st->core, 1, 0);
++
++		break;
+ 	default:
+ 		ret = cros_ec_sensors_core_write(&st->core, chan, val, val2,
+ 						 mask);
+@@ -163,79 +321,211 @@ static int cros_ec_light_prox_write(struct iio_dev *indio_dev,
+ 	return ret;
+ }
+ 
++static int cros_ec_light_push_data(
++		struct iio_dev *indio_dev,
++		s16 *data,
++		s64 timestamp)
++{
++	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
++	s16 *out = (s16 *)st->samples;
++
++	if (!st || !indio_dev->active_scan_mask)
++		return 0;
++
++	/* Save clear channel, will be used when RGB data arrives. */
++	if (test_bit(0, indio_dev->active_scan_mask))
++		*out = data[0];
++
++	/* Wait for RGB callback to send samples upstream. */
++	return 0;
++}
++
++static int cros_ec_light_push_data_rgb(
++		struct iio_dev *indio_dev,
++		s16 *data,
++		s64 timestamp)
++{
++	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
++	s16 *out;
++	s64 delta;
++	unsigned int i = 1;
++
++	if (!st || !indio_dev->active_scan_mask)
++		return 0;
++
++	/*
++	 * Send all data needed.
++	 */
++	out = (s16 *)st->samples;
++	if (test_bit(0, indio_dev->active_scan_mask))
++		out++;
++
++	for_each_set_bit_from(i,
++			 indio_dev->active_scan_mask,
++			 indio_dev->masklength) {
++		*out = data[i - 1];
++		out++;
++	}
++
++	if (iio_device_get_clock(indio_dev) != CLOCK_BOOTTIME)
++		delta = iio_get_time_ns(indio_dev) - cros_ec_get_time_ns();
++	else
++		delta = 0;
++
++	iio_push_to_buffers_with_timestamp(indio_dev, st->samples,
++					   timestamp + delta);
++	return 0;
++}
++
++static irqreturn_t cros_ec_light_capture(int irq, void *p)
++{
++	struct iio_poll_func *pf = p;
++	struct iio_dev *indio_dev = pf->indio_dev;
++	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
++	int ret, i, idx = 0;
++	s16 data = 0;
++	const unsigned long scan_mask = *(indio_dev->active_scan_mask);
++
++	mutex_lock(&st->cmd_lock);
++
++	/* Clear capture data. */
++	memset(st->samples, 0, indio_dev->scan_bytes);
++
++	/* Read first channel. */
++	ret = cros_ec_sensors_read_cmd(indio_dev, 1, &data);
++	if (ret < 0)
++		goto done;
++	if (test_bit(0, indio_dev->active_scan_mask))
++		((s16 *)st->samples)[idx++] = data;
++
++	/* Read remaining channels. */
++	if (scan_mask & ((1 << indio_dev->num_channels) - 2)) {
++		ret = cros_ec_light_extra_send_host_cmd(
++				st, 1, sizeof(st->resp->data));
++		if (ret < 0)
++			goto done;
++		for (i = 0; i < CROS_EC_SENSOR_MAX_AXIS; i++)
++			if (test_bit(i + 1, indio_dev->active_scan_mask))
++				((s16 *)st->samples)[idx++] =
++					st->resp->data.data[i];
++	}
++
++	iio_push_to_buffers_with_timestamp(indio_dev, st->samples,
++					   iio_get_time_ns(indio_dev));
++
++done:
++	/*
++	 * Tell the core we are done with this trigger and ready for the
++	 * next one.
++	 */
++	iio_trigger_notify_done(indio_dev->trig);
++
++	mutex_unlock(&st->cmd_lock);
++
++	return IRQ_HANDLED;
++}
++
+ static const struct iio_info cros_ec_light_prox_info = {
+ 	.read_raw = &cros_ec_light_prox_read,
+ 	.write_raw = &cros_ec_light_prox_write,
+ 	.read_avail = &cros_ec_sensors_core_read_avail,
+ };
+ 
++
+ static int cros_ec_light_prox_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
++	struct cros_ec_sensorhub *sensor_hub = dev_get_drvdata(dev->parent);
+ 	struct iio_dev *indio_dev;
+ 	struct cros_ec_light_prox_state *state;
+ 	struct iio_chan_spec *channel;
+-	int ret;
++	int ret, i, num_channels = CROS_EC_LIGHT_PROX_MIN_CHANNELS;
+ 
+ 	indio_dev = devm_iio_device_alloc(dev, sizeof(*state));
+ 	if (!indio_dev)
+ 		return -ENOMEM;
+ 
+ 	ret = cros_ec_sensors_core_init(pdev, indio_dev, true,
+-					cros_ec_sensors_capture);
++					cros_ec_light_capture);
+ 	if (ret)
+ 		return ret;
+ 
+ 	indio_dev->info = &cros_ec_light_prox_info;
+ 	state = iio_priv(indio_dev);
+-	channel = state->channels;
+ 
+-	/* Common part */
+-	channel->info_mask_shared_by_all =
+-		BIT(IIO_CHAN_INFO_SAMP_FREQ);
+-	channel->info_mask_shared_by_all_available =
+-		BIT(IIO_CHAN_INFO_SAMP_FREQ);
+-	channel->scan_type.realbits = CROS_EC_SENSOR_BITS;
+-	channel->scan_type.storagebits = CROS_EC_SENSOR_BITS;
+-	channel->scan_type.shift = 0;
+-	channel->scan_index = 0;
+-	channel->ext_info = cros_ec_sensors_ext_info;
+-	channel->scan_type.sign = 'u';
++	/* Check if we need more sensors for RGB (or XYZ). */
++	state->core.param.cmd = MOTIONSENSE_CMD_INFO;
++	if (cros_ec_light_extra_send_host_cmd(&state->core, 1, 0) == 0 &&
++	    state->core.resp->info.type == MOTIONSENSE_TYPE_LIGHT_RGB)
++		num_channels += CROS_EC_SENSOR_MAX_AXIS;
+ 
++	channel = devm_kcalloc(dev, num_channels, sizeof(*channel), 0);
++	if (channel == NULL)
++		return -ENOMEM;
++
++	indio_dev->channels = channel;
++	indio_dev->num_channels = num_channels;
++
++	cros_ec_light_channel_common(channel);
+ 	/* Sensor specific */
+ 	switch (state->core.type) {
+ 	case MOTIONSENSE_TYPE_LIGHT:
+ 		channel->type = IIO_LIGHT;
+-		channel->info_mask_separate =
+-			BIT(IIO_CHAN_INFO_PROCESSED) |
+-			BIT(IIO_CHAN_INFO_CALIBBIAS) |
+-			BIT(IIO_CHAN_INFO_CALIBSCALE);
++		if (num_channels < CROS_EC_LIGHT_PROX_MIN_CHANNELS +
++				CROS_EC_SENSOR_MAX_AXIS) {
++			/* For backward compatibility. */
++			channel->info_mask_separate =
++				BIT(IIO_CHAN_INFO_PROCESSED) |
++				BIT(IIO_CHAN_INFO_CALIBBIAS) |
++				BIT(IIO_CHAN_INFO_CALIBSCALE);
++		} else {
++			/*
++			 * To set a global scale, as CALIB_SCALE for RGB sensor
++			 * is limited between 0 and 2.
++			 */
++			channel->info_mask_shared_by_all |=
++				BIT(IIO_CHAN_INFO_SCALE);
++		}
+ 		break;
+ 	case MOTIONSENSE_TYPE_PROX:
+ 		channel->type = IIO_PROXIMITY;
+-		channel->info_mask_separate =
+-			BIT(IIO_CHAN_INFO_RAW) |
+-			BIT(IIO_CHAN_INFO_CALIBBIAS) |
+-			BIT(IIO_CHAN_INFO_CALIBSCALE);
+ 		break;
+ 	default:
+ 		dev_warn(dev, "Unknown motion sensor\n");
+ 		return -EINVAL;
+ 	}
++	channel++;
++
++	if (num_channels > CROS_EC_LIGHT_PROX_MIN_CHANNELS) {
++		u8 sensor_num = state->core.param.info.sensor_num;
++
++		for (i = CROS_EC_SENSOR_X; i < CROS_EC_SENSOR_MAX_AXIS;
++				i++, channel++) {
++			cros_ec_light_channel_common(channel);
++			channel->scan_index = i + 1;
++			channel->modified = 1;
++			channel->channel2 = IIO_MOD_LIGHT_RED + i;
++			channel->type = IIO_LIGHT;
++		}
++		cros_ec_sensorhub_unregister_push_data(sensor_hub, sensor_num);
++		cros_ec_sensorhub_register_push_data(
++				sensor_hub, sensor_num,
++				indio_dev,
++				cros_ec_light_push_data);
++		cros_ec_sensorhub_register_push_data(
++				sensor_hub, sensor_num + 1,
++				indio_dev,
++				cros_ec_light_push_data_rgb);
++	}
+ 
+ 	/* Timestamp */
+-	channel++;
+ 	channel->type = IIO_TIMESTAMP;
+ 	channel->channel = -1;
+-	channel->scan_index = 1;
++	channel->scan_index = num_channels - 1;
+ 	channel->scan_type.sign = 's';
+ 	channel->scan_type.realbits = 64;
+ 	channel->scan_type.storagebits = 64;
+ 
+-	indio_dev->channels = state->channels;
+-
+-	indio_dev->num_channels = CROS_EC_LIGHT_PROX_MAX_CHANNELS;
+-
+ 	state->core.read_ec_sensors_data = cros_ec_sensors_read_cmd;
+ 
+ 	return cros_ec_sensors_core_register(dev, indio_dev,
+diff --git a/drivers/platform/chrome/cros_ec_sensorhub.c b/drivers/platform/chrome/cros_ec_sensorhub.c
+index 31fb8bdaad5a..4985ac18189a 100644
+--- a/drivers/platform/chrome/cros_ec_sensorhub.c
++++ b/drivers/platform/chrome/cros_ec_sensorhub.c
+@@ -90,6 +90,9 @@ static int cros_ec_sensorhub_register(struct device *dev,
+ 		case MOTIONSENSE_TYPE_LIGHT:
+ 			name = "cros-ec-light";
+ 			break;
++		case MOTIONSENSE_TYPE_LIGHT_RGB:
++			/* Processed with cros-ec-light. */
++			continue;
+ 		case MOTIONSENSE_TYPE_ACTIVITY:
+ 			name = "cros-ec-activity";
+ 			break;
+diff --git a/include/linux/iio/common/cros_ec_sensors_core.h b/include/linux/iio/common/cros_ec_sensors_core.h
+index bb966abcde53..577f7ae6c399 100644
+--- a/include/linux/iio/common/cros_ec_sensors_core.h
++++ b/include/linux/iio/common/cros_ec_sensors_core.h
+@@ -26,7 +26,6 @@ enum {
+ 
+ /*
+  * 4 16 bit channels are allowed.
+- * Good enough for current sensors, they use up to 3 16 bit vectors.
+  */
+ #define CROS_EC_SAMPLE_SIZE  (sizeof(s64) * 2)
+ 
+diff --git a/include/linux/platform_data/cros_ec_commands.h b/include/linux/platform_data/cros_ec_commands.h
+index 3b36f458193d..f22948c2b4d0 100644
+--- a/include/linux/platform_data/cros_ec_commands.h
++++ b/include/linux/platform_data/cros_ec_commands.h
+@@ -2360,6 +2360,7 @@ enum motionsensor_type {
+ 	MOTIONSENSE_TYPE_ACTIVITY = 5,
+ 	MOTIONSENSE_TYPE_BARO = 6,
+ 	MOTIONSENSE_TYPE_SYNC = 7,
++	MOTIONSENSE_TYPE_LIGHT_RGB = 8,
+ 	MOTIONSENSE_TYPE_MAX,
+ };
+ 
+@@ -2393,6 +2394,7 @@ enum motionsensor_chip {
+ 	MOTIONSENSE_CHIP_LSM6DS3 = 17,
+ 	MOTIONSENSE_CHIP_LSM6DSO = 18,
+ 	MOTIONSENSE_CHIP_LNG2DM = 19,
++	MOTIONSENSE_CHIP_TCS3400 = 20,
+ 	MOTIONSENSE_CHIP_MAX,
+ };
+ 
+-- 
+2.39.0.314.g84b9a713c41-goog
+
