@@ -1,0 +1,161 @@
+From ce824363e5cf37599d3d9dde6bd06ad7dda986d0 Mon Sep 17 00:00:00 2001
+From: Stephen Boyd <swboyd@chromium.org>
+Date: Wed, 2 Mar 2022 15:32:06 -0800
+Subject: [PATCH] CHROMIUM: alt-syscall: Limit kcmp() syscall on android
+
+The kcmp syscall is enabled now after commit bfe3911a9104 ("kcmp:
+Support selection of SYS_kcmp without CHECKPOINT_RESTORE") because
+config DRM is always enabled and that has a select KCMP now. Android CTS
+fails with this syscall being exposed, but we may want to use the
+syscall in mesa, so let's knock out the syscall for android specifically
+via the alt-syscall mechanism. This should let us keep passing CTS on
+5.15 kernels running android in a container.
+
+BUG=b:187024841
+TEST=test_that -b trogdor-kernelnext $trogdor_dut cheets_CTS_P.arm.CtsKernelConfigTestCases
+
+Signed-off-by: Stephen Boyd <swboyd@chromium.org>
+Change-Id: I828e6406dbd9f5593f4b5089dc641439d4da58f1
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3501193
+Reviewed-by: Douglas Anderson <dianders@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: alt-syscall: Limit kcmp() syscall on android
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    c71a6ace778634333eab198f867db2b460b908d6
+    eff0b8926ba03fe0d43578b0b7695844edada4fc
+
+ include/linux/syscalls.h                 |  2 ++
+ kernel/kcmp.c                            | 10 ++++++++--
+ security/chromiumos/alt-syscall.c        | 22 ++++++++++++++++++++++
+ security/chromiumos/android_whitelists.h | 12 ++++++++++++
+ 4 files changed, 44 insertions(+), 2 deletions(-)
+
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index ec2134b74469..bc1352b18b0a 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -1395,6 +1395,8 @@ int ksys_getpriority(int which, int who);
+ int ksys_perf_event_open(
+ 		struct perf_event_attr __user *attr_uptr,
+ 		pid_t pid, int cpu, int group_fd, unsigned long flags);
++int ksys_kcmp(pid_t pid1, pid_t pid2, int type,
++		unsigned long idx1, unsigned long idx2);
+ int ksys_clock_adjtime(const clockid_t which_clock, struct __kernel_timex __user * utx);
+ int ksys_adjtimex(struct __kernel_timex __user *txc_p);
+ int ksys_getcpu(unsigned __user *cpu, unsigned __user *node,
+diff --git a/kernel/kcmp.c b/kernel/kcmp.c
+index 5353edfad8e1..c4ab0524eb1b 100644
+--- a/kernel/kcmp.c
++++ b/kernel/kcmp.c
+@@ -132,8 +132,8 @@ static int kcmp_epoll_target(struct task_struct *task1,
+ }
+ #endif
+ 
+-SYSCALL_DEFINE5(kcmp, pid_t, pid1, pid_t, pid2, int, type,
+-		unsigned long, idx1, unsigned long, idx2)
++int ksys_kcmp(pid_t pid1, pid_t pid2, int type,
++		unsigned long idx1, unsigned long idx2)
+ {
+ 	struct task_struct *task1, *task2;
+ 	int ret;
+@@ -225,6 +225,12 @@ SYSCALL_DEFINE5(kcmp, pid_t, pid1, pid_t, pid2, int, type,
+ 	return -ESRCH;
+ }
+ 
++SYSCALL_DEFINE5(kcmp, pid_t, pid1, pid_t, pid2, int, type,
++		unsigned long, idx1, unsigned long, idx2)
++{
++	return ksys_kcmp(pid1, pid2, type, idx1, idx2);
++}
++
+ static __init int kcmp_cookies_init(void)
+ {
+ 	int i;
+diff --git a/security/chromiumos/alt-syscall.c b/security/chromiumos/alt-syscall.c
+index 184dcbe66240..c049f49f3202 100644
+--- a/security/chromiumos/alt-syscall.c
++++ b/security/chromiumos/alt-syscall.c
+@@ -13,6 +13,7 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/kernel.h>
++#include <linux/kcmp.h>
+ #include <linux/module.h>
+ #include <linux/prctl.h>
+ #include <linux/sched/types.h>
+@@ -151,6 +152,27 @@ static asmlinkage long android_keyctl(struct pt_regs *regs)
+ 	return -EACCES;
+ }
+ 
++#ifdef CONFIG_KCMP
++static asmlinkage long android_kcmp(struct pt_regs *regs)
++{
++	struct task_struct *task = current;
++	unsigned long args[6];
++	pid_t pid1, pid2;
++	int type;
++	unsigned long idx1, idx2;
++
++	syscall_get_arguments(task, regs, args);
++	type = args[2];
++	if (type == KCMP_SYSVSEM)
++		return -ENOSYS;
++
++	pid1 = args[0];
++	pid2 = args[1];
++	idx1 = args[3];
++	idx2 = args[4];
++	return ksys_kcmp(pid1, pid2, type, idx1, idx2);
++}
++#endif
+ 
+ static asmlinkage long android_setpriority(struct pt_regs *regs)
+ {
+diff --git a/security/chromiumos/android_whitelists.h b/security/chromiumos/android_whitelists.h
+index 6e676af24f5e..e67efdf50ffe 100644
+--- a/security/chromiumos/android_whitelists.h
++++ b/security/chromiumos/android_whitelists.h
+@@ -39,6 +39,10 @@
+ static asmlinkage long android_getpriority(struct pt_regs *regs);
+ /* Android does not get to call keyctl. */
+ static asmlinkage long android_keyctl(struct pt_regs *regs);
++#ifdef CONFIG_KCMP
++/* Android does not get to call kcmp with type==KCMP_SYSVEM. */
++static asmlinkage long android_kcmp(struct pt_regs *regs);
++#endif
+ /* Make sure nothing sets a nice value more favorable than -10. */
+ static asmlinkage long android_setpriority(struct pt_regs *regs);
+ static asmlinkage long android_sched_setscheduler(struct pt_regs *regs);
+@@ -125,7 +129,11 @@ static struct syscall_whitelist_entry android_whitelist[] = {
+         SYSCALL_ENTRY(io_submit),
+ 	SYSCALL_ENTRY(ioprio_set),
+         SYSCALL_ENTRY_ALT(keyctl, android_keyctl),
++#ifdef CONFIG_KCMP
++	SYSCALL_ENTRY_ALT(kcmp, android_kcmp),
++#else
+ 	SYSCALL_ENTRY(kcmp),
++#endif
+ 	SYSCALL_ENTRY(kill),
+ 	SYSCALL_ENTRY(lgetxattr),
+ 	SYSCALL_ENTRY(linkat),
+@@ -401,7 +409,11 @@ static struct syscall_whitelist_entry android_compat_whitelist[] = {
+         COMPAT_SYSCALL_ENTRY(io_submit),
+ 	COMPAT_SYSCALL_ENTRY(ioprio_set),
+         COMPAT_SYSCALL_ENTRY_ALT(keyctl, android_keyctl),
++#ifdef CONFIG_KCMP
++	COMPAT_SYSCALL_ENTRY_ALT(kcmp, android_kcmp),
++#else
+ 	COMPAT_SYSCALL_ENTRY(kcmp),
++#endif
+ 	COMPAT_SYSCALL_ENTRY(kill),
+ 	COMPAT_SYSCALL_ENTRY(lgetxattr),
+ 	COMPAT_SYSCALL_ENTRY(link),
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

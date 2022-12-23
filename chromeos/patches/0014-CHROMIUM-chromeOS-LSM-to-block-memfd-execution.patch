@@ -1,0 +1,114 @@
+From 093bf9187eedf08a558842e1c878c7b17069d5d3 Mon Sep 17 00:00:00 2001
+From: Jeff Xu <jeffxu@google.com>
+Date: Fri, 19 Aug 2022 20:52:34 +0000
+Subject: [PATCH] CHROMIUM: chromeOS LSM to block memfd execution.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In chromeOS, memfd is frequently seen as a tool
+for noexec bypass. This noexec bypass enables
+“Confused deputy attack” for root escalation.
+
+Example:
+https://crbug.com/1305267
+https://crbug.com/1336668
+
+This change blocks memfd execution in chromeOS LSM.
+
+Existing hook to use: security_bprm_creds_for_exec
+
+In order to block user space memfd execution, we need
+a hook in bprm_execve() after do_open_execat() call.
+
+bprm_execve() is a common code path from 3 entry points:
+1> syscall: execve
+2> syscall: execveat
+3> kernel_execve (used by kernel to invoke user program)
+
+do_open_execat() gets struct file pointer from fd or filename,
+after permission checks.
+
+Since the memfd check is based on file pointer,
+and we want to exit as early as possible, before loading
+the executable,  it is ideal to have the check right after
+do_open_execat call, however that be a new hook.
+
+After do_open_execat(), there is call to sched_exec(), then
+hook security_bprm_creds_for_exec(), sched_exec() is a
+balancing opportunity, (so not too much cost), so we could use
+security_bprm_creds_for_exec() for our purpose.
+
+The file pointer is coming from bprm->file.
+
+With this, chromeOS LSM will block all user space memfd execution.
+
+BUG=b:242725803
+TEST=run manual test
+
+Signed-off-by: Jeff Xu<jeffxu@google.com>
+Change-Id: Ib261d76973e91a29916c05bf0ecf51d06a28be07
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3834992
+Reviewed-by: Guenter Roeck <groeck@chromium.org>
+Reviewed-by: Jorge Lucangeli Obes <jorgelo@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: chromeOS LSM to block memfd execution.
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    fd7f8ec09032ed5e143fda3fb5b01a0076b3fd37
+    fdd5114dd557e3e60ac00505f3e022a27cdbc5dd
+
+ security/chromiumos/lsm.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/security/chromiumos/lsm.c b/security/chromiumos/lsm.c
+index 5502aaf0ed85..8028ae38b2b2 100644
+--- a/security/chromiumos/lsm.c
++++ b/security/chromiumos/lsm.c
+@@ -20,6 +20,7 @@
+ #define pr_fmt(fmt) "Chromium OS LSM: " fmt
+ 
+ #include <asm/syscall.h>
++#include <linux/binfmts.h>
+ #include <linux/cred.h>
+ #include <linux/fs.h>
+ #include <linux/fs_parser.h>
+@@ -33,6 +34,7 @@
+ #include <linux/sched/task_stack.h>
+ #include <linux/sched.h>	/* current and other task related stuff */
+ #include <linux/security.h>
++#include <linux/shmem_fs.h>
+ #include <uapi/linux/mount.h>
+ 
+ #include "inode_mark.h"
+@@ -252,11 +254,22 @@ int chromiumos_sb_eat_lsm_opts(char *options, void **mnt_opts)
+ 	return 0;
+ }
+ 
++static int chromiumos_bprm_creds_for_exec(struct linux_binprm *bprm)
++{
++	struct file *file = bprm->file;
++
++	if (shmem_file(file))
++		return -EACCES;
++
++	return 0;
++}
++
+ static struct security_hook_list chromiumos_security_hooks[] = {
+ 	LSM_HOOK_INIT(sb_mount, chromiumos_security_sb_mount),
+ 	LSM_HOOK_INIT(inode_follow_link, chromiumos_security_inode_follow_link),
+ 	LSM_HOOK_INIT(file_open, chromiumos_security_file_open),
+ 	LSM_HOOK_INIT(sb_eat_lsm_opts, chromiumos_sb_eat_lsm_opts),
++	LSM_HOOK_INIT(bprm_creds_for_exec, chromiumos_bprm_creds_for_exec),
+ };
+ 
+ static int __init chromiumos_security_init(void)
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

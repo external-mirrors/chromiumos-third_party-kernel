@@ -1,0 +1,178 @@
+From 99afd72b408268f70d4accad77d851977d20ac47 Mon Sep 17 00:00:00 2001
+From: Michael Kao <michael.kao@mediatek.com>
+Date: Tue, 12 Mar 2019 17:46:49 +0800
+Subject: [PATCH] FROMLIST: thermal: mediatek: add another get_temp ops for
+ thermal sensors
+
+Provide thermal zone to read thermal sensor
+in the SoC. We can read all the thermal sensors
+value in the SoC by the node /sys/class/thermal/
+
+Signed-off-by: Michael Kao <michael.kao@mediatek.com>
+
+(am from https://patchwork.kernel.org/patch/10938829/)
+
+BUG=b:131870692
+TEST=Read temperature of tzts1~6
+
+Change-Id: I01e3471d6e40d2005bbfeec2e1b6c25a4633743f
+Signed-off-by: Eddie Huang <eddie.huang@mediatek.com>
+Reviewed-on: https://chromium-review.googlesource.com/1637172
+Commit-Ready: Nicolas Boichat <drinkcat@chromium.org>
+Tested-by: Nicolas Boichat <drinkcat@chromium.org>
+Legacy-Commit-Queue: Commit Bot <commit-bot@chromium.org>
+Reviewed-by: Nicolas Boichat <drinkcat@chromium.org>
+[rebase54(groeck): Squashed:
+	FIXUP: FROMLIST: thermal: mediatek: add another get_temp ops for thermal sensors (2x)
+]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+[rebase510(groeck): Function name change;
+    Squashed:
+	FIXUP: FROMLIST: thermal: mediatek: add another get_temp ops for thermal sensors
+]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: FROMLIST: thermal: mediatek: add another get_temp ops for thermal sensors
+	FIXUP: FROMLIST: thermal: mediatek: add another get_temp ops for thermal sensors
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    43f30b7eedce4c0bd934d95466d48718fab30d7c
+    9653baaedec6b2dab524b920757c266e011de4e9
+    1c63c1d1cf0f3e304ef242c342fa10ff91001dae
+
+ drivers/thermal/mtk_thermal.c | 76 ++++++++++++++++++++++++++++++-----
+ 1 file changed, 65 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/thermal/mtk_thermal.c b/drivers/thermal/mtk_thermal.c
+index 8440692e3890..a3f8b16b7889 100644
+--- a/drivers/thermal/mtk_thermal.c
++++ b/drivers/thermal/mtk_thermal.c
+@@ -247,6 +247,11 @@ enum mtk_thermal_version {
+ 
+ struct mtk_thermal;
+ 
++struct mtk_thermal_zone {
++	struct mtk_thermal *mt;
++	int id;
++};
++
+ struct thermal_bank_cfg {
+ 	unsigned int num_sensors;
+ 	const int *sensors;
+@@ -670,7 +675,7 @@ static int mtk_thermal_bank_temperature(struct mtk_thermal_bank *bank)
+ 		 * not immediately shut down.
+ 		 */
+ 		if (temp > 200000)
+-			temp = 0;
++			temp = -EAGAIN;
+ 
+ 		if (temp > max)
+ 			max = temp;
+@@ -694,16 +699,47 @@ static int mtk_read_temp(struct thermal_zone_device *tz, int *temperature)
+ 
+ 		mtk_thermal_put_bank(bank);
+ 	}
+-
+ 	*temperature = tempmax;
+ 
+ 	return 0;
+ }
+ 
++static int mtk_read_sensor_temp(struct thermal_zone_device *tz, int *temperature)
++{
++	struct mtk_thermal *mt = tz->devdata;
++	const struct mtk_thermal_data *conf = mt->conf;
++	int id = tz->id - 1;
++	int temp = INT_MIN;
++	u32 raw;
++
++	if (id < 0)
++		return  -EACCES;
++
++	raw = readl(mt->thermal_base + conf->msr[id]);
++
++	temp = raw_to_mcelsius_v1(mt, id, raw);
++
++	/*
++	 * The first read of a sensor often contains very high bogus
++	 * temperature value. Filter these out so that the system does
++	 * not immediately shut down.
++	 */
++
++	if (temp > 200000)
++		return  -EAGAIN;
++
++	*temperature = temp;
++	return 0;
++}
++
+ static const struct thermal_zone_device_ops mtk_thermal_ops = {
+ 	.get_temp = mtk_read_temp,
+ };
+ 
++static const struct thermal_zone_device_ops mtk_thermal_sensor_ops = {
++	.get_temp = mtk_read_sensor_temp,
++};
++
+ static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
+ 				  u32 apmixed_phys_base, u32 auxadc_phys_base,
+ 				  int ctrl_id)
+@@ -994,6 +1030,7 @@ static int mtk_thermal_probe(struct platform_device *pdev)
+ 	u64 auxadc_phys_base, apmixed_phys_base;
+ 	struct thermal_zone_device *tzdev;
+ 	void __iomem *apmixed_base, *auxadc_base;
++	struct mtk_thermal_zone *tz;
+ 
+ 	mt = devm_kzalloc(&pdev->dev, sizeof(*mt), GFP_KERNEL);
+ 	if (!mt)
+@@ -1082,16 +1119,33 @@ static int mtk_thermal_probe(struct platform_device *pdev)
+ 
+ 	platform_set_drvdata(pdev, mt);
+ 
+-	tzdev = devm_thermal_of_zone_register(&pdev->dev, 0, mt,
+-					      &mtk_thermal_ops);
+-	if (IS_ERR(tzdev)) {
+-		ret = PTR_ERR(tzdev);
+-		goto err_disable_clk_peri_therm;
+-	}
++	for (i = 0; i < mt->conf->num_sensors + 1; i++) {
++		tz = kmalloc(sizeof(*tz), GFP_KERNEL);
++		if (!tz)
++			return -ENOMEM;
++
++		tz->mt = mt;
++		tz->id = i;
++
++		tzdev = devm_thermal_of_zone_register(&pdev->dev, i,
++				tz, (i == 0) ?
++				&mtk_thermal_ops : &mtk_thermal_sensor_ops);
++
++		if (IS_ERR(tzdev)) {
++			if (PTR_ERR(tzdev) == -ENODEV) {
++				dev_warn(&pdev->dev, "can't find thermal sensor %d\n", i);
++				continue;
++			}
++			if (PTR_ERR(tzdev) != -EACCES) {
++				ret = PTR_ERR(tzdev);
++				goto err_disable_clk_peri_therm;
++			}
++		}
+ 
+-	ret = devm_thermal_add_hwmon_sysfs(tzdev);
+-	if (ret)
+-		dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs");
++		ret = devm_thermal_add_hwmon_sysfs(tzdev);
++		if (ret)
++			dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs: %d\n", ret);
++	}
+ 
+ 	return 0;
+ 
+-- 
+2.39.0.314.g84b9a713c41-goog
+

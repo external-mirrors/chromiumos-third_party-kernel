@@ -1,0 +1,100 @@
+From fe2e20febb42300b750c0d1acd11373b84d04da3 Mon Sep 17 00:00:00 2001
+From: Chirantan Ekbote <chirantan@chromium.org>
+Date: Thu, 5 Nov 2020 19:15:44 +0900
+Subject: [PATCH] CHROMIUM: fuse: Implement CHROMEOS_TMPFILE
+
+This is a chrome os extension for fuse implemented in a way that will
+hopefully not conflict with rebases.  The upstream maintainer was not
+happy with this approach because it uses 2 round-trips instead of one.
+However, his proposed mechanism requires changes to the VFS layer but
+the VFS maintainer was non-committal.
+
+At this point, I think the patch is non-intrusive enough that we can
+just maintain it ourselves and if upstream ever gains support for
+O_TMPFILE we can drop it at that time.
+
+BUG=b:160932094
+TEST=Successfully open a file with  O_TMPFILE on virtio-fs
+
+Change-Id: I600abd2d7604f8e167b6be65f5194e18bbf1b554
+Signed-off-by: Chirantan Ekbote <chirantan@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/2520740
+Reviewed-by: Suleiman Souhlal <suleiman@chromium.org>
+Conflicts: fs/fuse/file.c
+[rebase510(groeck):
+    no init_security in v5.10
+    1st argument to create_new_entry() changed
+]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: fuse: Implement CHROMEOS_TMPFILE
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    8de4d93b1f397d7835d3dfa3e571cf56789ee98f
+    b90aa5a33823337790d3f001ed9218bcb0a45cc5
+
+ fs/fuse/dir.c  | 22 ++++++++++++++++++++++
+ fs/fuse/file.c |  2 +-
+ 2 files changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/fs/fuse/dir.c b/fs/fuse/dir.c
+index bb97a384dc5d..76055f9b8b65 100644
+--- a/fs/fuse/dir.c
++++ b/fs/fuse/dir.c
+@@ -841,6 +841,27 @@ static int fuse_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
+ 	return create_new_entry(fm, &args, dir, entry, S_IFDIR);
+ }
+ 
++static int fuse_chromeos_tmpfile(struct user_namespace *mnt_userns, struct inode *dir,
++				 struct file *file, umode_t mode)
++{
++	struct fuse_chromeos_tmpfile_in inarg;
++	struct fuse_mount *fm = get_fuse_mount(dir);
++	FUSE_ARGS(args);
++
++	if (!fm->fc->dont_mask)
++		mode &= ~current_umask();
++
++	memset(&inarg, 0, sizeof(inarg));
++	inarg.mode = mode;
++	inarg.umask = current_umask();
++	args.opcode = FUSE_CHROMEOS_TMPFILE;
++	args.in_numargs = 1;
++	args.in_args[0].size = sizeof(inarg);
++	args.in_args[0].value = &inarg;
++
++	return create_new_entry(fm, &args, dir, file->f_path.dentry, S_IFREG);
++}
++
+ static int fuse_symlink(struct user_namespace *mnt_userns, struct inode *dir,
+ 			struct dentry *entry, const char *link)
+ {
+@@ -1939,6 +1960,7 @@ static const struct inode_operations fuse_dir_inode_operations = {
+ 	.set_acl	= fuse_set_acl,
+ 	.fileattr_get	= fuse_fileattr_get,
+ 	.fileattr_set	= fuse_fileattr_set,
++	.tmpfile	= fuse_chromeos_tmpfile,
+ };
+ 
+ static const struct file_operations fuse_dir_operations = {
+diff --git a/fs/fuse/file.c b/fs/fuse/file.c
+index 71bfb663aac5..8aaf7c894a9b 100644
+--- a/fs/fuse/file.c
++++ b/fs/fuse/file.c
+@@ -27,7 +27,7 @@ static int fuse_send_open(struct fuse_mount *fm, u64 nodeid,
+ 	FUSE_ARGS(args);
+ 
+ 	memset(&inarg, 0, sizeof(inarg));
+-	inarg.flags = open_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
++	inarg.flags = open_flags & ~(O_CREAT | O_EXCL | O_NOCTTY | O_TMPFILE);
+ 	if (!fm->fc->atomic_o_trunc)
+ 		inarg.flags &= ~O_TRUNC;
+ 
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+

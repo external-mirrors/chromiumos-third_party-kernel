@@ -1,0 +1,68 @@
+From 5bd8215bd09fc4302565d6eeaa6b8262709a8938 Mon Sep 17 00:00:00 2001
+From: Guenter Roeck <groeck@chromium.org>
+Date: Sat, 11 Sep 2021 03:57:27 -0700
+Subject: [PATCH] CHROMIUM: Enable CONFIG_WERROR only for important test builds
+
+If CONFIG_WERROR is enabled on test builds for all architectures, 0-day would
+flood us with irrelevant errors. Only enable it for configurations which are
+important for us, ie ARM64, and X86.
+
+We should also enable CONFIG_WERROR for arm builds, but that is probably
+hopeless due to several frame_size errors observed with clang builds.
+
+BUG=b:199583119
+TEST=Test builds
+
+Change-Id: I8a8b656b61827e6eb38187a37ca2c34f58ff6577
+Disallow-Recycled-Builds: test-failures
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3156339
+Reviewed-by: Marty Faltesek <mfaltesek@google.com>
+Reviewed-by: William K Lin <wklin@chromium.org>
+(cherry picked from commit d034161066940eeb5cc2be57024d54ac89595e5e)
+Signed-off-by: Guenter Roeck <groeck@google.com>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3288762
+Reviewed-by: Zubin Mithra <zsm@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	CHROMIUM: arm: enable CONFIG_WERROR for arm on test builds
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    57f821d073ed5a2cd546240ba1861f36877aad90
+    d1dc7e515bb1bd4d16ca962831fbd76ec7d188cf
+
+ init/Kconfig      | 1 +
+ lib/Kconfig.debug | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/init/Kconfig b/init/Kconfig
+index 94125d3b6893..f609be0664a2 100644
+--- a/init/Kconfig
++++ b/init/Kconfig
+@@ -155,6 +155,7 @@ config COMPILE_TEST
+ 
+ config WERROR
+ 	bool "Compile the kernel with warnings as errors"
++	depends on !COMPILE_TEST || ARM64 || X86 || ARM
+ 	default COMPILE_TEST
+ 	help
+ 	  A kernel build should not cause any compiler warnings, and this
+diff --git a/lib/Kconfig.debug b/lib/Kconfig.debug
+index 3638b3424be5..79107b4e7f16 100644
+--- a/lib/Kconfig.debug
++++ b/lib/Kconfig.debug
+@@ -396,6 +396,7 @@ config FRAME_WARN
+ 	int "Warn for stack frames larger than"
+ 	range 0 8192
+ 	default 0 if KMSAN
++	default 8192 if ARM && COMPILE_TEST
+ 	default 2048 if GCC_PLUGIN_LATENT_ENTROPY
+ 	default 2048 if PARISC
+ 	default 1536 if (!64BIT && XTENSA)
+-- 
+2.39.0.314.g84b9a713c41-goog
+

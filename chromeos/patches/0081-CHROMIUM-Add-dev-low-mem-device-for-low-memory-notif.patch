@@ -1,0 +1,837 @@
+From 01f0d38db9bbef06d60099f35788f5c1010f1009 Mon Sep 17 00:00:00 2001
+From: Luigi Semenzato <semenzato@chromium.org>
+Date: Thu, 3 Apr 2014 17:23:06 -0700
+Subject: [PATCH] CHROMIUM: Add /dev/low-mem device for low-memory
+ notification.
+
+This patch adds a simple low-memory notification mechanism.  I took a recent
+proposal by Minchan Kim and adapted it to our (Chromium OS) needs.
+
+A process requests a low-memory notification by polling /dev/low-mem
+(this name could change).  The kernel checks for low-memory conditions in
+the allocator fast path and wakes up the poll queue when such conditions
+occur.  Low-memory conditions are also checked when a process enters
+the poll function, to ensure that any freeing done by the process is
+noticed.
+
+Low memory condition is defined as the ratio of "free memory" to total memory
+being lower than a given margin.  The margin is 10% by default and can be
+changed via /sys/kernel/mm/low_mem/margin (this name could change).
+
+Free memory is computed as an approximation as described in the code.
+
+This patch also contains a test program in tools/mm/low-mem-test.c.
+
+BUG=chromium-os:20086
+TEST=see enclosed test program.  Test team: verify that /dev/low-mem exists.
+
+Signed-off-by: Luigi Semenzato <semenzato@chromium.org>
+
+Change-Id: Iec1eb499d1482e818b491bacf1d48f53a5d9e191
+Reviewed-on: https://gerrit.chromium.org/gerrit/14635
+Tested-by: Luigi Semenzato <semenzato@chromium.org>
+Reviewed-by: Mandeep Singh Baines <msb@chromium.org>
+Reviewed-by: Olof Johansson <olofj@chromium.org>
+Commit-Ready: Luigi Semenzato <semenzato@chromium.org>
+
+Conflicts:
+	mm/page_alloc.c
+
+[anush: fixes for 3.3]
+Signed-off-by: Anush Elangovan <anush@chromium.org>
+
+[benzh: 3.14 rebase. "oldmem" memdev has beem removed. Fixed mm/Kconfig whitespace]
+Signed-off-by: Ben Zhang <benzh@chromium.org>
+
+Conflicts:
+	mm/Kconfig
+	mm/Makefile
+	mm/page_alloc.c
+[filbranden: 3.18 rebase. Solved conflicts, rename strict_strtoul -> kstrtoul]
+Signed-off-by: Filipe Brandenburger <filbranden@chromium.org>
+
+Conflicts:
+	drivers/char/mem.c
+	mm/Kconfig
+	mm/Makefile
+	mm/page_alloc.c
+
+[rebase44(groeck): Resolved conflicts;
+	Adjusted for upstream data structure change in drivers/char/mem.c]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+Conflicts:
+	mm/Kconfig
+	mm/Makefile
+	mm/page_alloc.c
+
+[rebase412(groeck): Resolved conflicts]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+Conflicts:
+	mm/Kconfig
+
+[rebase414(teravest): Resolved trivial conflict]
+Signed-off-by: Justin TerAvest <teravest@chromium.org>
+
+[rebase419(groeck): Squash
+	CHROMIUM: fix low-memory notification patch (change Iec1eb499)
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase54(yuzhao): Squash
+	  cd6dae3cd463 ("CHROMIUM: low-mem: improve detection of low-memory conditions.")
+	  8fb71ef7b6ec ("CHROMIUM: low-mem: Fix incorrect logging in debug code for low-mem-notify.")
+	  12a973b9646d ("CHROMIUM: low-mem: fix sign of free memory calculation.")
+	  405e19006b0f ("CHROMIUM: change low-mem to chromeos-low-mem in /sys/kernel/mm.")
+	  1fa6b9516423 ("CHROMIUM: low-mem notifier: lower default, change units, enable disabling")
+	  8249734249c7 ("CHROMIUM: low-mem: add "on" command and fix error case")
+	  fa92fb263868 ("CHROMIUM: low-mem: work with swap enabled")
+	  d950f3448614 ("CHROMIUM: low_mem: Use get_nr_swap_pages()")
+	  7d8e3cf4dc72 ("CHROMIUM: Consider min_free_kbytes in low memory notification.")
+	  705c56164a14 ("CHROMIUM: low-mem: Add "available" sysfs file.")
+	  950d9e4560ca ("CHROMIUM: low_mem: make ram_vs_swap_weight configurable")
+	  825100e54c02 ("CHROMIUM: low_mem: fix file_size underflow")
+	  e0509f4160bc ("CHROMIUM: mm: low-mem-notify: fix LRU counter usage for 4.14")
+	  da545b500aef ("CHROMIUM: low_mem: use enum node_stat_item directly to get memory status")
+	  a1f90f2a37a3 ("CHROMIUM: low_mem: notify low memory when anonymous is low")
+	  785186ff7513 ("CHROMIUM: low_mem: log low memory notification with rate limit")
+	  b7ec7fb624df ("CHROMIUM: low-mem: Fix return type of low_mem_notify_poll")
+	  3923e87e395b ("CHROMIUM: low-mem: handle multiple levels and provide edge notifications")
+	  f0caba2ba832 ("CHROMIUM: low_mem: exclude totalreserve_pages from available memory")
+	  d06b5269009a ("CHROMIUM: mm: low_mem_notify before unreserving highatomic")
+	  d91758439ffe ("FIXUP: CHROMIUM: low-mem: handle multiple levels and provide edge notifications")
+]
+Signed-off-by: Yu Zhao <yuzhao@google.com>
+[rebase510(groeck): Context conflicts]
+Signed-off-by: Guenter Roeck <groeck@chromium.org>
+
+Change-Id: Iecee1c530f75cc10741c8f67fbc5ba4bbf707963
+
+[rebase61(tzungbi):
+    Squashed:
+	CHROMIUM: mm: move low memory code
+	CHROMIUM: mm: low_mem_notify: Fix division by 0 error
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    53c0984971b28acd7fb627f44f5d3ad81ab914e7
+    adcbe56221df39a8c010a29170ba05e4dbbeb904
+    3eaaa3b172594a20f1f0112d5fcb5db031033ce2
+
+ drivers/char/mem.c             |   4 +
+ include/linux/low-mem-notify.h |  22 ++
+ mm/Kconfig                     |  11 +
+ mm/Makefile                    |   1 +
+ mm/low-mem-notify.c            | 397 +++++++++++++++++++++++++++++++++
+ mm/page_alloc.c                |   4 +
+ tools/mm/low-mem-test.c        | 178 +++++++++++++++
+ 7 files changed, 617 insertions(+)
+ create mode 100644 include/linux/low-mem-notify.h
+ create mode 100644 mm/low-mem-notify.c
+ create mode 100644 tools/mm/low-mem-test.c
+
+diff --git a/drivers/char/mem.c b/drivers/char/mem.c
+index 5611d127363e..4a20c66e1f8e 100644
+--- a/drivers/char/mem.c
++++ b/drivers/char/mem.c
+@@ -30,6 +30,7 @@
+ #include <linux/uio.h>
+ #include <linux/uaccess.h>
+ #include <linux/security.h>
++#include <linux/low-mem-notify.h>
+ 
+ #ifdef CONFIG_IA64
+ # include <linux/efi.h>
+@@ -717,6 +718,9 @@ static const struct memdev {
+ #ifdef CONFIG_PRINTK
+ 	[11] = { "kmsg", 0644, &kmsg_fops, 0 },
+ #endif
++#ifdef CONFIG_LOW_MEM_NOTIFY
++	[12] = { "chromeos-low-mem", 0666, &low_mem_notify_fops, 0 },
++#endif
+ };
+ 
+ static int memory_open(struct inode *inode, struct file *filp)
+diff --git a/include/linux/low-mem-notify.h b/include/linux/low-mem-notify.h
+new file mode 100644
+index 000000000000..0c2c18a9cc39
+--- /dev/null
++++ b/include/linux/low-mem-notify.h
+@@ -0,0 +1,22 @@
++#ifndef _LINUX_LOW_MEM_NOTIFY_H
++#define _LINUX_LOW_MEM_NOTIFY_H
++
++#include <linux/types.h>
++
++#ifdef CONFIG_LOW_MEM_NOTIFY
++extern const struct file_operations low_mem_notify_fops;
++
++void low_mem_notify(void);
++bool low_mem_check(void);
++#else
++static inline void low_mem_notify(void)
++{
++}
++
++static inline bool low_mem_check(void)
++{
++	return false;
++}
++#endif
++
++#endif
+diff --git a/mm/Kconfig b/mm/Kconfig
+index 3cf535ba76ca..14fb4f54df3a 100644
+--- a/mm/Kconfig
++++ b/mm/Kconfig
+@@ -1167,6 +1167,17 @@ config LRU_GEN_STATS
+ 	  This option has a per-memcg and per-node memory overhead.
+ # }
+ 
++config LOW_MEM_NOTIFY
++	bool "Create device that lets processes detect low-memory conditions"
++	default n
++	help
++	  A process can poll the /dev/low_mem device to be notified of
++	  low-memory conditions.  The process can then attempt to free memory
++	  before a OOM condition develops and the OOM killer takes over.  This
++	  is meant to be used in systems with no or very little swap space.  In
++	  the presence of large swap space, the system is likely to become
++	  unusable before the OOM killer is triggered.
++
+ source "mm/damon/Kconfig"
+ 
+ endmenu
+diff --git a/mm/Makefile b/mm/Makefile
+index 8e105e5b3e29..c0d2c0ef541e 100644
+--- a/mm/Makefile
++++ b/mm/Makefile
+@@ -124,6 +124,7 @@ obj-$(CONFIG_SECRETMEM) += secretmem.o
+ obj-$(CONFIG_CMA_SYSFS) += cma_sysfs.o
+ obj-$(CONFIG_USERFAULTFD) += userfaultfd.o
+ obj-$(CONFIG_IDLE_PAGE_TRACKING) += page_idle.o
++obj-$(CONFIG_LOW_MEM_NOTIFY) += low-mem-notify.o
+ obj-$(CONFIG_DEBUG_PAGE_REF) += debug_page_ref.o
+ obj-$(CONFIG_DAMON) += damon/
+ obj-$(CONFIG_HARDENED_USERCOPY) += usercopy.o
+diff --git a/mm/low-mem-notify.c b/mm/low-mem-notify.c
+new file mode 100644
+index 000000000000..3583dc43221d
+--- /dev/null
++++ b/mm/low-mem-notify.c
+@@ -0,0 +1,397 @@
++/*
++ * mm/low-mem-notify.c
++ *
++ * Sends low-memory notifications to processes via /dev/low-mem.
++ *
++ * Copyright (C) 2012 The Chromium OS Authors
++ * This program is free software, released under the GPL.
++ * Based on a proposal by Minchan Kim
++ *
++ * A process that polls /dev/low-mem is notified of a low-memory situation.
++ * The intent is to allow the process to free some memory before the OOM killer
++ * is invoked.
++ *
++ * A low-memory condition is estimated by subtracting anonymous memory
++ * (i.e. process data segments), kernel memory, and a fixed amount of
++ * file-backed memory from total memory.  This is just a heuristic, as in
++ * general we don't know how much memory can be reclaimed before we try to
++ * reclaim it, and that's too expensive or too late.
++ *
++ * This is tailored to Chromium OS, where a single program (the browser)
++ * controls most of the memory, and (currently) no swap space is used.
++ */
++
++
++#include <linux/module.h>
++#include <linux/sched.h>
++#include <linux/wait.h>
++#include <linux/poll.h>
++#include <linux/slab.h>
++#include <linux/mm.h>
++#include <linux/ctype.h>
++#include <linux/ratelimit.h>
++#include <linux/stddef.h>
++#include <linux/swap.h>
++#include <linux/low-mem-notify.h>
++
++#define MB (1 << 20)
++
++static DECLARE_WAIT_QUEUE_HEAD(low_mem_wait);
++static atomic_t low_mem_state = ATOMIC_INIT(0);
++
++/* We support up to this many different thresholds. */
++#define LOW_MEM_THRESHOLD_MAX 5
++
++/* This is a list of thresholds in pages and should be in ascending order. */
++static unsigned long low_mem_thresholds[LOW_MEM_THRESHOLD_MAX] = {
++	50 * MB / PAGE_SIZE
++};
++static unsigned int low_mem_threshold_count = 1;
++
++static bool low_mem_margin_enabled = true;
++static unsigned int low_mem_ram_vs_swap_weight = 4;
++
++void low_mem_notify(void)
++{
++	atomic_set(&low_mem_state, true);
++	wake_up(&low_mem_wait);
++}
++
++/*
++ * Compute available memory used by files that can be reclaimed quickly.
++ */
++static unsigned long get_available_file_mem(void)
++{
++	unsigned long file_mem =
++			global_node_page_state(NR_ACTIVE_FILE) +
++			global_node_page_state(NR_INACTIVE_FILE);
++	unsigned long dirty_mem = global_node_page_state(NR_FILE_DIRTY);
++	unsigned long min_file_mem = min_filelist_kbytes >> (PAGE_SHIFT - 10);
++	unsigned long clean_file_mem = file_mem > dirty_mem ?
++			file_mem - dirty_mem : 0;
++	/* Conservatively estimate the amount of available_file_mem */
++	unsigned long available_file_mem = clean_file_mem > min_file_mem ?
++			clean_file_mem - min_file_mem : 0;
++	return available_file_mem;
++}
++
++/*
++ * Available anonymous memory.
++ */
++static unsigned long get_available_anon_mem(void)
++{
++	return global_node_page_state(NR_ACTIVE_ANON) +
++		global_node_page_state(NR_INACTIVE_ANON);
++}
++
++/*
++ * Compute "available" memory, that is either free memory or memory that can be
++ * reclaimed quickly, adjusted for the presence of swap.
++ */
++static unsigned long get_available_mem_adj(void)
++{
++	/* free_mem is completely unallocated; clean file-backed memory
++	 * (file_mem - dirty_mem) is easy to reclaim, except for the last
++	 * min_filelist_kbytes. totalreserve_pages is the reserve of pages that
++	 * are not available to user space.
++	 */
++	unsigned long raw_free_mem = global_zone_page_state(NR_FREE_PAGES);
++	unsigned long free_mem = raw_free_mem > totalreserve_pages ?
++			raw_free_mem - totalreserve_pages : 0;
++	unsigned long available_mem = free_mem + get_available_file_mem();
++	unsigned long swappable_pages = min_t(unsigned long,
++			get_nr_swap_pages(), get_available_anon_mem());
++	/*
++	 * The contribution of swap is reduced by a factor of
++	 * low_mem_ram_vs_swap_weight.
++	 */
++	return available_mem + swappable_pages / low_mem_ram_vs_swap_weight;
++}
++
++#ifdef CONFIG_SYSFS
++static void low_mem_threshold_notify(void);
++#else
++static void low_mem_threshold_notify(void)
++{
++}
++#endif
++
++/*
++ * Returns TRUE if we are in a low memory state.
++ */
++bool low_mem_check(void)
++{
++	static bool was_low_mem;	/* = false, as per style guide */
++	static atomic_t in_low_mem_check = ATOMIC_INIT(0);
++	/* last observed threshold */
++	static unsigned int low_mem_threshold_last = UINT_MAX;
++	/* Limit logging low memory to once per second. */
++	static DEFINE_RATELIMIT_STATE(low_mem_logging_ratelimit, 1 * HZ, 1);
++
++	/* We declare a low-memory condition when a combination of RAM and swap
++	 * space is low.
++	 */
++	unsigned long available_mem = get_available_mem_adj();
++	/*
++	 * For backwards compatibility with the older margin interface, we will
++	 * trigger the /dev/chromeos-low_mem device when we are below the
++	 * lowest threshold
++	 */
++	bool is_low_mem = available_mem < low_mem_thresholds[0];
++	unsigned int threshold_lowest = UINT_MAX;
++	int i;
++
++	if (!low_mem_margin_enabled)
++		return false;
++
++	if (atomic_read(&in_low_mem_check) || atomic_xchg(&in_low_mem_check, 1))
++		return was_low_mem;
++
++	if (unlikely(is_low_mem && !was_low_mem) &&
++	    __ratelimit(&low_mem_logging_ratelimit)) {
++		pr_info("entering low_mem (avail RAM = %lu kB, avail swap %lu kB, avail file %lu kB, anon mem: %lu kB)\n",
++			available_mem * PAGE_SIZE / 1024,
++			get_nr_swap_pages() * PAGE_SIZE / 1024,
++			get_available_file_mem() * PAGE_SIZE / 1024,
++			get_available_anon_mem() * PAGE_SIZE / 1024);
++	}
++	was_low_mem = is_low_mem;
++
++	if (is_low_mem)
++		low_mem_notify();
++
++	for (i = 0; i < low_mem_threshold_count; i++) {
++		if (available_mem < low_mem_thresholds[i]) {
++			threshold_lowest = i;
++			break;
++		}
++	}
++
++	/* we crossed one or more thresholds */
++	if (unlikely(threshold_lowest < low_mem_threshold_last))
++		low_mem_threshold_notify();
++
++	low_mem_threshold_last = threshold_lowest;
++
++	atomic_set(&in_low_mem_check, 0);
++
++	return is_low_mem;
++}
++
++static int low_mem_notify_open(struct inode *inode, struct file *file)
++{
++	return 0;
++}
++
++static int low_mem_notify_release(struct inode *inode, struct file *file)
++{
++	return 0;
++}
++
++static __poll_t low_mem_notify_poll(struct file *file, poll_table *wait)
++{
++	/* Update state to reflect any recent freeing. */
++	atomic_set(&low_mem_state, low_mem_check());
++
++	poll_wait(file, &low_mem_wait, wait);
++
++	if (low_mem_margin_enabled && atomic_read(&low_mem_state))
++		return POLLIN;
++
++	return 0;
++}
++
++const struct file_operations low_mem_notify_fops = {
++	.open = low_mem_notify_open,
++	.release = low_mem_notify_release,
++	.poll = low_mem_notify_poll,
++};
++EXPORT_SYMBOL(low_mem_notify_fops);
++
++#ifdef CONFIG_SYSFS
++
++#define LOW_MEM_ATTR(_name)				      \
++	static struct kobj_attribute low_mem_##_name##_attr = \
++		__ATTR(_name, 0644, low_mem_##_name##_show,   \
++		       low_mem_##_name##_store)
++
++static ssize_t low_mem_margin_show(struct kobject *kobj,
++				  struct kobj_attribute *attr, char *buf)
++{
++	int i;
++	ssize_t written = 0;
++
++	if (!low_mem_margin_enabled || !low_mem_threshold_count)
++		return sprintf(buf, "off\n");
++
++	for (i = 0; i < low_mem_threshold_count; i++)
++		written += sprintf(buf + written, "%lu ",
++			    low_mem_thresholds[i] * PAGE_SIZE / MB);
++	written += sprintf(buf + written, "\n");
++	return written;
++}
++
++static ssize_t low_mem_margin_store(struct kobject *kobj,
++				    struct kobj_attribute *attr,
++				    const char *buf, size_t count)
++{
++	int i = 0, consumed = 0;
++	const char *start = buf;
++	char *endp;
++	unsigned long thresholds[LOW_MEM_THRESHOLD_MAX];
++
++	memset(thresholds, 0, sizeof(thresholds));
++	/*
++	 * Even though the API does not say anything about this, the string in
++	 * buf is zero-terminated (as long as count < PAGE_SIZE) because buf is
++	 * a newly allocated zero-filled page.  Most other sysfs handlers rely
++	 * on this too.
++	 */
++	if (strncmp("off", buf, 3) == 0) {
++		pr_info("low_mem: disabling notifier\n");
++		low_mem_margin_enabled = false;
++		return count;
++	}
++	if (strncmp("on", buf, 2) == 0) {
++		pr_info("low_mem: enabling notifier\n");
++		low_mem_margin_enabled = true;
++		return count;
++	}
++	/*
++	 * This takes a space separated list of thresholds in ascending order,
++	 * and a trailing newline is optional.
++	 */
++	while (consumed < count) {
++		if (i >= LOW_MEM_THRESHOLD_MAX) {
++			pr_warn("low-mem: too many thresholds");
++			return -EINVAL;
++		}
++		/* special case for trailing newline */
++		if (*start == '\n')
++			break;
++
++		thresholds[i] = simple_strtoul(start, &endp, 0);
++		if ((endp == start) && *endp != '\n')
++			return -EINVAL;
++
++		/* make sure each is larger than the last one */
++		if (i && thresholds[i] <= thresholds[i - 1]) {
++			pr_warn("low-mem: thresholds not in increasing order: %lu then %lu\n",
++				thresholds[i - 1], thresholds[i]);
++			return -EINVAL;
++		}
++
++		if (thresholds[i] * (MB / PAGE_SIZE) > totalram_pages()) {
++			pr_warn("low-mem: threshold too high\n");
++			return -EINVAL;
++		}
++
++		consumed += endp - start + 1;
++		start = endp + 1;
++		i++;
++	}
++
++	low_mem_threshold_count = i;
++	low_mem_margin_enabled = !!low_mem_threshold_count;
++
++	/* Convert to pages outside the allocator fast path. */
++	for (i = 0; i < low_mem_threshold_count; i++) {
++		low_mem_thresholds[i] = thresholds[i] * (MB / PAGE_SIZE);
++		pr_info("low_mem: threshold[%d] %lu MB\n", i,
++			low_mem_thresholds[i] * PAGE_SIZE / MB);
++	}
++
++	return count;
++}
++LOW_MEM_ATTR(margin);
++
++static ssize_t low_mem_ram_vs_swap_weight_show(struct kobject *kobj,
++					       struct kobj_attribute *attr,
++					       char *buf)
++{
++	return sprintf(buf, "%u\n", low_mem_ram_vs_swap_weight);
++}
++
++static ssize_t low_mem_ram_vs_swap_weight_store(struct kobject *kobj,
++						struct kobj_attribute *attr,
++						const char *buf, size_t count)
++{
++	int err;
++	unsigned weight;
++
++	err = kstrtouint(buf, 10, &weight);
++	if (err)
++		return -EINVAL;
++
++	/* The special value 0 represents infinity. */
++	low_mem_ram_vs_swap_weight = !weight ? -1 : weight;
++	pr_info("low_mem: setting ram weight to %u\n",
++		low_mem_ram_vs_swap_weight);
++	return count;
++}
++LOW_MEM_ATTR(ram_vs_swap_weight);
++
++static ssize_t low_mem_available_show(struct kobject *kobj,
++				      struct kobj_attribute *attr,
++				      char *buf)
++{
++	unsigned long available_mem = get_available_mem_adj();
++
++	return sprintf(buf, "%lu\n",
++		       available_mem / (MB / PAGE_SIZE));
++}
++
++static ssize_t low_mem_available_store(struct kobject *kobj,
++				       struct kobj_attribute *attr,
++				       const char *buf, size_t count)
++{
++	return -EINVAL;
++}
++LOW_MEM_ATTR(available);
++
++static struct attribute *low_mem_attrs[] = {
++	&low_mem_margin_attr.attr,
++	&low_mem_ram_vs_swap_weight_attr.attr,
++	&low_mem_available_attr.attr,
++	NULL,
++};
++
++static struct attribute_group low_mem_attr_group = {
++	.attrs = low_mem_attrs,
++	.name = "chromeos-low_mem",
++};
++
++static struct kernfs_node *low_mem_available_dirent;
++
++static void low_mem_threshold_notify(void)
++{
++	if (low_mem_available_dirent)
++		sysfs_notify_dirent(low_mem_available_dirent);
++}
++
++static int __init low_mem_init(void)
++{
++	int err;
++	struct kernfs_node *low_mem_node;
++
++	err = sysfs_create_group(mm_kobj, &low_mem_attr_group);
++	if (err) {
++		pr_err("low_mem: register sysfs failed\n");
++		return err;
++	}
++
++	low_mem_node = sysfs_get_dirent(mm_kobj->sd, "chromeos-low_mem");
++	if (low_mem_node) {
++		low_mem_available_dirent =
++		    sysfs_get_dirent(low_mem_node, "available");
++		sysfs_put(low_mem_node);
++	}
++
++	if (!low_mem_available_dirent)
++		pr_warn("unable to find dirent for \"available\" attribute\n");
++
++	return 0;
++}
++module_init(low_mem_init)
++
++#endif
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 6e60657875d3..e0e1536bf143 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -76,6 +76,7 @@
+ #include <linux/khugepaged.h>
+ #include <linux/buffer_head.h>
+ #include <linux/delayacct.h>
++#include <linux/low-mem-notify.h>
+ #include <asm/sections.h>
+ #include <asm/tlbflush.h>
+ #include <asm/div64.h>
+@@ -4938,6 +4939,7 @@ should_reclaim_retry(gfp_t gfp_mask, unsigned order,
+ 	 * several times in the row.
+ 	 */
+ 	if (*no_progress_loops > MAX_RECLAIM_RETRIES) {
++		low_mem_notify();
+ 		/* Before OOM, exhaust highatomic_reserve */
+ 		return unreserve_highatomic_pageblock(ac, true);
+ 	}
+@@ -5548,6 +5550,8 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
+ 			&alloc_gfp, &alloc_flags))
+ 		return NULL;
+ 
++	low_mem_check();
++
+ 	/*
+ 	 * Forbid the first pass from falling back to types that fragment
+ 	 * memory until all local zones are considered.
+diff --git a/tools/mm/low-mem-test.c b/tools/mm/low-mem-test.c
+new file mode 100644
+index 000000000000..e5cc8390b3e0
+--- /dev/null
++++ b/tools/mm/low-mem-test.c
+@@ -0,0 +1,178 @@
++/* Copyright (c) 2012 The Chromium OS Authors. All rights reserved.
++ * This program is free software, released under the GPL.
++ * Based on code by Minchan Kim
++ *
++ * User program that tests low-memory notifications.
++ *
++ * Compile with -lpthread
++ * for instance
++ * i686-pc-linux-gnu-gcc low-mem-test.c -o low-mem-test -lpthread
++ *
++ * Run as: low-mem-test <allocation size> <allocation interval (microseconds)>
++ *
++ * This program runs in two threads.  One thread continuously allocates memory
++ * in the given chunk size, waiting for the specified microsecond interval
++ * between allocations.  The other runs in a loop that waits for a low-memory
++ * notification, then frees some of the memory that the first thread has
++ * allocated.
++ */
++
++#include <poll.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <stdio.h>
++#include <pthread.h>
++#include <stdlib.h>
++#include <string.h>
++
++int memory_chunk_size = 10000000;
++int wait_time_us = 10000;
++int autotesting;
++
++pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
++
++struct node {
++	void *memory;
++	struct node *prev;
++	struct node *next;
++};
++
++struct node head, tail;
++
++void work(void)
++{
++	int i;
++
++	while (1) {
++		struct node *new = malloc(sizeof(struct node));
++		if (new == NULL) {
++			perror("allocating node");
++			exit(1);
++		}
++		new->memory = malloc(memory_chunk_size);
++		if (new->memory == NULL) {
++			perror("allocating chunk");
++			exit(1);
++		}
++
++		pthread_mutex_lock(&mutex);
++		new->next = &head;
++		new->prev = head.prev;
++		new->prev->next = new;
++		new->next->prev = new;
++		for (i = 0; i < memory_chunk_size / 4096; i++) {
++			/* touch page */
++			((unsigned char *) new->memory)[i * 4096] = 1;
++		}
++
++		pthread_mutex_unlock(&mutex);
++
++		if (!autotesting) {
++			printf("+");
++			fflush(stdout);
++		}
++
++		usleep(wait_time_us);
++	}
++}
++
++void free_memory(void)
++{
++	struct node *old;
++	pthread_mutex_lock(&mutex);
++	old = tail.next;
++	if (old == &head) {
++		fprintf(stderr, "no memory left to free\n");
++		exit(1);
++	}
++	old->prev->next = old->next;
++	old->next->prev = old->prev;
++	free(old->memory);
++	free(old);
++	pthread_mutex_unlock(&mutex);
++	if (!autotesting) {
++		printf("-");
++		fflush(stdout);
++	}
++}
++
++void *poll_thread(void *dummy)
++{
++	struct pollfd pfd;
++	int fd = open("/dev/chromeos-low-mem", O_RDONLY);
++	if (fd == -1) {
++		perror("/dev/chromeos-low-mem");
++		exit(1);
++	}
++
++	pfd.fd = fd;
++	pfd.events = POLLIN;
++
++	if (autotesting) {
++		/* Check that there is no memory shortage yet. */
++		poll(&pfd, 1, 0);
++		if (pfd.revents != 0) {
++			exit(0);
++		} else {
++			fprintf(stderr, "expected no events but "
++				"poll() returned 0x%x\n", pfd.revents);
++			exit(1);
++		}
++	}
++
++	while (1) {
++		poll(&pfd, 1, -1);
++		if (autotesting) {
++			/* Free several chunks and check that the notification
++			 * is gone. */
++			free_memory();
++			free_memory();
++			free_memory();
++			free_memory();
++			free_memory();
++			poll(&pfd, 1, 0);
++			if (pfd.revents == 0) {
++				exit(0);
++			} else {
++				fprintf(stderr, "expected no events but "
++					"poll() returned 0x%x\n", pfd.revents);
++				exit(1);
++			}
++		}
++		free_memory();
++	}
++}
++
++int main(int argc, char **argv)
++{
++	pthread_t threadid;
++
++	head.next = NULL;
++	head.prev = &tail;
++	tail.next = &head;
++	tail.prev = NULL;
++
++	if (argc != 3 && (argc != 2 || strcmp(argv[1], "autotesting"))) {
++		fprintf(stderr,
++			"usage: low-mem-test <alloc size in bytes> "
++			"<alloc interval in microseconds>\n"
++			"or:    low-mem-test autotesting\n");
++		exit(1);
++	}
++
++	if (argc == 2) {
++		autotesting = 1;
++	} else {
++		memory_chunk_size = atoi(argv[1]);
++		wait_time_us = atoi(argv[2]);
++	}
++
++	if (pthread_create(&threadid, NULL, poll_thread, NULL)) {
++		perror("pthread");
++		return 1;
++	}
++
++	work();
++	return 0;
++}
+-- 
+2.39.0.314.g84b9a713c41-goog
+

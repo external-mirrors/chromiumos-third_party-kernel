@@ -1,0 +1,51 @@
+From 4d18d5067e3e7f95f83e31fe1c761c5eda7b2058 Mon Sep 17 00:00:00 2001
+From: Pin-yen Lin <treapking@chromium.org>
+Date: Fri, 7 Oct 2022 19:21:09 +0800
+Subject: [PATCH] CHROMIUM: drm/bridge: it6505: Add completion in Type-C MUX
+ set callback
+
+This is required to adapt to a recent series for improving it6505
+synchronization.
+
+BUG=b:238067574, b:253549368
+TEST=Re-plug the external display quickly
+UPSTREAM-TASK=b:255468958
+
+Change-Id: Id8fb47ad80e40ffb68773bf9a02280a83f59eb8b
+Signed-off-by: Pin-yen Lin <treapking@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3943281
+Reviewed-by: Hsin-Yi Wang <hsinyi@chromium.org>
+
+[rebase61(tzungbi):
+    Fixed context conflicts due to "FIXUP: FROMLIST: drm/bridge: it6505:
+    Add typec_mux_set callback function" squashed.
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    edb1e31a39a95caa95dc0c83620952e07c742ba8
+
+ drivers/gpu/drm/bridge/ite-it6505.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/gpu/drm/bridge/ite-it6505.c b/drivers/gpu/drm/bridge/ite-it6505.c
+index d41f64a99ee3..d6bab11f2d5c 100644
+--- a/drivers/gpu/drm/bridge/ite-it6505.c
++++ b/drivers/gpu/drm/bridge/ite-it6505.c
+@@ -3431,9 +3431,12 @@ static int it6505_typec_mux_set(struct typec_mux_dev *mux,
+ 		 */
+ 		if (ret < 0)
+ 			it6505_poweron(it6505);
++
++		complete_all(&it6505->extcon_completion);
+ 	}
+ 
+ 	if (old_dp_connected && !new_dp_connected) {
++		reinit_completion(&it6505->extcon_completion);
+ 		pm_runtime_put_sync(dev);
+ 		if (it6505->bridge.dev)
+ 			drm_helper_hpd_irq_event(it6505->bridge.dev);
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
