@@ -1,0 +1,69 @@
+From bb82495d167623093d609c18a91211faf74ac915 Mon Sep 17 00:00:00 2001
+From: Colin Cross <ccross@android.com>
+Date: Mon, 6 May 2013 23:50:16 +0000
+Subject: [PATCH] ANDROID: fs: epoll: use freezable blocking call
+
+Avoid waking up every thread sleeping in an epoll_wait call during
+suspend and resume by calling a freezable blocking call.  Previous
+patches modified the freezer to avoid sending wakeups to threads
+that are blocked in freezable blocking calls.
+
+This call was selected to be converted to a freezable call because
+it doesn't hold any locks or release any resources when interrupted
+that might be needed by another freezing task or a kernel driver
+during suspend, and is a common site where idle userspace tasks are
+blocked.
+
+[CPNOTE: 20/07/21] Lee: Pinged the bug for status
+
+Bug: 77139736
+Bug: 120440023
+[ccross: This was upstream (https://lkml.org/lkml/2013/5/6/823), but
+         reverted because it reportedly caused memory corruption on
+         32-bit x86 (https://patchwork.kernel.org/patch/3162301/).]
+Acked-by: Tejun Heo <tj@kernel.org>
+Signed-off-by: Colin Cross <ccross@android.com>
+Signed-off-by: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
+[gregkh: add this back after the 5.11-rc1 merge mess]
+Signed-off-by: Greg Kroah-Hartman <gregkh@google.com>
+Change-Id: Ia8268d310c00f0cfa6c01f36f3fa528e04f206e0
+Signed-off-by: Lee Jones <joneslee@google.com>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: ANDROID: fs: epoll: use freezable blocking call
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    c1efa4122c04c2202f515c85e6de952e48af5054
+    43b7a59826bde7fabfe4781062cea3af6952484f
+
+ fs/eventpoll.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/fs/eventpoll.c b/fs/eventpoll.c
+index 52954d4637b5..98b3431a880c 100644
+--- a/fs/eventpoll.c
++++ b/fs/eventpoll.c
+@@ -29,6 +29,7 @@
+ #include <linux/mutex.h>
+ #include <linux/anon_inodes.h>
+ #include <linux/device.h>
++#include <linux/freezer.h>
+ #include <linux/uaccess.h>
+ #include <asm/io.h>
+ #include <asm/mman.h>
+@@ -1859,7 +1860,7 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
+ 		 * the same lock on wakeup ep_poll_callback() side, so it
+ 		 * is safe to avoid an explicit barrier.
+ 		 */
+-		__set_current_state(TASK_INTERRUPTIBLE);
++		__set_current_state(TASK_INTERRUPTIBLE|TASK_FREEZABLE);
+ 
+ 		/*
+ 		 * Do the final check under the lock. ep_scan_ready_list()
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
