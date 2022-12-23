@@ -1,0 +1,51 @@
+From 6d8cf356d0679c7cd72586d9b598e76ed01de218 Mon Sep 17 00:00:00 2001
+From: Gwendal Grignou <gwendal@chromium.org>
+Date: Fri, 17 Jun 2022 17:49:04 -0700
+Subject: [PATCH] CHROMIUM: iio/cros_ec_light_prox : Fix 5.15 merging
+
+Use proper callback when controlling a simple sensor: when only one
+channel is present, we need to use the common callback to get samples
+from the EC FIFO.
+
+Fixes commit 8fbc644519da ("CHROMIUM: iio: cros_ec_light: Fix regular and RGB callbacks")
+
+BUG=none
+TEST=compile. Check diff with 5.10 version of the driver for
+differences.
+
+Change-Id: I81e43973c03d44f31c1bfe47b0acd0f182cee776
+Signed-off-by: Gwendal Grignou <gwendal@chromium.org>
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3712851
+Reviewed-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: iio/cros_ec_light_prox : Fix 5.15 merging
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    0cdd61bf487c4733e72ff021d4985dbe0ab6a61e
+    e86bb2c12427de3633be14cc611cf0fbc0021432
+
+ drivers/iio/light/cros_ec_light_prox.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/drivers/iio/light/cros_ec_light_prox.c b/drivers/iio/light/cros_ec_light_prox.c
+index 9bdd87169eb4..522418ec1637 100644
+--- a/drivers/iio/light/cros_ec_light_prox.c
++++ b/drivers/iio/light/cros_ec_light_prox.c
+@@ -446,8 +446,7 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 
+ 	ret = cros_ec_sensors_core_init(pdev, indio_dev, true,
+-					cros_ec_light_capture,
+-					cros_ec_light_push_data);
++					cros_ec_light_capture);
+ 	if (ret)
+ 		return ret;
+ 
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
