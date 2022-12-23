@@ -1,0 +1,266 @@
+From 0003996e87824abafc6cca4215f1bf0b5a2bd987 Mon Sep 17 00:00:00 2001
+From: Joseph Hwang <josephsih@chromium.org>
+Date: Thu, 22 Sep 2022 17:51:47 +0800
+Subject: [PATCH] CHROMIUM: mgmt: support MGMT_OP_GET_VS_OPCODE
+
+This patch supports a new MGMT handler for MGMT_OP_GET_VS_OPCODE.
+This patch also shifts the floss MGMT opcode starting from 0x0100
+to avoid opcode value conflict with the upstream in the future.
+
+UPSTREAM-TASK=b:254411214
+BUG=b:246398494
+TEST=emerge
+When tested with floss MSFT patches, it displays something like
+  INFO btadapterd: get_msft_opcode: MSFT opcode 0xfd70
+on trogdor/lazor with an Qualcomm Bluetooth controller.
+
+Signed-off-by: Joseph Hwang <josephsih@chromium.org>
+Change-Id: I4324abe14b7e405f4ed55c38dd38beb16ec826ea
+Reviewed-on: https://chromium-review.googlesource.com/c/chromiumos/third_party/kernel/+/3965210
+Reviewed-by: Guenter Roeck <groeck@chromium.org>
+
+[rebase61(tzungbi):
+    Squashed:
+	FIXUP: CHROMIUM: mgmt: support MGMT_OP_GET_VS_OPCODE
+]
+Signed-off-by: Tzung-Bi Shih <tzungbi@chromium.org>
+---
+
+Notes:
+    295dc859bd6cbfdcc75878448f06781f14c6910c
+    ad644fcfa91849f6c3a83134ad7be0a70b8d1c38
+
+ include/net/bluetooth/mgmt.h |  22 ++++++-
+ net/bluetooth/mgmt.c         | 123 ++++++++++++++++++++++++++---------
+ 2 files changed, 114 insertions(+), 31 deletions(-)
+
+diff --git a/include/net/bluetooth/mgmt.h b/include/net/bluetooth/mgmt.h
+index a1c49162e8a8..907f215768c0 100644
+--- a/include/net/bluetooth/mgmt.h
++++ b/include/net/bluetooth/mgmt.h
+@@ -875,7 +875,11 @@ struct mgmt_cp_mesh_send_cancel {
+ } __packed;
+ #define MGMT_MESH_SEND_CANCEL_SIZE	1
+ 
+-#define MGMT_OP_GET_SCO_CODEC_CAPABILITIES	0x0057
++
++/*
++ * Floss MGMT Opcodes start here.
++ */
++#define MGMT_OP_GET_SCO_CODEC_CAPABILITIES	0x0100
+ #define MGMT_SCO_CODEC_CVSD			0x1
+ #define MGMT_SCO_CODEC_MSBC_TRANSPARENT		0x2
+ #define MGMT_SCO_CODEC_MSBC			0x3
+@@ -902,7 +906,7 @@ struct mgmt_rp_get_codec_capabilities {
+ 	struct mgmt_bt_codec	codecs[];
+ } __packed;
+ 
+-#define MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE	0x0058
++#define MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE	0x0101
+ struct mgmt_cp_notify_sco_connection_change {
+ 	__u16 hci_id;
+ 	struct mgmt_addr_info	addr;
+@@ -911,6 +915,20 @@ struct mgmt_cp_notify_sco_connection_change {
+ } __packed;
+ #define MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE	0xB
+ 
++#define MGMT_OP_GET_VS_OPCODE			0x0102
++#define MGMT_VS_OPCODE_MSFT			0x0001
++
++struct mgmt_cp_get_vs_opcode {
++	__u16	hci_id;
++	__u16	vendor_specification;
++} __packed;
++#define MGMT_GET_VS_OPCODE_SIZE			0x4
++
++struct mgmt_rp_get_vs_opcode {
++	__u16	hci_id;
++	__u16	opcode;
++} __packed;
++
+ #define MGMT_EV_CMD_COMPLETE		0x0001
+ struct mgmt_ev_cmd_complete {
+ 	__le16	opcode;
+diff --git a/net/bluetooth/mgmt.c b/net/bluetooth/mgmt.c
+index 7b142b3eb8dc..b5b53d58b780 100644
+--- a/net/bluetooth/mgmt.c
++++ b/net/bluetooth/mgmt.c
+@@ -9258,31 +9258,44 @@ static int get_adv_size_info(struct sock *sk, struct hci_dev *hdev,
+ 				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
+ }
+ 
+-static int get_sco_codec_capabilities(struct sock *sk, struct hci_dev *hdev,
+-				      void *data, u16 data_len)
++static struct hci_dev *floss_get_hdev(u16 hci_id)
+ {
+-	struct mgmt_cp_get_codec_capabilities *cp = data;
+-	struct mgmt_rp_get_codec_capabilities *rp;
+-	int i, num_rp_codecs;
+-	int err;
+-	size_t total_size = sizeof(struct mgmt_rp_get_codec_capabilities);
+-	bool wbs_supported = false;
++	struct hci_dev *hdev = NULL;
+ 	struct hci_dev *d;
+-	u8 *ptr;
+ 
+-	// First find the corresponding hci device.
+ 	read_lock(&hci_dev_list_lock);
+ 
++	// find the corresponding hci device.
+ 	list_for_each_entry(d, &hci_dev_list, list) {
+-		if (d->id == cp->hci_id) {
++		if (d->id == hci_id) {
+ 			hdev = d;
+ 			break;
+ 		}
+ 	}
+ 	read_unlock(&hci_dev_list_lock);
+ 
++	return hdev;
++}
++
++static int floss_get_sco_codec_capabilities(struct sock *sk,
++					    struct hci_dev *hdev,
++					    void *data, u16 data_len)
++{
++	struct mgmt_cp_get_codec_capabilities *cp = data;
++	struct mgmt_rp_get_codec_capabilities *rp;
++	int i, num_rp_codecs;
++	int err;
++	size_t total_size = sizeof(struct mgmt_rp_get_codec_capabilities);
++	bool wbs_supported = false;
++	u8 *ptr;
++	struct hci_dev *found_hdev;
++
++	found_hdev = floss_get_hdev(cp->hci_id);
++	if (found_hdev)
++		hdev = found_hdev;
++
+ 	// Make sure we have a valid hdev.
+-	if (!hdev || hdev->id != cp->hci_id)
++	if (!hdev)
+ 		return -EINVAL;
+ 
+ 	wbs_supported = test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+@@ -9348,28 +9361,22 @@ static int get_sco_codec_capabilities(struct sock *sk, struct hci_dev *hdev,
+ 	return err;
+ }
+ 
+-static int notify_sco_connection_change(struct sock *sk, struct hci_dev *hdev,
+-					void *data, u16 data_len)
++static int floss_notify_sco_connection_change(struct sock *sk,
++					      struct hci_dev *hdev,
++					      void *data, u16 data_len)
+ {
+ 	struct mgmt_cp_notify_sco_connection_change *cp = data;
+ 
+ 	struct hci_conn *conn;
+ 	int notify;
+-	struct hci_dev *d;
+-
+-	// First find the corresponding hci device.
+-	read_lock(&hci_dev_list_lock);
++	struct hci_dev *found_hdev;
+ 
+-	list_for_each_entry(d, &hci_dev_list, list) {
+-		if (d->id == cp->hci_id) {
+-			hdev = d;
+-			break;
+-		}
+-	}
+-	read_unlock(&hci_dev_list_lock);
++	found_hdev = floss_get_hdev(cp->hci_id);
++	if (found_hdev)
++		hdev = found_hdev;
+ 
+ 	// Make sure we have a valid hdev.
+-	if (!hdev || hdev->id != cp->hci_id)
++	if (!hdev)
+ 		return -EINVAL;
+ 
+ 	/* We only need to notify the driver if it listens for it. */
+@@ -9397,6 +9404,52 @@ static int notify_sco_connection_change(struct sock *sk, struct hci_dev *hdev,
+ 	return 0;
+ }
+ 
++/* The user space provides the value of vendor_specification. For example,
++ * the user space wants to query what the opcode for MSFT extension is,
++ * It provides MGMT_VS_OPCODE_MSFT as vendor_specification. For now,
++ * the only possible value of vendor_specification is MGMT_VS_OPCODE_MSFT.
++ */
++static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
++			       void *data, u16 data_len)
++{
++	struct mgmt_cp_get_vs_opcode *cp = data;
++	struct mgmt_rp_get_vs_opcode rp;
++	u16 hci_id;
++	u16 vendor_specification;
++	int err;
++	struct hci_dev *found_hdev;
++
++	hci_id = __le16_to_cpu(cp->hci_id);
++	vendor_specification = __le16_to_cpu(cp->vendor_specification);
++
++	found_hdev = floss_get_hdev(cp->hci_id);
++	if (found_hdev)
++		hdev = found_hdev;
++
++	// Make sure we have a valid hdev.
++	if (!hdev) {
++		BT_INFO("Cannot find hdev 0x%4.4x", hci_id);
++		return mgmt_cmd_status(sk, hci_id, MGMT_OP_GET_VS_OPCODE,
++				       MGMT_STATUS_INVALID_INDEX);
++	}
++	rp.hci_id = hdev->id;
++
++	switch (vendor_specification) {
++#if IS_ENABLED(CONFIG_BT_MSFTEXT)
++	case MGMT_VS_OPCODE_MSFT:
++		rp.opcode = hdev->msft_opcode;
++		break;
++#endif
++	default:
++		rp.opcode = HCI_OP_NOP;
++	}
++
++	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
++				MGMT_OP_GET_VS_OPCODE,
++				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
++	return err;
++}
++
+ static const struct hci_mgmt_handler mgmt_handlers[] = {
+ 	{ NULL }, /* 0x0000 (no command) */
+ 	{ read_version,            MGMT_READ_VERSION_SIZE,
+@@ -9528,13 +9581,25 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
+ 	{ mesh_send,               MGMT_MESH_SEND_SIZE,
+ 						HCI_MGMT_VAR_LEN },
+ 	{ mesh_send_cancel,        MGMT_MESH_SEND_CANCEL_SIZE },
+-	{ get_sco_codec_capabilities, MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
++
++	/* CHROMIUM specific floss handlers start here.
++	 *
++	 * Let the mgmt handler opcodes for floss start from 0x0100
++	 * to avoid collision with the upstream new ones.
++	 */
++	[MGMT_OP_GET_SCO_CODEC_CAPABILITIES] = {
++	floss_get_sco_codec_capabilities,
++				   MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
+ 						HCI_MGMT_NO_HDEV |
+ 						HCI_MGMT_UNTRUSTED |
+ 						HCI_MGMT_VAR_LEN },
+-	{ notify_sco_connection_change, MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
++	{ floss_notify_sco_connection_change,
++				   MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
+ 						HCI_MGMT_NO_HDEV |
+-						HCI_MGMT_UNTRUSTED }
++						HCI_MGMT_UNTRUSTED },
++	{ floss_get_vs_opcode,     MGMT_GET_VS_OPCODE_SIZE,
++						HCI_MGMT_NO_HDEV |
++						HCI_MGMT_UNTRUSTED },
+ };
+ 
+ void mgmt_index_added(struct hci_dev *hdev)
+-- 
+2.38.1.584.g0f3c55d4c2-goog
+
