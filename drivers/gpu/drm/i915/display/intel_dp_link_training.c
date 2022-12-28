@@ -89,7 +89,18 @@ static void intel_dp_read_lttpr_phy_caps(struct intel_dp *intel_dp,
 static bool intel_dp_read_lttpr_common_caps(struct intel_dp *intel_dp,
 					    const u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
 	int ret;
+
+	if (intel_dp_is_edp(intel_dp))
+		return false;
+
+	/*
+	 * Detecting LTTPRs must be avoided on platforms with an AUX timeout
+	 * period < 3.2ms. (see DP Standard v2.0, 2.11.2, 3.6.6.1).
+	 */
+	if (DISPLAY_VER(i915) < 10 || IS_GEMINILAKE(i915))
+		return false;
 
 	ret = drm_dp_read_lttpr_common_caps(&intel_dp->aux, dpcd,
 					    intel_dp->lttpr_common_caps);
@@ -189,25 +200,13 @@ static int intel_dp_init_lttpr(struct intel_dp *intel_dp, const u8 dpcd[DP_RECEI
  */
 int intel_dp_init_lttpr_and_dprx_caps(struct intel_dp *intel_dp)
 {
-	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
-	int lttpr_count = 0;
+	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+	int lttpr_count;
 
-	/*
-	 * Detecting LTTPRs must be avoided on platforms with an AUX timeout
-	 * period < 3.2ms. (see DP Standard v2.0, 2.11.2, 3.6.6.1).
-	 */
-	if (!intel_dp_is_edp(intel_dp) &&
-	    (DISPLAY_VER(i915) >= 10 && !IS_GEMINILAKE(i915))) {
-		u8 dpcd[DP_RECEIVER_CAP_SIZE];
+	if (drm_dp_read_dpcd_caps(&intel_dp->aux, dpcd))
+		return -EIO;
 
-		if (drm_dp_dpcd_probe(&intel_dp->aux, DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV))
-			return -EIO;
-
-		if (drm_dp_read_dpcd_caps(&intel_dp->aux, dpcd))
-			return -EIO;
-
-		lttpr_count = intel_dp_init_lttpr(intel_dp, dpcd);
-	}
+	lttpr_count = intel_dp_init_lttpr(intel_dp, dpcd);
 
 	/*
 	 * The DPTX shall read the DPRX caps after LTTPR detection, so re-read
