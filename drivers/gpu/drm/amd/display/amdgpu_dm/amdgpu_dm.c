@@ -68,6 +68,7 @@
 #include "ivsrcid/ivsrcid_vislands30.h"
 
 #include "i2caux_interface.h"
+#include <linux/backlight.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/types.h>
