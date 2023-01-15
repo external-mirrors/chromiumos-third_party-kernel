@@ -2500,6 +2500,8 @@ ssize_t cpu_show_retbleed(struct device *dev, struct device_attribute *attr, cha
 	return cpu_show_common(dev, attr, buf, X86_BUG_RETBLEED);
 }
 
+#endif
+
 /*
  * When coresched=secure command line option is passed (default), disable core
  * scheduling if CPU does not have MDS/L1TF vulnerability.
@@ -2513,5 +2515,3 @@ static void __init coresched_select(void)
 		static_branch_disable(&sched_coresched_supported);
 #endif
 }
-
-#endif
