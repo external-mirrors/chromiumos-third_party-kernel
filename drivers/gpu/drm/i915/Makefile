@@ -271,6 +271,7 @@ i915-y += \
 	display/intel_quirks.o \
 	display/intel_sprite.o \
 	display/intel_tc.o \
+	display/intel_vblank.o \
 	display/intel_vga.o \
 	display/intel_wm.o \
 	display/i9xx_plane.o \
