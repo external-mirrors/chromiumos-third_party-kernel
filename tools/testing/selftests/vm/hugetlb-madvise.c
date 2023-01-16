@@ -16,7 +16,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#define __USE_GNU
 #include <fcntl.h>
 
 #define USAGE	"USAGE: %s <hugepagefile_name>\n"
