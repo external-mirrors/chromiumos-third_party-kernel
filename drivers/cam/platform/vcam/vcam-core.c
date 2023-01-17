@@ -37,7 +37,7 @@ static const char *entity_names[] = {
 };
 
 struct vcam_buffer {
-	u32				fd;
+	u32				id;
 	struct cam_obj_buffer		*buffer;
 	struct list_head		entry;
 };
@@ -58,6 +58,12 @@ struct vcam_device {
 	struct hrtimer			event_timer_slow;
 	unsigned long			timer_start_ts;
 };
+
+static void unregister_buffer(struct vcam_device *vcam, struct vcam_buffer *vb)
+{
+	cam_buffer_put(vb->buffer);
+	cam_buffer_unregister(vcam->cam, vb->id);
+}
 
 static int entity_read(struct cam_obj_entity *entity,
 		       struct cam_read_instruction *rw)
@@ -117,7 +123,8 @@ static int dma_importer_read(struct cam_obj_entity *entity,
 
 static int vcam_buffer_add(struct vcam_device *vcam,
 			   struct cam_obj_entity *entity,
-			   int fd)
+			   int fd,
+			   u32 *obj_id)
 {
 	struct vcam_buffer *vb;
 
@@ -125,24 +132,28 @@ static int vcam_buffer_add(struct vcam_device *vcam,
 	if (!vb)
 		return -ENOMEM;
 
-	vb->fd = fd;
 	vb->buffer = cam_buffer_register(vcam->cam,
-					 cam_entity_id(entity),
-					 vcam->dev,
-					 fd);
-	if (!vb->buffer) {
-		kfree(vb);
-		return -EINVAL;
-	}
+				  cam_entity_id(entity),
+				  vcam->dev,
+				  fd);
+	if (!vb->buffer)
+		goto error;
+
+	*obj_id = cam_obj_id(&vb->buffer->nsobj);
+	vb->id = cam_obj_id(&vb->buffer->nsobj);
 
 	mutex_lock(&vcam->buffers_lock);
 	list_add(&vb->entry, &vcam->buffers);
 	mutex_unlock(&vcam->buffers_lock);
 
 	return 0;
+
+error:
+	kfree(vb);
+	return -EINVAL;
 }
 
-static int vcam_buffer_remove(struct vcam_device *vcam, int fd)
+static int vcam_buffer_remove(struct vcam_device *vcam, u32 id)
 {
 	struct vcam_buffer *vb;
 	int ret = -EINVAL;
@@ -154,9 +165,10 @@ static int vcam_buffer_remove(struct vcam_device *vcam, int fd)
 	}
 
 	list_for_each_entry(vb, &vcam->buffers, entry) {
-		if (vb->fd == fd) {
+		if (vb->id == id) {
 			list_del(&vb->entry);
-			cam_buffer_unregister(vb->buffer);
+
+			unregister_buffer(vcam, vb);
 			kfree(vb);
 			ret = 0;
 			goto out;
@@ -192,15 +204,20 @@ static int dma_importer_write(struct cam_obj_entity *entity,
 
 	switch (insn.type) {
 	case VCAM_DMABUF_ADD:
-		ret = vcam_buffer_add(vcam, entity, insn.fd);
+		ret = vcam_buffer_add(vcam, entity, insn.fd, &insn.cam_id);
 		break;
 	case VCAM_DMABUF_REMOVE:
-		ret = vcam_buffer_remove(vcam, insn.fd);
+		ret = vcam_buffer_remove(vcam, insn.cam_id);
 		break;
 	default:
 		ret = -EINVAL;
 		pr_err("Unknown type of dmabuf insn: %d\n", insn.type);
 		break;
+	}
+
+	if (copy_to_user(u64_to_user_ptr(rw->ptr), &insn, rw->size)) {
+		pr_err("Cannot copy DMABUF insn from user\n");
+		return -EINVAL;
 	}
 
 	return ret;
@@ -302,14 +319,15 @@ static void cam_objects_release(struct vcam_device *vcam)
 
 	mutex_lock(&vcam->buffers_lock);
 	while (!list_empty(&vcam->buffers)) {
-		pr_err("User-space did not destroy imported DMA buffer: %d\n",
-		       vb->fd);
 		vb = list_first_entry(&vcam->buffers,
 				      struct vcam_buffer,
 				      entry);
 
+		pr_err("User-space did not destroy imported DMA buffer: %d\n",
+		       vb->id);
+
 		list_del(&vb->entry);
-		cam_buffer_unregister(vb->buffer);
+		unregister_buffer(vcam, vb);
 		kfree(vb);
 	}
 	mutex_unlock(&vcam->buffers_lock);

@@ -37,7 +37,7 @@ static char *exit_at_functions[] = {
 	"test_add_valid_operations",
 	"test_add_valid_rw_operations",
 	"test_export_import_operations",
-	"test_add_buffers"
+	"test_add_buffer"
 };
 
 const char *exit_at_function = NULL;
@@ -189,6 +189,7 @@ static int event_register(struct cam_query_event_entry *entry,
 }
 
 static int buffer_register(struct obj_entity *parent,
+			   u32 id,
 			   struct libkc_dmabuf *buf)
 {
 	struct obj_buffer *obj;
@@ -201,7 +202,7 @@ static int buffer_register(struct obj_entity *parent,
 
 	num_buffers++;
 	obj->type = OBJ_TYPE_BUFFER;
-	obj->id = buf->fd;
+	obj->id = id;
 	obj->dmabuf = buf;
 	INIT_LIST_HEAD(&obj->obj_list);
 
@@ -1959,7 +1960,7 @@ out:
 	return ret;
 }
 
-static int test_add_buffers(struct libkc *cam)
+static int test_add_buffer(struct libkc *cam)
 {
 	struct vcam_dmabuf_instruction insn;
 	struct libkc_operation *lco = NULL;
@@ -2021,6 +2022,7 @@ static int test_add_buffers(struct libkc *cam)
 
 	insn.type	= VCAM_DMABUF_ADD;
 	insn.fd		= buf->fd;
+	insn.cam_id	= INVALID_BUFFER_ID;
 
 	rw->type	= CAM_WRITE_INSTRUCTION;
 	rw->wr.reg	= 0;
@@ -2040,7 +2042,16 @@ static int test_add_buffers(struct libkc *cam)
 		goto out;
 	}
 
-	ret = buffer_register(entity, buf);
+	if (insn.cam_id == INVALID_BUFFER_ID) {
+		pr_err("Failed to import DMA buf\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	pr_info("DMA buffer %d imported under ID %d\n",
+		buf->fd, insn.cam_id);
+
+	ret = buffer_register(entity, insn.cam_id, buf);
 	if (ret) {
 		pr_err("Failed to register buffer-%d\n", buf->fd);
 		ret = -EINVAL;
@@ -2104,7 +2115,8 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	}
 
 	insn.type	= VCAM_DMABUF_REMOVE;
-	insn.fd		= buf->id;
+	insn.fd		= INVALID_BUFFER_ID;
+	insn.cam_id	= buf->id;
 
 	rw->type	= CAM_WRITE_INSTRUCTION;
 	rw->wr.reg	= 0;
@@ -2283,9 +2295,9 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_add_buffers(cam);
+	ret = test_add_buffer(cam);
 	if (ret) {
-		pr_err("FATAL: failure test_add_buffers()\n");
+		pr_err("FATAL: failure test_add_buffer()\n");
 		goto out;
 	}
 
@@ -2419,9 +2431,9 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = test_add_buffers(cam);
+	ret = test_add_buffer(cam);
 	if (ret) {
-		pr_err("FATAL: failure test_add_buffers()\n");
+		pr_err("FATAL: failure test_add_buffer()\n");
 		return ret;
 	}
 

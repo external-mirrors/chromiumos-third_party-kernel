@@ -44,7 +44,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 					   u32 parent_id,
 					   struct device *dev,
 					   u32 fd);
-void cam_buffer_unregister(struct cam_obj_buffer *buffer);
+void cam_buffer_unregister(struct cam_device *cam, u32 id);
 
 struct cam_obj_buffer *cam_buffer_lookup(struct cam_device *cam, u32 id);
 void cam_buffer_put(struct cam_obj_buffer *buffer);

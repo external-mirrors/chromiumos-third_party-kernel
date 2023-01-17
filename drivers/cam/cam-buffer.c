@@ -130,12 +130,12 @@ ALLOW_ERROR_INJECTION(cam_buffer_register, NULL);
 /**
  * cam_buffer_unregister() - Unregister (remove from namespace and possibly
  * release) imported DMA buffer
- * @buffer: pointer to CAM buffer
+ * @cam: pointer to CAM
+ * @id: ID of the namespace object
  */
-void cam_buffer_unregister(struct cam_obj_buffer *buffer)
+void cam_buffer_unregister(struct cam_device *cam, u32 id)
 {
-	cam_obj_remove(&buffer->nsobj);
-	cam_obj_deinit(&buffer->nsobj);
+	cam_obj_remove_id(&cam->ns, CAM_OBJ_TYPE_BUFFER, id);
 }
 EXPORT_SYMBOL_GPL(cam_buffer_unregister);
 

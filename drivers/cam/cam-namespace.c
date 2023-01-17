@@ -313,6 +313,7 @@ unsigned long cam_obj_id(struct cam_obj *nsobj)
 
 	return nsobj->id;
 }
+EXPORT_SYMBOL_GPL(cam_obj_id);
 
 enum cam_obj_type cam_obj_type(struct cam_obj *nsobj)
 {
