@@ -38,7 +38,6 @@ static const char *entity_names[] = {
 
 struct vcam_buffer {
 	u32				id;
-	struct cam_obj_buffer		*buffer;
 	struct list_head		entry;
 };
 
@@ -61,7 +60,6 @@ struct vcam_device {
 
 static void unregister_buffer(struct vcam_device *vcam, struct vcam_buffer *vb)
 {
-	cam_buffer_put(vb->buffer);
 	cam_buffer_unregister(vcam->cam, vb->id);
 }
 
@@ -126,31 +124,31 @@ static int vcam_buffer_add(struct vcam_device *vcam,
 			   int fd,
 			   u32 *obj_id)
 {
+	struct cam_obj_buffer *buffer;
 	struct vcam_buffer *vb;
 
 	vb = kzalloc(sizeof(struct vcam_buffer), GFP_KERNEL);
 	if (!vb)
 		return -ENOMEM;
 
-	vb->buffer = cam_buffer_register(vcam->cam,
-				  cam_entity_id(entity),
-				  vcam->dev,
-				  fd);
-	if (!vb->buffer)
-		goto error;
+	buffer = cam_buffer_register(vcam->cam,
+				     cam_entity_id(entity),
+				     vcam->dev,
+				     fd);
+	if (!buffer) {
+		kfree(vb);
+		return -EINVAL;
+	}
 
-	*obj_id = cam_obj_id(&vb->buffer->nsobj);
-	vb->id = cam_obj_id(&vb->buffer->nsobj);
+	*obj_id = cam_obj_id(&buffer->nsobj);
+	vb->id = cam_obj_id(&buffer->nsobj);
+	cam_buffer_put(buffer);
 
 	mutex_lock(&vcam->buffers_lock);
 	list_add(&vb->entry, &vcam->buffers);
 	mutex_unlock(&vcam->buffers_lock);
 
 	return 0;
-
-error:
-	kfree(vb);
-	return -EINVAL;
 }
 
 static int vcam_buffer_remove(struct vcam_device *vcam, u32 id)
