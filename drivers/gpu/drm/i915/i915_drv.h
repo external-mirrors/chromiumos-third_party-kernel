@@ -68,8 +68,6 @@ struct drm_i915_clock_gating_funcs;
 struct vlv_s0ix_state;
 struct intel_pxp;
 
-#define I915_COLOR_UNEVICTABLE (-1) /* a non-vma sharing the address space */
-
 #define GEM_QUIRK_PIN_SWIZZLED_PAGES	BIT(0)
 
 /* Data Stolen Memory (DSM) aka "i915 stolen memory" */
