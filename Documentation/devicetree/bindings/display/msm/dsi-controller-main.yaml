@@ -95,12 +95,16 @@ properties:
       with MIPI DCS commands when qcom,dual-dsi-mode enabled.
 
   assigned-clocks:
-    maxItems: 2
+    minItems: 2
+    maxItems: 4
     description: |
       Parents of "byte" and "pixel" for the given platform.
+      For DSIv2 platforms this should contain "byte", "esc", "src" and
+      "pixel_src" clocks.
 
   assigned-clock-parents:
-    maxItems: 2
+    minItems: 2
+    maxItems: 4
     description: |
       The Byte clock and Pixel clock PLL outputs provided by a DSI PHY block.
 
