@@ -1,0 +1,25 @@
+  UPD     include/config/kernel.release
+  UPD     include/generated/utsrelease.h
+  CALL    scripts/checksyscalls.sh
+  DESCEND objtool
+  CC [M]  drivers/net/wireless/iwl7000/mac80211/main.o
+  CC [M]  drivers/net/wireless/iwl7000/mac80211/status.o
+  CC [M]  drivers/net/wireless/iwl7000/mac80211/driver-ops.o
+  CC [M]  drivers/net/wireless/iwl7000/mac80211/sta_info.o
+In file included from ./drivers/net/wireless/iwl7000/hdrs/iwl-chrome.h:19,
+                 from <command-line>:
+drivers/net/wireless/iwl7000/mac80211/sta_info.c: In function ‘sta_info_init’:
+./drivers/net/wireless/iwl7000/hdrs/mac80211-exp.h:84:23: error: implicit declaration of function ‘__iwl7000_rhltable_init’; did you mean ‘__iwl7000_rhashtable_destroy’? [-Werror=implicit-function-declaration]
+   84 | #define rhltable_init __iwl7000_rhltable_init
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~
+drivers/net/wireless/iwl7000/mac80211/sta_info.c:1407:15: note: in expansion of macro ‘rhltable_init’
+ 1407 |         err = rhltable_init(&local->sta_hash, &sta_rht_params);
+      |               ^~~~~~~~~~~~~
+cc1: some warnings being treated as errors
+make[6]: *** [scripts/Makefile.build:250: drivers/net/wireless/iwl7000/mac80211/sta_info.o] Error 1
+make[5]: *** [scripts/Makefile.build:500: drivers/net/wireless/iwl7000/mac80211] Error 2
+make[4]: *** [scripts/Makefile.build:500: drivers/net/wireless/iwl7000] Error 2
+make[3]: *** [scripts/Makefile.build:500: drivers/net/wireless] Error 2
+make[2]: *** [scripts/Makefile.build:500: drivers/net] Error 2
+make[1]: *** [scripts/Makefile.build:500: drivers] Error 2
+make: *** [Makefile:1992: .] Error 2
