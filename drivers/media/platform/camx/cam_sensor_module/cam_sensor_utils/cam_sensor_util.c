@@ -512,17 +512,13 @@ int cam_sensor_i2c_command_parser(
 			}
 		}
 		i2c_reg_settings->is_settings_valid = 1;
-		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-			CAM_WARN(CAM_SENSOR, "put failed for buffer :0x%x",
-				cmd_desc[i].mem_handle);
+		cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 	}
 
 	return rc;
 
 rel_buf:
-	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-		CAM_WARN(CAM_SENSOR, "put failed for buffer :0x%x",
-			cmd_desc[i].mem_handle);
+	cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 	return rc;
 }
 
@@ -2085,4 +2081,3 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 
 	return 0;
 }
-
