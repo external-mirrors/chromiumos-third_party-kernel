@@ -22,10 +22,17 @@
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
+#include <linux/atomic.h>
 
 #include <trace/events/cam.h>
 
 #include <uapi/linux/cam.h>
+
+/*
+ * a counter used to assign a unique ID to each pipeline
+ * we ignore the case of overflow, so it should only be used for debugging
+ */
+static atomic_t pipeline_count = ATOMIC_INIT(1);
 
 /**
  * cam_pipeline_is_active() - Check whether the execution pipeline is active
@@ -124,8 +131,8 @@ static bool cam_op_set_state(struct cam_obj_op *op,
 	if (WARN_ON(op->state > new_state))
 		goto out;
 
-	trace_cam_operation_set_state(op);
 	op->state = new_state;
+	trace_cam_operation_set_state(op);
 	ret = true;
 out:
 	write_unlock_irqrestore(&op->notify_lock, flags);
@@ -352,6 +359,7 @@ static bool cam_op_notify(struct cam_op_signal *sig)
 	if (!op)
 		return false;
 
+	trace_cam_signal_fire_active(sig);
 	execute = atomic_dec_and_test(&op->num_blockers);
 	/*
 	 * We are in STRICT mode, pick first pending signal and try to
@@ -805,8 +813,10 @@ static int cam_pipeline_io_worker(void *data)
 		if (op) {
 			cam_op_run(op);
 		} else {
+			trace_cam_io_worker_sleep(pipeline);
 			wait_event_interruptible(pipeline->io_queue_wait,
 						 io_queue_status(pipeline));
+			trace_cam_io_worker_wakeup(pipeline);
 		}
 	}
 
@@ -904,6 +914,7 @@ static int cam_op_add_pending_signal(struct cam_obj *source,
 
 	list_add_tail(&sig->entry, &target->notify_pending_chain);
 	atomic_inc(&target->num_blockers);
+	trace_cam_signal_add_pending(sig);
 	return 0;
 error:
 	if (sig->source)
@@ -1578,5 +1589,6 @@ int cam_pipeline_init(struct cam_device *cam, struct cam_pipeline *pipeline)
 	mutex_init(&pipeline->io_release_lock);
 	pipeline->io_thread = NULL;
 	pipeline->cam = cam;
+	pipeline->id = atomic_inc_return(&pipeline_count);
 	return ret;
 }

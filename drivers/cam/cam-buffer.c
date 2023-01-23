@@ -67,7 +67,7 @@ static void cam_buffer_release(struct cam_obj *nsobj)
  * @cam: pointer to CAM device
  * @parent_id: ID of parent entity object
  * @dev: pointer to device
- * @fd: file descriptor the of the imported DMA buffer
+ * @fd: file descriptor of the imported DMA buffer
  *
  * Return: NULL on error or CAM buffer pointer otherwise.
  */

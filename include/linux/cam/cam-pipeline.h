@@ -40,6 +40,8 @@ struct cam_pipeline {
 	unsigned long		io_state;
 	/** @io_relase_lock: Lock to protect IO-thread release */
 	struct mutex		io_release_lock;
+	/** @id: ID of the pipeline used for debugging */
+	int			id;
 };
 
 /**
