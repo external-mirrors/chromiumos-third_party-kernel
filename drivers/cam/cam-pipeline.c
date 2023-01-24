@@ -7,6 +7,7 @@
 
 #define pr_fmt(fmt) "cam-pipeline: " fmt
 
+#include <linux/cam/cam-buffer.h>
 #include <linux/cam/cam-device.h>
 #include <linux/cam/cam-entity.h>
 #include <linux/cam/cam-graph.h>
@@ -629,6 +630,33 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 	cam_ringbuffer_write(&pipeline->event_buffer, &completion);
 }
 
+static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
+				  struct cam_obj_entity *entity,
+				  struct cam_dmabuf_instruction *insn)
+{
+	if (insn->op == CAM_DMABUF_OP_REMOVE) {
+		cam_buffer_unregister(&pipeline->objs, insn->buf_id);
+		return 0;
+	}
+
+	if (insn->op == CAM_DMABUF_OP_ADD) {
+		struct cam_obj_buffer *buffer;
+
+		buffer = cam_buffer_register(&pipeline->objs,
+					     entity,
+					     insn->dma_fd,
+					     insn->buf_id);
+		if (!buffer)
+			return -EINVAL;
+
+		cam_buffer_put(buffer);
+		return 0;
+	}
+
+	pr_err("Unknown dmabuf instruction operation: %d\n", insn->op);
+	return -EINVAL;
+}
+
 static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 {
 	struct cam_rw_instruction_list rw_list;
@@ -671,6 +699,11 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 			break;
 		case CAM_WRITE_INSTRUCTION:
 			ret = entity->ops->write(entity, &insn.wr);
+			break;
+		case CAM_DMABUF_INSTRUCTION:
+			ret = cam_dmabuf_instruction(op->pipeline,
+						     entity,
+						     &insn.db);
 			break;
 		default:
 			pr_err("Invalid operation instruction type: %d\n",
