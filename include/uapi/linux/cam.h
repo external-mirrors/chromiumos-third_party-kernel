@@ -190,6 +190,30 @@ struct cam_query {
 } __attribute__((packed));
 
 /**
+ * enum cam_dmabuf_instruction_op - DMA buffer instruction operation type
+ *
+ * @CAM_DMABUF_OP_ADD:		Add (import) DMA buffer
+ * @CAM_DMABUF_OP_REMOVE:	Remove (release) DMA buffer
+ */
+enum cam_dmabuf_instruction_op {
+	CAM_DMABUF_OP_ADD,
+	CAM_DMABUF_OP_REMOVE,
+};
+
+/**
+ * struct cam_dmabuf_instruction - Operation DMA buffer instruction
+ *
+ * @op:		DMA buffer operation
+ * @dma_fd:	DMA buffer ID
+ * @buf_id:	Requested CAM object ID
+ */
+struct cam_dmabuf_instruction {
+	__u32		op;
+	__u32		dma_fd;
+	__u32		buf_id;
+};
+
+/**
  * struct cam_read_instruction - Operation read instruction
  *
  * @reg:	Register to perform operation on
@@ -220,10 +244,12 @@ struct cam_write_instruction {
  *
  * @CAM_READ_INSTRUCTION:	Read instruction
  * @CAM_WRITE_INSTRUCTION:	Write instruction
+ * @CAM_DMABUF_INSTRUCTION:	DMA buffer instruction
  */
 enum cam_rw_instruction_type {
 	CAM_READ_INSTRUCTION,
 	CAM_WRITE_INSTRUCTION,
+	CAM_DMABUF_INSTRUCTION,
 };
 
 /**
@@ -232,12 +258,14 @@ enum cam_rw_instruction_type {
  * @type:	Type of instruction
  * @rd:		Used when type is CAM_READ_INSTRUCTION
  * @wr:		Used when type is CAM_WRITE_INSTRUCTION
+ * @db:		Used when type is CAM_DMABUF_INSTRUCTION
  */
 struct cam_rw_instruction {
 	__u32		type;
 	union {
 		struct cam_read_instruction	rd;
 		struct cam_write_instruction	wr;
+		struct cam_dmabuf_instruction	db;
 		__u32				reserved[28];
 	};
 } __attribute__((packed));
