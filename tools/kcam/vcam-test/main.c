@@ -1964,8 +1964,6 @@ out:
 
 static int test_add_buffer(struct libkc *cam)
 {
-	/* @FIXME */
-#if 0
 	struct libkc_operation *lco = NULL;
 	struct libkc_dmabuf *buf = NULL;
 	struct cam_rw_instruction *rw;
@@ -2053,15 +2051,10 @@ static int test_add_buffer(struct libkc *cam)
 out:
 	libkc_operation_put(lco);
 	return ret;
-#else
-	return 0;
-#endif
 }
 
 static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 {
-	/* @FIXME */
-#if 0
 	struct libkc_operation *lco = NULL;
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
@@ -2131,9 +2124,6 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 out:
 	libkc_operation_put(lco);
 	return ret;
-#else
-	return 0;
-#endif
 }
 
 static int test_remove_buffers(struct libkc *cam)
@@ -2141,8 +2131,7 @@ static int test_remove_buffers(struct libkc *cam)
 	struct obj_buffer *buf;
 	int ret;
 
-	/* @FIXME: ret = -EINVAL */
-	ret = 0;
+	ret = -EINVAL;
 	pthread_mutex_lock(&buffers_lock);
 	while (!list_empty(&buffers)) {
 		buf = list_first_entry(&buffers, struct obj_buffer, obj_list);
