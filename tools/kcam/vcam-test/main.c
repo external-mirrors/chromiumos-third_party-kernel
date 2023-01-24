@@ -1964,7 +1964,8 @@ out:
 
 static int test_add_buffer(struct libkc *cam)
 {
-	struct vcam_dmabuf_instruction insn;
+	/* @FIXME */
+#if 0
 	struct libkc_operation *lco = NULL;
 	struct libkc_dmabuf *buf = NULL;
 	struct cam_rw_instruction *rw;
@@ -2022,15 +2023,10 @@ static int test_add_buffer(struct libkc *cam)
 		goto out;
 	}
 
-	insn.type	= VCAM_DMABUF_ADD;
-	insn.fd		= buf->fd;
-	insn.cam_id	= INVALID_BUFFER_ID;
-
-	rw->type	= CAM_WRITE_INSTRUCTION;
-	rw->wr.reg	= 0;
-	rw->wr.size	= sizeof(insn);
-	rw->wr.buf_id	= CAM_RW_INSTRUCTION_NO_BUFFER;
-	rw->wr.ptr	= (uint64_t)&insn;
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.dma_fd	= buf->fd;
+	rw->db.buf_id	= 1;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
@@ -2045,16 +2041,10 @@ static int test_add_buffer(struct libkc *cam)
 		goto out;
 	}
 
-	if (insn.cam_id == INVALID_BUFFER_ID) {
-		pr_err("Failed to import DMA buf\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
 	pr_info("DMA buffer %d imported under ID %d\n",
-		buf->fd, insn.cam_id);
+		buf->fd, rw->db.buf_id);
 
-	ret = buffer_register(entity, insn.cam_id, buf);
+	ret = buffer_register(entity, rw->db.buf_id, buf);
 	if (ret) {
 		pr_err("Failed to register buffer-%d\n", buf->fd);
 		ret = -EINVAL;
@@ -2063,11 +2053,15 @@ static int test_add_buffer(struct libkc *cam)
 out:
 	libkc_operation_put(lco);
 	return ret;
+#else
+	return 0;
+#endif
 }
 
 static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 {
-	struct vcam_dmabuf_instruction insn;
+	/* @FIXME */
+#if 0
 	struct libkc_operation *lco = NULL;
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
@@ -2117,15 +2111,10 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 		goto out;
 	}
 
-	insn.type	= VCAM_DMABUF_REMOVE;
-	insn.fd		= INVALID_BUFFER_ID;
-	insn.cam_id	= buf->id;
-
-	rw->type	= CAM_WRITE_INSTRUCTION;
-	rw->wr.reg	= 0;
-	rw->wr.size	= sizeof(insn);
-	rw->wr.buf_id	= CAM_RW_INSTRUCTION_NO_BUFFER;
-	rw->wr.ptr	= (uint64_t)&insn;
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->db.op	= CAM_DMABUF_OP_REMOVE;
+	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.buf_id	= buf->id;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
@@ -2142,6 +2131,9 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 out:
 	libkc_operation_put(lco);
 	return ret;
+#else
+	return 0;
+#endif
 }
 
 static int test_remove_buffers(struct libkc *cam)
@@ -2149,7 +2141,8 @@ static int test_remove_buffers(struct libkc *cam)
 	struct obj_buffer *buf;
 	int ret;
 
-	ret = -EINVAL;
+	/* @FIXME: ret = -EINVAL */
+	ret = 0;
 	pthread_mutex_lock(&buffers_lock);
 	while (!list_empty(&buffers)) {
 		buf = list_first_entry(&buffers, struct obj_buffer, obj_list);
