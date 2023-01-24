@@ -50,6 +50,14 @@ struct vcam_device {
 	unsigned long			timer_start_ts;
 };
 
+static struct device *entity_device(struct cam_obj_entity *entity)
+{
+	struct vcam_device *vcam;
+
+	vcam = cam_entity_driver_data(entity);
+	return vcam->dev;
+}
+
 static int entity_read(struct cam_obj_entity *entity,
 		       struct cam_read_instruction *rw)
 {
@@ -97,6 +105,7 @@ static int entity_write(struct cam_obj_entity *entity,
 static struct cam_entity_ops entity_ops = {
 	.read		= entity_read,
 	.write		= entity_write,
+	.device		= entity_device,
 };
 
 static int dma_importer_read(struct cam_obj_entity *entity,
@@ -116,6 +125,7 @@ static int dma_importer_write(struct cam_obj_entity *entity,
 static struct cam_entity_ops dma_importer_entity_ops = {
 	.read		= dma_importer_read,
 	.write		= dma_importer_write,
+	.device		= entity_device,
 };
 
 static void trigger_event_on(struct vcam_device *vcam,

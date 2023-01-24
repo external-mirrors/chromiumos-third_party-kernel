@@ -33,9 +33,16 @@ static int root_entity_write(struct cam_obj_entity *entity,
 	return -EINVAL;
 }
 
+static struct device *root_entity_device(struct cam_obj_entity *entity)
+{
+	WARN_ON(1);
+	return NULL;
+}
+
 static struct cam_entity_ops root_entity_ops = {
 	.read		= root_entity_read,
 	.write		= root_entity_write,
+	.device		= root_entity_device,
 };
 
 /**
@@ -156,6 +163,8 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 		ops->read = root_entity_read;
 	if (!ops->write)
 		ops->write = root_entity_write;
+	if (!ops->device)
+		ops->device = root_entity_device;
 
 	entity = kzalloc(sizeof(*entity), GFP_KERNEL);
 	if (!entity)

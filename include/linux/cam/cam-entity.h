@@ -31,6 +31,12 @@ struct cam_entity_ops {
 	 * Return: 0 on success, or negative error code on failure
 	 */
 	int (*write)(struct cam_obj_entity *, struct cam_write_instruction *);
+	/**
+	 * device(): pointer to device that this entity is attached to
+	 *
+	 * Returns pointer to device or NULL
+	 */
+	struct device *(*device)(struct cam_obj_entity *);
 };
 
 /**
