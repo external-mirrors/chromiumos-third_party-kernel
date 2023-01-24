@@ -41,7 +41,8 @@ struct cam_obj_entity;
 
 struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 					   struct cam_obj_entity *entity,
-					   u32 fd);
+					   u32 fd,
+					   u32 id);
 void cam_buffer_unregister(struct cam_ns *ns, u32 id);
 
 struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id);

@@ -67,12 +67,14 @@ static void cam_buffer_release(struct cam_obj *nsobj)
  * @ns: pointer to CAM namespace
  * @entity: parent entity to link to
  * @fd: file descriptor of the imported DMA buffer
+ * @id: requested object ID
  *
  * Return: NULL on error or CAM buffer pointer otherwise.
  */
 struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 					   struct cam_obj_entity *entity,
-					   u32 fd)
+					   u32 fd,
+					   u32 id)
 {
 	struct cam_obj_buffer *buffer;
 	struct device *dev;
@@ -89,6 +91,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 		     CAM_OBJ_TYPE_BUFFER,
 		     cam_buffer_release,
 		     ns);
+	cam_obj_set_id(&buffer->nsobj, id);
 
 	buffer->dma_buf = dma_buf_get(fd);
 	if (IS_ERR(buffer->dma_buf))
