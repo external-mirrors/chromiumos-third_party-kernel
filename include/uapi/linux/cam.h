@@ -214,15 +214,26 @@ struct cam_dmabuf_instruction {
 };
 
 /**
+ * enum cam_rw_instruction_buffer_id - Special RW instructions buffer_id values
+ *
+ * @CAM_RW_INSTRUCTION_NO_BUFFER:	Operation does not need a DMA buffer
+ */
+enum cam_instruction_buffer_id {
+	CAM_RW_INSTRUCTION_NO_BUFFER	= 0xffffffff,
+};
+
+/**
  * struct cam_read_instruction - Operation read instruction
  *
  * @reg:	Register to perform operation on
  * @size:	Size of blob data
+ * @buf_id:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
  * @ptr:	User pointer to instruction blob
  */
 struct cam_read_instruction {
 	__u32		reg;
 	__u32		size;
+	__u32		buf_id;
 	__u64		ptr;
 } __attribute__((packed));
 
@@ -231,11 +242,13 @@ struct cam_read_instruction {
  *
  * @reg:	Register to perform operation on
  * @size:	Size of blob data
+ * @buf_id:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
  * @ptr:	User pointer to instruction blob
  */
 struct cam_write_instruction {
 	__u32		reg;
 	__u32		size;
+	__u32		buf_id;
 	__u64		ptr;
 } __attribute__((packed));
 

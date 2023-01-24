@@ -1420,6 +1420,7 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 				rw->type	= CAM_READ_INSTRUCTION;
 				rw->rd.reg	= 42;
 				rw->rd.size	= READ_BUFFER_SIZE;
+				rw->rd.buf_id	= CAM_RW_INSTRUCTION_NO_BUFFER;
 				rw->rd.ptr	= (uint64_t)read_buffer;
 			}
 			continue;
@@ -1436,6 +1437,7 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 				rw->type	= CAM_WRITE_INSTRUCTION;
 				rw->wr.reg	= 42;
 				rw->wr.size	= sizeof(write_buffer);
+				rw->wr.buf_id	= CAM_RW_INSTRUCTION_NO_BUFFER;
 				rw->wr.ptr	= (uint64_t)write_buffer;
 			}
 			continue;
@@ -2027,6 +2029,7 @@ static int test_add_buffer(struct libkc *cam)
 	rw->type	= CAM_WRITE_INSTRUCTION;
 	rw->wr.reg	= 0;
 	rw->wr.size	= sizeof(insn);
+	rw->wr.buf_id	= CAM_RW_INSTRUCTION_NO_BUFFER;
 	rw->wr.ptr	= (uint64_t)&insn;
 
 	ret = libkc_operation_ioctl(cam, lco);
@@ -2121,6 +2124,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	rw->type	= CAM_WRITE_INSTRUCTION;
 	rw->wr.reg	= 0;
 	rw->wr.size	= sizeof(insn);
+	rw->wr.buf_id	= CAM_RW_INSTRUCTION_NO_BUFFER;
 	rw->wr.ptr	= (uint64_t)&insn;
 
 	ret = libkc_operation_ioctl(cam, lco);
