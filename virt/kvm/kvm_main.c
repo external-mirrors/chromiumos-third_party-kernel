@@ -2714,8 +2714,8 @@ out:
  *     whether the mapping is writable.
  */
 kvm_pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool interruptible,
-			    bool *async, bool write_fault, bool *writable,
-			    struct page **page)
+		     bool *async, bool write_fault, bool *writable,
+		     struct page **page)
 {
 	struct vm_area_struct *vma;
 	kvm_pfn_t pfn;
@@ -2803,8 +2803,8 @@ kvm_pfn_t gfn_to_pfn_page_prot(struct kvm *kvm, gfn_t gfn, bool write_fault,
 			       bool *writable, struct page **page)
 {
 	return __gfn_to_pfn_page_memslot(gfn_to_memslot(kvm, gfn), gfn, false,
-					 false, NULL, write_fault, writable,
-					 NULL, page);
+					 false, NULL, write_fault, writable, NULL,
+					 page);
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_page_prot);
 
@@ -2876,7 +2876,7 @@ static kvm_pfn_t kvm_try_get_page_ref(struct page *page, kvm_pfn_t pfn)
 }
 
 kvm_pfn_t __gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn,
-			       bool atomic, bool interruptible, bool *async, 
+			       bool atomic, bool interruptible, bool *async,
 			       bool write_fault, bool *writable, hva_t *hva)
 {
 	struct page *page;

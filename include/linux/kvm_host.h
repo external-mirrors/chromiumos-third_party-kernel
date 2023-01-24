@@ -1184,9 +1184,9 @@ kvm_pfn_t gfn_to_pfn_page_memslot_atomic(const struct kvm_memory_slot *slot,
 					 gfn_t gfn, struct page **page);
 kvm_pfn_t __gfn_to_pfn_page_memslot(const struct kvm_memory_slot *slot,
 				    gfn_t gfn, bool atomic, bool interruptible,
-				    bool *async,
-				    bool write_fault, bool *writable,
-				    hva_t *hva, struct page **page);
+				    bool *async, bool write_fault,
+				    bool *writable, hva_t *hva,
+				    struct page **page);
 
 void kvm_release_pfn_clean(kvm_pfn_t pfn);
 void kvm_release_pfn_dirty(kvm_pfn_t pfn);
