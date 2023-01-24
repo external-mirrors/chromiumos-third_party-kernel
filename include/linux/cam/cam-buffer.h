@@ -37,16 +37,14 @@ struct cam_obj_buffer {
 	struct sg_table			*dma_sgt;
 };
 
-struct device;
-struct cam_device;
+struct cam_obj_entity;
 
-struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
-					   u32 parent_id,
-					   struct device *dev,
+struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
+					   struct cam_obj_entity *entity,
 					   u32 fd);
-void cam_buffer_unregister(struct cam_device *cam, u32 id);
+void cam_buffer_unregister(struct cam_ns *ns, u32 id);
 
-struct cam_obj_buffer *cam_buffer_lookup(struct cam_device *cam, u32 id);
+struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id);
 void cam_buffer_put(struct cam_obj_buffer *buffer);
 
 #endif /* __LINUX_CAM_BUFFER_H__ */

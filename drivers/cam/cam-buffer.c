@@ -64,33 +64,31 @@ static void cam_buffer_release(struct cam_obj *nsobj)
 /**
  * cam_buffer_register() - Imports and registers (inserts into namespace) DMA
  * buffer
- * @cam: pointer to CAM device
- * @parent_id: ID of parent entity object
- * @dev: pointer to device
+ * @ns: pointer to CAM namespace
+ * @entity: parent entity to link to
  * @fd: file descriptor of the imported DMA buffer
  *
  * Return: NULL on error or CAM buffer pointer otherwise.
  */
-struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
-					   u32 parent_id,
-					   struct device *dev,
+struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
+					   struct cam_obj_entity *entity,
 					   u32 fd)
 {
 	struct cam_obj_buffer *buffer;
-	struct cam_obj_entity *link;
+	struct device *dev;
+
+	dev = entity->ops->device(entity);
+	if (!dev)
+		return NULL;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
 		return NULL;
 
-	link = cam_entity_lookup(cam, parent_id);
-	if (!link)
-		goto error;
-
 	cam_obj_init(&buffer->nsobj,
 		     CAM_OBJ_TYPE_BUFFER,
 		     cam_buffer_release,
-		     &cam->ns);
+		     ns);
 
 	buffer->dma_buf = dma_buf_get(fd);
 	if (IS_ERR(buffer->dma_buf))
@@ -108,11 +106,9 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
 	buffer->va = sg_virt(buffer->dma_sgt->sgl);
 
-	if (cam_obj_link(&buffer->nsobj, &link->nsobj))
+	/* cam_obj_link() will increment entity ref-count */
+	if (cam_obj_link(&buffer->nsobj, &entity->nsobj))
 		goto error;
-
-	/* Link increments ref-counter of the object we link to */
-	cam_entity_put(link);
 
 	if (cam_obj_insert(&buffer->nsobj))
 		goto error;
@@ -120,7 +116,6 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 	return buffer;
 
 error:
-	cam_entity_put(link);
 	cam_buffer_release(&buffer->nsobj);
 	return NULL;
 }
@@ -130,29 +125,29 @@ ALLOW_ERROR_INJECTION(cam_buffer_register, NULL);
 /**
  * cam_buffer_unregister() - Unregister (remove from namespace and possibly
  * release) imported DMA buffer
- * @cam: pointer to CAM
+ * @ns: pointer to CAM namespace
  * @id: ID of the namespace object
  */
-void cam_buffer_unregister(struct cam_device *cam, u32 id)
+void cam_buffer_unregister(struct cam_ns *ns, u32 id)
 {
-	cam_obj_remove_id(&cam->ns, CAM_OBJ_TYPE_BUFFER, id);
+	cam_obj_remove_id(ns, CAM_OBJ_TYPE_BUFFER, id);
 }
 EXPORT_SYMBOL_GPL(cam_buffer_unregister);
 
 /**
  * cam_buffer_lookup() - Lookup CAM buffer by ID
- * @cam: pointer to CAM device
+ * @ns: pointer to CAM namespace
  * @id: ID of CAM buffer
  *
  * Return: NULL on error or CAM buffer pointer otherwise. Returned object is
  * valid and has incremented ref-counter, call cam_buffer_put() to properly
  * decrement ref-counter back.
  */
-struct cam_obj_buffer *cam_buffer_lookup(struct cam_device *cam, u32 id)
+struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id)
 {
 	struct cam_obj *nsobj;
 
-	nsobj = cam_obj_lookup(&cam->ns, CAM_OBJ_TYPE_BUFFER, id);
+	nsobj = cam_obj_lookup(ns, CAM_OBJ_TYPE_BUFFER, id);
 	if (!nsobj)
 		return NULL;
 
