@@ -3580,6 +3580,9 @@ static int ath11k_start_scan(struct ath11k *ar,
 
 		if (ar->supports_6ghz)
 			timeout += 5 * HZ;
+
+		if (ar->state_11d != ATH11K_11D_IDLE)
+			timeout = 1 * HZ;
 	}
 
 	ret = wait_for_completion_timeout(&ar->scan.started, timeout);
@@ -3724,8 +3727,17 @@ exit:
 
 	mutex_unlock(&ar->conf_mutex);
 
-	if (ar->state_11d == ATH11K_11D_PREPARING)
+	if (ar->state_11d == ATH11K_11D_PREPARING) {
+		/* When split scan feature is enabled, start 11d scan only after
+		 * the 6 GHz scan. Otherwise, the second scan with 6 GHz channels
+		 * will get delayed and there is a chance of scan timing out due
+		 * to ongoing 11d scan.
+		 */
+		if (ar->hw->wiphy->flags & WIPHY_FLAG_SPLIT_SCAN_6GHZ && !req->scan_6ghz)
+			return ret;
+
 		ath11k_mac_11d_scan_start(ar, arvif->vdev_id);
+	}
 
 	return ret;
 }
@@ -5788,27 +5800,6 @@ static int ath11k_mac_config_mon_status_default(struct ath11k *ar, bool enable)
 	return ret;
 }
 
-static void ath11k_mac_wait_reconfigure(struct ath11k_base *ab)
-{
-	int recovery_start_count;
-
-	if (!ab->is_reset)
-		return;
-
-	recovery_start_count = atomic_inc_return(&ab->recovery_start_count);
-	ath11k_dbg(ab, ATH11K_DBG_MAC, "recovery start count %d\n", recovery_start_count);
-
-	if (recovery_start_count == ab->num_radios) {
-		complete(&ab->recovery_start);
-		ath11k_dbg(ab, ATH11K_DBG_MAC, "recovery started success\n");
-	}
-
-	ath11k_dbg(ab, ATH11K_DBG_MAC, "waiting reconfigure...\n");
-
-	wait_for_completion_timeout(&ab->reconfigure_complete,
-				    ATH11K_RECONFIGURE_TIMEOUT_HZ);
-}
-
 static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 {
 	struct ath11k *ar = hw->priv;
@@ -5817,6 +5808,13 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 	int ret;
 
 	ath11k_mac_drain_tx(ar);
+
+	ret = ath11k_core_start_device(ab);
+	if (ret) {
+		ath11k_err(ab, "failed to start device : %d\n", ret);
+		return ret;
+	}
+
 	mutex_lock(&ar->conf_mutex);
 
 	switch (ar->state) {
@@ -5825,7 +5823,6 @@ static int ath11k_mac_op_start(struct ieee80211_hw *hw)
 		break;
 	case ATH11K_STATE_RESTARTING:
 		ar->state = ATH11K_STATE_RESTARTED;
-		ath11k_mac_wait_reconfigure(ab);
 		break;
 	case ATH11K_STATE_RESTARTED:
 	case ATH11K_STATE_WEDGED:
@@ -5975,6 +5972,10 @@ static void ath11k_mac_op_stop(struct ieee80211_hw *hw)
 	synchronize_rcu();
 
 	atomic_set(&ar->num_pending_mgmt_tx, 0);
+
+	/* If all PDEVs on the SoC are down, then power down the device */
+	if (!ath11k_core_any_pdevs_on(ar->ab))
+		ath11k_core_stop_device(ar->ab);
 }
 
 static void
@@ -8980,8 +8981,11 @@ static int __ath11k_mac_register(struct ath11k *ar)
 
 	ar->hw->wiphy->interface_modes = ab->hw_params.interface_modes;
 
-	if (ab->hw_params.single_pdev_only && ar->supports_6ghz)
+	if (ab->hw_params.single_pdev_only && ar->supports_6ghz) {
 		ieee80211_hw_set(ar->hw, SINGLE_SCAN_ON_ALL_BANDS);
+		if (ab->hw_params.split_scan)
+			ar->hw->wiphy->flags |= WIPHY_FLAG_SPLIT_SCAN_6GHZ;
+	}
 
 	if (ab->hw_params.supports_multi_bssid) {
 		ieee80211_hw_set(ar->hw, SUPPORTS_MULTI_BSSID);
