@@ -184,7 +184,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
 		     &cam->ns);
 
-	if (cam_obj_link(cam, &entity->nsobj, &link->nsobj))
+	if (cam_obj_link(&entity->nsobj, &link->nsobj))
 		goto error;
 
 	/* Link increments ref-counter of the object we link to */
@@ -412,7 +412,7 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	cam_obj_init(&event->nsobj, CAM_OBJ_TYPE_EVENT, cam_event_release,
 		     &cam->ns);
 
-	if (cam_obj_link(cam, &event->nsobj, &entity->nsobj))
+	if (cam_obj_link(&event->nsobj, &entity->nsobj))
 		goto error;
 
 	/* Link increments ref-counter of the object we link to */

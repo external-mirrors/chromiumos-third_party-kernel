@@ -32,15 +32,12 @@ void cam_graph_node_init(struct cam_obj *nsobj)
 
 /**
  * cam_obj_link() - Link two namespace objects
- * @cam: CAM device
  * @nsobj: namespace object to link
  * @link: namespace object to link to
  *
  * Return: 0 on success or error value otherwise
  */
-int cam_obj_link(struct cam_device *cam,
-		 struct cam_obj *nsobj,
-		 struct cam_obj *link)
+int cam_obj_link(struct cam_obj *nsobj, struct cam_obj *link)
 {
 	struct cam_graph_node *curr_node = &nsobj->gnode;
 	struct cam_graph_node *link_node;

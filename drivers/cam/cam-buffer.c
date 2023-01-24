@@ -108,7 +108,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_device *cam,
 	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
 	buffer->va = sg_virt(buffer->dma_sgt->sgl);
 
-	if (cam_obj_link(cam, &buffer->nsobj, &link->nsobj))
+	if (cam_obj_link(&buffer->nsobj, &link->nsobj))
 		goto error;
 
 	/* Link increments ref-counter of the object we link to */

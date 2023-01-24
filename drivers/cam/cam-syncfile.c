@@ -151,7 +151,7 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 	if (ret && ret != -ENOENT)
 		goto error;
 
-	if (cam_obj_link(cam, &sf->nsobj, &op->nsobj))
+	if (cam_obj_link(&sf->nsobj, &op->nsobj))
 		goto error;
 
 	if (cam_obj_insert(&sf->nsobj))
@@ -283,7 +283,7 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 	if (!syncfile)
 		goto error;
 
-	if (cam_obj_link(cam, &sf->nsobj, &op->nsobj))
+	if (cam_obj_link(&sf->nsobj, &op->nsobj))
 		goto error;
 
 	if (cam_obj_insert(&sf->nsobj))
