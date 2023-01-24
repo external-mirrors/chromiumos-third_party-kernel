@@ -88,6 +88,11 @@ struct intel_wm_funcs {
 	void (*get_hw_state)(struct drm_i915_private *i915);
 };
 
+struct intel_audio_state {
+	struct intel_encoder *encoder;
+	struct intel_connector *connector;
+};
+
 struct intel_audio {
 	/* hda/i915 audio component */
 	struct i915_audio_component *component;
@@ -97,8 +102,8 @@ struct intel_audio {
 	int power_refcount;
 	u32 freq_cntrl;
 
-	/* Used to save the pipe-to-encoder mapping for audio */
-	struct intel_encoder *encoder_map[I915_MAX_PIPES];
+	/* current audio state for the audio component hooks */
+	struct intel_audio_state state[I915_MAX_PIPES];
 
 	/* necessary resource sharing with HDMI LPE audio driver. */
 	struct {
