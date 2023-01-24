@@ -22,8 +22,10 @@
  * @TODO more details? (io_uring etc?)
  */
 struct cam_pipeline {
-	/** @ns: Operations namespace */
-	struct cam_ns		ns;
+	/** @ops: Operations namespace */
+	struct cam_ns		ops;
+	/** @objs: Namespace of objects specific to this pipeline */
+	struct cam_ns		objs;
 	/** @cam: CAM device */
 	struct cam_device	*cam;
 	/** @event_buffer: notifications for user-space */

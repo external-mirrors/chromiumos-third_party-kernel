@@ -516,7 +516,7 @@ static void cam_drain_ops(struct cam_pipeline *pipeline)
 	struct cam_ns_walk_control ctl = {};
 
 	ctl.cb		= cam_drain_op_callback;
-	cam_ns_for_each(&pipeline->ns, &ctl);
+	cam_ns_for_each(&pipeline->ops, &ctl);
 }
 
 /**
@@ -859,7 +859,7 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 	if (!cam_pipeline_is_active(pipeline))
 		return -EINVAL;
 
-	op = cam_op_lookup(&pipeline->ns, req->id);
+	op = cam_op_lookup(&pipeline->ops, req->id);
 	if (!op)
 		return -EINVAL;
 
@@ -938,7 +938,7 @@ static int cam_op_dependency_add(struct cam_pipeline *pipeline,
 	struct cam_obj_op *dep_op;
 	int ret;
 
-	dep_op = cam_op_lookup(&pipeline->ns, req->id);
+	dep_op = cam_op_lookup(&pipeline->ops, req->id);
 	if (!dep_op) {
 		/*
 		 * Unsatisfied OP dependencies are considered to be
@@ -1214,7 +1214,7 @@ int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
 		return -ENOMEM;
 
 	cam_obj_init(&op->nsobj, CAM_OBJ_TYPE_OPERATION,
-		     cam_op_release, &pipeline->ns);
+		     cam_op_release, &pipeline->ops);
 	cam_obj_set_id(&op->nsobj, req->id);
 
 	atomic_set(&op->num_blockers, 0);
@@ -1300,7 +1300,7 @@ int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 	if (!cam_pipeline_is_active(pipeline))
 		return -EINVAL;
 
-	op = cam_op_lookup(&pipeline->ns, req->id);
+	op = cam_op_lookup(&pipeline->ops, req->id);
 	if (!op)
 		return -EINVAL;
 
@@ -1341,7 +1341,7 @@ ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_submit, ERRNO);
 int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 				struct cam_operation_add *req)
 {
-	struct cam_obj_op *op = cam_op_lookup(&pipeline->ns, req->id);
+	struct cam_obj_op *op = cam_op_lookup(&pipeline->ops, req->id);
 
 	if (!op)
 		return 0;
@@ -1425,7 +1425,7 @@ static void query_state_filter(struct cam_pipeline *pipeline,
 	ctl.data	= output;
 	ctl.flags	= state;
 	ctl.cb		= cam_ns_walk_callback;
-	cam_ns_for_each(&pipeline->ns, &ctl);
+	cam_ns_for_each(&pipeline->ops, &ctl);
 }
 
 /**
@@ -1458,7 +1458,7 @@ int cam_pipeline_query(struct cam_pipeline *pipeline,
 		struct cam_graph_walk ctl;
 		struct cam_obj_op *op;
 
-		op = cam_op_lookup(&pipeline->ns, query->id);
+		op = cam_op_lookup(&pipeline->ops, query->id);
 		if (!op)
 			return -EINVAL;
 
@@ -1507,7 +1507,8 @@ ALLOW_ERROR_INJECTION(cam_pipeline_query, ERRNO);
 void cam_pipeline_destroy(struct cam_pipeline *pipeline)
 {
 	cam_ringbuffer_release(&pipeline->event_buffer);
-	cam_ns_release(&pipeline->ns);
+	cam_ns_release(&pipeline->ops);
+	cam_ns_release(&pipeline->objs);
 }
 
 /**
@@ -1572,15 +1573,22 @@ int cam_pipeline_init(struct cam_device *cam, struct cam_pipeline *pipeline)
 {
 	int ret;
 
-	ret = cam_ns_init(&pipeline->ns, CAM_NS_POL_USER_ID);
+	ret = cam_ns_init(&pipeline->ops, CAM_NS_POL_USER_ID);
 	if (ret)
 		return ret;
+
+	ret = cam_ns_init(&pipeline->objs, CAM_NS_POL_USER_ID);
+	if (ret) {
+		cam_ns_release(&pipeline->ops);
+		return ret;
+	}
 
 	ret = cam_ringbuffer_init(&pipeline->event_buffer,
 				  sizeof(struct cam_completion),
 				  CAM_RINGBUFFER_SIZE);
 	if (ret) {
-		cam_ns_release(&pipeline->ns);
+		cam_ns_release(&pipeline->ops);
+		cam_ns_release(&pipeline->objs);
 		return ret;
 	}
 
