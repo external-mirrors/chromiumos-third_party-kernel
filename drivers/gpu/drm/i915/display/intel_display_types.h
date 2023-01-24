@@ -1286,6 +1286,8 @@ struct intel_crtc_state {
 		struct drm_dp_vsc_sdp vsc;
 	} infoframes;
 
+	u8 eld[MAX_ELD_BYTES];
+
 	/* HDMI scrambling status */
 	bool hdmi_scrambling;
 
