@@ -1131,6 +1131,11 @@ static int hw_init(struct msm_gpu *gpu)
 	/* Enable interrupts */
 	gpu_write(gpu, REG_A6XX_RBBM_INT_0_MASK, A6XX_INT_MASK);
 
+	/* Disable an interrupt in 7c3 for now to avoid gpu interrupt storm */
+	if (adreno_is_7c3(adreno_gpu))
+		gpu_rmw(gpu, REG_A6XX_RBBM_INT_0_MASK,
+				A6XX_RBBM_INT_0_MASK_CP_HW_ERROR, 0);
+
 	ret = adreno_hw_init(gpu);
 	if (ret)
 		goto out;
@@ -1418,7 +1423,7 @@ static int a6xx_fault_handler(void *arg, unsigned long iova, int flags, void *da
 		/* Turn off the hangcheck timer to keep it from bothering us */
 		del_timer(&gpu->hangcheck_timer);
 
-		gpu->fault_info.ttbr0 = info->ttbr0;
+		gpu->fault_info.smmu_info = *info;
 		gpu->fault_info.iova  = iova;
 		gpu->fault_info.flags = flags;
 		gpu->fault_info.type  = type;
@@ -2028,7 +2033,7 @@ struct msm_gpu *a6xx_gpu_init(struct drm_device *dev)
 	 * to cause power supply issues:
 	 */
 	if (adreno_is_a618(adreno_gpu) || adreno_is_7c3(adreno_gpu))
-		gpu->clamp_to_idle = true;
+		priv->gpu_clamp_to_idle = true;
 
 	/* Check if there is a GMU phandle and set it up */
 	node = of_parse_phandle(pdev->dev.of_node, "qcom,gmu", 0);

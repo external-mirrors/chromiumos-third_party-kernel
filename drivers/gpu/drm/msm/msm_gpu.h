@@ -10,6 +10,7 @@
 #include <linux/adreno-smmu-priv.h>
 #include <linux/clk.h>
 #include <linux/devfreq.h>
+#include <linux/input.h>
 #include <linux/interconnect.h>
 #include <linux/pm_opp.h>
 #include <linux/regulator/consumer.h>
@@ -91,11 +92,19 @@ struct msm_gpu_funcs {
 
 /* Additional state for iommu faults: */
 struct msm_gpu_fault_info {
-	u64 ttbr0;
+	struct adreno_smmu_fault_info smmu_info;
 	unsigned long iova;
 	int flags;
 	const char *type;
 	const char *block;
+
+	/* Information about what we think/expect is the current SMMU state,
+	 * for example expected_ttbr0 should match smmu_info.ttbr0 which
+	 * was read back from SMMU registers.
+	 */
+	phys_addr_t pgtbl_ttbr0;
+	u64 ptes[4];
+	int asid;
 };
 
 /**
@@ -109,11 +118,15 @@ struct msm_gpu_devfreq {
 	struct mutex lock;
 
 	/**
-	 * idle_constraint:
+	 * idle_freq:
 	 *
-	 * A PM QoS constraint to limit max freq while the GPU is idle.
+	 * Shadow frequency used while the GPU is idle.  From the PoV of
+	 * the devfreq governor, we are continuing to sample busyness and
+	 * adjust frequency while the GPU is idle, but we use this shadow
+	 * value as the GPU is actually clamped to minimum frequency while
+	 * it is inactive.
 	 */
-	struct dev_pm_qos_request idle_freq;
+	unsigned long idle_freq;
 
 	/**
 	 * boost_constraint:
@@ -134,8 +147,6 @@ struct msm_gpu_devfreq {
 
 	/** idle_time: Time of last transition to idle: */
 	ktime_t idle_time;
-
-	struct devfreq_dev_status average_status;
 
 	/**
 	 * idle_work:
@@ -249,6 +260,10 @@ struct msm_gpu {
 #define DRM_MSM_HANGCHECK_PROGRESS_RETRIES 3
 	struct timer_list hangcheck_timer;
 
+	/* work for waking GPU on input: */
+	struct kthread_work boost_work;
+	struct input_handler boost_handler;
+
 	/* Fault info for most recent iova fault: */
 	struct msm_gpu_fault_info fault_info;
 
@@ -274,9 +289,6 @@ struct msm_gpu {
 	uint32_t suspend_count;
 
 	struct msm_gpu_state *crashstate;
-
-	/* Enable clamping to idle freq when inactive: */
-	bool clamp_to_idle;
 
 	/* True if the hardware supports expanded apriv (a650 and newer) */
 	bool hw_apriv;
