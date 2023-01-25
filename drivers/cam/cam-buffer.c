@@ -42,8 +42,6 @@ static void cam_buffer_release(struct cam_obj *nsobj)
 	if (!buffer)
 		return;
 
-	cam_obj_unlink(nsobj);
-
 	if (!IS_ERR_OR_NULL(buffer->dma_sgt)) {
 		dma_buf_unmap_attachment(buffer->dma_attach,
 					 buffer->dma_sgt,
@@ -108,10 +106,6 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 
 	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
 	buffer->va = sg_virt(buffer->dma_sgt->sgl);
-
-	/* cam_obj_link() will increment entity ref-count */
-	if (cam_obj_link(&buffer->nsobj, &entity->nsobj))
-		goto error;
 
 	if (cam_obj_insert(&buffer->nsobj))
 		goto error;
