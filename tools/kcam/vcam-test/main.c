@@ -12,21 +12,9 @@
 #include <pthread.h>
 
 #include <libkc/libkc.h>
-#include <vcam_objects.h>
 
 /* @FIXME */
 #include "../../../include/uapi/linux/vcam.h"
-
-static LIST_HEAD(entities);
-static int num_entities;
-
-static LIST_HEAD(events);
-static int num_events;
-
-static LIST_HEAD(buffers);
-static int num_buffers;
-
-static pthread_mutex_t buffers_lock = PTHREAD_MUTEX_INITIALIZER;
 
 #define CAM_NO_DEP	0xffffffff
 
@@ -81,144 +69,6 @@ static void parse_exit_at_function(char *command)
 }
 
 #define MAY_EXIT_AT()	__may_exit_at(__func__)
-
-static struct obj_entity *entity_lookup(unsigned int id)
-{
-	struct obj_entity *entry;
-
-	/*
-	 * We have very few entities created by VCAM, so a simple linear
-	 * search is just fine
-	 */
-	list_for_each_entry(entry, &entities, obj_list) {
-		if (entry->type == OBJ_TYPE_ENTITY && entry->id == id)
-			return entry;
-	}
-
-	return NULL;
-}
-
-static struct obj_entity *entity_lookup_by_name(const char *name)
-{
-	struct obj_entity *entry;
-
-	/*
-	 * We have very few entities created by VCAM, so a simple linear
-	 * search is just fine
-	 */
-	list_for_each_entry(entry, &entities, obj_list) {
-		if (entry->type == OBJ_TYPE_ENTITY &&
-		    !strcmp(entry->name, name))
-			return entry;
-	}
-
-	return NULL;
-}
-
-static struct obj_event *entity_first_event(struct obj_entity *entity)
-{
-	struct obj_event *event;
-
-	list_for_each_entry(event, &entity->children, parent_entry) {
-		if (event->type != OBJ_TYPE_EVENT)
-			continue;
-		return event;
-	}
-	return NULL;
-}
-
-static int entity_register(struct cam_query_entity_entry *entry)
-{
-	struct obj_entity *obj;
-	struct obj_entity *parent;
-
-	obj = malloc(sizeof(*obj));
-	if (!obj) {
-		pr_err("OOM\n");
-		return -ENOMEM;
-	}
-
-	num_entities++;
-	obj->id = entry->id;
-	obj->type = OBJ_TYPE_ENTITY;
-	strcpy(obj->name, entry->name);
-	INIT_LIST_HEAD(&obj->children);
-	INIT_LIST_HEAD(&obj->obj_list);
-	list_add_tail(&obj->obj_list, &entities);
-
-	if (obj->id == CAM_OBJ_ID_ROOT)
-		return 0;
-
-	parent = entity_lookup(entry->parent);
-	if (!parent) {
-		pr_err("Unable to find entity ID: %d\n", entry->parent);
-		return -EINVAL;
-	}
-
-	list_add(&obj->parent_entry, &parent->children);
-	return 0;
-}
-
-static int event_register(struct cam_query_event_entry *entry,
-			  unsigned int entity_id)
-{
-	struct obj_event *obj;
-	struct obj_entity *parent;
-
-	obj = malloc(sizeof(*obj));
-	if (!obj) {
-		pr_err("OOM\n");
-		return -ENOMEM;
-	}
-
-	num_events++;
-	obj->id = entry->id;
-	obj->type = OBJ_TYPE_EVENT;
-	strcpy(obj->name, entry->name);
-	INIT_LIST_HEAD(&obj->obj_list);
-	list_add_tail(&obj->obj_list, &events);
-
-	parent = entity_lookup(entity_id);
-	if (!parent) {
-		pr_err("Unable to find entity ID: %d\n", entity_id);
-		return -EINVAL;
-	}
-
-	list_add(&obj->parent_entry, &parent->children);
-	return 0;
-}
-
-static int buffer_register(struct obj_entity *parent,
-			   u32 id,
-			   struct libkc_dmabuf *buf)
-{
-	struct obj_buffer *obj;
-
-	obj = malloc(sizeof(*obj));
-	if (!obj) {
-		pr_err("OOM\n");
-		return -ENOMEM;
-	}
-
-	num_buffers++;
-	obj->type = OBJ_TYPE_BUFFER;
-	obj->id = id;
-	obj->dmabuf = buf;
-	INIT_LIST_HEAD(&obj->obj_list);
-
-	pthread_mutex_lock(&buffers_lock);
-	list_add_tail(&obj->obj_list, &buffers);
-	pthread_mutex_unlock(&buffers_lock);
-	return 0;
-}
-
-static void buffer_unregister(struct obj_buffer *buf)
-{
-	num_buffers--;
-	list_del(&buf->obj_list);
-	libkc_dmabuf_put(buf->dmabuf);
-	free(buf);
-}
 
 static int test_query_unknown_entity(struct libkc *cam,
 				     struct libkc_query *lcq)
@@ -307,7 +157,7 @@ static int test_query_all_entities(struct libkc *cam,
 				entry->name,
 				entry->parent);
 
-			ret = entity_register(entry);
+			ret = libkc_entity_register(cam, entry);
 			if (ret)
 				goto out;
 		}
@@ -339,7 +189,7 @@ static int test_compound_query_count(struct libkc *cam,
 	q->query_entities.id		= CAM_OBJ_ID_ROOT;
 	q->query_entities.maxdepth	= CAM_QUERY_ALL_OBJECTS;
 
-	entity = entity_lookup_by_name(VCAM_FAST_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup %s entity\n",
 		       VCAM_FAST_IRQ_ENTITY_NAME);
@@ -356,7 +206,7 @@ static int test_compound_query_count(struct libkc *cam,
 	q->query_events.entity		= entity->id;
 	q->query_events.id		= CAM_QUERY_ALL_OBJECTS;
 
-	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup %s entity\n",
 		       VCAM_SLOW_IRQ_ENTITY_NAME);
@@ -424,7 +274,7 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 	q->query_entities.id		= CAM_OBJ_ID_ROOT;
 	q->query_entities.maxdepth	= CAM_QUERY_ALL_OBJECTS;
 
-	entity = entity_lookup_by_name(VCAM_FAST_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup %s entity\n",
 		       VCAM_FAST_IRQ_ENTITY_NAME);
@@ -441,7 +291,7 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 	q->query_events.entity		= entity->id;
 	q->query_events.id		= CAM_QUERY_ALL_OBJECTS;
 
-	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup %s entity\n",
 		       VCAM_SLOW_IRQ_ENTITY_NAME);
@@ -517,7 +367,7 @@ static int test_query_exact_entity(struct libkc *cam,
 
 	pr_info("Test test_query_exact_entity()\n");
 
-	entity = entity_lookup_by_name(VCAM_FAST_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
@@ -771,7 +621,7 @@ static int test_query_entity_events(struct libkc *cam,
 				entry->id,
 				entry->name);
 
-			ret = event_register(entry, entity_id);
+			ret = libkc_event_register(cam, entry, entity_id);
 			if (ret)
 				goto out;
 		}
@@ -792,7 +642,7 @@ static int test_query_events(struct libkc *cam)
 	if (!lcq)
 		return -EINVAL;
 
-	list_for_each_entry(entity, &entities, obj_list) {
+	list_for_each_entry(entity, &cam->entities, obj_list) {
 		struct obj_event *child;
 
 		ret = test_query_unknown_event(cam, lcq, entity->id);
@@ -884,13 +734,13 @@ static int wait_for_slow_entity_timer(struct libkc *cam)
 
 	pr_info("wait_for_slow_entity_timer()\n");
 
-	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -997,7 +847,7 @@ static int add_single_invalid_fence_out_operation(struct libkc *cam,
 	if (!op)
 		return -EINVAL;
 
-	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
@@ -1031,13 +881,13 @@ static int add_many_invalid_operations(struct libkc *cam,
 
 	pr_info("Test add_many_invalid_operations()\n");
 
-	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -1223,13 +1073,13 @@ static int test_add_valid_operations(struct libkc *cam,
 	pr_info("Test test_add_valid_operations() entity: %s mode: %s\n",
 		entity_name, modes[mode]);
 
-	entity = entity_lookup_by_name(entity_name);
+	entity = libkc_entity_lookup_by_name(cam, entity_name);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -1285,13 +1135,13 @@ static int test_add_valid_complex_operations(struct libkc *cam,
 	pr_info("Test test_add_valid_complex_operations() entity: %s\n",
 		entity_name);
 
-	entity = entity_lookup_by_name(entity_name);
+	entity = libkc_entity_lookup_by_name(cam, entity_name);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -1365,13 +1215,13 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 	pr_info("Test test_add_valid_rw_operations() entity: %s\n",
 		entity_name);
 
-	entity = entity_lookup_by_name(entity_name);
+	entity = libkc_entity_lookup_by_name(cam, entity_name);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -1490,13 +1340,13 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 	pr_info("Test test_add_invalid_rw_num_entries() entity: %s\n",
 		entity_name);
 
-	entity = entity_lookup_by_name(entity_name);
+	entity = libkc_entity_lookup_by_name(cam, entity_name);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -1560,13 +1410,13 @@ static int test_add_too_many_rw_instructions(struct libkc *cam,
 	pr_info("Test test_add_too_many_rw_instructions() entity: %s\n",
 		entity_name);
 
-	entity = entity_lookup_by_name(entity_name);
+	entity = libkc_entity_lookup_by_name(cam, entity_name);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
 	}
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event) {
 		pr_err("Unable to find event\n");
 		return -EINVAL;
@@ -1875,11 +1725,11 @@ static int test_export_import_operations(struct libkc *cam)
 
 	pr_info("Test fence export/import\n");
 
-	entity = entity_lookup_by_name(VCAM_SLOW_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
 	if (!entity)
 		return -EINVAL;
 
-	event = entity_first_event(entity);
+	event = libkc_entity_first_event(entity);
 	if (!event)
 		return -EINVAL;
 
@@ -1974,7 +1824,7 @@ static int test_add_buffer(struct libkc *cam)
 
 	pr_info("Test ADD buffers\n");
 
-	entity = entity_lookup_by_name(VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
 		       VCAM_DMA_IMPORT_ENTITY_NAME);
@@ -2042,7 +1892,7 @@ static int test_add_buffer(struct libkc *cam)
 	pr_info("DMA buffer %d imported under ID %d\n",
 		buf->fd, rw->db.buf_id);
 
-	ret = buffer_register(entity, rw->db.buf_id, buf);
+	ret = libkc_buffer_register(cam, entity, rw->db.buf_id, buf);
 	if (ret) {
 		pr_err("Failed to register buffer-%d\n", buf->fd);
 		ret = -EINVAL;
@@ -2064,7 +1914,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 
 	pr_info("Test REMOVE buffers\n");
 
-	entity = entity_lookup_by_name(VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
 		       VCAM_DMA_IMPORT_ENTITY_NAME);
@@ -2132,17 +1982,17 @@ static int test_remove_buffers(struct libkc *cam)
 	int ret;
 
 	ret = -EINVAL;
-	pthread_mutex_lock(&buffers_lock);
-	while (!list_empty(&buffers)) {
-		buf = list_first_entry(&buffers, struct obj_buffer, obj_list);
+	while (!list_empty(&cam->buffers)) {
+		buf = list_first_entry(&cam->buffers,
+				       struct obj_buffer,
+				       obj_list);
 
 		ret = test_remove_buffer(cam, buf);
 		if (ret)
 			goto out;
-		buffer_unregister(buf);
+		libkc_buffer_unregister(cam, buf);
 	}
 out:
-	pthread_mutex_unlock(&buffers_lock);
 	return ret;
 }
 
@@ -2156,6 +2006,18 @@ static void *thread_fn(void *arg)
 	cam = libkc_open(cam_path);
 	if (!cam) {
 		pr_err("FATAL: cannot open %s\n", cam_path);
+		goto out;
+	}
+
+	ret = test_query_entities(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_query_entities()\n");
+		goto out;
+	}
+
+	ret = test_query_events(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_query_events()\n");
 		goto out;
 	}
 
@@ -2287,16 +2149,16 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	pthread_mutex_lock(&buffers_lock);
-	if (!list_empty(&buffers)) {
-		buf = list_first_entry(&buffers, struct obj_buffer, obj_list);
+	if (!list_empty(&cam->buffers)) {
+		buf = list_first_entry(&cam->buffers,
+				       struct obj_buffer,
+				       obj_list);
 
 		ret = test_remove_buffer(cam, buf);
 		if (ret)
 			pr_err("FATAL: failure test_remove_buffer()\n");
-		buffer_unregister(buf);
+		libkc_buffer_unregister(cam, buf);
 	}
-	pthread_mutex_unlock(&buffers_lock);
 
 	pr_info("Test emergency pipeline drain\n");
 
