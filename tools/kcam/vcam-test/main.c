@@ -1899,6 +1899,8 @@ static int test_add_buffer(struct libkc *cam)
 		goto out;
 	}
 out:
+	if (ret)
+		libkc_dmabuf_put(buf);
 	libkc_operation_put(lco);
 	return ret;
 }
