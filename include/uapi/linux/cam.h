@@ -227,13 +227,13 @@ enum cam_instruction_buffer_id {
  *
  * @reg:	Register to perform operation on
  * @size:	Size of blob data
- * @buf_id:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
+ * @dbuf:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
  * @ptr:	User pointer to instruction blob
  */
 struct cam_read_instruction {
 	__u32		reg;
 	__u32		size;
-	__u32		buf_id;
+	__u32		dbuf;
 	__u64		ptr;
 } __attribute__((packed));
 
@@ -242,13 +242,13 @@ struct cam_read_instruction {
  *
  * @reg:	Register to perform operation on
  * @size:	Size of blob data
- * @buf_id:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
+ * @dbuf:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
  * @ptr:	User pointer to instruction blob
  */
 struct cam_write_instruction {
 	__u32		reg;
 	__u32		size;
-	__u32		buf_id;
+	__u32		dbuf;
 	__u64		ptr;
 } __attribute__((packed));
 
