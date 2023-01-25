@@ -679,14 +679,12 @@ static int cam_read_instruction(struct cam_pipeline *pipeline,
 {
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
-	u32 id;
 
 	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
 		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
 		if (!buffer)
 			return -EINVAL;
 
-		id = insn->dbuf;
 		insn->dbuf = (u64)buffer;
 	}
 
@@ -703,14 +701,12 @@ static int cam_write_instruction(struct cam_pipeline *pipeline,
 {
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
-	u32 id;
 
 	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
 		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
 		if (!buffer)
 			return -EINVAL;
 
-		id = insn->dbuf;
 		insn->dbuf = (u64)buffer;
 	}
 
