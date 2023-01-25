@@ -233,7 +233,7 @@ enum cam_instruction_buffer_id {
 struct cam_read_instruction {
 	__u32		reg;
 	__u32		size;
-	__u32		dbuf;
+	__u64		dbuf;
 	__u64		ptr;
 } __attribute__((packed));
 
@@ -248,7 +248,7 @@ struct cam_read_instruction {
 struct cam_write_instruction {
 	__u32		reg;
 	__u32		size;
-	__u32		dbuf;
+	__u64		dbuf;
 	__u64		ptr;
 } __attribute__((packed));
 
