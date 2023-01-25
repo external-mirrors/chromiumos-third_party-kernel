@@ -657,6 +657,70 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 	return -EINVAL;
 }
 
+/**
+ * cam_read_instruction() and cam_write_instruction() hold the reference of
+ * DMA-buf objects only thought out corresponding entity call. If the driver
+ * needs to access that buffer from different context (e.g. IRQ which may
+ * happen after entity call returns) the driver need to additionally increment
+ * DMA-buf object's ref-count and decrement it once DMA-buf access is done.
+ *
+ * Driver cannot lookup DMA buffer objects directly, because those belong to
+ * pipeline local namespace. However, we pass pointer to cam_obj_buffer object
+ * down to the entity call.
+ *
+ * User-space provides us with buffer object ID, we overwrite that field with
+ * a pointer to actual buffer object (if such object exists) right before
+ * entity call. Both function operate on local (stack) copy of user-supplied
+ * RW instruction.
+ */
+static int cam_read_instruction(struct cam_pipeline *pipeline,
+				struct cam_obj_entity *entity,
+				struct cam_read_instruction *insn)
+{
+	struct cam_obj_buffer *buffer = NULL;
+	int ret;
+	u32 id;
+
+	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
+		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
+		if (!buffer)
+			return -EINVAL;
+
+		id = insn->dbuf;
+		insn->dbuf = (u64)buffer;
+	}
+
+	ret = entity->ops->read(entity, insn);
+
+	if (buffer)
+		cam_buffer_put(buffer);
+	return ret;
+}
+
+static int cam_write_instruction(struct cam_pipeline *pipeline,
+				 struct cam_obj_entity *entity,
+				 struct cam_write_instruction *insn)
+{
+	struct cam_obj_buffer *buffer = NULL;
+	int ret;
+	u32 id;
+
+	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
+		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
+		if (!buffer)
+			return -EINVAL;
+
+		id = insn->dbuf;
+		insn->dbuf = (u64)buffer;
+	}
+
+	ret = entity->ops->write(entity, insn);
+
+	if (buffer)
+		cam_buffer_put(buffer);
+	return ret;
+}
+
 static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 {
 	struct cam_rw_instruction_list rw_list;
@@ -695,10 +759,14 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 
 		switch (insn.type) {
 		case CAM_READ_INSTRUCTION:
-			ret = entity->ops->read(entity, &insn.rd);
+			ret = cam_read_instruction(op->pipeline,
+						   entity,
+						   &insn.rd);
 			break;
 		case CAM_WRITE_INSTRUCTION:
-			ret = entity->ops->write(entity, &insn.wr);
+			ret = cam_write_instruction(op->pipeline,
+						    entity,
+						    &insn.wr);
 			break;
 		case CAM_DMABUF_INSTRUCTION:
 			ret = cam_dmabuf_instruction(op->pipeline,
