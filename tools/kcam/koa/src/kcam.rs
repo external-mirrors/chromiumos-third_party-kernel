@@ -6,55 +6,13 @@ use std::io::{BufRead, Result, Write};
 pub type PipelineID = i32;
 pub type OpID = i32;
 
-struct OpStateName;
-
-impl OpStateName {
-    fn get(value: &i32) -> &'static str {
-        match value {
-            1 => "SLEEP",
-            2 => "QUEUED",
-            4 => "RUNNING",
-            8 => "EXECUTED",
-            16 => "DELETED",
-            _ => "UNKNOWN or ILLEGAL",
-        }
-    }
-
-    fn rget(name: &str) -> i32 {
-        match name {
-            "SLEEP" => 1,
-            "QUEUED" => 2,
-            "RUNNING" => 4,
-            "EXECUTED" => 8,
-            "DELETED" => 16,
-            _ => -1,
-        }
-    }
-}
-
-struct ObjTypeName;
-
-impl ObjTypeName {
-    fn get(value: &i32) -> &'static str {
-        match value {
-            1 => "ENTITY",
-            2 => "EVENT",
-            4 => "OPERATION",
-            8 => "BUFFER",
-            16 => "IN-SYNCFILE",
-            20 => "OUT-SYNCFILE",
-            24 => "ROOT",
-            _ => "UNKNOWN or ILLEGAL",
-        }
-    }
-}
 
 #[derive(PartialEq, Debug)]
 struct OpEvent {
     event_type: OpEventType,
     ts: f32,
     id: OpID,
-    state: i32,
+    state: String,
     delay_ns: i32,
     num_blockers: i32,
     pipeline_id: PipelineID,
@@ -80,7 +38,7 @@ impl OpEvent {
                 .unwrap()
                 .parse::<OpID>()
                 .unwrap(),
-            state: tokens[9].strip_suffix(',').unwrap().parse::<i32>().unwrap(),
+            state: tokens[9].strip_suffix(',').unwrap().to_string(),
             delay_ns: tokens[12]
                 .strip_suffix(',')
                 .unwrap()
@@ -101,7 +59,7 @@ struct SignalEvent {
     event_type: SignalEventType,
     ts: f32,
     source_id: i32,
-    source_type: i32,
+    source_type: String,
     target_id: OpID,
     pipeline_id: PipelineID,
 }
@@ -126,7 +84,7 @@ impl SignalEvent {
                 .unwrap()
                 .parse::<OpID>()
                 .unwrap(),
-            source_type: tokens[9].strip_suffix(',').unwrap().parse::<i32>().unwrap(),
+            source_type: tokens[9].strip_suffix(',').unwrap().to_string(),
             target_id: tokens[12]
                 .strip_suffix(',')
                 .unwrap()
@@ -162,10 +120,10 @@ impl EventEntry {
 impl EventEntry {
     /*
      * example for operation class logs:
-     * ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 79605, state = 0, delay_ns = 0, num_blockers = 0, pipeline_id = 3
+     * ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 79605, state = SLEEP, delay_ns = 0, num_blockers = 0, pipeline_id = 3
      *
      * example for signal class logs:
-     * vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 8, source_type = 2, target_id = 0, pipeline_id = 2
+     * vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 8, source_type = EVENT, target_id = 0, pipeline_id = 2
      *
      * example for event class logs (ignored):
      * irq/16-intel-ip-2807  [010]   995.813770: cam_event_trigger:    entity_id = 1, entity_name = PSYS, event_id = 2, event_name = event-189
@@ -393,11 +351,11 @@ impl<'a> OpRefList<'a> {
         let mut stats = TimeStats::new();
         for op in &self.list {
             let mut is_first = true;
-            let mut prev_state = 0;
+            let mut prev_state = "";
             let mut prev_ts = 0.0;
             for h in &op.state_history {
                 if is_first {
-                    prev_state = h.state;
+                    prev_state = &h.state;
                     prev_ts = h.ts;
                     is_first = false;
                     continue;
@@ -406,19 +364,8 @@ impl<'a> OpRefList<'a> {
                     continue;
                 }
 
-                if prev_state > h.state {
-                    println!(
-                        "-- this should not happen -------------------------------------------"
-                    );
-                    dbg!(&op);
-                    println!(
-                        "---------------------------------------------------------------------"
-                    );
-                    break;
-                }
-
-                stats.append(prev_state, h.state, h.ts - prev_ts);
-                prev_state = h.state;
+                stats.append(prev_state, &h.state, h.ts - prev_ts);
+                prev_state = &h.state;
                 prev_ts = h.ts;
             }
         }
@@ -431,8 +378,8 @@ impl<'a> OpRefList<'a> {
             write!(
                 writer,
                 "    {:8} -> {:8}: min {:.6}, max {:.6}, avg {:.6}, count {}",
-                OpStateName::get(&old_s),
-                OpStateName::get(&new_s),
+                old_s,
+                new_s,
                 e.min,
                 e.max,
                 e.avg,
@@ -458,18 +405,18 @@ impl<'a> OpRefList<'a> {
     }
 }
 
-struct TimeStats {
-    map: BTreeMap<(i32, i32), TimeStatsEntry>,
+struct TimeStats<'a> {
+    map: BTreeMap<(&'a str, &'a str), TimeStatsEntry>,
 }
 
-impl TimeStats {
+impl<'a> TimeStats<'a> {
     fn new() -> Self {
         TimeStats {
             map: BTreeMap::new(),
         }
     }
 
-    fn append(&mut self, old_state: i32, new_state: i32, length: f32) {
+    fn append(&mut self, old_state: &'a str, new_state: &'a str, length: f32) {
         let e = self.map.entry((old_state, new_state)).or_default();
         let mut sum: f64 = e.avg as f64 * e.count as f64;
         sum += length as f64;
@@ -503,20 +450,20 @@ impl Default for TimeStatsEntry {
     }
 }
 
-struct StateHistgram {
-    map: BTreeMap<PipelineID, BTreeMap<i32, usize>>,
+struct StateHistgram<'a> {
+    map: BTreeMap<PipelineID, BTreeMap<&'a str, usize>>,
 }
 
-impl StateHistgram {
+impl<'a> StateHistgram<'a> {
     fn new() -> Self {
         StateHistgram {
             map: BTreeMap::new(),
         }
     }
 
-    fn append(&mut self, op: &Op) {
+    fn append(&mut self, op: &'a Op) {
         let p_e = self.map.entry(op.pipeline_id).or_default();
-        let last_state = op.state_history.last().unwrap().state;
+        let last_state = &op.state_history.last().unwrap().state;
         let c_e = p_e.entry(last_state).or_insert(0);
         *c_e += 1;
     }
@@ -529,7 +476,7 @@ impl StateHistgram {
                 writeln!(
                     writer,
                     "{indent} # of ops in {}: {}",
-                    OpStateName::get(state),
+                    state,
                     count
                 )?;
             }
@@ -590,8 +537,8 @@ impl Op {
     }
 
     fn is_finished(&self) -> bool {
-        let last_state = self.state_history.last().unwrap().state;
-        last_state == OpStateName::rget("EXECUTED") || last_state == OpStateName::rget("DELETED")
+        let last_state = &self.state_history.last().unwrap().state;
+        last_state == "EXECUTED" || last_state == "DELETED"
     }
 
     fn output_details<W: Write>(&self, writer: &mut W) -> Result<()> {
@@ -610,7 +557,7 @@ impl Op {
                         writer,
                         "      [ts {:.6}, state {}, added {}, num_blockers {}, blockers {:?}]",
                         s.ts,
-                        OpStateName::get(&s.state),
+                        s.state,
                         s.added,
                         s.num_blockers,
                         s.blockers
@@ -619,7 +566,7 @@ impl Op {
                 Some(prev_state) => {
                     write!(writer, "      [ts {:.6}", s.ts)?;
                     if prev_state.state != s.state {
-                        write!(writer, ", state -> {}", OpStateName::get(&s.state))?;
+                        write!(writer, ", state -> {}", s.state)?;
                     }
                     if prev_state.added != s.added {
                         write!(writer, ", added -> {}", s.added)?;
@@ -644,7 +591,7 @@ impl Op {
 #[derive(PartialEq, Debug)]
 pub struct OpState {
     ts: f32,
-    state: i32,
+    state: String,
     added: bool,
     num_blockers: i32,
     blockers: BTreeSet<BlockerInfo>,
@@ -654,7 +601,7 @@ impl OpState {
     fn unknown() -> Self {
         OpState {
             ts: -1.0,
-            state: -1,
+            state: "".to_string(),
             added: false,
             num_blockers: 0,
             blockers: BTreeSet::new(),
@@ -664,7 +611,7 @@ impl OpState {
     fn from_op_event(oe: &OpEvent, maybe_prev: Option<&OpState>) -> Self {
         OpState {
             ts: oe.ts,
-            state: oe.state,
+            state: oe.state.clone(),
             added: match oe.event_type {
                 OpEventType::Add => true,
                 _ => {
@@ -696,7 +643,7 @@ impl OpState {
 
         OpState {
             ts: se.ts,
-            state: prev.state,
+            state: prev.state.clone(),
             added: prev.added,
             num_blockers,
             blockers,
@@ -706,14 +653,14 @@ impl OpState {
 
 #[derive(Eq, Ord, PartialOrd, PartialEq, Clone)]
 struct BlockerInfo {
-    obj_type: i32,
+    obj_type: String,
     id: i32,
 }
 
 impl BlockerInfo {
     fn from_signal_event(se: &SignalEvent) -> Self {
         BlockerInfo {
-            obj_type: se.source_type,
+            obj_type: se.source_type.clone(),
             id: se.source_id,
         }
     }
@@ -721,7 +668,7 @@ impl BlockerInfo {
 
 impl fmt::Debug for BlockerInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", ObjTypeName::get(&self.obj_type), self.id)
+        write!(f, "{} {}", self.obj_type, self.id)
     }
 }
 
@@ -738,9 +685,9 @@ mod tests {
     use std::fmt::Write;
 
     impl BlockerInfo {
-        fn test_new(obj_type: &i32, id: &i32) -> Self {
+        fn test_new(obj_type: &str, id: &i32) -> Self {
             BlockerInfo {
-                obj_type: *obj_type,
+                obj_type: obj_type.to_string(),
                 id: *id,
             }
         }
@@ -748,7 +695,7 @@ mod tests {
 
     #[test]
     fn parse_line_for_state_event() {
-        let log = "ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 79605, state = 1, delay_ns = 2, num_blockers = 4, pipeline_id = 3";
+        let log = "ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 79605, state = SLEEP, delay_ns = 2, num_blockers = 4, pipeline_id = 3";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_some());
@@ -757,7 +704,7 @@ mod tests {
             event_type: OpEventType::SetState,
             ts: 995.744359,
             id: 79605,
-            state: 1,
+            state: "SLEEP".to_string(),
             delay_ns: 2,
             num_blockers: 4,
             pipeline_id: 3,
@@ -767,7 +714,7 @@ mod tests {
 
     #[test]
     fn parse_line_for_state_add() {
-        let log = "vcamtest-265   [001]    17.088879: cam_operation_add:    id = 0, state = 1, delay_ns = 0, num_blockers = 1, pipeline_id = 2";
+        let log = "vcamtest-265   [001]    17.088879: cam_operation_add:    id = 0, state = SLEEP, delay_ns = 0, num_blockers = 1, pipeline_id = 2";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_some());
@@ -776,7 +723,7 @@ mod tests {
             event_type: OpEventType::Add,
             ts: 17.088879,
             id: 0,
-            state: 1,
+            state: "SLEEP".to_string(),
             delay_ns: 0,
             num_blockers: 1,
             pipeline_id: 2,
@@ -786,7 +733,7 @@ mod tests {
 
     #[test]
     fn parse_line_for_signal_event() {
-        let log = "vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 8, source_type = 2, target_id = 0, pipeline_id = 2";
+        let log = "vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 8, source_type = EVENT, target_id = 0, pipeline_id = 2";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_some());
@@ -795,7 +742,7 @@ mod tests {
             event_type: SignalEventType::AddPending,
             ts: 34.317839,
             source_id: 8,
-            source_type: 2,
+            source_type: "EVENT".to_string(),
             target_id: 0,
             pipeline_id: 2,
         });
@@ -826,7 +773,7 @@ mod tests {
                 event_type: OpEventType::SetState,
                 ts: 1.234,
                 id: 5,
-                state: 2,
+                state: "QUEUED".to_string(),
                 delay_ns: 3,
                 num_blockers: 4,
                 pipeline_id: 5,
@@ -845,7 +792,7 @@ mod tests {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
                     id: 5,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
                     pipeline_id: 5,
@@ -854,7 +801,7 @@ mod tests {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
                     id: 6,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
                     pipeline_id: 5,
@@ -875,7 +822,7 @@ mod tests {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
                     id: 5,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
                     pipeline_id: 5,
@@ -884,7 +831,7 @@ mod tests {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
                     id: 5,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
                     pipeline_id: 7,
@@ -905,7 +852,7 @@ mod tests {
                 event_type: SignalEventType::AddPending,
                 ts: 34.317839,
                 source_id: 8,
-                source_type: 2,
+                source_type: "EVENT".to_string(),
                 target_id: 0,
                 pipeline_id: 2,
             })],
@@ -923,7 +870,7 @@ mod tests {
                     event_type: SignalEventType::AddPending,
                     ts: 34.317839,
                     source_id: 8,
-                    source_type: 2,
+                    source_type: "EVENT".to_string(),
                     target_id: 0,
                     pipeline_id: 2,
                 }),
@@ -931,7 +878,7 @@ mod tests {
                     event_type: SignalEventType::AddPending,
                     ts: 34.317839,
                     source_id: 8,
-                    source_type: 2,
+                    source_type: "EVENT".to_string(),
                     target_id: 1,
                     pipeline_id: 2,
                 }),
@@ -951,7 +898,7 @@ mod tests {
                     event_type: SignalEventType::AddPending,
                     ts: 34.317839,
                     source_id: 8,
-                    source_type: 2,
+                    source_type: "EVENT".to_string(),
                     target_id: 0,
                     pipeline_id: 1,
                 }),
@@ -959,7 +906,7 @@ mod tests {
                     event_type: SignalEventType::FireActive,
                     ts: 34.317839,
                     source_id: 8,
-                    source_type: 2,
+                    source_type: "EVENT".to_string(),
                     target_id: 1,
                     pipeline_id: 2,
                 }),
@@ -978,7 +925,7 @@ mod tests {
             event_type: OpEventType::SetState,
             ts: 1.234,
             id: 5,
-            state: 2,
+            state: "QUEUED".to_string(),
             delay_ns: 3,
             num_blockers: 4,
             pipeline_id: 5,
@@ -991,7 +938,7 @@ mod tests {
             pipeline_id: 5,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1008,7 +955,7 @@ mod tests {
             pipeline_id: 5,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 0,
                 blockers: BTreeSet::new(),
@@ -1019,7 +966,7 @@ mod tests {
             event_type: SignalEventType::AddPending,
             ts: 34.317839,
             source_id: 8,
-            source_type: 2,
+            source_type: "EVENT".to_string(),
             target_id: 0,
             pipeline_id: 1,
         };
@@ -1028,7 +975,7 @@ mod tests {
             event_type: SignalEventType::FireActive,
             ts: 35.317839,
             source_id: 8,
-            source_type: 2,
+            source_type: "EVENT".to_string(),
             target_id: 0,
             pipeline_id: 1,
         };
@@ -1043,21 +990,21 @@ mod tests {
             state_history: vec![
                 OpState {
                     ts: 1.234,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     added: false,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 34.317839,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     added: false,
                     num_blockers: 1,
-                    blockers: BTreeSet::from([BlockerInfo::test_new(&2, &8)]),
+                    blockers: BTreeSet::from([BlockerInfo::test_new("EVENT", &8)]),
                 },
                 OpState {
                     ts: 35.317839,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     added: false,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
@@ -1080,7 +1027,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1093,28 +1040,28 @@ mod tests {
             state_history: vec![
                 OpState {
                     ts: 1.234,
-                    state: 1,
+                    state: "SLEEP".to_string(),
                     added: false,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 1.234,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     added: false,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 1.234,
-                    state: 4,
+                    state: "RUNNING".to_string(),
                     added: false,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 1.234,
-                    state: 8,
+                    state: "EXECUTED".to_string(),
                     added: false,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
@@ -1128,7 +1075,7 @@ mod tests {
             pipeline_id: pipeline2_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 16,
+                state: "DELETED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1167,7 +1114,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1204,7 +1151,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1217,7 +1164,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1257,7 +1204,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1270,7 +1217,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1283,7 +1230,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1324,7 +1271,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1337,7 +1284,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1350,7 +1297,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1363,7 +1310,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1376,7 +1323,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1389,7 +1336,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: false,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1424,8 +1371,8 @@ mod tests {
 
     #[test]
     fn calc_time_statistics() {
-        let key_pair_1 = (1, 1);
-        let key_pair_2 = (1, 2);
+        let key_pair_1 = ("SLEEP", "QUEUED");
+        let key_pair_2 = ("QUEUED", "RUNNING");
 
         let mut ts = TimeStats::new();
 
@@ -1510,7 +1457,7 @@ mod tests {
             pipeline_id: pipeline1_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 2,
+                state: "QUEUED".to_string(),
                 added: true,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1523,28 +1470,28 @@ mod tests {
             state_history: vec![
                 OpState {
                     ts: 1.234,
-                    state: 1,
+                    state: "SLEEP".to_string(),
                     added: true,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 1.234,
-                    state: 2,
+                    state: "QUEUED".to_string(),
                     added: true,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 1.234,
-                    state: 4,
+                    state: "RUNNING".to_string(),
                     added: true,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
                 },
                 OpState {
                     ts: 1.234,
-                    state: 8,
+                    state: "EXECUTED".to_string(),
                     added: true,
                     num_blockers: 0,
                     blockers: BTreeSet::new(),
@@ -1558,7 +1505,7 @@ mod tests {
             pipeline_id: pipeline2_id,
             state_history: vec![OpState {
                 ts: 1.234,
-                state: 16,
+                state: "DELETED".to_string(),
                 added: true,
                 num_blockers: 4,
                 blockers: BTreeSet::new(),
@@ -1569,16 +1516,16 @@ mod tests {
         sh.append(&pipeline1_op2);
         sh.append(&pipeline2_op1);
 
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get(&1), None);
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get(&2), Some(&1));
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get(&4), None);
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get(&8), Some(&1));
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get(&16), None);
+        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("SLEEP"), None);
+        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("QUEUED"), Some(&1));
+        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("RUNNING"), None);
+        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("EXECUTED"), Some(&1));
+        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("DELETED"), None);
 
-        assert_eq!(sh.map.get(&pipeline2_id).unwrap().get(&16), Some(&1));
+        assert_eq!(sh.map.get(&pipeline2_id).unwrap().get("DELETED"), Some(&1));
 
-        /* illegal state numbers */
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get(&3), None);
-        assert_eq!(sh.map.get(&pipeline2_id).unwrap().get(&7), None);
+        /* illegal states */
+        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("SLEPT"), None);
+        assert_eq!(sh.map.get(&pipeline2_id).unwrap().get("ABORTED"), None);
     }
 }
