@@ -1820,6 +1820,7 @@ static int test_add_buffer(struct libkc *cam)
 	struct libkc_rw_list *rw_list;
 	struct obj_entity *entity;
 	struct cam_operation *op;
+	char *read_buffer;
 	int ret;
 
 	pr_info("Test ADD buffers\n");
@@ -1838,9 +1839,15 @@ static int test_add_buffer(struct libkc *cam)
 		goto out;
 	}
 
-	lco = libkc_operation_get(1);
+	lco = libkc_operation_get(2);
 	if (!lco) {
 		ret = -EINVAL;
+		goto out;
+	}
+
+	read_buffer = calloc(1, READ_BUFFER_SIZE);
+	if (!read_buffer) {
+		ret = -ENOMEM;
 		goto out;
 	}
 
@@ -1876,14 +1883,49 @@ static int test_add_buffer(struct libkc *cam)
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
 
+	op = libkc_operation_at(lco, 1);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 2;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= 0;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.mode		= CAM_DEPENDENCY_STRICT_ORDER;
+	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
+	op->operation_add.deps[0].id	= 1;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_READ_INSTRUCTION;
+	rw->rd.reg	= 42;
+	rw->rd.size	= READ_BUFFER_SIZE;
+	rw->rd.dbuf	= 1;
+	rw->rd.ptr	= (uint64_t)read_buffer;
+
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
 		goto out;
 
 	MAY_EXIT_AT();
 
-	ret = read_operations_completion_events(cam, 1);
-	if (ret != 1) {
+	ret = read_operations_completion_events(cam, 2);
+	if (ret != 2) {
 		pr_err("Invalid number of completions %d\n", ret);
 		ret = -EINVAL;
 		goto out;
@@ -1902,6 +1944,7 @@ out:
 	if (ret)
 		libkc_dmabuf_put(buf);
 	libkc_operation_put(lco);
+	free(read_buffer);
 	return ret;
 }
 
