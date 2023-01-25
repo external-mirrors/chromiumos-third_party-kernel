@@ -676,7 +676,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 		return;
 
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
-		pr_err("Unable to access opeeration RW instructions list\n");
+		pr_err("Unable to access operation RW instructions list\n");
 		return;
 	}
 
@@ -689,7 +689,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 		int ret;
 
 		if (copy_from_user(&insn, payload, sizeof(insn))) {
-			pr_err("Ubable to access RW instruction\n");
+			pr_err("Unable to access RW instruction\n");
 			break;
 		}
 
