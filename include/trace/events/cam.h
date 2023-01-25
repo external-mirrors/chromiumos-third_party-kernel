@@ -14,6 +14,43 @@
 #include <linux/cam/cam-entity.h>
 #include <linux/cam/cam-pipeline.h>
 
+#include <uapi/linux/cam.h>
+
+/* export enums for trace-cmd */
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_ENTITY);
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_EVENT);
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_OPERATION);
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_BUFFER);
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_IN_SYNCFILE);
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_OUT_SYNCFILE);
+TRACE_DEFINE_ENUM(CAM_OBJ_TYPE_ROOT);
+
+TRACE_DEFINE_ENUM(CAM_OPERATION_STATE_SLEEP);
+TRACE_DEFINE_ENUM(CAM_OPERATION_STATE_QUEUED);
+TRACE_DEFINE_ENUM(CAM_OPERATION_STATE_RUNNING);
+TRACE_DEFINE_ENUM(CAM_OPERATION_STATE_EXECUTED);
+TRACE_DEFINE_ENUM(CAM_OPERATION_STATE_DELETED);
+
+#define type_name(type)	{ CAM_OBJ_TYPE_##type, #type }
+#define show_type_name(val)				\
+	__print_symbolic(val,				\
+			 type_name(ENTITY),		\
+			 type_name(EVENT),		\
+			 type_name(OPERATION),		\
+			 type_name(BUFFER),		\
+			 type_name(IN_SYNCFILE),	\
+			 type_name(OUT_SYNCFILE),	\
+			 type_name(ROOT))
+
+#define state_name(state)	{ CAM_OPERATION_STATE_##state, #state }
+#define show_state_name(val)			\
+	__print_symbolic(val,			\
+			state_name(SLEEP),	\
+			state_name(QUEUED),	\
+			state_name(RUNNING),	\
+			state_name(EXECUTED),	\
+			state_name(DELETED))
+
 DECLARE_EVENT_CLASS(cam_operation_class,
 	TP_PROTO(struct cam_obj_op *op),
 	TP_ARGS(op),
@@ -34,9 +71,9 @@ DECLARE_EVENT_CLASS(cam_operation_class,
 		__entry->pipeline_id = op->pipeline->id;
 	),
 
-	TP_printk("id = %lu, state = %d, delay_ns = %llu, num_blockers = %d, pipeline_id = %d",
+	TP_printk("id = %lu, state = %s, delay_ns = %llu, num_blockers = %d, pipeline_id = %d",
 		  __entry->id,
-		  __entry->state,
+		  show_state_name(__entry->state),
 		  __entry->delay_ns,
 		  __entry->num_blockers,
 		  __entry->pipeline_id
@@ -107,9 +144,9 @@ DECLARE_EVENT_CLASS(cam_signal_class,
 	),
 
 	TP_printk(
-		  "source_id = %lu, source_type = %d, target_id = %lu, pipeline_id = %d",
+		  "source_id = %lu, source_type = %s, target_id = %lu, pipeline_id = %d",
 		  __entry->source_id,
-		  __entry->source_type,
+		  show_type_name(__entry->source_type),
 		  __entry->target_id,
 		  __entry->pipeline_id
 	)
