@@ -111,14 +111,24 @@ static struct cam_entity_ops entity_ops = {
 static int dma_importer_read(struct cam_obj_entity *entity,
 			     struct cam_read_instruction *rw)
 {
-	pr_info("VCAM: DMA importer read\n");
+	struct cam_obj_buffer *buffer = (struct cam_obj_buffer *)rw->dbuf;
+
+	pr_info("VCAM: DMA importer read: buffer_id: %lu, va: %p\n",
+		cam_obj_id(&buffer->nsobj),
+		buffer->va);
+
 	return 0;
 }
 
 static int dma_importer_write(struct cam_obj_entity *entity,
 			      struct cam_write_instruction *rw)
 {
-	pr_info("VCAM: DMA importer write\n");
+	struct cam_obj_buffer *buffer = (struct cam_obj_buffer *)rw->dbuf;
+
+	pr_info("VCAM: DMA importer write: buffer_id: %lu, va: %p\n",
+		cam_obj_id(&buffer->nsobj),
+		buffer->va);
+
 	return 0;
 }
 
