@@ -1124,7 +1124,6 @@ static const struct of_device_id mtk_dpi_of_ids[] = {
 	},
 	{ .compatible = "mediatek,mt8188-dp-intf",
 	  .data = &mt8188_dpintf_conf,
-	},
 	{ .compatible = "mediatek,mt8186-dpi",
 	  .data = &mt8186_conf,
 	},
