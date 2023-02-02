@@ -201,7 +201,7 @@ static irqreturn_t t7xx_rgu_isr_thread(int irq, void *data)
 	t7xx_mode_update(t7xx_dev, T7XX_RESET);
 	msleep(RGU_RESET_DELAY_MS);
 	t7xx_reset_device_via_pmic(t7xx_dev);
-	t7xx_rescan_queue_work(t7xx_dev->pdev);
+	t7xx_rescan_queue_work(t7xx_dev->pdev, false);
 
 	return IRQ_HANDLED;
 }
