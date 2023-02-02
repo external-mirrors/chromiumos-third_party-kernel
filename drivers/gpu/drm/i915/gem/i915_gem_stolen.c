@@ -912,7 +912,7 @@ i915_gem_stolen_lmem_setup(struct drm_i915_private *i915, u16 type,
 		dsm_base = intel_uncore_read64(uncore, GEN12_DSMBASE) & GEN12_BDSM_MASK;
 		if (WARN_ON(lmem_size < dsm_base))
 			return ERR_PTR(-ENODEV);
-		dsm_size = lmem_size - dsm_base;
+		dsm_size = ALIGN_DOWN(lmem_size - dsm_base, SZ_1M);
 	}
 
 	if (pci_resource_len(pdev, GEN12_LMEM_BAR) < lmem_size) {
