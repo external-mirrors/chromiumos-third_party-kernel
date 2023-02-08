@@ -22,6 +22,7 @@
 #include "debug.h"
 #include "iommu.h"
 #include "iommu_internal.h"
+#include "iommu_spgt.h"
 #include "mem_protect.h"
 #include "lapic.h"
 
@@ -30,6 +31,7 @@ void *pkvm_mmu_pgt_base;
 void *host_ept_pgt_base;
 static void *iommu_mem_base;
 static void *shadow_ept_base;
+static void *shadow_iommu_pgt_base;
 
 static int divide_memory_pool(phys_addr_t phys, unsigned long size)
 {
@@ -67,6 +69,11 @@ static int divide_memory_pool(phys_addr_t phys, unsigned long size)
 						 PKVM_MAX_SECURE_VM_NUM);
 	shadow_ept_base = pkvm_early_alloc_contig(nr_pages);
 	if (!shadow_ept_base)
+		return -ENOMEM;
+
+	nr_pages = pkvm_shadow_iommu_pgtable_pages(PKVM_MAX_PDEV_NUM);
+	shadow_iommu_pgt_base = pkvm_early_alloc_contig(nr_pages);
+	if (!shadow_iommu_pgt_base)
 		return -ENOMEM;
 
 	return 0;
@@ -331,6 +338,11 @@ int __pkvm_init_finalise(struct kvm_vcpu *vcpu, struct pkvm_section sections[],
 	ret = pkvm_shadow_ept_pool_init(shadow_ept_base,
 					pkvm_shadow_ept_pgtable_pages(PKVM_MAX_NORMAL_VM_NUM +
 								      PKVM_MAX_SECURE_VM_NUM));
+	if (ret)
+		goto out;
+
+	ret = pkvm_iommu_spgt_pool_init(shadow_iommu_pgt_base,
+					pkvm_shadow_iommu_pgtable_pages(PKVM_MAX_PDEV_NUM));
 	if (ret)
 		goto out;
 

@@ -52,7 +52,7 @@ static inline void pkvm_init_ept_page(void *page)
 	memset64((u64 *)page, EPT_PROT_DEF, 512);
 }
 
-static void *ept_zalloc_page(struct pkvm_pool *pool)
+void *ept_zalloc_page(struct pkvm_pool *pool)
 {
 	void *page;
 
