@@ -140,4 +140,7 @@ int pkvm_pgtable_annotate(struct pkvm_pgtable *pgt, unsigned long addr,
 			  unsigned long size, u64 annotation);
 int pkvm_pgtable_sync_map(struct pkvm_pgtable *src, struct pkvm_pgtable *dest,
 			  u64 *prot, pgtable_leaf_ov_fn_t map_leaf);
+int pkvm_pgtable_sync_map_range(struct pkvm_pgtable *src, struct pkvm_pgtable *dest,
+				unsigned long vaddr, unsigned long size,
+				u64 *prot, pgtable_leaf_ov_fn_t map_leaf);
 #endif
