@@ -8,6 +8,7 @@
 /dts-v1/;
 
 #include "sc7180-trogdor.dtsi"
+#include "sc7180-trogdor-mipi-camera.dtsi"
 
 /* This board only has 1 USB Type-C port. */
 /delete-node/ &usb_c1;
@@ -99,6 +100,10 @@
 			};
 		};
 	};
+};
+
+&mdp {
+	chromium-enable-overlays;
 };
 
 &gpio_keys {
