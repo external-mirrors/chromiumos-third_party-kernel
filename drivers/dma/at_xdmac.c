@@ -1993,6 +1993,7 @@ static int __maybe_unused atmel_xdmac_suspend(struct device *dev)
 
 	at_xdmac_off(atxdmac);
 	clk_disable_unprepare(atxdmac->clk);
+
 	return 0;
 }
 
@@ -2008,6 +2009,8 @@ static int __maybe_unused atmel_xdmac_resume(struct device *dev)
 	ret = clk_prepare_enable(atxdmac->clk);
 	if (ret)
 		return ret;
+
+	pm_runtime_get_noresume(atxdmac->dev);
 
 	at_xdmac_axi_config(pdev);
 
