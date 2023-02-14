@@ -41,6 +41,8 @@
 #define MT7921_EEPROM_SIZE		3584
 #define MT7921_TOKEN_SIZE		8192
 
+#define MT7921_EEPROM_BLOCK_SIZE	16
+
 #define MT7921_CFEND_RATE_DEFAULT	0x49	/* OFDM 24M */
 #define MT7921_CFEND_RATE_11B		0x03	/* 11B LP, 11M */
 
@@ -149,6 +151,29 @@ struct mib_stats {
 	u32 tx_amsdu_cnt;
 };
 
+enum {
+	MT7921_CLC_POWER,
+	MT7921_CLC_CHAN,
+	MT7921_CLC_MAX_NUM,
+};
+
+struct mt7921_clc_rule {
+	u8 alpha2[2];
+	u8 type[2];
+	__le16 len;
+	u8 data[];
+} __packed;
+
+struct mt7921_clc {
+	__le32 len;
+	u8 idx;
+	u8 ver;
+	u8 nr_country;
+	u8 type;
+	u8 rsv[8];
+	u8 data[];
+} __packed;
+
 struct mt7921_phy {
 	struct mt76_phy *mt76;
 	struct mt7921_dev *dev;
@@ -174,6 +199,8 @@ struct mt7921_phy {
 #ifdef CONFIG_ACPI
 	struct mt7921_acpi_sar *acpisar;
 #endif
+
+	struct mt7921_clc *clc[MT7921_CLC_MAX_NUM];
 };
 
 #define mt7921_init_reset(dev)		((dev)->hif_ops->init_reset(dev))
@@ -218,6 +245,8 @@ struct mt7921_dev {
 	struct work_struct ipv6_ns_work;
 	/* IPv6 addresses for WoWLAN */
 	struct sk_buff_head ipv6_ns_list;
+
+	enum environment_cap country_ie_env;
 };
 
 enum {
@@ -295,6 +324,8 @@ int mt7921_mcu_get_rx_rate(struct mt7921_phy *phy, struct ieee80211_vif *vif,
 			   struct ieee80211_sta *sta, struct rate_info *rate);
 int mt7921_mcu_fw_log_2_host(struct mt7921_dev *dev, u8 ctrl);
 void mt7921_mcu_rx_event(struct mt7921_dev *dev, struct sk_buff *skb);
+int mt7921_mcu_set_rxfilter(struct mt7921_dev *dev, u32 fif,
+			    u8 bit_op, u32 bit_map);
 
 static inline void mt7921_irq_enable(struct mt7921_dev *dev, u32 mask)
 {
@@ -385,7 +416,6 @@ int mt7921e_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 			   struct mt76_tx_info *tx_info);
 
 void mt7921_tx_worker(struct mt76_worker *w);
-void mt7921e_tx_complete_skb(struct mt76_dev *mdev, struct mt76_queue_entry *e);
 void mt7921_tx_token_put(struct mt7921_dev *dev);
 void mt7921_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 			 struct sk_buff *skb);
@@ -419,8 +449,6 @@ int mt7921_testmode_dump(struct ieee80211_hw *hw, struct sk_buff *msg,
 			 struct netlink_callback *cb, void *data, int len);
 void mt7921_tx_check_aggr(struct ieee80211_sta *sta, __le32 *txwi);
 void mt7921_mac_sta_poll(struct mt7921_dev *dev);
-int mt7921_mcu_fill_message(struct mt76_dev *mdev, struct sk_buff *skb,
-			    int cmd, int *wait_seq);
 int mt7921_mcu_parse_response(struct mt76_dev *mdev, int cmd,
 			      struct sk_buff *skb, int seq);
 
@@ -488,4 +516,7 @@ mt7921_init_acpi_sar_power(struct mt7921_phy *phy, bool set_default)
 #endif
 int mt7921_set_tx_sar_pwr(struct ieee80211_hw *hw,
 			  const struct cfg80211_sar_specs *sar);
+
+int mt7921_mcu_set_clc(struct mt7921_dev *dev, u8 *alpha2,
+		       enum environment_cap env_cap);
 #endif

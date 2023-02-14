@@ -232,7 +232,7 @@ mt7915_mac_fill_rx(struct mt7915_dev *dev, struct sk_buff *skb)
 	bool unicast, insert_ccmp_hdr = false;
 	u8 remove_pad, amsdu_info;
 	u8 mode = 0, qos_ctl = 0;
-	struct mt7915_sta *msta;
+	struct mt7915_sta *msta = NULL;
 	bool hdr_trans;
 	u16 hdr_gap;
 	u16 seq_ctrl = 0;
@@ -662,7 +662,8 @@ mt7915_mac_write_txwi_tm(struct mt7915_phy *phy, __le32 *txwi,
 
 void mt7915_mac_write_txwi(struct mt76_dev *dev, __le32 *txwi,
 			   struct sk_buff *skb, struct mt76_wcid *wcid, int pid,
-			   struct ieee80211_key_conf *key, u32 changed)
+			   struct ieee80211_key_conf *key,
+			   enum mt76_txq_id qid, u32 changed)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct mt76_phy *mphy = &dev->phy;
@@ -670,8 +671,7 @@ void mt7915_mac_write_txwi(struct mt76_dev *dev, __le32 *txwi,
 	if ((info->hw_queue & MT_TX_HW_QUEUE_EXT_PHY) && dev->phy2)
 		mphy = dev->phy2;
 
-	mt76_connac2_mac_write_txwi(dev, txwi, skb, wcid, key, pid, changed);
-
+	mt76_connac2_mac_write_txwi(dev, txwi, skb, wcid, key, pid, qid, changed);
 
 	if (mt76_testmode_enabled(mphy))
 		mt7915_mac_write_txwi_tm(mphy->priv, txwi, skb);
@@ -687,8 +687,8 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(tx_info->skb);
 	struct ieee80211_key_conf *key = info->control.hw_key;
 	struct ieee80211_vif *vif = info->control.vif;
+	struct mt76_connac_fw_txp *txp;
 	struct mt76_txwi_cache *t;
-	struct mt7915_txp *txp;
 	int id, i, nbuf = tx_info->nbuf - 1;
 	u8 *txwi = (u8 *)txwi_ptr;
 	int pid;
@@ -718,9 +718,10 @@ int mt7915_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 		return id;
 
 	pid = mt76_tx_status_skb_add(mdev, wcid, tx_info->skb);
-	mt7915_mac_write_txwi(mdev, txwi_ptr, tx_info->skb, wcid, pid, key, 0);
+	mt7915_mac_write_txwi(mdev, txwi_ptr, tx_info->skb, wcid, pid, key,
+			      qid, 0);
 
-	txp = (struct mt7915_txp *)(txwi + MT_TXD_SIZE);
+	txp = (struct mt76_connac_fw_txp *)(txwi + MT_TXD_SIZE);
 	for (i = 0; i < nbuf; i++) {
 		txp->buf[i] = cpu_to_le32(tx_info->buf[i + 1].addr);
 		txp->len[i] = cpu_to_le16(tx_info->buf[i + 1].len);
@@ -783,18 +784,6 @@ mt7915_tx_check_aggr(struct ieee80211_sta *sta, __le32 *txwi)
 }
 
 static void
-mt7915_txp_skb_unmap(struct mt76_dev *dev, struct mt76_txwi_cache *t)
-{
-	struct mt7915_txp *txp;
-	int i;
-
-	txp = mt7915_txwi_to_txp(dev, t);
-	for (i = 0; i < txp->nbuf; i++)
-		dma_unmap_single(dev->dev, le32_to_cpu(txp->buf[i]),
-				 le16_to_cpu(txp->len[i]), DMA_TO_DEVICE);
-}
-
-static void
 mt7915_txwi_free(struct mt7915_dev *dev, struct mt76_txwi_cache *t,
 		 struct ieee80211_sta *sta, struct list_head *free_list)
 {
@@ -803,7 +792,7 @@ mt7915_txwi_free(struct mt7915_dev *dev, struct mt76_txwi_cache *t,
 	__le32 *txwi;
 	u16 wcid_idx;
 
-	mt7915_txp_skb_unmap(mdev, t);
+	mt76_connac_txp_skb_unmap(mdev, t);
 	if (!t->skb)
 		goto out;
 
@@ -1023,27 +1012,6 @@ void mt7915_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 	}
 }
 
-void mt7915_tx_complete_skb(struct mt76_dev *mdev, struct mt76_queue_entry *e)
-{
-	if (!e->txwi) {
-		dev_kfree_skb_any(e->skb);
-		return;
-	}
-
-	/* error path */
-	if (e->skb == DMA_DUMMY_DATA) {
-		struct mt76_txwi_cache *t;
-		struct mt7915_txp *txp;
-
-		txp = mt7915_txwi_to_txp(mdev, e->txwi);
-		t = mt76_token_put(mdev, le16_to_cpu(txp->token));
-		e->skb = t ? t->skb : NULL;
-	}
-
-	if (e->skb)
-		mt76_tx_complete_skb(mdev, e->wcid, e->skb);
-}
-
 void mt7915_mac_cca_stats_reset(struct mt7915_phy *phy)
 {
 	struct mt7915_dev *dev = phy->dev;
@@ -1087,7 +1055,7 @@ void mt7915_mac_set_timing(struct mt7915_phy *phy)
 		  FIELD_PREP(MT_TIMEOUT_VAL_CCA, 48);
 	u32 ofdm = FIELD_PREP(MT_TIMEOUT_VAL_PLCP, 60) |
 		   FIELD_PREP(MT_TIMEOUT_VAL_CCA, 28);
-	int offset;
+	int eifs_ofdm = 360, sifs = 10, offset;
 	bool a_band = !(phy->mt76->chandef.chan->band == NL80211_BAND_2GHZ);
 
 	if (!test_bit(MT76_STATE_RUNNING, &phy->mt76->state))
@@ -1105,16 +1073,25 @@ void mt7915_mac_set_timing(struct mt7915_phy *phy)
 	reg_offset = FIELD_PREP(MT_TIMEOUT_VAL_PLCP, offset) |
 		     FIELD_PREP(MT_TIMEOUT_VAL_CCA, offset);
 
+	if (!is_mt7915(&dev->mt76)) {
+		if (!a_band) {
+			mt76_wr(dev, MT_TMAC_ICR1(phy->band_idx),
+				FIELD_PREP(MT_IFS_EIFS_CCK, 314));
+			eifs_ofdm = 78;
+		} else {
+			eifs_ofdm = 84;
+		}
+	} else if (a_band) {
+		sifs = 16;
+	}
+
 	mt76_wr(dev, MT_TMAC_CDTR(phy->band_idx), cck + reg_offset);
 	mt76_wr(dev, MT_TMAC_ODTR(phy->band_idx), ofdm + reg_offset);
 	mt76_wr(dev, MT_TMAC_ICR0(phy->band_idx),
-		FIELD_PREP(MT_IFS_EIFS_OFDM, a_band ? 84 : 78) |
+		FIELD_PREP(MT_IFS_EIFS_OFDM, eifs_ofdm) |
 		FIELD_PREP(MT_IFS_RIFS, 2) |
-		FIELD_PREP(MT_IFS_SIFS, 10) |
+		FIELD_PREP(MT_IFS_SIFS, sifs) |
 		FIELD_PREP(MT_IFS_SLOT, phy->slottime));
-
-	mt76_wr(dev, MT_TMAC_ICR1(phy->band_idx),
-		FIELD_PREP(MT_IFS_EIFS_CCK, 314));
 
 	if (phy->slottime < 20 || a_band)
 		val = MT7915_CFEND_RATE_DEFAULT;

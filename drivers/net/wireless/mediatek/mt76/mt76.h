@@ -169,7 +169,6 @@ struct mt76_queue {
 
 	u8 buf_offset;
 	u8 hw_idx;
-	u8 qid;
 
 	dma_addr_t desc_dma;
 	struct sk_buff *rx_head;
@@ -204,8 +203,8 @@ struct mt76_queue_ops {
 		     u32 ring_base);
 
 	int (*tx_queue_skb)(struct mt76_dev *dev, struct mt76_queue *q,
-			    struct sk_buff *skb, struct mt76_wcid *wcid,
-			    struct ieee80211_sta *sta);
+			    enum mt76_txq_id qid, struct sk_buff *skb,
+			    struct mt76_wcid *wcid, struct ieee80211_sta *sta);
 
 	int (*tx_queue_skb_raw)(struct mt76_dev *dev, struct mt76_queue *q,
 				struct sk_buff *skb, u32 tx_info);
@@ -361,6 +360,7 @@ struct mt76_hw_cap {
 #define MT_DRV_SW_RX_AIRTIME		BIT(2)
 #define MT_DRV_RX_DMA_HDR		BIT(3)
 #define MT_DRV_HW_MGMT_TXQ		BIT(4)
+#define MT_DRV_AMSDU_OFFLOAD		BIT(5)
 
 struct mt76_driver_ops {
 	u32 drv_flags;
@@ -955,7 +955,6 @@ static inline int mt76_init_tx_queue(struct mt76_phy *phy, int qid, int idx,
 	if (IS_ERR(q))
 		return PTR_ERR(q);
 
-	q->qid = qid;
 	phy->q_tx[qid] = q;
 
 	return 0;
@@ -970,7 +969,6 @@ static inline int mt76_init_mcu_queue(struct mt76_dev *dev, int qid, int idx,
 	if (IS_ERR(q))
 		return PTR_ERR(q);
 
-	q->qid = __MT_TXQ_MAX + qid;
 	dev->q_mcu[qid] = q;
 
 	return 0;
@@ -1080,8 +1078,9 @@ static inline bool mt76_is_skb_pktid(u8 pktid)
 static inline u8 mt76_tx_power_nss_delta(u8 nss)
 {
 	static const u8 nss_delta[4] = { 0, 6, 9, 12 };
+	u8 idx = nss - 1;
 
-	return nss_delta[nss - 1];
+	return (idx < ARRAY_SIZE(nss_delta)) ? nss_delta[idx] : 0;
 }
 
 static inline bool mt76_testmode_enabled(struct mt76_phy *phy)
@@ -1324,12 +1323,12 @@ int mt76s_rd_rp(struct mt76_dev *dev, u32 base,
 
 struct sk_buff *
 __mt76_mcu_msg_alloc(struct mt76_dev *dev, const void *data,
-		     int data_len, gfp_t gfp);
+		     int len, int data_len, gfp_t gfp);
 static inline struct sk_buff *
 mt76_mcu_msg_alloc(struct mt76_dev *dev, const void *data,
 		   int data_len)
 {
-	return __mt76_mcu_msg_alloc(dev, data, data_len, GFP_KERNEL);
+	return __mt76_mcu_msg_alloc(dev, data, data_len, data_len, GFP_KERNEL);
 }
 
 void mt76_mcu_rx_event(struct mt76_dev *dev, struct sk_buff *skb);

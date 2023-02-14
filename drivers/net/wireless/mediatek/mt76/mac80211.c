@@ -267,7 +267,8 @@ static void mt76_init_stream_cap(struct mt76_phy *phy,
 	}
 	vht_cap->vht_mcs.rx_mcs_map = cpu_to_le16(mcs_map);
 	vht_cap->vht_mcs.tx_mcs_map = cpu_to_le16(mcs_map);
-	vht_cap->vht_mcs.tx_highest |=
+	if (ieee80211_hw_check(phy->hw, SUPPORTS_VHT_EXT_NSS_BW))
+		vht_cap->vht_mcs.tx_highest |=
 				cpu_to_le16(IEEE80211_VHT_EXT_NSS_BW_CAPABLE);
 }
 
@@ -442,8 +443,12 @@ mt76_phy_init(struct mt76_phy *phy, struct ieee80211_hw *hw)
 	ieee80211_hw_set(hw, SUPPORTS_CLONED_SKBS);
 	ieee80211_hw_set(hw, SUPPORTS_AMSDU_IN_AMPDU);
 	ieee80211_hw_set(hw, SUPPORTS_REORDERING_BUFFER);
-	ieee80211_hw_set(hw, TX_AMSDU);
-	ieee80211_hw_set(hw, TX_FRAG_LIST);
+
+	if (!(dev->drv->drv_flags & MT_DRV_AMSDU_OFFLOAD)) {
+		ieee80211_hw_set(hw, TX_AMSDU);
+		ieee80211_hw_set(hw, TX_FRAG_LIST);
+	}
+
 	ieee80211_hw_set(hw, MFP_CAPABLE);
 	ieee80211_hw_set(hw, AP_LINK_PS);
 	ieee80211_hw_set(hw, REPORTS_TX_ACK_STATUS);
@@ -1019,7 +1024,7 @@ mt76_rx_convert(struct mt76_dev *dev, struct sk_buff *skb,
 	*hw = mt76_phy_hw(dev, mstat.ext_phy);
 }
 
-static int
+static void
 mt76_check_ccmp_pn(struct sk_buff *skb)
 {
 	struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
@@ -1029,10 +1034,13 @@ mt76_check_ccmp_pn(struct sk_buff *skb)
 	int ret;
 
 	if (!(status->flag & RX_FLAG_DECRYPTED))
-		return 0;
+		return;
+
+	if (status->flag & RX_FLAG_ONLY_MONITOR)
+		return;
 
 	if (!wcid || !wcid->rx_check_pn)
-		return 0;
+		return;
 
 	security_idx = status->qos_ctl & IEEE80211_QOS_CTL_TID_MASK;
 	if (status->flag & RX_FLAG_8023)
@@ -1046,7 +1054,7 @@ mt76_check_ccmp_pn(struct sk_buff *skb)
 		 */
 		if (ieee80211_is_frag(hdr) &&
 		    !ieee80211_is_first_frag(hdr->frame_control))
-			return 0;
+			return;
 	}
 
 	/* IEEE 802.11-2020, 12.5.3.4.4 "PN and replay detection" c):
@@ -1063,15 +1071,15 @@ skip_hdr_check:
 	BUILD_BUG_ON(sizeof(status->iv) != sizeof(wcid->rx_key_pn[0]));
 	ret = memcmp(status->iv, wcid->rx_key_pn[security_idx],
 		     sizeof(status->iv));
-	if (ret <= 0)
-		return -EINVAL; /* replay */
+	if (ret <= 0) {
+		status->flag |= RX_FLAG_ONLY_MONITOR;
+		return;
+	}
 
 	memcpy(wcid->rx_key_pn[security_idx], status->iv, sizeof(status->iv));
 
 	if (status->flag & RX_FLAG_IV_STRIPPED)
 		status->flag |= RX_FLAG_PN_VALIDATED;
-
-	return 0;
 }
 
 static void
@@ -1244,11 +1252,7 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 	while ((skb = __skb_dequeue(frames)) != NULL) {
 		struct sk_buff *nskb = skb_shinfo(skb)->frag_list;
 
-		if (mt76_check_ccmp_pn(skb)) {
-			dev_kfree_skb(skb);
-			continue;
-		}
-
+		mt76_check_ccmp_pn(skb);
 		skb_shinfo(skb)->frag_list = NULL;
 		mt76_rx_convert(dev, skb, &hw, &sta);
 		ieee80211_rx_list(hw, sta, skb, &list);

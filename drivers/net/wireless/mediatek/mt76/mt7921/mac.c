@@ -235,7 +235,7 @@ mt7921_mac_fill_rx(struct mt7921_dev *dev, struct sk_buff *skb)
 	u32 rxd2 = le32_to_cpu(rxd[2]);
 	u32 rxd3 = le32_to_cpu(rxd[3]);
 	u32 rxd4 = le32_to_cpu(rxd[4]);
-	struct mt7921_sta *msta;
+	struct mt7921_sta *msta = NULL;
 	u16 seq_ctrl = 0;
 	__le16 fc = 0;
 	u8 mode = 0;
@@ -748,9 +748,9 @@ void mt7921_mac_reset_work(struct work_struct *work)
 					      reset_work);
 	struct ieee80211_hw *hw = mt76_hw(dev);
 	struct mt76_connac_pm *pm = &dev->pm;
-	int i;
+	int i, ret;
 
-	dev_err(dev->mt76.dev, "chip reset\n");
+	dev_dbg(dev->mt76.dev, "chip reset\n");
 	dev->hw_full_reset = true;
 	ieee80211_stop_queues(hw);
 
@@ -758,11 +758,14 @@ void mt7921_mac_reset_work(struct work_struct *work)
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
 
-	mutex_lock(&dev->mt76.mutex);
-	for (i = 0; i < 10; i++)
-		if (!mt7921_dev_reset(dev))
+	for (i = 0; i < 10; i++) {
+		mutex_lock(&dev->mt76.mutex);
+		ret = mt7921_dev_reset(dev);
+		mutex_unlock(&dev->mt76.mutex);
+
+		if (!ret)
 			break;
-	mutex_unlock(&dev->mt76.mutex);
+	}
 
 	if (i == 10)
 		dev_err(dev->mt76.dev, "chip reset failed\n");
@@ -849,7 +852,7 @@ void mt7921_mac_update_mib_stats(struct mt7921_phy *phy)
 		mib->tx_amsdu_cnt += val;
 	}
 
-	for (i = 0, aggr1 = aggr0 + 4; i < 4; i++) {
+	for (i = 0, aggr1 = aggr0 + 8; i < 4; i++) {
 		u32 val2;
 
 		val = mt76_rr(dev, MT_TX_AGG_CNT(0, i));
@@ -985,7 +988,7 @@ void mt7921_coredump_work(struct work_struct *work)
 		if (!skb)
 			break;
 
-		skb_pull(skb, sizeof(struct mt7921_mcu_rxd));
+		skb_pull(skb, sizeof(struct mt76_connac2_mcu_rxd));
 		if (!dump || data + skb->len - dump > MT76_CONNAC_COREDUMP_SZ) {
 			dev_kfree_skb(skb);
 			continue;
@@ -1014,7 +1017,7 @@ mt7921_usb_sdio_write_txwi(struct mt7921_dev *dev, struct mt76_wcid *wcid,
 	__le32 *txwi = (__le32 *)(skb->data - MT_SDIO_TXD_SIZE);
 
 	memset(txwi, 0, MT_SDIO_TXD_SIZE);
-	mt76_connac2_mac_write_txwi(&dev->mt76, txwi, skb, wcid, key, pid, 0);
+	mt76_connac2_mac_write_txwi(&dev->mt76, txwi, skb, wcid, key, pid, qid, 0);
 	skb_push(skb, MT_SDIO_TXD_SIZE);
 }
 

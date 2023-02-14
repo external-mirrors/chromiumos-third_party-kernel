@@ -285,7 +285,7 @@ __mt76_tx_queue_skb(struct mt76_phy *phy, int qid, struct sk_buff *skb,
 	int idx;
 
 	non_aql = !info->tx_time_est;
-	idx = dev->queue_ops->tx_queue_skb(dev, q, skb, wcid, sta);
+	idx = dev->queue_ops->tx_queue_skb(dev, q, qid, skb, wcid, sta);
 	if (idx < 0 || !sta)
 		return idx;
 
@@ -328,7 +328,6 @@ mt76_tx(struct mt76_phy *phy, struct ieee80211_sta *sta,
 	    !ieee80211_is_data(hdr->frame_control) &&
 	    !ieee80211_is_bufferable_mmpdu(hdr->frame_control)) {
 		qid = MT_TXQ_PSD;
-		skb_set_queue_mapping(skb, qid);
 	}
 
 	if (wcid && !(wcid->tx_info & MT_WCID_TX_INFO_SET))

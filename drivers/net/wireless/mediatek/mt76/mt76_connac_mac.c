@@ -3,6 +3,7 @@
 
 #include "mt76_connac.h"
 #include "mt76_connac2_mac.h"
+#include "dma.h"
 
 #define HE_BITS(f)		cpu_to_le16(IEEE80211_RADIOTAP_HE_##f)
 #define HE_PREP(f, m, v)	le16_encode_bits(le32_get_bits(v, MT_CRXV_HE_##m),\
@@ -120,6 +121,135 @@ void mt76_connac_pm_dequeue_skbs(struct mt76_phy *phy,
 	mt76_worker_schedule(&phy->dev->tx_worker);
 }
 EXPORT_SYMBOL_GPL(mt76_connac_pm_dequeue_skbs);
+
+void mt76_connac_tx_complete_skb(struct mt76_dev *mdev,
+				 struct mt76_queue_entry *e)
+{
+	if (!e->txwi) {
+		dev_kfree_skb_any(e->skb);
+		return;
+	}
+
+	/* error path */
+	if (e->skb == DMA_DUMMY_DATA) {
+		struct mt76_connac_txp_common *txp;
+		struct mt76_txwi_cache *t;
+		u16 token;
+
+		txp = mt76_connac_txwi_to_txp(mdev, e->txwi);
+		if (is_mt76_fw_txp(mdev))
+			token = le16_to_cpu(txp->fw.token);
+		else
+			token = le16_to_cpu(txp->hw.msdu_id[0]) &
+				~MT_MSDU_ID_VALID;
+
+		t = mt76_token_put(mdev, token);
+		e->skb = t ? t->skb : NULL;
+	}
+
+	if (e->skb)
+		mt76_tx_complete_skb(mdev, e->wcid, e->skb);
+}
+EXPORT_SYMBOL_GPL(mt76_connac_tx_complete_skb);
+
+void mt76_connac_write_hw_txp(struct mt76_dev *dev,
+			      struct mt76_tx_info *tx_info,
+			      void *txp_ptr, u32 id)
+{
+	struct mt76_connac_hw_txp *txp = txp_ptr;
+	struct mt76_connac_txp_ptr *ptr = &txp->ptr[0];
+	int i, nbuf = tx_info->nbuf - 1;
+	u32 last_mask;
+
+	tx_info->buf[0].len = MT_TXD_SIZE + sizeof(*txp);
+	tx_info->nbuf = 1;
+
+	txp->msdu_id[0] = cpu_to_le16(id | MT_MSDU_ID_VALID);
+
+	if (is_mt7663(dev) || is_mt7921(dev))
+		last_mask = MT_TXD_LEN_LAST;
+	else
+		last_mask = MT_TXD_LEN_AMSDU_LAST |
+			    MT_TXD_LEN_MSDU_LAST;
+
+	for (i = 0; i < nbuf; i++) {
+		u16 len = tx_info->buf[i + 1].len & MT_TXD_LEN_MASK;
+		u32 addr = tx_info->buf[i + 1].addr;
+
+		if (i == nbuf - 1)
+			len |= last_mask;
+
+		if (i & 1) {
+			ptr->buf1 = cpu_to_le32(addr);
+			ptr->len1 = cpu_to_le16(len);
+			ptr++;
+		} else {
+			ptr->buf0 = cpu_to_le32(addr);
+			ptr->len0 = cpu_to_le16(len);
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(mt76_connac_write_hw_txp);
+
+static void
+mt76_connac_txp_skb_unmap_fw(struct mt76_dev *mdev,
+			     struct mt76_connac_fw_txp *txp)
+{
+	struct device *dev = is_connac_v1(mdev) ? mdev->dev : mdev->dma_dev;
+	int i;
+
+	for (i = 0; i < txp->nbuf; i++)
+		dma_unmap_single(dev, le32_to_cpu(txp->buf[i]),
+				 le16_to_cpu(txp->len[i]), DMA_TO_DEVICE);
+}
+
+static void
+mt76_connac_txp_skb_unmap_hw(struct mt76_dev *dev,
+			     struct mt76_connac_hw_txp *txp)
+{
+	u32 last_mask;
+	int i;
+
+	if (is_mt7663(dev) || is_mt7921(dev))
+		last_mask = MT_TXD_LEN_LAST;
+	else
+		last_mask = MT_TXD_LEN_MSDU_LAST;
+
+	for (i = 0; i < ARRAY_SIZE(txp->ptr); i++) {
+		struct mt76_connac_txp_ptr *ptr = &txp->ptr[i];
+		bool last;
+		u16 len;
+
+		len = le16_to_cpu(ptr->len0);
+		last = len & last_mask;
+		len &= MT_TXD_LEN_MASK;
+		dma_unmap_single(dev->dev, le32_to_cpu(ptr->buf0), len,
+				 DMA_TO_DEVICE);
+		if (last)
+			break;
+
+		len = le16_to_cpu(ptr->len1);
+		last = len & last_mask;
+		len &= MT_TXD_LEN_MASK;
+		dma_unmap_single(dev->dev, le32_to_cpu(ptr->buf1), len,
+				 DMA_TO_DEVICE);
+		if (last)
+			break;
+	}
+}
+
+void mt76_connac_txp_skb_unmap(struct mt76_dev *dev,
+			       struct mt76_txwi_cache *t)
+{
+	struct mt76_connac_txp_common *txp;
+
+	txp = mt76_connac_txwi_to_txp(dev, t);
+	if (is_mt76_fw_txp(dev))
+		mt76_connac_txp_skb_unmap_fw(dev, &txp->fw);
+	else
+		mt76_connac_txp_skb_unmap_hw(dev, &txp->hw);
+}
+EXPORT_SYMBOL_GPL(mt76_connac_txp_skb_unmap);
 
 static u16
 mt76_connac2_mac_tx_rate_val(struct mt76_phy *mphy, struct ieee80211_vif *vif,
@@ -306,7 +436,7 @@ mt76_connac2_mac_write_txwi_80211(struct mt76_dev *dev, __le32 *txwi,
 void mt76_connac2_mac_write_txwi(struct mt76_dev *dev, __le32 *txwi,
 				 struct sk_buff *skb, struct mt76_wcid *wcid,
 				 struct ieee80211_key_conf *key, int pid,
-				 u32 changed)
+				 enum mt76_txq_id qid, u32 changed)
 {
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	bool ext_phy = info->hw_queue & MT_TX_HW_QUEUE_EXT_PHY;
@@ -337,7 +467,7 @@ void mt76_connac2_mac_write_txwi(struct mt76_dev *dev, __le32 *txwi,
 	} else if (beacon) {
 		p_fmt = MT_TX_TYPE_FW;
 		q_idx = MT_LMAC_BCN0;
-	} else if (skb_get_queue_mapping(skb) >= MT_TXQ_PSD) {
+	} else if (qid >= MT_TXQ_PSD) {
 		p_fmt = mt76_is_mmio(dev) ? MT_TX_TYPE_CT : MT_TX_TYPE_SF;
 		q_idx = MT_LMAC_ALTX0;
 	} else {
