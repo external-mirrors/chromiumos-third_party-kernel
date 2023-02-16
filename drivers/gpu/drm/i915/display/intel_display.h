@@ -165,6 +165,8 @@ enum tc_port {
 };
 
 enum aux_ch {
+	AUX_CH_NONE = -1,
+
 	AUX_CH_A,
 	AUX_CH_B,
 	AUX_CH_C,
