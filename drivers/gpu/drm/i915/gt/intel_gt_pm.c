@@ -14,7 +14,6 @@
 #include "intel_gt.h"
 #include "intel_gt_clock_utils.h"
 #include "intel_gt_pm.h"
-#include "intel_gt_print.h"
 #include "intel_gt_requests.h"
 #include "intel_llc.h"
 #include "intel_pm.h"
@@ -276,7 +275,8 @@ int intel_gt_resume(struct intel_gt *gt)
 	/* Only when the HW is re-initialised, can we replay the requests */
 	err = intel_gt_init_hw(gt);
 	if (err) {
-		gt_probe_error(gt, "Failed to initialize GPU, declaring it wedged!\n");
+		i915_probe_error(gt->i915,
+				 "Failed to initialize GPU, declaring it wedged!\n");
 		goto err_wedged;
 	}
 
@@ -293,8 +293,9 @@ int intel_gt_resume(struct intel_gt *gt)
 
 		intel_engine_pm_put(engine);
 		if (err) {
-			gt_err(gt, "Failed to restart %s (%d)\n",
-			       engine->name, err);
+			drm_err(&gt->i915->drm,
+				"Failed to restart %s (%d)\n",
+				engine->name, err);
 			goto err_wedged;
 		}
 	}

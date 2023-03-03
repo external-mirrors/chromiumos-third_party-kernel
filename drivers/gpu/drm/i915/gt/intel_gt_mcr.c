@@ -6,7 +6,6 @@
 #include "i915_drv.h"
 
 #include "intel_gt_mcr.h"
-#include "intel_gt_print.h"
 #include "intel_gt_regs.h"
 
 /**
@@ -159,7 +158,7 @@ void intel_gt_mcr_init(struct intel_gt *gt)
 			 GEN12_MEML3_EN_MASK);
 
 		if (!gt->info.mslice_mask) /* should be impossible! */
-			gt_warn(gt, "mslice mask all zero!\n");
+			drm_warn(&i915->drm, "mslice mask all zero!\n");
 	}
 
 	if (MEDIA_VER(i915) >= 13 && gt->type == GT_MEDIA) {
@@ -206,7 +205,7 @@ void intel_gt_mcr_init(struct intel_gt *gt)
 			~intel_uncore_read(gt->uncore, GEN10_MIRROR_FUSE3) &
 			GEN10_L3BANK_MASK;
 		if (!gt->info.l3bank_mask) /* should be impossible! */
-			gt_warn(gt, "L3 bank mask is all zero!\n");
+			drm_warn(&i915->drm, "L3 bank mask is all zero!\n");
 	} else if (GRAPHICS_VER(i915) >= 11) {
 		/*
 		 * We expect all modern platforms to have at least some
@@ -395,7 +394,9 @@ void intel_gt_mcr_lock(struct intel_gt *gt, unsigned long *flags)
 	 * releasing it properly.
 	 */
 	if (err == -ETIMEDOUT) {
-		gt_err_ratelimited(gt, "hardware MCR steering semaphore timed out");
+		drm_err_ratelimited(&gt->i915->drm,
+				    "GT%u hardware MCR steering semaphore timed out",
+				    gt->info.id);
 		add_taint_for_CI(gt->i915, TAINT_WARN);  /* CI is now unreliable */
 	}
 }
