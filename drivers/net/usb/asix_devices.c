@@ -637,7 +637,7 @@ static int asix_resume(struct usb_interface *intf)
 	return usbnet_resume(intf);
 }
 
-static int ax88772_init_mdio(struct usbnet *dev)
+static int ax88772_mdio_register(struct usbnet *dev)
 {
 	struct asix_common_private *priv = dev->driver_priv;
 	int ret;
@@ -657,10 +657,22 @@ static int ax88772_init_mdio(struct usbnet *dev)
 	ret = mdiobus_register(priv->mdio);
 	if (ret) {
 		netdev_err(dev->net, "Could not register MDIO bus (err %d)\n", ret);
-		mdiobus_free(priv->mdio);
-		priv->mdio = NULL;
+		goto mdio_register_err;
 	}
 
+	priv->phydev = mdiobus_get_phy(priv->mdio, priv->phy_addr);
+	if (!priv->phydev) {
+		netdev_err(dev->net, "Could not find PHY\n");
+		ret = -ENODEV;
+		goto mdio_phy_err;
+	}
+
+	return 0;
+
+mdio_phy_err:
+	mdiobus_unregister(priv->mdio);
+mdio_register_err:
+	mdiobus_free(priv->mdio);
 	return ret;
 }
 
@@ -674,13 +686,6 @@ static int ax88772_init_phy(struct usbnet *dev)
 {
 	struct asix_common_private *priv = dev->driver_priv;
 	int ret;
-
-	priv->phydev = mdiobus_get_phy(priv->mdio, priv->phy_addr);
-	if (!priv->phydev) {
-		netdev_err(dev->net, "Could not find PHY\n");
-		ax88772_mdio_unregister(priv);
-		return -ENODEV;
-	}
 
 	ret = phy_connect_direct(dev->net, priv->phydev, &asix_adjust_link,
 				 PHY_INTERFACE_MODE_INTERNAL);
@@ -799,7 +804,7 @@ static int ax88772_bind(struct usbnet *dev, struct usb_interface *intf)
 	priv->presvd_phy_bmcr = 0;
 	priv->presvd_phy_advertise = 0;
 
-	ret = ax88772_init_mdio(dev);
+	ret = ax88772_mdio_register(dev);
 	if (ret)
 		goto mdio_err;
 
