@@ -5925,7 +5925,7 @@ static struct kobj_attribute lru_gen_enabled_attr = __ATTR_RW(enabled);
 static int print_node_mglru(struct lruvec *lruvec, char *buf, int orig_pos)
 {
 	unsigned long seq;
-	struct lru_gen_struct *lrugen = &lruvec->lrugen;
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
