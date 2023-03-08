@@ -1826,7 +1826,7 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 		}
 
 		pmdp_test_and_clear_young(vma, addr, pmd);
-		deactivate_page(page);
+		folio_deactivate(page_folio(page));
 huge_unlock:
 		spin_unlock(ptl);
 		return 0;
@@ -1876,7 +1876,7 @@ regular_page:
 			continue;
 
 		ptep_test_and_clear_young(vma, addr, pte);
-		deactivate_page(page);
+		folio_deactivate(page_folio(page));
 	}
 	pte_unmap_unlock(orig_pte, ptl);
 	cond_resched();
