@@ -242,10 +242,6 @@ struct vif_params *params)
 		if (params->use_4addr == ifmgd->use_4addr)
 			return 0;
 
-		/* FIXME: no support for 4-addr MLO yet */
-		if (sdata->vif.valid_links)
-			return -EOPNOTSUPP;
-
 		sdata->u.mgd.use_4addr = params->use_4addr;
 		if (!ifmgd->associated)
 			return 0;
@@ -1909,7 +1905,7 @@ static int sta_link_apply_parameters(struct ieee80211_local *local,
 #endif
 
 #if CFG80211_VERSION >= KERNEL_VERSION(9,9,9)
-	if (params->he_capa && params->eht_capa)
+	if (params->eht_capa)
 		ieee80211_eht_cap_ie_to_sta_eht_cap(sdata, sband,
 						    (u8 *)params->he_capa,
 						    params->he_capa_len,
@@ -2763,52 +2759,47 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 				struct bss_parameters *params)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	struct ieee80211_link_data *link;
 	struct ieee80211_supported_band *sband;
 	u32 changed = 0;
 
-	link = ieee80211_link_or_deflink(sdata,
-					 cfg80211_bss_params_link_id(params),
-					 true);
-	if (IS_ERR(link))
-		return PTR_ERR(link);
-
-	if (!sdata_dereference(link->u.ap.beacon, sdata))
+	if (!sdata_dereference(sdata->deflink.u.ap.beacon, sdata))
 		return -ENOENT;
 
-	sband = ieee80211_get_link_sband(link);
+	sband = ieee80211_get_sband(sdata);
 	if (!sband)
 		return -EINVAL;
 
 	if (params->use_cts_prot >= 0) {
-		link->conf->use_cts_prot = params->use_cts_prot;
+		sdata->vif.bss_conf.use_cts_prot = params->use_cts_prot;
 		changed |= BSS_CHANGED_ERP_CTS_PROT;
 	}
 	if (params->use_short_preamble >= 0) {
-		link->conf->use_short_preamble = params->use_short_preamble;
+		sdata->vif.bss_conf.use_short_preamble =
+			params->use_short_preamble;
 		changed |= BSS_CHANGED_ERP_PREAMBLE;
 	}
 
-	if (!link->conf->use_short_slot &&
+	if (!sdata->vif.bss_conf.use_short_slot &&
 	    (sband->band == NL80211_BAND_5GHZ ||
 	     nl80211_is_6ghz(sband->band))) {
-		link->conf->use_short_slot = true;
+		sdata->vif.bss_conf.use_short_slot = true;
 		changed |= BSS_CHANGED_ERP_SLOT;
 	}
 
 	if (params->use_short_slot_time >= 0) {
-		link->conf->use_short_slot = params->use_short_slot_time;
+		sdata->vif.bss_conf.use_short_slot =
+			params->use_short_slot_time;
 		changed |= BSS_CHANGED_ERP_SLOT;
 	}
 
 	if (params->basic_rates) {
-		ieee80211_parse_bitrates(link->conf->chandef.width,
+		ieee80211_parse_bitrates(sdata->vif.bss_conf.chandef.width,
 					 wiphy->bands[sband->band],
 					 params->basic_rates,
 					 params->basic_rates_len,
-					 &link->conf->basic_rates);
+					 &sdata->vif.bss_conf.basic_rates);
 		changed |= BSS_CHANGED_BASIC_RATES;
-		ieee80211_check_rate_mask(link);
+		ieee80211_check_rate_mask(&sdata->deflink);
 	}
 
 	if (params->ap_isolate >= 0) {
@@ -2820,29 +2811,30 @@ static int ieee80211_change_bss(struct wiphy *wiphy,
 	}
 
 	if (params->ht_opmode >= 0) {
-		link->conf->ht_operation_mode = (u16)params->ht_opmode;
+		sdata->vif.bss_conf.ht_operation_mode =
+			(u16) params->ht_opmode;
 		changed |= BSS_CHANGED_HT;
 	}
 
 	if (params->p2p_ctwindow >= 0) {
-		link->conf->p2p_noa_attr.oppps_ctwindow &=
+		sdata->vif.bss_conf.p2p_noa_attr.oppps_ctwindow &=
 					~IEEE80211_P2P_OPPPS_CTWINDOW_MASK;
-		link->conf->p2p_noa_attr.oppps_ctwindow |=
+		sdata->vif.bss_conf.p2p_noa_attr.oppps_ctwindow |=
 			params->p2p_ctwindow & IEEE80211_P2P_OPPPS_CTWINDOW_MASK;
 		changed |= BSS_CHANGED_P2P_PS;
 	}
 
 	if (params->p2p_opp_ps > 0) {
-		link->conf->p2p_noa_attr.oppps_ctwindow |=
+		sdata->vif.bss_conf.p2p_noa_attr.oppps_ctwindow |=
 					IEEE80211_P2P_OPPPS_ENABLE_BIT;
 		changed |= BSS_CHANGED_P2P_PS;
 	} else if (params->p2p_opp_ps == 0) {
-		link->conf->p2p_noa_attr.oppps_ctwindow &=
+		sdata->vif.bss_conf.p2p_noa_attr.oppps_ctwindow &=
 					~IEEE80211_P2P_OPPPS_ENABLE_BIT;
 		changed |= BSS_CHANGED_P2P_PS;
 	}
 
-	ieee80211_link_info_change_notify(sdata, link, changed);
+	ieee80211_link_info_change_notify(sdata, &sdata->deflink, changed);
 
 	return 0;
 }
@@ -3936,6 +3928,9 @@ static int ieee80211_set_csa_beacon(struct ieee80211_sub_if_data *sdata,
 	case NL80211_IFTYPE_MESH_POINT: {
 		struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
 
+		if (params->chandef.width != sdata->vif.bss_conf.chandef.width)
+			return -EINVAL;
+
 		/* changes into another band are not supported */
 		if (sdata->vif.bss_conf.chandef.chan->band !=
 		    params->chandef.chan->band)
@@ -4073,7 +4068,7 @@ __ieee80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 					  IEEE80211_QUEUE_STOP_REASON_CSA);
 
 	cfg80211_ch_switch_started_notify(sdata->dev,
-					  &sdata->deflink.csa_chandef, 0,
+					  &sdata->deflink.csa_chandef,
 					  params->count, params->block_tx);
 
 	if (changed) {
@@ -5028,9 +5023,6 @@ static int ieee80211_add_intf_link(struct wiphy *wiphy,
 				   unsigned int link_id)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
-
-	if (wdev->use_4addr)
-		return -EOPNOTSUPP;
 
 	return ieee80211_vif_set_links(sdata, wdev->valid_links);
 }
