@@ -27,6 +27,7 @@
 #include "intel_modeset_setup.h"
 #include "intel_pch_display.h"
 #include "intel_pmdemand.h"
+#include "intel_vblank.h"
 #include "intel_wm.h"
 #include "skl_watermark.h"
 
