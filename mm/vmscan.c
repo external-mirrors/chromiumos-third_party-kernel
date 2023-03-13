@@ -5981,6 +5981,8 @@ static ssize_t store_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *
 	next = buf;
 	next[len] = '\0';
 
+	set_task_reclaim_state(current, &sc.reclaim_state);
+
 	while ((cur = strsep(&next, ",;\n"))) {
 		int n;
 		int end;
@@ -6007,6 +6009,7 @@ static ssize_t store_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *
 			break;
 	}
 
+	set_task_reclaim_state(current, NULL);
 	kvfree(buf);
 
 	return err ? : len;
