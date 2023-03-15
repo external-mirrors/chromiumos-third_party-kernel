@@ -1,5 +1,5 @@
 steps:
-- name: 'gcr.io/${PROJECT_ID}/kernel-virtme'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   entrypoint: 'bash'
   id: 'configure'
   args:
@@ -30,7 +30,7 @@ steps:
         git checkout -b CUT #Cl under test
         git format-patch -1
         git checkout HEAD~1
-- name: 'gcr.io/${PROJECT_ID}/kernel-build'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   timeout: "600s"
   entrypoint: 'bash'
   id: 'build_parent'
@@ -40,7 +40,7 @@ steps:
         set -ve
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1 || true
-- name: 'gcr.io/${PROJECT_ID}/kernel-build'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   timeout: "600s"
   entrypoint: 'bash'
   id: 'build'
@@ -51,7 +51,7 @@ steps:
         git checkout CUT
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
-- name: 'gcr.io/${PROJECT_ID}/kernel-build'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   entrypoint: 'bash'
   id: 'build_userspace_tests'
   args:
@@ -62,7 +62,7 @@ steps:
         sh autogen.sh
         ./configure
         make
-- name: 'gcr.io/${PROJECT_ID}/kernel-virtme'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   entrypoint: 'bash'
   id: 'virtme'
   args:
@@ -88,7 +88,7 @@ steps:
         grep -qz "BUG: " /tmp/virtme.out && exit 1
         grep -qz "WARNING: " /tmp/virtme.out && exit 1
         grep "virtme-init: script returned 0" /tmp/virtme.out
-- name: 'gcr.io/${PROJECT_ID}/kernel-virtme'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   entrypoint: 'bash'
   id: 'kunit'
   args:
@@ -98,17 +98,16 @@ steps:
         make ARCH=x86_64 mrproper
         mkdir -p /tmp/kunit
         TMPDIR=/tmp/kunit ./tools/testing/kunit/kunit.py run --jobs=$(nproc) --kunitconfig=drivers/cam/.kunitconfig --arch x86_64
-- name: 'gcr.io/${PROJECT_ID}/kernel-build'
+- name: 'gcr.io/${PROJECT_ID}/kcam'
   entrypoint: 'bash'
   id: 'checkpatch'
-  waitFor: ['makepatch']
   args:
   - '-c'
   - |
         set -v
         scripts/checkpatch.pl --show-types --strict --ignore GERRIT_CHANGE_ID \
                 --ignore UNKNOWN_COMMIT_ID --ignore COMMIT_LOG_LONG_LINE \
-                --ignore FILE_PATH_CHANGES  *patch || true
+                --ignore FILE_PATH_CHANGES  *patch
 substitutions:
   _ARCH: x86
   _CROSS_COMPILE: ""
