@@ -44,6 +44,9 @@
 #include "dm_helpers.h"
 #include "ddc_service_types.h"
 
+/* MST Dock */
+static const uint8_t SYNAPTICS_DEVICE_ID[] = "SYNA";
+
 static u32 edid_extract_panel_id(struct edid *edid)
 {
 	return (u32)edid->mfg_id[0] << 24   |
