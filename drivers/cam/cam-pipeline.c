@@ -1426,6 +1426,50 @@ int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_submit, ERRNO);
 
+static void cam_cancel_dmabuf_instruction(struct cam_pipeline *pipeline,
+					  struct cam_dmabuf_instruction *insn)
+{
+	if (insn->op == CAM_DMABUF_OP_REMOVE)
+		return;
+
+	cam_buffer_unregister(&pipeline->objs, insn->buf_id);
+}
+
+static void cam_op_cancel_rw_instruction(struct cam_obj_op *op)
+{
+	struct cam_rw_instruction __user *payload;
+	struct cam_rw_instruction_list rw_list;
+	int i;
+
+	if (op->exec_rw_list_addr == CAM_NO_RD_WR)
+		return;
+
+	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
+		pr_err("Unable to access operation RW instructions list\n");
+		return;
+	}
+
+	payload = op->exec_rw_list_addr +
+		offsetof(struct cam_rw_instruction_list, instructions);
+
+	for (i = 0; i < rw_list.num_entries; i++) {
+		struct cam_rw_instruction insn;
+
+		if (copy_from_user(&insn, payload, sizeof(insn))) {
+			pr_err("Unable to access RW instruction\n");
+			break;
+		}
+
+		switch (insn.type) {
+		case CAM_DMABUF_INSTRUCTION:
+			cam_cancel_dmabuf_instruction(op->pipeline, &insn.db);
+			break;
+		}
+
+		payload++;
+	}
+}
+
 /**
  * cam_pipeline_enqueue_cancel() - Cancel an operation
  * @pipeline: pointer to CAM pipeline
@@ -1444,6 +1488,7 @@ int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 		return 0;
 
 	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
+	cam_op_cancel_rw_instruction(op);
 	cam_drain_op_dependencies(op);
 	cam_drain_op_syncfiles(op);
 	/* drop lookup ref-count */
