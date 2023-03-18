@@ -657,7 +657,7 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 	return -EINVAL;
 }
 
-/**
+/*
  * cam_read_instruction() and cam_write_instruction() hold the reference of
  * DMA-buf objects only thought out corresponding entity call. If the driver
  * needs to access that buffer from different context (e.g. IRQ which may
@@ -1106,7 +1106,7 @@ static int cam_fence_in_dependency_add(struct cam_pipeline *pipeline,
 }
 
 /**
- * cam_fence_out_dependency_add(struct() - Create Out-Fence-to-OP dependency
+ * cam_fence_out_dependency_add() - Create Out-Fence-to-OP dependency
  * @pipeline: pointer to CAM pipeline
  * @req: add request from user-space
  * @op: pointer to the dependent operation
