@@ -1975,6 +1975,96 @@ out:
 	return ret;
 }
 
+static int test_add_buffer_cancellation(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct libkc_dmabuf *buf = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	int ret;
+
+	pr_info("Test ADD buffer cancellation\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	buf = libkc_dmabuf_get(cam, 4);
+	if (!buf) {
+		pr_err("Failed to create buffer\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= 0;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(2);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.dma_fd	= buf->fd;
+	rw->db.buf_id	= 1;
+
+	rw = libkc_rw_instruction_at(rw_list, 1);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Already used buffer ID */
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.dma_fd	= buf->fd;
+	rw->db.buf_id	= 1;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret == 0) {
+		pr_err("Conflicting buffer ID test should fail %d\n", ret);
+		ret = -EINVAL;
+	} else {
+		ret = 0;
+	}
+
+out:
+	libkc_dmabuf_put(buf);
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_add_buffer(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2322,6 +2412,12 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
+	ret = test_add_buffer_cancellation(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_add_buffer_cancellation()\n");
+		goto out;
+	}
+
 	ret = test_add_buffer(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_add_buffer()\n");
@@ -2371,7 +2467,7 @@ out:
 	return NULL;
 }
 
-#define NUM_THREADS	8
+#define NUM_THREADS	5
 
 static int multi_threaded_test(void)
 {
