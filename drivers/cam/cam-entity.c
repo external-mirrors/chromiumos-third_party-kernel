@@ -626,7 +626,7 @@ static void cam_drain_event_callback(struct cam_obj *nsobj,
 
 /**
  * cam_drain_events() - Exhaust all active event signals under a CAM device.
- * @cam: pointer to CAM device
+ * @pipeline: pointer to CAM pipeline
  *
  * Return: 0 on success.
  */
