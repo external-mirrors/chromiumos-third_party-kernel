@@ -746,7 +746,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 
 	for (i = 0; i < rw_list.num_entries; i++) {
 		struct cam_rw_instruction insn;
-		int ret;
+		int ret = 0;
 
 		if (copy_from_user(&insn, payload, sizeof(insn))) {
 			pr_err("Unable to access RW instruction\n");
@@ -763,16 +763,6 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 			ret = cam_write_instruction(op->pipeline,
 						    entity,
 						    &insn.wr);
-			break;
-		case CAM_DMABUF_INSTRUCTION:
-			ret = cam_dmabuf_instruction(op->pipeline,
-						     entity,
-						     &insn.db);
-			break;
-		default:
-			pr_err("Invalid operation instruction type: %d\n",
-			       insn.type);
-			ret = -EINVAL;
 			break;
 		}
 
@@ -1289,6 +1279,51 @@ error:
 	return -EINVAL;
 }
 
+static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
+{
+	struct cam_rw_instruction __user *payload;
+	struct cam_rw_instruction_list rw_list;
+	struct cam_obj_entity *entity;
+	int i;
+
+	if (op->exec_rw_list_addr == CAM_NO_RD_WR)
+		return 0;
+
+	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
+		pr_err("Unable to access operation RW instructions list\n");
+		return -EFAULT;
+	}
+
+	entity = op->exec_entity;
+	payload = op->exec_rw_list_addr +
+		offsetof(struct cam_rw_instruction_list, instructions);
+
+	for (i = 0; i < rw_list.num_entries; i++) {
+		struct cam_rw_instruction insn;
+		int ret = 0;
+
+		if (copy_from_user(&insn, payload, sizeof(insn))) {
+			pr_err("Unable to access RW instruction\n");
+			return -EFAULT;
+		}
+
+		switch (insn.type) {
+		case CAM_DMABUF_INSTRUCTION:
+			ret = cam_dmabuf_instruction(op->pipeline,
+						     entity,
+						     &insn.db);
+			break;
+		}
+
+		if (ret)
+			return ret;
+
+		payload++;
+	}
+
+	return 0;
+}
+
 /**
  * cam_pipeline_enqueue_prepare() - Create an operation
  * @pipeline: pointer to CAM pipeline
@@ -1370,6 +1405,9 @@ int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
 		if (ret)
 			break;
 	}
+
+	if (!ret)
+		ret = cam_op_prepare_rw_instruction(op);
 
 	if (!ret)
 		trace_cam_operation_add(op);
