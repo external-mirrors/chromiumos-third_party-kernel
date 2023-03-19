@@ -268,6 +268,7 @@ static int vcam_probe(struct platform_device *pdev)
 						CAM_OBJ_ID_ROOT,
 						vcam,
 						&entity_ops,
+						CAM_ENTITY_NO_INSTANCES,
 						entity_names[idx]);
 	if (!vcam->root_entity) {
 		ret = -ENOMEM;
@@ -280,6 +281,7 @@ static int vcam_probe(struct platform_device *pdev)
 						      parent_id,
 						      vcam,
 						      &dma_importer_entity_ops,
+						      CAM_ENTITY_NO_INSTANCES,
 						      entity_names[idx]);
 	if (!vcam->dma_import_entity) {
 		ret = -ENOMEM;
@@ -288,13 +290,16 @@ static int vcam_probe(struct platform_device *pdev)
 
 	idx = 2;
 	for (obj = 0; obj < ARRAY_SIZE(vcam->entities); obj++) {
-		parent_id = cam_entity_id(vcam->root_entity);
+		struct cam_obj_entity *entity;
 
-		vcam->entities[obj] = cam_entity_register(vcam->cam,
-							  parent_id,
-							  vcam,
-							  &entity_ops,
-							  entity_names[idx]);
+		parent_id = cam_entity_id(vcam->root_entity);
+		entity = cam_entity_register(vcam->cam,
+					     parent_id,
+					     vcam,
+					     &entity_ops,
+					     CAM_ENTITY_NO_INSTANCES,
+					     entity_names[idx]);
+		vcam->entities[obj] = entity;
 		if (!vcam->entities[obj]) {
 			dev_err(vcam->dev, "%s: failed to register entity\n",
 				__func__);

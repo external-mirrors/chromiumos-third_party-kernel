@@ -152,15 +152,17 @@ EXPORT_SYMBOL_GPL(cam_entity_unregister);
  * @parent_id: ID of parent entity object
  * @driver_data: Pointer to driver data associated with this entity
  * @ops: entity operations
+ * @num_instances: max number of instances
  * @namefmt: entity name format string
  *
  * Return: NULL on error or CAM entity pointer otherwise.
  */
-__printf(5, 6)
+__printf(6, 7)
 struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 					   u32 parent_id,
 					   void *driver_data,
 					   struct cam_entity_ops *ops,
+					   s32 num_instances,
 					   const char *namefmt,
 					   ...)
 {
@@ -195,6 +197,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
+	atomic_set(&entity->nr_instances, num_instances);
 	entity->ops = ops;
 	entity->driver_data = driver_data;
 	strlcpy(entity->name, name, CAM_ENTITY_NAME_SZ);
@@ -239,6 +242,7 @@ struct cam_obj_entity *cam_root_entity_register(struct cam_device *cam)
 	if (!entity)
 		return NULL;
 
+	atomic_set(&entity->nr_instances, CAM_ENTITY_NO_INSTANCES);
 	entity->ops = &root_entity_ops;
 	strlcpy(entity->name, "CAM root entity", CAM_ENTITY_NAME_SZ);
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
@@ -294,10 +298,12 @@ static void cam_instance_release(struct cam_obj *nsobj)
 			struct cam_obj_entity *entity;
 
 			entity = nsobj_to_cam_entity(link);
-			if (entity)
+			if (entity) {
+				atomic_inc(&entity->nr_instances);
 				entity->ops->instance_destroy(driver_data);
-			else
+			} else {
 				pr_err("Unable to destroy entity instance\n");
+			}
 			cam_obj_put(link);
 		}
 	}
@@ -340,6 +346,9 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	cam_obj_set_id(&instance->nsobj, id);
 
 	if (cam_obj_link(&instance->nsobj, &entity->nsobj))
+		goto error;
+
+	if (arch_atomic_dec_if_positive(&entity->nr_instances) < 0)
 		goto error;
 
 	instance->driver_data = entity->ops->instance_create();

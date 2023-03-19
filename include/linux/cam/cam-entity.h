@@ -13,6 +13,9 @@
 
 struct cam_obj_entity;
 
+#define CAM_ENTITY_NO_INSTANCES		0
+#define CAM_ENTITY_UNLIMITED_INSTANCES	INT_MAX
+
 /**
  * cam_entity_ops - CAM entity operation list
  *
@@ -61,6 +64,8 @@ struct cam_obj_entity {
 	struct cam_obj		nsobj;
 	/** @ops: Read/Write execution callbacks */
 	struct cam_entity_ops	*ops;
+	/** @nr_instances: number of instances this entity can have */
+	atomic_t		nr_instances;
 	/** @driver_data: Driver specific data */
 	void			*driver_data;
 	/** @name: entity name */
@@ -102,6 +107,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 					   u32 parent_id,
 					   void *driver_data,
 					   struct cam_entity_ops *ops,
+					   s32 num_instances,
 					   const char *namefmt,
 					   ...);
 void cam_entity_unregister(struct cam_obj_entity *ce);
