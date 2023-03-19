@@ -86,6 +86,16 @@ enum cam_id_policy {
 	CAM_NS_POL_USER_ID	= BIT(1),
 };
 
+/*
+ * CAM pipeline objects namespace has USER_ID policy. To avoid ID
+ * conflicts (e.g. between DMA buffers and entity instances objects)
+ * we split the ID range (transparently for user-space).
+ */
+#define CAM_OBJS_NS_BUFFER_ID_START	0
+#define CAM_OBJS_NS_BUFFER_ID_END	(UINT_MAX / 2)
+#define CAM_OBJS_NS_INSTANCE_ID_START	(CAM_OBJS_NS_BUFFER_ID_END + 1)
+#define CAM_OBJS_NS_INSTANCE_ID_END	UINT_MAX
+
 /**
  * cam_ns - CAM file handle namespace
  */

@@ -319,6 +319,7 @@ static void cam_instance_release(struct cam_obj *nsobj)
  */
 void cam_instance_destroy(struct cam_ns *ns, u32 id)
 {
+	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	cam_obj_remove_id(ns, CAM_OBJ_TYPE_INSTANCE, id);
 }
 
@@ -336,6 +337,7 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 {
 	struct cam_obj_instance *instance;
 
+	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
 	if (!instance)
 		return NULL;
@@ -378,6 +380,7 @@ struct cam_obj_instance *cam_instance_lookup(struct cam_ns *ns, u32 id)
 {
 	struct cam_obj *obj = NULL;
 
+	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	obj = cam_obj_lookup(ns, CAM_OBJ_TYPE_INSTANCE, id);
 	if (!obj)
 		return NULL;

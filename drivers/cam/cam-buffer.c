@@ -77,6 +77,9 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 	struct cam_obj_buffer *buffer;
 	struct device *dev;
 
+	if (id > CAM_OBJS_NS_BUFFER_ID_END)
+		return NULL;
+
 	dev = entity->ops->device(entity);
 	if (!dev)
 		return NULL;
