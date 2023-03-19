@@ -39,10 +39,23 @@ static struct device *root_entity_device(struct cam_obj_entity *entity)
 	return NULL;
 }
 
+static void *root_entity_instance_create(void)
+{
+	WARN_ON(1);
+	return NULL;
+}
+
+static void root_entity_instance_destroy(void *instance_data)
+{
+	WARN_ON(1);
+}
+
 static struct cam_entity_ops root_entity_ops = {
-	.read		= root_entity_read,
-	.write		= root_entity_write,
-	.device		= root_entity_device,
+	.read			= root_entity_read,
+	.write			= root_entity_write,
+	.device			= root_entity_device,
+	.instance_create	= root_entity_instance_create,
+	.instance_destroy	= root_entity_instance_destroy,
 };
 
 /**
@@ -165,6 +178,10 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 		ops->write = root_entity_write;
 	if (!ops->device)
 		ops->device = root_entity_device;
+	if (!ops->instance_create)
+		ops->instance_create = root_entity_instance_create;
+	if (!ops->instance_destroy)
+		ops->instance_destroy = root_entity_instance_destroy;
 
 	entity = kzalloc(sizeof(*entity), GFP_KERNEL);
 	if (!entity)

@@ -34,9 +34,19 @@ struct cam_entity_ops {
 	/**
 	 * device(): pointer to device that this entity is attached to
 	 *
-	 * Returns pointer to device or NULL
+	 * Return: pointer to device or NULL
 	 */
 	struct device *(*device)(struct cam_obj_entity *);
+	/**
+	 * instance_create(): callback to create entity instance
+	 *
+	 * Return: pointer to instance or NULL
+	 */
+	void *(*instance_create)(void);
+	/**
+	 * instance_destroy(): callback to destroy entity instance
+	 */
+	void (*instance_destroy)(void *);
 };
 
 /**
