@@ -634,12 +634,12 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 				  struct cam_obj_entity *entity,
 				  struct cam_dmabuf_instruction *insn)
 {
-	if (insn->op == CAM_DMABUF_OP_REMOVE) {
+	if (insn->op == CAM_OP_DMABUF_REMOVE) {
 		cam_buffer_unregister(&pipeline->objs, insn->buf_id);
 		return 0;
 	}
 
-	if (insn->op == CAM_DMABUF_OP_ADD) {
+	if (insn->op == CAM_OP_DMABUF_ADD) {
 		struct cam_obj_buffer *buffer;
 
 		buffer = cam_buffer_register(&pipeline->objs,
@@ -1467,7 +1467,7 @@ ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_submit, ERRNO);
 static void cam_cancel_dmabuf_instruction(struct cam_pipeline *pipeline,
 					  struct cam_dmabuf_instruction *insn)
 {
-	if (insn->op == CAM_DMABUF_OP_REMOVE)
+	if (insn->op == CAM_OP_DMABUF_REMOVE)
 		return;
 
 	cam_buffer_unregister(&pipeline->objs, insn->buf_id);

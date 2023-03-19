@@ -192,12 +192,12 @@ struct cam_query {
 /**
  * enum cam_dmabuf_instruction_op - DMA buffer instruction operation type
  *
- * @CAM_DMABUF_OP_ADD:		Add (import) DMA buffer
- * @CAM_DMABUF_OP_REMOVE:	Remove (release) DMA buffer
+ * @CAM_OP_DMABUF_ADD:		Add (import) DMA buffer
+ * @CAM_OP_DMABUF_REMOVE:	Remove (release) DMA buffer
  */
 enum cam_dmabuf_instruction_op {
-	CAM_DMABUF_OP_ADD,
-	CAM_DMABUF_OP_REMOVE,
+	CAM_OP_DMABUF_ADD,
+	CAM_OP_DMABUF_REMOVE,
 };
 
 /**

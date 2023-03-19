@@ -1880,7 +1880,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.op	= CAM_OP_DMABUF_ADD;
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
 
@@ -1951,7 +1951,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_DMABUF_OP_REMOVE;
+	rw->db.op	= CAM_OP_DMABUF_REMOVE;
 	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= 1;
 
@@ -2035,7 +2035,7 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.op	= CAM_OP_DMABUF_ADD;
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
 
@@ -2047,7 +2047,7 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 
 	/* Already used buffer ID */
 	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.op	= CAM_OP_DMABUF_ADD;
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
 
@@ -2132,7 +2132,7 @@ static int test_add_buffer(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_DMABUF_OP_ADD;
+	rw->db.op	= CAM_OP_DMABUF_ADD;
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
 
@@ -2218,7 +2218,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_DMABUF_OP_REMOVE;
+	rw->db.op	= CAM_OP_DMABUF_REMOVE;
 	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= buf->id;
 
