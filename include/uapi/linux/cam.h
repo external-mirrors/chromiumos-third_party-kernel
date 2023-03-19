@@ -223,6 +223,28 @@ enum cam_instruction_buffer_id {
 };
 
 /**
+ * enum cam_instance_instruction_op - Instance instruction operation type
+ *
+ * @CAM_OP_DMABUF_ADD:		Create entity intsance (context)
+ * @CAM_OP_DMABUF_REMOVE:	Destroy entity instance (context)
+ */
+enum cam_instance_instruction_op {
+	CAM_OP_INSTANCE_CREATE,
+	CAM_OP_INSTANCE_DESTROY,
+};
+
+/**
+ * struct cam_instance_instruction - Operation instance instruction
+ *
+ * @op:		Entity instance operation
+ * @buf_id:	Requested CAM object ID
+ */
+struct cam_instance_instruction {
+	__u32		op;
+	__u32		id;
+};
+
+/**
  * struct cam_read_instruction - Operation read instruction
  *
  * @reg:	Register to perform operation on
@@ -258,11 +280,13 @@ struct cam_write_instruction {
  * @CAM_READ_INSTRUCTION:	Read instruction
  * @CAM_WRITE_INSTRUCTION:	Write instruction
  * @CAM_DMABUF_INSTRUCTION:	DMA buffer instruction
+ * @CAM_INSTANCE_INSTRUCTION:	Entity instance instruction
  */
 enum cam_rw_instruction_type {
 	CAM_READ_INSTRUCTION,
 	CAM_WRITE_INSTRUCTION,
 	CAM_DMABUF_INSTRUCTION,
+	CAM_INSTANCE_INSTRUCTION,
 };
 
 /**
@@ -272,6 +296,7 @@ enum cam_rw_instruction_type {
  * @rd:		Used when type is CAM_READ_INSTRUCTION
  * @wr:		Used when type is CAM_WRITE_INSTRUCTION
  * @db:		Used when type is CAM_DMABUF_INSTRUCTION
+ * @in:		Used when type is CAM_INSTANCE_INSTRUCTION
  */
 struct cam_rw_instruction {
 	__u32		type;
@@ -279,6 +304,7 @@ struct cam_rw_instruction {
 		struct cam_read_instruction	rd;
 		struct cam_write_instruction	wr;
 		struct cam_dmabuf_instruction	db;
+		struct cam_instance_instruction	in;
 		__u32				reserved[28];
 	};
 } __attribute__((packed));

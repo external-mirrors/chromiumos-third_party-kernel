@@ -657,6 +657,32 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 	return -EINVAL;
 }
 
+static int cam_instance_instruction(struct cam_pipeline *pipeline,
+				    struct cam_obj_entity *entity,
+				    struct cam_instance_instruction *insn)
+{
+	if (insn->op == CAM_OP_INSTANCE_DESTROY) {
+		cam_instance_destroy(&pipeline->objs, insn->id);
+		return 0;
+	}
+
+	if (insn->op == CAM_OP_INSTANCE_CREATE) {
+		struct cam_obj_instance *instance;
+
+		instance = cam_instance_create(&pipeline->objs,
+					       entity,
+					       insn->id);
+		if (!instance)
+			return -EINVAL;
+
+		cam_instance_put(instance);
+		return 0;
+	}
+
+	pr_err("Unknown instance instruction operation: %d\n", insn->op);
+	return -EINVAL;
+}
+
 /*
  * cam_read_instruction() and cam_write_instruction() hold the reference of
  * DMA-buf objects only thought out corresponding entity call. If the driver
@@ -1313,6 +1339,11 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 						     entity,
 						     &insn.db);
 			break;
+		case CAM_INSTANCE_INSTRUCTION:
+			ret = cam_instance_instruction(op->pipeline,
+						       entity,
+						       &insn.in);
+			break;
 		}
 
 		if (ret)
@@ -1473,6 +1504,16 @@ static void cam_cancel_dmabuf_instruction(struct cam_pipeline *pipeline,
 	cam_buffer_unregister(&pipeline->objs, insn->buf_id);
 }
 
+static void
+cam_cancel_instance_instruction(struct cam_pipeline *pipeline,
+				struct cam_instance_instruction *insn)
+{
+	if (insn->op == CAM_OP_INSTANCE_DESTROY)
+		return;
+
+	cam_instance_destroy(&pipeline->objs, insn->id);
+}
+
 static void cam_op_cancel_rw_instruction(struct cam_obj_op *op)
 {
 	struct cam_rw_instruction __user *payload;
@@ -1501,6 +1542,9 @@ static void cam_op_cancel_rw_instruction(struct cam_obj_op *op)
 		switch (insn.type) {
 		case CAM_DMABUF_INSTRUCTION:
 			cam_cancel_dmabuf_instruction(op->pipeline, &insn.db);
+			break;
+		case CAM_INSTANCE_INSTRUCTION:
+			cam_cancel_instance_instruction(op->pipeline, &insn.in);
 			break;
 		}
 
