@@ -243,6 +243,116 @@ error:
 }
 
 /**
+ * nsobj_to_cam_instance() - Get CAM instance pointer from the associated CAM
+ * object
+ * @nsobj: pointer to CAM object that represents a CAM instance
+ *
+ * Return: NULL on error or CAM instance pointer otherwise.
+ */
+static struct cam_obj_instance *nsobj_to_cam_instance(struct cam_obj *nsobj)
+{
+	if (!cam_obj_check_type(nsobj, CAM_OBJ_TYPE_INSTANCE))
+		return NULL;
+
+	return container_of(nsobj, struct cam_obj_instance, nsobj);
+}
+
+/**
+ * cam_instance_release() - The release function of CAM instance
+ * @nsobj: pointer to CAM object that represents a CAM instance
+ */
+static void cam_instance_release(struct cam_obj *nsobj)
+{
+	struct cam_obj_instance *instance = nsobj_to_cam_instance(nsobj);
+
+	if (!instance)
+		return;
+
+	cam_obj_unlink(nsobj);
+	kfree(instance);
+}
+
+/**
+ * cam_instance_destroy() - Destroy entity instance (context)
+ * @ns: namespace
+ * @id: ID of the instance object
+ */
+void cam_instance_destroy(struct cam_ns *ns, u32 id)
+{
+	cam_obj_remove_id(ns, CAM_OBJ_TYPE_INSTANCE, id);
+}
+
+/**
+ * cam_instance_create() - Create entity instance (context)
+ * @ns: namespace
+ * @entity: CAM entity
+ * @id: ID of the instance (context) object
+ *
+ * Return: NULL on error or CAM intance pointer otherwise
+ */
+struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
+					     struct cam_obj_entity *entity,
+					     u32 id)
+{
+	struct cam_obj_instance *instance;
+
+	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
+	if (!instance)
+		return NULL;
+
+	cam_obj_init(&instance->nsobj, CAM_OBJ_TYPE_INSTANCE,
+		     cam_instance_release,
+		     ns);
+	cam_obj_set_id(&instance->nsobj, id);
+
+	if (cam_obj_link(&instance->nsobj, &entity->nsobj))
+		goto error;
+
+	if (cam_obj_insert(&instance->nsobj))
+		goto error;
+
+	return instance;
+
+error:
+	cam_instance_release(&instance->nsobj);
+	return NULL;
+}
+
+/**
+ * cam_instance_lookup() - Lookup CAM instance by ID
+ * @ns: pointer to namespace
+ * @id: ID of CAM instance
+ *
+ * Return: NULL on error or CAM instance pointer otherwise. Returned object is
+ * valid and has incremented ref-counter, call cam_instance_put() to properly
+ * decrement ref-counter back.
+ */
+struct cam_obj_instance *cam_instance_lookup(struct cam_ns *ns, u32 id)
+{
+	struct cam_obj *obj = NULL;
+
+	obj = cam_obj_lookup(ns, CAM_OBJ_TYPE_INSTANCE, id);
+	if (!obj)
+		return NULL;
+
+	return nsobj_to_cam_instance(obj);
+}
+ALLOW_ERROR_INJECTION(cam_instance_lookup, NULL);
+
+/**
+ * cam_instance_put() - Decrements ref-counter of the CAM instance
+ * @instance: pointer to CAM instance
+ */
+void cam_instance_put(struct cam_obj_instance *instance)
+{
+	if (likely(instance))
+		cam_obj_put(&instance->nsobj);
+	else
+		WARN_ON(1);
+}
+EXPORT_SYMBOL_GPL(cam_instance_put);
+
+/**
  * nsobj_to_cam_event() - Get CAM event pointer from the associated CAM
  * object
  * @nsobj: pointer to CAM object that represents a CAM event

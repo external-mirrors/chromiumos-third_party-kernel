@@ -56,6 +56,7 @@ struct cam_obj;
  * enum cam_obj_type - CAM object types
  *
  * @CAM_OBJ_TYPE_ENTITY:	Entity
+ * @CAM_OBJ_TYPE_INSTANCE:	Entity instance (context)
  * @CAM_OBJ_TYPE_EVENT:		Event
  * @CAM_OBJ_TYPE_OPERATION:	Operation
  * @CAM_OBJ_TYPE_BUFFER:	Buffer
@@ -65,11 +66,12 @@ struct cam_obj;
  */
 enum cam_obj_type {
 	CAM_OBJ_TYPE_ENTITY		= BIT(0),
-	CAM_OBJ_TYPE_EVENT		= BIT(1),
-	CAM_OBJ_TYPE_OPERATION		= BIT(2),
-	CAM_OBJ_TYPE_BUFFER		= BIT(3),
-	CAM_OBJ_TYPE_IN_SYNCFILE	= BIT(4),
-	CAM_OBJ_TYPE_OUT_SYNCFILE	= BIT(5),
+	CAM_OBJ_TYPE_INSTANCE		= BIT(1),
+	CAM_OBJ_TYPE_EVENT		= BIT(2),
+	CAM_OBJ_TYPE_OPERATION		= BIT(3),
+	CAM_OBJ_TYPE_BUFFER		= BIT(4),
+	CAM_OBJ_TYPE_IN_SYNCFILE	= BIT(5),
+	CAM_OBJ_TYPE_OUT_SYNCFILE	= BIT(6),
 	CAM_OBJ_TYPE_ROOT		= BIT(12),
 };
 

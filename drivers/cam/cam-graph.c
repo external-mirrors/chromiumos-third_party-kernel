@@ -114,6 +114,25 @@ u32 cam_obj_link_id(struct cam_obj *nsobj)
 	return pair_id;
 }
 
+
+/**
+ * cam_obj_linked_to() - Get object we are linked to
+ * @nsobj: current object
+ *
+ * Return: NULL on error or pointer to object we are linked to with
+ * incremented ref-count.
+ */
+struct cam_obj *cam_obj_linked_to(struct cam_obj *nsobj)
+{
+	struct cam_graph_node *curr_node = &nsobj->gnode;
+
+	if (!curr_node->linked_to)
+		return NULL;
+	if (!cam_obj_get(curr_node->linked_to))
+		return NULL;
+	return curr_node->linked_to;
+}
+
 /**
  * cam_graph_stack_alloc() - Allocate array to serve as stack storage for graph
  * traversal. Stack holds pointers to namespace objects.

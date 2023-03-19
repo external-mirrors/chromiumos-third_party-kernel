@@ -58,6 +58,18 @@ struct cam_obj_entity {
 };
 
 /**
+ * cam_obj_instance - CAM entity instance (execution context)
+ *
+ * This structure holds driver's execution context data (if any).
+ */
+struct cam_obj_instance {
+	/** @nsobj: namespace object */
+	struct cam_obj		nsobj;
+	/** @driver_data: Driver specific data */
+	void			*driver_data;
+};
+
+/**
  * cam_obj_event - The pipeline event structure
  *
  * Pipeline event that generates signals but is never executed on its own.
@@ -114,6 +126,13 @@ int cam_enum_entities(struct cam_device *cam,
 int cam_enum_events(struct cam_device *cam,
 		    struct cam_query_events *query,
 		    struct cam_koutput *output);
+
+void cam_instance_destroy(struct cam_ns *ns, u32 id);
+struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
+					     struct cam_obj_entity *entity,
+					     u32 id);
+struct cam_obj_instance *cam_instance_lookup(struct cam_ns *ns, u32 id);
+void cam_instance_put(struct cam_obj_instance *instance);
 
 struct cam_pipeline;
 
