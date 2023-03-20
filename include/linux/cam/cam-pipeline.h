@@ -83,6 +83,8 @@ struct cam_op_signal {
 	struct cam_obj			*target;
 	/** @entry: List entry in the pending/active lists */
 	struct list_head		entry;
+	/** @instance: ID of enity instance */
+	u32				instance;
 	/** @activate: Function that activates pending signal */
 	bool (*activate)(struct cam_op_signal *sig);
 	/** @fire: Function that raises the signal */
@@ -152,6 +154,8 @@ int cam_pipeline_query(struct cam_pipeline *pipeline,
 		       struct cam_koutput *output);
 
 void cam_fire_active_signals(struct list_head *notify_active_chain);
+void cam_instance_fire_active_signals(struct cam_obj_instance *instance,
+				      struct list_head *notify_active_chain);
 void cam_drain_active_signals(struct list_head *notify_active_chain,
 			      struct cam_pipeline *pipeline);
 

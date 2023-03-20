@@ -541,6 +541,26 @@ void cam_event_trigger_signals(struct cam_obj_entity *entity,
 EXPORT_SYMBOL_GPL(cam_event_trigger_signals);
 
 /**
+ * cam_instance_event_trigger_signals() - Trigger and notify all active signals
+ * depending on the provided event instance
+ * @entity: pointer to CAM entity
+ * @instance: entity instance (context)
+ * @event: pointer to CAM event
+ */
+void cam_instance_event_trigger_signals(struct cam_obj_entity *entity,
+					struct cam_obj_instance *instance,
+					struct cam_obj_event *event)
+{
+	unsigned long flags;
+
+	trace_cam_event_trigger(entity, event);
+	write_lock_irqsave(&event->notify_lock, flags);
+	cam_instance_fire_active_signals(instance, &event->notify_active_chain);
+	write_unlock_irqrestore(&event->notify_lock, flags);
+}
+EXPORT_SYMBOL_GPL(cam_instance_event_trigger_signals);
+
+/**
  * cam_event_put() - Decrements ref-counter of the CAM event
  * @event: pointer to CAM event
  */

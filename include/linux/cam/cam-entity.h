@@ -150,6 +150,10 @@ bool cam_event_activate_signal(struct cam_op_signal *sig);
 void cam_event_trigger_signals(struct cam_obj_entity *entity,
 			       struct cam_obj_event *event);
 
+void cam_instance_event_trigger_signals(struct cam_obj_entity *entity,
+					struct cam_obj_instance *instance,
+					struct cam_obj_event *event);
+
 struct cam_obj_event *cam_event_lookup(struct cam_device *cam, u32 event_id);
 void cam_event_put(struct cam_obj_event *ce);
 

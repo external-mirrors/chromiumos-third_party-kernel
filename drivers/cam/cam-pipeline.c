@@ -409,6 +409,29 @@ void cam_fire_active_signals(struct list_head *notify_active_chain)
 	}
 }
 
+/**
+ * cam_instance_fire_active_signals() - Raise signals that wait on instance
+ * event
+ * @instance: entity instance (context)
+ * @notify_active_chain: operation notify chain with signals to be fired
+ *
+ * After firing the signals will be removed from the chain and released.
+ */
+void cam_instance_fire_active_signals(struct cam_obj_instance *instance,
+				      struct list_head *notify_active_chain)
+{
+	struct cam_op_signal *sig, *safe;
+
+	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+		if (sig->instance != cam_obj_id(&instance->nsobj))
+			continue;
+
+		list_del_init(&sig->entry);
+		sig->fire(sig);
+		release_signal(sig);
+	}
+}
+
 static void drain_notify_chain(struct list_head *notify_chain)
 {
 	struct cam_op_signal *sig;
