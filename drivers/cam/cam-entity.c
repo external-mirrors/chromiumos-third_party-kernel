@@ -216,6 +216,8 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	va_end(args);
 
 	atomic_set(&entity->nr_instances, num_instances);
+	if (num_instances)
+		entity->flags |= CAM_ENTITY_FLAG_REQUIRE_INSTANCE;
 	entity->ops = ops;
 	entity->driver_data = driver_data;
 	strlcpy(entity->name, name, CAM_ENTITY_NAME_SZ);
@@ -533,6 +535,9 @@ void cam_event_trigger_signals(struct cam_obj_entity *entity,
 {
 	unsigned long flags;
 
+	if (entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE)
+		return;
+
 	trace_cam_event_trigger(entity, event);
 	write_lock_irqsave(&event->notify_lock, flags);
 	cam_fire_active_signals(&event->notify_active_chain);
@@ -552,6 +557,9 @@ void cam_instance_event_trigger_signals(struct cam_obj_entity *entity,
 					struct cam_obj_event *event)
 {
 	unsigned long flags;
+
+	if (!(entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE))
+		return;
 
 	trace_cam_event_trigger(entity, event);
 	write_lock_irqsave(&event->notify_lock, flags);

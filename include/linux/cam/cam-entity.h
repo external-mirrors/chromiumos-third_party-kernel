@@ -16,6 +16,8 @@ struct cam_obj_entity;
 #define CAM_ENTITY_NO_INSTANCES		0
 #define CAM_ENTITY_UNLIMITED_INSTANCES	INT_MAX
 
+#define CAM_ENTITY_FLAG_REQUIRE_INSTANCE	(1 << 0)
+
 struct cam_obj_instance;
 
 /**
@@ -84,6 +86,8 @@ struct cam_obj_entity {
 	struct cam_entity_ops	*ops;
 	/** @nr_instances: number of instances this entity can have */
 	atomic_t		nr_instances;
+	/** @flags: Entity flags */
+	u32			flags;
 	/** @driver_data: Driver specific data */
 	void			*driver_data;
 	/** @name: entity name */

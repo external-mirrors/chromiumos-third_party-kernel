@@ -797,6 +797,14 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 	if (!op->exec_entity)
 		return;
 
+	/*
+	 * This is probably OP that either created or destroyed an instance,
+	 * which is done at prepare() stage. No need to run this OP.
+	 */
+	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
+	    !op->exec_instance)
+		return;
+
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
 		pr_err("Unable to access operation RW instructions list\n");
 		return;
@@ -1339,6 +1347,9 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 	}
 
 	if (req->instance != CAM_OP_NO_INSTANCE) {
+		if (!op->exec_entity)
+			goto error;
+
 		op->exec_instance = cam_instance_lookup(&pipeline->objs,
 							req->instance);
 		if (!op->exec_instance)
