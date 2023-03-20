@@ -95,7 +95,7 @@ void cam_obj_unlink(struct cam_obj *nsobj)
 }
 
 /**
- * cam_graph_node_link_id() - ID of the linked_to object
+ * cam_obj_link_id() - ID of the linked_to object
  * @nsobj: object to get linked_to ID of
  *
  * Return: ID of the linked_to object.
