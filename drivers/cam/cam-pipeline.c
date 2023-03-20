@@ -632,10 +632,11 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 	cam_ringbuffer_write(&pipeline->event_buffer, &completion);
 }
 
-static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
-				  struct cam_obj_op *op,
+static int cam_dmabuf_instruction(struct cam_obj_op *op,
 				  struct cam_dmabuf_instruction *insn)
 {
+	struct cam_pipeline *pipeline = op->pipeline;
+
 	if (insn->op == CAM_OP_DMABUF_REMOVE) {
 		cam_buffer_unregister(&pipeline->objs, insn->buf_id);
 		return 0;
@@ -659,10 +660,11 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 	return -EINVAL;
 }
 
-static int cam_instance_instruction(struct cam_pipeline *pipeline,
-				    struct cam_obj_op *op,
+static int cam_instance_instruction(struct cam_obj_op *op,
 				    struct cam_instance_instruction *insn)
 {
+	struct cam_pipeline *pipeline = op->pipeline;
+
 	if (insn->op == CAM_OP_INSTANCE_DESTROY) {
 		cam_instance_destroy(&pipeline->objs, insn->id);
 		return 0;
@@ -701,11 +703,11 @@ static int cam_instance_instruction(struct cam_pipeline *pipeline,
  * entity call. Both function operate on local (stack) copy of user-supplied
  * RW instruction.
  */
-static int cam_read_instruction(struct cam_pipeline *pipeline,
-				struct cam_obj_op *op,
+static int cam_read_instruction(struct cam_obj_op *op,
 				struct cam_read_instruction *insn)
 {
 	struct cam_obj_entity *entity = op->exec_entity;
+	struct cam_pipeline *pipeline = op->pipeline;
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
 
@@ -728,11 +730,11 @@ static int cam_read_instruction(struct cam_pipeline *pipeline,
 	return ret;
 }
 
-static int cam_write_instruction(struct cam_pipeline *pipeline,
-				 struct cam_obj_op *op,
+static int cam_write_instruction(struct cam_obj_op *op,
 				 struct cam_write_instruction *insn)
 {
 	struct cam_obj_entity *entity = op->exec_entity;
+	struct cam_pipeline *pipeline = op->pipeline;
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
 
@@ -791,10 +793,10 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 
 		switch (insn.type) {
 		case CAM_READ_INSTRUCTION:
-			ret = cam_read_instruction(op->pipeline, op, &insn.rd);
+			ret = cam_read_instruction(op, &insn.rd);
 			break;
 		case CAM_WRITE_INSTRUCTION:
-			ret = cam_write_instruction(op->pipeline, op, &insn.wr);
+			ret = cam_write_instruction(op, &insn.wr);
 			break;
 		}
 
@@ -1359,14 +1361,10 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 
 		switch (insn.type) {
 		case CAM_DMABUF_INSTRUCTION:
-			ret = cam_dmabuf_instruction(op->pipeline,
-						     op,
-						     &insn.db);
+			ret = cam_dmabuf_instruction(op, &insn.db);
 			break;
 		case CAM_INSTANCE_INSTRUCTION:
-			ret = cam_instance_instruction(op->pipeline,
-						       op,
-						       &insn.in);
+			ret = cam_instance_instruction(op, &insn.in);
 			break;
 		}
 
@@ -1519,9 +1517,11 @@ int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_submit, ERRNO);
 
-static void cam_cancel_dmabuf_instruction(struct cam_pipeline *pipeline,
+static void cam_cancel_dmabuf_instruction(struct cam_obj_op *op,
 					  struct cam_dmabuf_instruction *insn)
 {
+	struct cam_pipeline *pipeline = op->pipeline;
+
 	if (insn->op == CAM_OP_DMABUF_REMOVE)
 		return;
 
@@ -1529,9 +1529,11 @@ static void cam_cancel_dmabuf_instruction(struct cam_pipeline *pipeline,
 }
 
 static void
-cam_cancel_instance_instruction(struct cam_pipeline *pipeline,
+cam_cancel_instance_instruction(struct cam_obj_op *op,
 				struct cam_instance_instruction *insn)
 {
+	struct cam_pipeline *pipeline = op->pipeline;
+
 	if (insn->op == CAM_OP_INSTANCE_DESTROY)
 		return;
 
@@ -1565,10 +1567,10 @@ static void cam_op_cancel_rw_instruction(struct cam_obj_op *op)
 
 		switch (insn.type) {
 		case CAM_DMABUF_INSTRUCTION:
-			cam_cancel_dmabuf_instruction(op->pipeline, &insn.db);
+			cam_cancel_dmabuf_instruction(op, &insn.db);
 			break;
 		case CAM_INSTANCE_INSTRUCTION:
-			cam_cancel_instance_instruction(op->pipeline, &insn.in);
+			cam_cancel_instance_instruction(op, &insn.in);
 			break;
 		}
 
