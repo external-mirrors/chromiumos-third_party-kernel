@@ -47,9 +47,17 @@ struct vcam_device {
 	struct cam_obj_entity		*entities[3];
 	struct cam_obj_event		*events[3];
 
+	spinlock_t			instances_lock;
+	struct list_head		instances;
+
 	struct hrtimer			event_timer_fast;
 	struct hrtimer			event_timer_slow;
 	unsigned long			timer_start_ts;
+};
+
+struct vcam_exec_instance {
+	struct cam_obj_instance		*instance;
+	struct list_head		entry;
 };
 
 #define VCAM_INSTANCE_DATA_BUF_SZ	64
@@ -137,9 +145,80 @@ static int entity_write(struct cam_obj_entity *entity,
 	return 0;
 }
 
+static void trigger_instance_event_on(struct vcam_device *vcam,
+				      u32 entity_id,
+				      u32 event_id)
+{
+	struct vcam_exec_instance *inst;
+	unsigned long flags;
+
+	if (!vcam->entities[entity_id] || !vcam->events[event_id])
+		return;
+
+	spin_lock_irqsave(&vcam->instances_lock, flags);
+	while (!list_empty(&vcam->instances)) {
+		inst = list_first_entry(&vcam->instances,
+					struct vcam_exec_instance,
+					entry);
+		list_del(&inst->entry);
+
+		cam_instance_event_trigger_signals(vcam->entities[entity_id],
+						   inst->instance,
+						   vcam->events[event_id]);
+		cam_instance_put(inst->instance);
+		kfree(inst);
+	}
+	spin_unlock_irqrestore(&vcam->instances_lock, flags);
+}
+
+static int record_event_instance(struct vcam_device *vcam,
+				 struct cam_obj_instance *instance)
+{
+	struct vcam_exec_instance *inst;
+	unsigned long flags;
+
+	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
+	if (!inst)
+		return -ENOMEM;
+
+	if (!cam_instance_get(instance)) {
+		kfree(inst);
+		return -EINVAL;
+	}
+
+	INIT_LIST_HEAD(&inst->entry);
+	inst->instance = instance;
+
+	spin_lock_irqsave(&vcam->instances_lock, flags);
+	list_add(&inst->entry, &vcam->instances);
+	spin_unlock_irqrestore(&vcam->instances_lock, flags);
+	return 0;
+}
+
+static int entity_instance_read(struct cam_obj_entity *entity,
+				struct cam_obj_instance *instance,
+				struct cam_read_instruction *rw)
+{
+	pr_info("VCAM: execute entity instance read\n");
+	return record_event_instance(cam_entity_driver_data(entity),
+				     instance);
+}
+
+static int entity_instance_write(struct cam_obj_entity *entity,
+				 struct cam_obj_instance *instance,
+				 struct cam_write_instruction *rw)
+{
+
+	pr_info("VCAM: execute entity instance write\n");
+	return record_event_instance(cam_entity_driver_data(entity),
+				     instance);
+}
+
 static struct cam_entity_ops entity_ops = {
 	.read			= entity_read,
 	.write			= entity_write,
+	.instance_read		= entity_instance_read,
+	.instance_write		= entity_instance_write,
 	.device			= entity_device,
 	.instance_create	= entity_instance_create,
 	.instance_destroy	= entity_instance_destroy,
@@ -203,6 +282,7 @@ static enum hrtimer_restart vcam_event_timer(struct vcam_device *vcam)
 
 	dev_info(vcam->dev, "events: trigger slow events\n");
 	/* We cancel HR timer, send spurious wakeup to all entities */
+	trigger_instance_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
 	vcam->timer_start_ts = jiffies;
@@ -244,6 +324,7 @@ static void cam_objects_release(struct vcam_device *vcam)
 {
 	int obj;
 
+	trigger_instance_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
 	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
@@ -281,6 +362,8 @@ static int vcam_probe(struct platform_device *pdev)
 	if (!vcam)
 		return -ENOMEM;
 
+	spin_lock_init(&vcam->instances_lock);
+	INIT_LIST_HEAD(&vcam->instances);
 	vcam->dev = &pdev->dev;
 	platform_set_drvdata(pdev, vcam);
 	hrtimer_init(&vcam->event_timer_fast, CLOCK_MONOTONIC,
