@@ -2133,6 +2133,67 @@ out:
 	return ret;
 }
 
+static int test_entity_instance_limit(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	int ret, rw_idx;
+
+	pr_info("Test entity instance limit\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_FAST_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.fence_out	= 0;
+	op->operation_add.flags		= 0;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(8);
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	for_each_rw_instruction(rw_list, rw_idx, rw) {
+		rw->type	= CAM_INSTANCE_INSTRUCTION;
+		rw->in.op	= CAM_OP_INSTANCE_CREATE;
+		rw->in.id	= rw_idx;
+	}
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret)
+		ret = 0;
+	else
+		ret = -EINVAL;
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_add_buffer(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2483,6 +2544,12 @@ static void *thread_fn(void *arg)
 	ret = test_root_entity_instance(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_root_entity_instance()\n");
+		goto out;
+	}
+
+	ret = test_entity_instance_limit(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_entity_instance_limit()\n");
 		goto out;
 	}
 
