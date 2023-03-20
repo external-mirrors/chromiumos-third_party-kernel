@@ -421,6 +421,21 @@ void cam_instance_put(struct cam_obj_instance *instance)
 EXPORT_SYMBOL_GPL(cam_instance_put);
 
 /**
+ * cam_instance_get() - Increment ref-counter of the CAM instance
+ * @instance: pointer to CAM instance
+ *
+ * Return: true if instance ref-count was incremented and false otherwise
+ */
+bool __must_check cam_instance_get(struct cam_obj_instance *instance)
+{
+	if (cam_obj_get(&instance->nsobj))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(cam_instance_get);
+
+/**
  * nsobj_to_cam_event() - Get CAM event pointer from the associated CAM
  * object
  * @nsobj: pointer to CAM object that represents a CAM event

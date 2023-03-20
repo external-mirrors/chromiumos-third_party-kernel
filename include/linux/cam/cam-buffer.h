@@ -46,6 +46,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 void cam_buffer_unregister(struct cam_ns *ns, u32 id);
 
 struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id);
+bool cam_buffer_get(struct cam_obj_buffer *buffer);
 void cam_buffer_put(struct cam_obj_buffer *buffer);
 
 #endif /* __LINUX_CAM_BUFFER_H__ */

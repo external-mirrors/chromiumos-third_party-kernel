@@ -168,3 +168,18 @@ void cam_buffer_put(struct cam_obj_buffer *buffer)
 		WARN_ON(1);
 }
 EXPORT_SYMBOL_GPL(cam_buffer_put);
+
+/**
+ * cam_buffer_get() - Increment ref-counter of the CAM buffer
+ * @buffer: pointer to CAM buffer
+ *
+ * Return: true if buffer ref-count was incremented and false otherwise
+ */
+bool __must_check cam_buffer_get(struct cam_obj_buffer *buffer)
+{
+	if (cam_obj_get(&buffer->nsobj))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(cam_buffer_get);
