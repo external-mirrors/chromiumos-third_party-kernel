@@ -995,6 +995,7 @@ ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
  * cam_op_add_pending_signal() - Create and add a pending signal
  * @source: pointer to CAM object that blocks @target
  * @target: pointer to CAM operation that depends on @source
+ * @instance: ID of entity instance
  * @activate: the callback called to activate the pending signal
  *
  * This allocate a pending CAM signal and append it to target's notify chain.
@@ -1004,6 +1005,7 @@ ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
  */
 static int cam_op_add_pending_signal(struct cam_obj *source,
 				     struct cam_obj_op *target,
+				     u32 instance,
 				     bool (*activate)(struct cam_op_signal *))
 {
 	struct cam_op_signal *sig;
@@ -1012,6 +1014,7 @@ static int cam_op_add_pending_signal(struct cam_obj *source,
 	if (!sig)
 		return -ENOMEM;
 
+	sig->instance	= instance;
 	sig->activate	= activate;
 	sig->fire	= cam_op_notify;
 	INIT_LIST_HEAD(&sig->entry);
@@ -1062,6 +1065,7 @@ static int cam_op_dependency_add(struct cam_pipeline *pipeline,
 	}
 
 	ret = cam_op_add_pending_signal(&dep_op->nsobj, op,
+					CAM_OP_NO_INSTANCE,
 					cam_op_activate_signal);
 	cam_op_put(dep_op);
 	return ret;
@@ -1080,13 +1084,19 @@ static int cam_event_dependency_add(struct cam_pipeline *pipeline,
 				    struct cam_obj_op *op)
 {
 	struct cam_obj_event *dep_event;
+	u32 instance;
 	int ret;
 
 	dep_event = cam_event_lookup(pipeline->cam, req->id);
 	if (!dep_event)
 		return -EINVAL;
 
+	instance = CAM_OP_NO_INSTANCE;
+	if (op->exec_instance)
+		instance = cam_obj_id(&op->exec_instance->nsobj);
+
 	ret = cam_op_add_pending_signal(&dep_event->nsobj, op,
+					instance,
 					cam_event_activate_signal);
 	cam_event_put(dep_event);
 	return ret;
@@ -1117,6 +1127,7 @@ static int cam_fence_in_dependency_add(struct cam_pipeline *pipeline,
 		return -EINVAL;
 
 	ret = cam_op_add_pending_signal(&sf->nsobj, op,
+					CAM_OP_NO_INSTANCE,
 					cam_in_syncfile_activate_signal);
 	return ret;
 }
