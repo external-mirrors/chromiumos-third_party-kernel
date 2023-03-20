@@ -756,8 +756,9 @@ static int wait_for_slow_entity_timer(struct libkc *cam)
 		op->operation_add.fence_out	= 0;
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.entity	= entity->id;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 		op->operation_add.deps[0].type	= CAM_DEPENDENCY_EVENT;
@@ -810,8 +811,9 @@ static int add_single_invalid_operation(struct libkc *cam,
 	op->operation_add.fence_out	= 0;
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
-	op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 	op->operation_add.entity	= event_entity;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	if (id_dep != CAM_NO_DEP) {
@@ -820,13 +822,13 @@ static int add_single_invalid_operation(struct libkc *cam,
 		d++;
 	}
 
-	if (event_id != CAM_NO_ENTITY) {
+	if (event_id != CAM_OP_NO_ENTITY) {
 		op->operation_add.deps[d].type	= CAM_DEPENDENCY_EVENT;
 		op->operation_add.deps[d].id	= event_id;
 		d++;
 	}
 
-	if (fence_in != CAM_NO_FENCE) {
+	if (fence_in != CAM_OP_NO_FENCE) {
 		op->operation_add.deps[d].type	= CAM_DEPENDENCY_FENCE_IN;
 		op->operation_add.deps[d].id	= fence_in;
 		d++;
@@ -858,8 +860,9 @@ static int add_single_invalid_fence_out_operation(struct libkc *cam,
 	op->operation_add.fence_out	= 0;
 	op->operation_add.flags		= CAM_OPERATION_FLAG_EXPORT_FENCE;
 	op->operation_add.delay_ns	= 0;
-	op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
@@ -899,9 +902,10 @@ static int add_many_invalid_operations(struct libkc *cam,
 		op->operation_add.fence_out	= 0;
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 		op->operation_add.entity	= entity->id;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 
 		/*
 		 * The first operation is blocked on entity event, and is
@@ -932,7 +936,7 @@ static int add_many_invalid_operations(struct libkc *cam,
 	ret = libkc_operation_ioctl(cam, lco);
 	/* Otherwise we will free(0xC0FFEE) in libkc_operation_put() */
 	for_each_cam_operation(lco, i, op) {
-		op->operation_add.rd_wr_list		= CAM_NO_RD_WR;
+		op->operation_add.rd_wr_list		= CAM_OP_NO_RW_LIST;
 	}
 	return ret;
 }
@@ -948,8 +952,8 @@ static int test_add_invalid_operations(struct libkc *cam)
 	if (!lco)
 		return -ENOMEM;
 
-	ret = add_single_invalid_operation(cam, lco, 255, CAM_NO_ENTITY,
-					   CAM_NO_ENTITY, CAM_NO_FENCE);
+	ret = add_single_invalid_operation(cam, lco, 255, CAM_OP_NO_ENTITY,
+					   CAM_OP_NO_ENTITY, CAM_OP_NO_FENCE);
 	if (ret) {
 		pr_err("FATAL: unmet operation dependency should succeed\n");
 		goto out;
@@ -962,7 +966,8 @@ static int test_add_invalid_operations(struct libkc *cam)
 	}
 
 	ret = add_single_invalid_operation(cam, lco, CAM_NO_DEP,
-					   255, CAM_NO_ENTITY, CAM_NO_FENCE);
+					   255, CAM_OP_NO_ENTITY,
+					   CAM_OP_NO_FENCE);
 	if (!ret) {
 		pr_err("FATAL: unmet entity dependency should fail\n");
 		ret = -EINVAL;
@@ -970,7 +975,8 @@ static int test_add_invalid_operations(struct libkc *cam)
 	}
 
 	ret = add_single_invalid_operation(cam, lco, CAM_NO_DEP,
-					   CAM_NO_ENTITY, 255, CAM_NO_FENCE);
+					   CAM_OP_NO_ENTITY, 255,
+					   CAM_OP_NO_FENCE);
 	if (!ret) {
 		pr_err("FATAL: unmet event dependency should fail\n");
 		ret = -EINVAL;
@@ -978,7 +984,7 @@ static int test_add_invalid_operations(struct libkc *cam)
 	}
 
 	ret = add_single_invalid_operation(cam, lco, CAM_NO_DEP, 255, 255,
-					   CAM_NO_FENCE);
+					   CAM_OP_NO_FENCE);
 	if (!ret) {
 		pr_err("FATAL: unmet entity:event dependency should fail\n");
 		ret = -EINVAL;
@@ -986,7 +992,7 @@ static int test_add_invalid_operations(struct libkc *cam)
 	}
 
 	ret = add_single_invalid_operation(cam, lco, 255, 255, 255,
-					   CAM_NO_FENCE);
+					   CAM_OP_NO_FENCE);
 	if (!ret) {
 		pr_err("FATAL: unmet operation:entity:event dependency "
 		       "should fail\n");
@@ -994,8 +1000,9 @@ static int test_add_invalid_operations(struct libkc *cam)
 		goto out;
 	}
 
-	ret = add_single_invalid_operation(cam, lco, CAM_NO_DEP, CAM_NO_ENTITY,
-					   CAM_NO_ENTITY, 255);
+	ret = add_single_invalid_operation(cam, lco, CAM_NO_DEP,
+					   CAM_OP_NO_ENTITY,
+					   CAM_OP_NO_ENTITY, 255);
 	if (!ret) {
 		pr_err("FATAL: unmet fence_in dependency should fail\n");
 		ret = -EINVAL;
@@ -1048,7 +1055,9 @@ static int test_add_instant_operations(struct libkc *cam, u32 num_ops)
 		op->operation_add.fence_out	= 0;
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+		op->operation_add.entity	= CAM_OP_NO_ENTITY;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 	}
 
@@ -1095,8 +1104,9 @@ static int test_add_valid_operations(struct libkc *cam,
 		op->operation_add.fence_out	= 0;
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= mode;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 
 		/*
 		 * The first operation is blocked on entity event. The rest
@@ -1157,8 +1167,9 @@ static int test_add_valid_complex_operations(struct libkc *cam,
 		op->operation_add.fence_out	= 0;
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= CAM_DEPENDENCY_STRICT_ORDER;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 
 		/*
 		 * The first operation is blocked on entity event.
@@ -1246,6 +1257,7 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.entity	= entity->id;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 		rw_list = libkc_rw_list_get(2);
@@ -1368,6 +1380,7 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);
@@ -1438,6 +1451,7 @@ static int test_add_too_many_rw_instructions(struct libkc *cam,
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);
@@ -1748,8 +1762,9 @@ static int test_export_import_operations(struct libkc *cam)
 	op->operation_add.fence_out	= 0;
 	op->operation_add.flags		= CAM_OPERATION_FLAG_EXPORT_FENCE;
 	op->operation_add.delay_ns	= 8888;
-	op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_EVENT;
@@ -1761,7 +1776,7 @@ static int test_export_import_operations(struct libkc *cam)
 		goto out;
 	}
 
-	if (op->operation_add.fence_out == CAM_NO_FENCE) {
+	if (op->operation_add.fence_out == CAM_OP_NO_FENCE) {
 		pr_err("Unexpected fence out fd value: %d\n",
 		       op->operation_add.fence_out);
 		ret = -EINVAL;
@@ -1782,8 +1797,9 @@ static int test_export_import_operations(struct libkc *cam)
 		op->operation_add.fence_out	= 0;
 		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= CAM_NO_RD_WR;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.entity	= entity->id;
+		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 		op->operation_add.deps[0].type	= CAM_DEPENDENCY_FENCE_IN;
@@ -1864,6 +1880,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);
@@ -1897,6 +1914,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_STRICT_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
 	op->operation_add.deps[0].id	= 1;
@@ -1933,6 +1951,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_STRICT_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
 	op->operation_add.deps[0].id	= 2;
@@ -2019,6 +2038,7 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(2);
@@ -2086,6 +2106,7 @@ static int test_root_entity_instance(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);
@@ -2154,6 +2175,7 @@ static int test_entity_instance_limit(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(8);
@@ -2230,6 +2252,7 @@ static int test_add_buffer(struct libkc *cam)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);
@@ -2316,6 +2339,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);

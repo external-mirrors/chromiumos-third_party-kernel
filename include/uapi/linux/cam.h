@@ -214,7 +214,7 @@ struct cam_dmabuf_instruction {
 };
 
 /**
- * enum cam_rw_instruction_buffer_id - Special RW instructions buffer_id values
+ * enum cam_instruction_buffer_id - Special RW instructions buffer_id values
  *
  * @CAM_RW_INSTRUCTION_NO_BUFFER:	Operation does not need a DMA buffer
  */
@@ -242,6 +242,15 @@ enum cam_instance_instruction_op {
 struct cam_instance_instruction {
 	__u32		op;
 	__u32		id;
+};
+
+/**
+ * enum cam_op_instance_id - Special operation instance values
+ *
+ * @CAM_OP_NO_INSTANCE:	Operation does not need an instance
+ */
+enum cam_op_instance_id {
+	CAM_OP_NO_INSTANCE	= 0xffffffff,
 };
 
 /**
@@ -373,44 +382,47 @@ enum cam_operation_flags {
 /**
  * enum operation_entity_id - Special value of operation entity ID
  *
- * @CAM_NO_ENTITY:	Set when operation has no entity execute on
+ * @CAM_OP_NO_ENTITY:	Set when operation has no entity to be executed on
  */
 enum operation_entity_id {
-	CAM_NO_ENTITY = 0xffffffff,
+	CAM_OP_NO_ENTITY = 0xffffffff,
 };
 
 /**
  * enum cam_fence_fd - Special values of operation_add out fence FD
  *
- * @CAM_NO_FENCE:	Set when operation did not export fence out (sync_file)
+ * @CAM_OP_NO_FENCE:	Set when operation did not export fence out (sync_file)
  */
 enum cam_fence_fd {
-	CAM_NO_FENCE = 0xffffffff,
+	CAM_OP_NO_FENCE = 0xffffffff,
 };
 
 /**
  * enum cam_no_rd_wr - Special values of operation_add RW instructions list
  *
- * @CAM_NO_RD_WR:	Set when operation has no RW instructions list
+ * @CAM_OP_NO_RW_LIST:	Set when operation has no RW instructions list
  */
 enum cam_no_rd_wr {
-	CAM_NO_RD_WR = 0x0,
+	CAM_OP_NO_RW_LIST = 0x0,
 };
 
 /**
  * struct cam_operation_add - Add operation to the list
  *
  * @id:			ID of the operation
- * @fence_out:		fd used as output fence or CAM_NO_FENCE
+ * @fence_out:		fd used as output fence or CAM_OP_NO_FENCE
  * @flags:		Operation flags
  * @mode:		Dependency execution mode: CAM_DEPENDENCY_WEAK_ORDER
  *			or CAM_DEPENDENCY_STRICT_ORDER.
  * @deps:		Array that describes operation dependencies (if any).
  * @delay_ns:		Time to pause an operation after all its dependencies
  *			are ready
- * @rd_wr_list:		Pointer to the property read/write list or CAM_NO_RD_WR
+ * @rd_wr_list:		Pointer to the property read/write list or
+ *			CAM_OP_NO_RW_LIST
  * @entity:		ID of the entity operation is executed on or
- *			CAM_NO_ENTITY
+ *			CAM_OP_NO_ENTITY
+ * @instance:		ID of the entity instance (context) operation is
+ *			executed on or CAM_OP_NO_INSTANCE
  */
 struct cam_operation_add {
 	__u32			id;
@@ -427,6 +439,7 @@ struct cam_operation_add {
 	__u64			delay_ns;
 	__u64			rd_wr_list;
 	__u32			entity;
+	__u32			instance;
 } __attribute__((packed));
 
 /**

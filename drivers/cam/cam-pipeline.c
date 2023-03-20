@@ -751,7 +751,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 	int i;
 
 	/* No execution payload, this probably was a SYNC operation */
-	if (op->exec_rw_list_addr == CAM_NO_RD_WR)
+	if (op->exec_rw_list_addr == CAM_OP_NO_RW_LIST)
 		return;
 
 	/*
@@ -1264,14 +1264,15 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 				  struct cam_obj_op *op)
 {
 	op->delay_ns		= req->delay_ns;
-	op->exec_rw_list_addr	= CAM_NO_RD_WR;
+	op->exec_rw_list_addr	= (void *)CAM_OP_NO_RW_LIST;
 	op->exec_entity		= NULL;
-	req->fence_out		= CAM_NO_FENCE;
+	req->fence_out		= CAM_OP_NO_FENCE;
 
-	if (req->entity == CAM_NO_ENTITY && req->rd_wr_list != CAM_NO_RD_WR)
+	if (req->entity == CAM_OP_NO_ENTITY &&
+	    req->rd_wr_list != CAM_OP_NO_RW_LIST)
 		return -EINVAL;
 
-	if (req->rd_wr_list != CAM_NO_RD_WR) {
+	if (req->rd_wr_list != CAM_OP_NO_RW_LIST) {
 		struct cam_rw_instruction_list rw;
 		struct cam_rw_instruction insn;
 		uintptr_t __user *addr;
@@ -1298,7 +1299,7 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 			goto error;
 	}
 
-	if (req->entity != CAM_NO_ENTITY) {
+	if (req->entity != CAM_OP_NO_ENTITY) {
 		op->exec_entity = cam_entity_lookup(pipeline->cam,
 						    req->entity);
 		if (!op->exec_entity)
@@ -1323,7 +1324,7 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 	struct cam_obj_entity *entity;
 	int i;
 
-	if (op->exec_rw_list_addr == CAM_NO_RD_WR)
+	if (op->exec_rw_list_addr == CAM_OP_NO_RW_LIST)
 		return 0;
 
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
@@ -1531,7 +1532,7 @@ static void cam_op_cancel_rw_instruction(struct cam_obj_op *op)
 	struct cam_rw_instruction_list rw_list;
 	int i;
 
-	if (op->exec_rw_list_addr == CAM_NO_RD_WR)
+	if (op->exec_rw_list_addr == CAM_OP_NO_RW_LIST)
 		return;
 
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
