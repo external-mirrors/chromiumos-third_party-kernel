@@ -21,17 +21,19 @@
 
 #define EVENT_TRIGGER_MS		1010
 
-#define ENTITY_1			0
-#define ENTITY_1_EVENT_1		0
-#define ENTITY_1_EVENT_2		1
+#define ENTITY_INST			0
+#define ENTITY_INST_EVENT		0
 
-#define ENTITY_2			1
-#define ENTITY_2_EVENT_1		2
-#define ENTITY_2_EVENT_2		3
+#define ENTITY_FAST_IRQ			1
+#define ENTITY_FAST_IRQ_EVENT		1
+
+#define ENTITY_SLOW_IRQ			2
+#define ENTITY_SLOW_IRQ_EVENT		2
 
 static const char *entity_names[] = {
 	VCAM_ROOT_ENTITY_NAME,
 	VCAM_DMA_IMPORT_ENTITY_NAME,
+	VCAM_INSTANCES_ENTITY_NAME,
 	VCAM_FAST_IRQ_ENTITY_NAME,
 	VCAM_SLOW_IRQ_ENTITY_NAME,
 };
@@ -42,8 +44,8 @@ struct vcam_device {
 
 	struct cam_obj_entity		*root_entity;
 	struct cam_obj_entity		*dma_import_entity;
-	struct cam_obj_entity		*entities[2];
-	struct cam_obj_event		*events[4];
+	struct cam_obj_entity		*entities[3];
+	struct cam_obj_event		*events[3];
 
 	struct hrtimer			event_timer_fast;
 	struct hrtimer			event_timer_slow;
@@ -152,11 +154,10 @@ static void trigger_event_on(struct vcam_device *vcam,
 static enum hrtimer_restart vcam_event_timer(struct vcam_device *vcam)
 {
 	/*
-	 * Trigger only ENTITY_1 events. We use ENTITY_2 to block OPs
-	 * on and to test query/add/remove ioctl().
+	 * Trigger only ENTITY_FAST_IRQ events. We use other entities
+	 * block OPs on and to test query/add/remove ioctl().
 	 */
-	trigger_event_on(vcam, ENTITY_1, ENTITY_1_EVENT_1);
-	trigger_event_on(vcam, ENTITY_1, ENTITY_1_EVENT_2);
+	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
 
 	/*
 	 * Flush all events every 5 seconds.
@@ -167,8 +168,8 @@ static enum hrtimer_restart vcam_event_timer(struct vcam_device *vcam)
 
 	dev_info(vcam->dev, "events: trigger slow events\n");
 	/* We cancel HR timer, send spurious wakeup to all entities */
-	trigger_event_on(vcam, ENTITY_2, ENTITY_2_EVENT_1);
-	trigger_event_on(vcam, ENTITY_2, ENTITY_2_EVENT_2);
+	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
+	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
 	vcam->timer_start_ts = jiffies;
 
 	return HRTIMER_RESTART;
@@ -208,10 +209,9 @@ static void cam_objects_release(struct vcam_device *vcam)
 {
 	int obj;
 
-	trigger_event_on(vcam, ENTITY_1, ENTITY_1_EVENT_1);
-	trigger_event_on(vcam, ENTITY_1, ENTITY_1_EVENT_2);
-	trigger_event_on(vcam, ENTITY_2, ENTITY_2_EVENT_1);
-	trigger_event_on(vcam, ENTITY_2, ENTITY_2_EVENT_2);
+	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
+	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
+	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
 
 	hrtimer_cancel(&vcam->event_timer_fast);
 	hrtimer_cancel(&vcam->event_timer_slow);
@@ -290,14 +290,22 @@ static int vcam_probe(struct platform_device *pdev)
 
 	idx = 2;
 	for (obj = 0; obj < ARRAY_SIZE(vcam->entities); obj++) {
+		u32 instances = CAM_ENTITY_NO_INSTANCES;
 		struct cam_obj_entity *entity;
+
+		/*
+		 * VCAM_INSTANCES_ENTITY_NAME supports instances unlike
+		 * the rest of entities
+		 */
+		if (obj == 0)
+			instances = 2;
 
 		parent_id = cam_entity_id(vcam->root_entity);
 		entity = cam_entity_register(vcam->cam,
 					     parent_id,
 					     vcam,
 					     &entity_ops,
-					     2,
+					     instances,
 					     entity_names[idx]);
 		vcam->entities[obj] = entity;
 		if (!vcam->entities[obj]) {
@@ -318,20 +326,7 @@ static int vcam_probe(struct platform_device *pdev)
 
 		vcam->events[obj] = cam_event_register(vcam->cam,
 						       parent_id,
-						       "%s.begin",
-						       entity_names[idx]);
-		if (!vcam->events[obj]) {
-			dev_err(vcam->dev, "%s: failed to register event\n",
-				__func__);
-			ret = -ENOMEM;
-			goto error;
-		}
-
-		obj++;
-
-		vcam->events[obj] = cam_event_register(vcam->cam,
-						       parent_id,
-						       "%s.end",
+						       "%s-event",
 						       entity_names[idx]);
 		if (!vcam->events[obj]) {
 			dev_err(vcam->dev, "%s: failed to register event\n",

@@ -166,8 +166,8 @@ out:
 	return ret;
 }
 
-#define VCAM_ENTITIES_COUNT	5
-#define VCAM_EVENTS_COUNT	2
+#define VCAM_ENTITIES_COUNT	6
+#define VCAM_EVENTS_COUNT	1
 
 static int test_compound_query_count(struct libkc *cam,
 				     struct libkc_query *lcq)
@@ -2129,7 +2129,7 @@ static int test_entity_instance_limit(struct libkc *cam)
 
 	pr_info("Test entity instance limit\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
 		       VCAM_FAST_IRQ_ENTITY_NAME);
