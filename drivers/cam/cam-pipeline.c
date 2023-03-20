@@ -633,7 +633,7 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 }
 
 static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
-				  struct cam_obj_entity *entity,
+				  struct cam_obj_op *op,
 				  struct cam_dmabuf_instruction *insn)
 {
 	if (insn->op == CAM_OP_DMABUF_REMOVE) {
@@ -645,7 +645,7 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 		struct cam_obj_buffer *buffer;
 
 		buffer = cam_buffer_register(&pipeline->objs,
-					     entity,
+					     op->exec_entity,
 					     insn->dma_fd,
 					     insn->buf_id);
 		if (!buffer)
@@ -660,7 +660,7 @@ static int cam_dmabuf_instruction(struct cam_pipeline *pipeline,
 }
 
 static int cam_instance_instruction(struct cam_pipeline *pipeline,
-				    struct cam_obj_entity *entity,
+				    struct cam_obj_op *op,
 				    struct cam_instance_instruction *insn)
 {
 	if (insn->op == CAM_OP_INSTANCE_DESTROY) {
@@ -672,7 +672,7 @@ static int cam_instance_instruction(struct cam_pipeline *pipeline,
 		struct cam_obj_instance *instance;
 
 		instance = cam_instance_create(&pipeline->objs,
-					       entity,
+					       op->exec_entity,
 					       insn->id);
 		if (!instance)
 			return -EINVAL;
@@ -1335,7 +1335,6 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 {
 	struct cam_rw_instruction __user *payload;
 	struct cam_rw_instruction_list rw_list;
-	struct cam_obj_entity *entity;
 	int i;
 
 	if (op->exec_rw_list_addr == CAM_OP_NO_RW_LIST)
@@ -1346,7 +1345,6 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 		return -EFAULT;
 	}
 
-	entity = op->exec_entity;
 	payload = op->exec_rw_list_addr +
 		offsetof(struct cam_rw_instruction_list, instructions);
 
@@ -1362,12 +1360,12 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 		switch (insn.type) {
 		case CAM_DMABUF_INSTRUCTION:
 			ret = cam_dmabuf_instruction(op->pipeline,
-						     entity,
+						     op,
 						     &insn.db);
 			break;
 		case CAM_INSTANCE_INSTRUCTION:
 			ret = cam_instance_instruction(op->pipeline,
-						       entity,
+						       op,
 						       &insn.in);
 			break;
 		}
