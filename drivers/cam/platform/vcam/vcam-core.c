@@ -297,7 +297,7 @@ static int vcam_probe(struct platform_device *pdev)
 					     parent_id,
 					     vcam,
 					     &entity_ops,
-					     CAM_ENTITY_NO_INSTANCES,
+					     2,
 					     entity_names[idx]);
 		vcam->entities[obj] = entity;
 		if (!vcam->entities[obj]) {
