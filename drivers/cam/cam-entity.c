@@ -281,9 +281,26 @@ static struct cam_obj_instance *nsobj_to_cam_instance(struct cam_obj *nsobj)
 static void cam_instance_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_instance *instance = nsobj_to_cam_instance(nsobj);
+	void *driver_data;
 
 	if (!instance)
 		return;
+
+	driver_data = instance->driver_data;
+	if (driver_data) {
+		struct cam_obj *link = cam_obj_linked_to(nsobj);
+
+		if (link) {
+			struct cam_obj_entity *entity;
+
+			entity = nsobj_to_cam_entity(link);
+			if (entity)
+				entity->ops->instance_destroy(driver_data);
+			else
+				pr_err("Unable to destroy entity instance\n");
+			cam_obj_put(link);
+		}
+	}
 
 	cam_obj_unlink(nsobj);
 	kfree(instance);
@@ -323,6 +340,10 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	cam_obj_set_id(&instance->nsobj, id);
 
 	if (cam_obj_link(&instance->nsobj, &entity->nsobj))
+		goto error;
+
+	instance->driver_data = entity->ops->instance_create();
+	if (!instance->driver_data)
 		goto error;
 
 	if (cam_obj_insert(&instance->nsobj))
