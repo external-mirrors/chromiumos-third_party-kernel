@@ -1983,7 +1983,7 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	struct libkc_rw_list *rw_list;
 	struct obj_entity *entity;
 	struct cam_operation *op;
-	int ret;
+	int ret, rw_idx;
 
 	pr_info("Test ADD buffer cancellation\n");
 
@@ -2028,28 +2028,13 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	}
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
-	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
+	/* Conflicting buffer ID */
+	for_each_rw_instruction(rw_list, rw_idx, rw) {
+		rw->type	= CAM_DMABUF_INSTRUCTION;
+		rw->db.op	= CAM_OP_DMABUF_ADD;
+		rw->db.dma_fd	= buf->fd;
+		rw->db.buf_id	= 1;
 	}
-
-	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_OP_DMABUF_ADD;
-	rw->db.dma_fd	= buf->fd;
-	rw->db.buf_id	= 1;
-
-	rw = libkc_rw_instruction_at(rw_list, 1);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	/* Already used buffer ID */
-	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->db.op	= CAM_OP_DMABUF_ADD;
-	rw->db.dma_fd	= buf->fd;
-	rw->db.buf_id	= 1;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret == 0) {
