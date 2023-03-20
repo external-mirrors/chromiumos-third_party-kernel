@@ -103,6 +103,8 @@ struct cam_obj_op {
 	u64				delay_ns;
 	/** @exec_entity: Entity object OP will be executed on */
 	struct cam_obj_entity		*exec_entity;
+	/** @exec_instance: Entity instance object OP will be executed on */
+	struct cam_obj_instance		*exec_instance;
 	/** @exec_rw_list_addr: Pointer to the list of read/write payloads */
 	void __user			*exec_rw_list_addr;
 	/** @cam: Execution pipeline */

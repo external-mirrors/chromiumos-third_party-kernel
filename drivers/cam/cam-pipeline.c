@@ -95,6 +95,8 @@ static void cam_op_release(struct cam_obj *nsobj)
 
 	if (op->exec_entity)
 		cam_entity_put(op->exec_entity);
+	if (op->exec_instance)
+		cam_instance_put(op->exec_instance);
 	kfree(op);
 }
 
@@ -700,9 +702,10 @@ static int cam_instance_instruction(struct cam_pipeline *pipeline,
  * RW instruction.
  */
 static int cam_read_instruction(struct cam_pipeline *pipeline,
-				struct cam_obj_entity *entity,
+				struct cam_obj_op *op,
 				struct cam_read_instruction *insn)
 {
+	struct cam_obj_entity *entity = op->exec_entity;
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
 
@@ -714,7 +717,11 @@ static int cam_read_instruction(struct cam_pipeline *pipeline,
 		insn->dbuf = (u64)buffer;
 	}
 
-	ret = entity->ops->read(entity, insn);
+	if (!op->exec_instance)
+		ret = entity->ops->read(entity, insn);
+	else
+		ret = entity->ops->instance_read(entity, op->exec_instance,
+						 insn);
 
 	if (buffer)
 		cam_buffer_put(buffer);
@@ -722,9 +729,10 @@ static int cam_read_instruction(struct cam_pipeline *pipeline,
 }
 
 static int cam_write_instruction(struct cam_pipeline *pipeline,
-				 struct cam_obj_entity *entity,
+				 struct cam_obj_op *op,
 				 struct cam_write_instruction *insn)
 {
+	struct cam_obj_entity *entity = op->exec_entity;
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
 
@@ -736,7 +744,11 @@ static int cam_write_instruction(struct cam_pipeline *pipeline,
 		insn->dbuf = (u64)buffer;
 	}
 
-	ret = entity->ops->write(entity, insn);
+	if (!op->exec_instance)
+		ret = entity->ops->write(entity, insn);
+	else
+		ret = entity->ops->instance_write(entity, op->exec_instance,
+						  insn);
 
 	if (buffer)
 		cam_buffer_put(buffer);
@@ -745,9 +757,8 @@ static int cam_write_instruction(struct cam_pipeline *pipeline,
 
 static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 {
-	struct cam_rw_instruction_list rw_list;
 	struct cam_rw_instruction __user *payload;
-	struct cam_obj_entity *entity;
+	struct cam_rw_instruction_list rw_list;
 	int i;
 
 	/* No execution payload, this probably was a SYNC operation */
@@ -766,7 +777,6 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 		return;
 	}
 
-	entity = op->exec_entity;
 	payload = op->exec_rw_list_addr +
 		offsetof(struct cam_rw_instruction_list, instructions);
 
@@ -781,14 +791,10 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 
 		switch (insn.type) {
 		case CAM_READ_INSTRUCTION:
-			ret = cam_read_instruction(op->pipeline,
-						   entity,
-						   &insn.rd);
+			ret = cam_read_instruction(op->pipeline, op, &insn.rd);
 			break;
 		case CAM_WRITE_INSTRUCTION:
-			ret = cam_write_instruction(op->pipeline,
-						    entity,
-						    &insn.wr);
+			ret = cam_write_instruction(op->pipeline, op, &insn.wr);
 			break;
 		}
 
@@ -1266,6 +1272,7 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 	op->delay_ns		= req->delay_ns;
 	op->exec_rw_list_addr	= (void *)CAM_OP_NO_RW_LIST;
 	op->exec_entity		= NULL;
+	op->exec_instance	= NULL;
 	req->fence_out		= CAM_OP_NO_FENCE;
 
 	if (req->entity == CAM_OP_NO_ENTITY &&
@@ -1303,6 +1310,13 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 		op->exec_entity = cam_entity_lookup(pipeline->cam,
 						    req->entity);
 		if (!op->exec_entity)
+			goto error;
+	}
+
+	if (req->instance != CAM_OP_NO_INSTANCE) {
+		op->exec_instance = cam_instance_lookup(&pipeline->objs,
+							req->instance);
+		if (!op->exec_instance)
 			goto error;
 	}
 
