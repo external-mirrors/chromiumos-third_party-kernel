@@ -33,6 +33,22 @@ static int root_entity_write(struct cam_obj_entity *entity,
 	return -EINVAL;
 }
 
+static int root_entity_instance_read(struct cam_obj_entity *entity,
+				     struct cam_obj_instance *instance,
+				     struct cam_read_instruction *rw)
+{
+	WARN_ON(1);
+	return -EINVAL;
+}
+
+static int root_entity_instance_write(struct cam_obj_entity *entity,
+				      struct cam_obj_instance *instance,
+				      struct cam_write_instruction *rw)
+{
+	WARN_ON(1);
+	return -EINVAL;
+}
+
 static struct device *root_entity_device(struct cam_obj_entity *entity)
 {
 	WARN_ON(1);
@@ -53,6 +69,8 @@ static void root_entity_instance_destroy(void *instance_data)
 static struct cam_entity_ops root_entity_ops = {
 	.read			= root_entity_read,
 	.write			= root_entity_write,
+	.instance_read		= root_entity_instance_read,
+	.instance_write		= root_entity_instance_write,
 	.device			= root_entity_device,
 	.instance_create	= root_entity_instance_create,
 	.instance_destroy	= root_entity_instance_destroy,

@@ -16,6 +16,8 @@ struct cam_obj_entity;
 #define CAM_ENTITY_NO_INSTANCES		0
 #define CAM_ENTITY_UNLIMITED_INSTANCES	INT_MAX
 
+struct cam_obj_instance;
+
 /**
  * cam_entity_ops - CAM entity operation list
  *
@@ -34,6 +36,22 @@ struct cam_entity_ops {
 	 * Return: 0 on success, or negative error code on failure
 	 */
 	int (*write)(struct cam_obj_entity *, struct cam_write_instruction *);
+	/**
+	 * instance_read(): entity instance register read callback
+	 *
+	 * Return: 0 on success, or negative error code on failure
+	 */
+	int (*instance_read)(struct cam_obj_entity *,
+			     struct cam_obj_instance *,
+			     struct cam_read_instruction *);
+	/**
+	 * instance_write(): entity instance register write callback
+	 *
+	 * Return: 0 on success, or negative error code on failure
+	 */
+	int (*instance_write)(struct cam_obj_entity *,
+			      struct cam_obj_instance *,
+			      struct cam_write_instruction *);
 	/**
 	 * device(): pointer to device that this entity is attached to
 	 *
