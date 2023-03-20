@@ -52,6 +52,39 @@ struct vcam_device {
 	unsigned long			timer_start_ts;
 };
 
+#define VCAM_INSTANCE_DATA_BUF_SZ	64
+
+struct vcam_entity_instance_data {
+	char				*buf;
+};
+
+static void *entity_instance_create(void)
+{
+	struct vcam_entity_instance_data *data;
+
+	pr_info("VCAM: instance create\n");
+
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return NULL;
+
+	data->buf = kzalloc(VCAM_INSTANCE_DATA_BUF_SZ, GFP_KERNEL);
+	if (!data->buf) {
+		kfree(data);
+		data = NULL;
+	}
+	return data;
+}
+
+static void entity_instance_destroy(void *instance_data)
+{
+	struct vcam_entity_instance_data *data = instance_data;
+
+	pr_info("VCAM: instance destroy\n");
+	kfree(data->buf);
+	kfree(data);
+}
+
 static struct device *entity_device(struct cam_obj_entity *entity)
 {
 	struct vcam_device *vcam;
@@ -105,9 +138,11 @@ static int entity_write(struct cam_obj_entity *entity,
 }
 
 static struct cam_entity_ops entity_ops = {
-	.read		= entity_read,
-	.write		= entity_write,
-	.device		= entity_device,
+	.read			= entity_read,
+	.write			= entity_write,
+	.device			= entity_device,
+	.instance_create	= entity_instance_create,
+	.instance_destroy	= entity_instance_destroy,
 };
 
 static int dma_importer_read(struct cam_obj_entity *entity,
