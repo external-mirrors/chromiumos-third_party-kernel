@@ -436,6 +436,18 @@ bool __must_check cam_instance_get(struct cam_obj_instance *instance)
 EXPORT_SYMBOL_GPL(cam_instance_get);
 
 /**
+ * cam_isntance_driver_data() - Access instance driver data
+ * @instance: pointer to CAM instance
+ *
+ * Return: a pointer to instance driver data
+ */
+void *cam_isntance_driver_data(struct cam_obj_instance *instance)
+{
+	return instance->driver_data;
+}
+EXPORT_SYMBOL_GPL(cam_isntance_driver_data);
+
+/**
  * nsobj_to_cam_event() - Get CAM event pointer from the associated CAM
  * object
  * @nsobj: pointer to CAM object that represents a CAM event

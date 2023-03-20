@@ -169,6 +169,8 @@ struct cam_obj_instance *cam_instance_lookup(struct cam_ns *ns, u32 id);
 bool cam_instance_get(struct cam_obj_instance *instance);
 void cam_instance_put(struct cam_obj_instance *instance);
 
+void *cam_isntance_driver_data(struct cam_obj_instance *instance);
+
 struct cam_pipeline;
 
 int cam_drain_events(struct cam_pipeline *pipeline);
