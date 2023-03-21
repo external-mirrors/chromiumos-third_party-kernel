@@ -770,6 +770,7 @@ static int cam_read_instruction(struct cam_obj_op *op,
 	struct cam_obj_entity *entity = op->exec_entity;
 	struct cam_pipeline *pipeline = op->pipeline;
 	struct cam_obj_buffer *buffer = NULL;
+	void *dev;
 	int ret;
 
 	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
@@ -784,11 +785,11 @@ static int cam_read_instruction(struct cam_obj_op *op,
 		insn->dbuf = (u64)buffer;
 	}
 
+	dev = cam_entity_driver_data(entity);
 	if (!op->exec_instance)
-		ret = entity->ops->read(entity, insn);
+		ret = entity->ops->read(dev, insn);
 	else
-		ret = entity->ops->instance_read(entity, op->exec_instance,
-						 insn);
+		ret = entity->ops->instance_read(dev, op->exec_instance, insn);
 
 	if (buffer)
 		cam_buffer_put(buffer);
@@ -801,6 +802,7 @@ static int cam_write_instruction(struct cam_obj_op *op,
 	struct cam_obj_entity *entity = op->exec_entity;
 	struct cam_pipeline *pipeline = op->pipeline;
 	struct cam_obj_buffer *buffer = NULL;
+	void *dev;
 	int ret;
 
 	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
@@ -815,11 +817,11 @@ static int cam_write_instruction(struct cam_obj_op *op,
 		insn->dbuf = (u64)buffer;
 	}
 
+	dev = cam_entity_driver_data(entity);
 	if (!op->exec_instance)
-		ret = entity->ops->write(entity, insn);
+		ret = entity->ops->write(dev, insn);
 	else
-		ret = entity->ops->instance_write(entity, op->exec_instance,
-						  insn);
+		ret = entity->ops->instance_write(dev, op->exec_instance, insn);
 
 	if (buffer)
 		cam_buffer_put(buffer);

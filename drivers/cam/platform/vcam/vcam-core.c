@@ -66,7 +66,7 @@ struct vcam_entity_instance_data {
 	char				*buf;
 };
 
-static void *entity_instance_create(void)
+static void *entity_instance_create(void *dev)
 {
 	struct vcam_entity_instance_data *data;
 
@@ -84,7 +84,7 @@ static void *entity_instance_create(void)
 	return data;
 }
 
-static void entity_instance_destroy(void *instance_data)
+static void entity_instance_destroy(void *dev, void *instance_data)
 {
 	struct vcam_entity_instance_data *data = instance_data;
 
@@ -93,16 +93,14 @@ static void entity_instance_destroy(void *instance_data)
 	kfree(data);
 }
 
-static struct device *entity_device(struct cam_obj_entity *entity)
+static struct device *entity_device(void *dev)
 {
-	struct vcam_device *vcam;
+	struct vcam_device *vcam = dev;
 
-	vcam = cam_entity_driver_data(entity);
 	return vcam->dev;
 }
 
-static int entity_read(struct cam_obj_entity *entity,
-		       struct cam_read_instruction *rw)
+static int entity_read(void *dev, struct cam_read_instruction *rw)
 {
 	char dummy_buffer[32] = {};
 	u64 len;
@@ -124,8 +122,7 @@ static int entity_read(struct cam_obj_entity *entity,
 	return 0;
 }
 
-static int entity_write(struct cam_obj_entity *entity,
-			struct cam_write_instruction *rw)
+static int entity_write(void *dev, struct cam_write_instruction *rw)
 {
 	char dummy_buffer[32] = {};
 
@@ -195,23 +192,24 @@ static int record_event_instance(struct vcam_device *vcam,
 	return 0;
 }
 
-static int entity_instance_read(struct cam_obj_entity *entity,
+static int entity_instance_read(void *dev,
 				struct cam_obj_instance *instance,
 				struct cam_read_instruction *rw)
 {
+	struct vcam_device *vcam = dev;
+
 	pr_info("VCAM: execute entity instance read\n");
-	return record_event_instance(cam_entity_driver_data(entity),
-				     instance);
+	return record_event_instance(vcam, instance);
 }
 
-static int entity_instance_write(struct cam_obj_entity *entity,
+static int entity_instance_write(void *dev,
 				 struct cam_obj_instance *instance,
 				 struct cam_write_instruction *rw)
 {
+	struct vcam_device *vcam = dev;
 
 	pr_info("VCAM: execute entity instance write\n");
-	return record_event_instance(cam_entity_driver_data(entity),
-				     instance);
+	return record_event_instance(vcam, instance);
 }
 
 static struct cam_entity_ops entity_ops = {
@@ -224,8 +222,7 @@ static struct cam_entity_ops entity_ops = {
 	.instance_destroy	= entity_instance_destroy,
 };
 
-static int dma_importer_read(struct cam_obj_entity *entity,
-			     struct cam_read_instruction *rw)
+static int dma_importer_read(void *dev, struct cam_read_instruction *rw)
 {
 	struct cam_obj_buffer *buffer = (struct cam_obj_buffer *)rw->dbuf;
 
@@ -236,8 +233,7 @@ static int dma_importer_read(struct cam_obj_entity *entity,
 	return 0;
 }
 
-static int dma_importer_write(struct cam_obj_entity *entity,
-			      struct cam_write_instruction *rw)
+static int dma_importer_write(void *dev, struct cam_write_instruction *rw)
 {
 	struct cam_obj_buffer *buffer = (struct cam_obj_buffer *)rw->dbuf;
 

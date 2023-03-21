@@ -80,7 +80,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 	if (id > CAM_OBJS_NS_BUFFER_ID_END)
 		return NULL;
 
-	dev = entity->ops->device(entity);
+	dev = entity->ops->device(cam_entity_driver_data(entity));
 	if (!dev)
 		return NULL;
 

@@ -31,19 +31,19 @@ struct cam_entity_ops {
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*read)(struct cam_obj_entity *, struct cam_read_instruction *);
+	int (*read)(void *, struct cam_read_instruction *);
 	/**
 	 * write(): the register write callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*write)(struct cam_obj_entity *, struct cam_write_instruction *);
+	int (*write)(void *, struct cam_write_instruction *);
 	/**
 	 * instance_read(): entity instance register read callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*instance_read)(struct cam_obj_entity *,
+	int (*instance_read)(void *,
 			     struct cam_obj_instance *,
 			     struct cam_read_instruction *);
 	/**
@@ -51,7 +51,7 @@ struct cam_entity_ops {
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*instance_write)(struct cam_obj_entity *,
+	int (*instance_write)(void *,
 			      struct cam_obj_instance *,
 			      struct cam_write_instruction *);
 	/**
@@ -59,17 +59,17 @@ struct cam_entity_ops {
 	 *
 	 * Return: pointer to device or NULL
 	 */
-	struct device *(*device)(struct cam_obj_entity *);
+	struct device *(*device)(void *);
 	/**
 	 * instance_create(): callback to create entity instance
 	 *
 	 * Return: pointer to instance or NULL
 	 */
-	void *(*instance_create)(void);
+	void *(*instance_create)(void *);
 	/**
 	 * instance_destroy(): callback to destroy entity instance
 	 */
-	void (*instance_destroy)(void *);
+	void (*instance_destroy)(void *, void *);
 };
 
 /**

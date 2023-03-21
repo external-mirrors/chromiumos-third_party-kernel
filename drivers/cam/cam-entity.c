@@ -19,21 +19,19 @@
 
 #include <trace/events/cam.h>
 
-static int root_entity_read(struct cam_obj_entity *entity,
-			    struct cam_read_instruction *rw)
+static int root_entity_read(void *dev, struct cam_read_instruction *rw)
 {
 	WARN_ON(1);
 	return -EINVAL;
 }
 
-static int root_entity_write(struct cam_obj_entity *entity,
-			     struct cam_write_instruction *rw)
+static int root_entity_write(void *dev, struct cam_write_instruction *rw)
 {
 	WARN_ON(1);
 	return -EINVAL;
 }
 
-static int root_entity_instance_read(struct cam_obj_entity *entity,
+static int root_entity_instance_read(void *dev,
 				     struct cam_obj_instance *instance,
 				     struct cam_read_instruction *rw)
 {
@@ -41,7 +39,7 @@ static int root_entity_instance_read(struct cam_obj_entity *entity,
 	return -EINVAL;
 }
 
-static int root_entity_instance_write(struct cam_obj_entity *entity,
+static int root_entity_instance_write(void *dev,
 				      struct cam_obj_instance *instance,
 				      struct cam_write_instruction *rw)
 {
@@ -49,19 +47,19 @@ static int root_entity_instance_write(struct cam_obj_entity *entity,
 	return -EINVAL;
 }
 
-static struct device *root_entity_device(struct cam_obj_entity *entity)
+static struct device *root_entity_device(void *dev)
 {
 	WARN_ON(1);
 	return NULL;
 }
 
-static void *root_entity_instance_create(void)
+static void *root_entity_instance_create(void *dev)
 {
 	WARN_ON(1);
 	return NULL;
 }
 
-static void root_entity_instance_destroy(void *instance_data)
+static void root_entity_instance_destroy(void *dev, void *instance_data)
 {
 	WARN_ON(1);
 }
@@ -305,13 +303,13 @@ static struct cam_obj_instance *nsobj_to_cam_instance(struct cam_obj *nsobj)
 static void cam_instance_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_instance *instance = nsobj_to_cam_instance(nsobj);
-	void *driver_data;
+	void *dev, *dev_data;
 
 	if (!instance)
 		return;
 
-	driver_data = instance->driver_data;
-	if (driver_data) {
+	dev_data = instance->driver_data;
+	if (dev_data) {
 		struct cam_obj *link = cam_obj_linked_to(nsobj);
 
 		if (link) {
@@ -319,8 +317,9 @@ static void cam_instance_release(struct cam_obj *nsobj)
 
 			entity = nsobj_to_cam_entity(link);
 			if (entity) {
+				dev = cam_entity_driver_data(entity);
 				atomic_inc(&entity->nr_instances);
-				entity->ops->instance_destroy(driver_data);
+				entity->ops->instance_destroy(dev, dev_data);
 			} else {
 				pr_err("Unable to destroy entity instance\n");
 			}
@@ -356,6 +355,7 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 					     u32 id)
 {
 	struct cam_obj_instance *instance;
+	void *dev;
 
 	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
@@ -373,7 +373,8 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	if (arch_atomic_dec_if_positive(&entity->nr_instances) < 0)
 		goto error;
 
-	instance->driver_data = entity->ops->instance_create();
+	dev = cam_entity_driver_data(entity);
+	instance->driver_data = entity->ops->instance_create(dev);
 	if (!instance->driver_data)
 		goto error;
 
