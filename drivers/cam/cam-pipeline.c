@@ -655,15 +655,20 @@ static void cam_op_completion_event(struct cam_pipeline *pipeline,
 	cam_ringbuffer_write(&pipeline->event_buffer, &completion);
 }
 
-static int cam_dmabuf_instruction(struct cam_obj_op *op,
-				  struct cam_dmabuf_instruction *insn)
+/*
+ * prepare() stage should only handle instructions that set up execution
+ * context: e.g. create entity instance, import DMA buffer, etc. We cannot
+ * handle instructions that destroy execution context, as there may be
+ * operations in the batch that depend on that context. Therefore context
+ * destructions instructions are handled during operation execution.
+ */
+static int cam_prepare_dmabuf_instruction(struct cam_obj_op *op,
+					  struct cam_dmabuf_instruction *insn)
 {
 	struct cam_pipeline *pipeline = op->pipeline;
 
-	if (insn->op == CAM_OP_DMABUF_REMOVE) {
-		cam_buffer_unregister(&pipeline->objs, insn->buf_id);
+	if (insn->op == CAM_OP_DMABUF_REMOVE)
 		return 0;
-	}
 
 	if (insn->op == CAM_OP_DMABUF_ADD) {
 		struct cam_obj_buffer *buffer;
@@ -683,15 +688,14 @@ static int cam_dmabuf_instruction(struct cam_obj_op *op,
 	return -EINVAL;
 }
 
-static int cam_instance_instruction(struct cam_obj_op *op,
-				    struct cam_instance_instruction *insn)
+static int
+cam_prepare_instance_instruction(struct cam_obj_op *op,
+				 struct cam_instance_instruction *insn)
 {
 	struct cam_pipeline *pipeline = op->pipeline;
 
-	if (insn->op == CAM_OP_INSTANCE_DESTROY) {
-		cam_instance_destroy(&pipeline->objs, insn->id);
+	if (insn->op == CAM_OP_INSTANCE_DESTROY)
 		return 0;
-	}
 
 	if (insn->op == CAM_OP_INSTANCE_CREATE) {
 		struct cam_obj_instance *instance;
@@ -703,6 +707,40 @@ static int cam_instance_instruction(struct cam_obj_op *op,
 			return -EINVAL;
 
 		cam_instance_put(instance);
+		return 0;
+	}
+
+	pr_err("Unknown instance instruction operation: %d\n", insn->op);
+	return -EINVAL;
+}
+
+static int cam_run_dmabuf_instruction(struct cam_obj_op *op,
+				      struct cam_dmabuf_instruction *insn)
+{
+	struct cam_pipeline *pipeline = op->pipeline;
+
+	if (insn->op == CAM_OP_DMABUF_ADD)
+		return 0;
+
+	if (insn->op == CAM_OP_DMABUF_REMOVE) {
+		cam_buffer_unregister(&pipeline->objs, insn->buf_id);
+		return 0;
+	}
+
+	pr_err("Unknown dmabuf instruction operation: %d\n", insn->op);
+	return -EINVAL;
+}
+
+static int cam_run_instance_instruction(struct cam_obj_op *op,
+					struct cam_instance_instruction *insn)
+{
+	struct cam_pipeline *pipeline = op->pipeline;
+
+	if (insn->op == CAM_OP_INSTANCE_CREATE)
+		return 0;
+
+	if (insn->op == CAM_OP_INSTANCE_DESTROY) {
+		cam_instance_destroy(&pipeline->objs, insn->id);
 		return 0;
 	}
 
@@ -734,6 +772,10 @@ static int cam_read_instruction(struct cam_obj_op *op,
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
 
+	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
+	    !op->exec_instance)
+		return -EINVAL;
+
 	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
 		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
 		if (!buffer)
@@ -760,6 +802,10 @@ static int cam_write_instruction(struct cam_obj_op *op,
 	struct cam_pipeline *pipeline = op->pipeline;
 	struct cam_obj_buffer *buffer = NULL;
 	int ret;
+
+	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
+	    !op->exec_instance)
+		return -EINVAL;
 
 	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
 		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
@@ -797,14 +843,6 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 	if (!op->exec_entity)
 		return;
 
-	/*
-	 * This is probably OP that either created or destroyed an instance,
-	 * which is done at prepare() stage. No need to run this OP.
-	 */
-	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
-	    !op->exec_instance)
-		return;
-
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
 		pr_err("Unable to access operation RW instructions list\n");
 		return;
@@ -828,6 +866,12 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 			break;
 		case CAM_WRITE_INSTRUCTION:
 			ret = cam_write_instruction(op, &insn.wr);
+			break;
+		case CAM_DMABUF_INSTRUCTION:
+			ret = cam_run_dmabuf_instruction(op, &insn.db);
+			break;
+		case CAM_INSTANCE_INSTRUCTION:
+			ret = cam_run_instance_instruction(op, &insn.in);
 			break;
 		}
 
@@ -1389,10 +1433,10 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 
 		switch (insn.type) {
 		case CAM_DMABUF_INSTRUCTION:
-			ret = cam_dmabuf_instruction(op, &insn.db);
+			ret = cam_prepare_dmabuf_instruction(op, &insn.db);
 			break;
 		case CAM_INSTANCE_INSTRUCTION:
-			ret = cam_instance_instruction(op, &insn.in);
+			ret = cam_prepare_instance_instruction(op, &insn.in);
 			break;
 		case CAM_OUT_FENCE_INSTRUCTION:
 			ret = cam_out_fence_instruction(op, &insn.of);
