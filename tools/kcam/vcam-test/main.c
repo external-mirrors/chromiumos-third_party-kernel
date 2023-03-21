@@ -2136,6 +2136,153 @@ out:
 	return ret;
 }
 
+static int test_entity_instance(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct obj_entity *entity;
+	struct obj_event *event;
+	struct cam_operation *op;
+	int ret, rw_idx;
+
+	pr_info("Test entity instance\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_FAST_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	event = libkc_entity_first_event(entity);
+	if (!event) {
+		pr_err("Unable to find event\n");
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(3);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->in.op	= CAM_OP_INSTANCE_CREATE;
+	rw->in.id	= 1;
+
+	op = libkc_operation_at(lco, 1);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 2;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= 1;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
+	op->operation_add.deps[0].id	= 1;
+
+	rw_list = libkc_rw_list_get(1);
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_READ_INSTRUCTION;
+	rw->rd.reg	= 42;
+	rw->rd.size	= READ_BUFFER_SIZE;
+	rw->rd.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->rd.ptr	= 0x00;
+
+	op = libkc_operation_at(lco, 2);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 3;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= 1;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
+	op->operation_add.deps[0].id	= 2;
+	op->operation_add.deps[0].type	= CAM_DEPENDENCY_EVENT;
+	op->operation_add.deps[0].id	= event->id;
+
+	rw_list = libkc_rw_list_get(1);
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->in.op	= CAM_OP_INSTANCE_DESTROY;
+	rw->in.id	= 1;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret)
+		goto out;
+
+	ret = read_operations_completion_events(cam, 3);
+	if (ret != 3) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
+		ret = -EINVAL;
+		goto out;
+	} else {
+		ret = 0;
+	}
+
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_add_buffer(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2487,12 +2634,6 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_entity_instance_limit(cam);
-	if (ret) {
-		pr_err("FATAL: failure test_entity_instance_limit()\n");
-		goto out;
-	}
-
 	ret = test_add_buffer_cancellation(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_add_buffer_cancellation()\n");
@@ -2638,6 +2779,18 @@ int main(int argc, char *argv[])
 	ret = test_compound_buffer_operations(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_compound_buffer_operations()\n");
+		return ret;
+	}
+
+	ret = test_entity_instance_limit(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_entity_instance_limit()\n");
+		return ret;
+	}
+
+	ret = test_entity_instance(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_entity_instance()\n");
 		return ret;
 	}
 
