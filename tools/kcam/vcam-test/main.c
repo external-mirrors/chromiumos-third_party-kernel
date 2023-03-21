@@ -753,8 +753,6 @@ static int wait_for_slow_entity_timer(struct libkc *cam)
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.entity	= entity->id;
@@ -808,8 +806,6 @@ static int add_single_invalid_operation(struct libkc *cam,
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 	op->operation_add.entity	= event_entity;
@@ -833,43 +829,6 @@ static int add_single_invalid_operation(struct libkc *cam,
 		op->operation_add.deps[d].id	= fence_in;
 		d++;
 	}
-
-	return libkc_operation_ioctl(cam, lco);
-}
-
-static int add_single_invalid_fence_out_operation(struct libkc *cam,
-						  struct libkc_operation *lco)
-{
-	struct cam_operation *op;
-	struct obj_entity *entity;
-
-	pr_info("Test add_single_invalid_fence_out_operation()\n");
-
-	op = libkc_operation_at(lco, 0);
-	if (!op)
-		return -EINVAL;
-
-	entity = libkc_entity_lookup_by_name(cam, VCAM_SLOW_IRQ_ENTITY_NAME);
-	if (!entity) {
-		pr_err("Entity lookup has failed\n");
-		return -EINVAL;
-	}
-
-	op->operation_type		= CAM_OPERATION_TYPE_ADD;
-	op->operation_add.id		= 0;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= CAM_OPERATION_FLAG_EXPORT_FENCE;
-	op->operation_add.delay_ns	= 0;
-	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
-	op->operation_add.entity	= entity->id;
-	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
-	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
-
-	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
-	op->operation_add.deps[0].id	= 255;
-
-	op->operation_add.deps[1].type	= CAM_DEPENDENCY_EVENT;
-	op->operation_add.deps[1].id	= 255;
 
 	return libkc_operation_ioctl(cam, lco);
 }
@@ -899,8 +858,6 @@ static int add_many_invalid_operations(struct libkc *cam,
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
@@ -1009,14 +966,6 @@ static int test_add_invalid_operations(struct libkc *cam)
 		goto out;
 	}
 
-
-	ret = add_single_invalid_fence_out_operation(cam, lco);
-	if (!ret) {
-		pr_err("FATAL: unmet entity:event dependency should fail\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
 	libkc_operation_put(lco);
 	lco = libkc_operation_get(2);
 	if (!lco)
@@ -1052,8 +1001,6 @@ static int test_add_instant_operations(struct libkc *cam, u32 num_ops)
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.entity	= CAM_OP_NO_ENTITY;
 		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -1101,8 +1048,6 @@ static int test_add_valid_operations(struct libkc *cam,
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= mode;
@@ -1164,8 +1109,6 @@ static int test_add_valid_complex_operations(struct libkc *cam,
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.mode		= CAM_DEPENDENCY_STRICT_ORDER;
@@ -1253,8 +1196,6 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 	for_each_cam_operation(lco, op_idx, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= op_idx;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.entity	= entity->id;
 		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -1376,8 +1317,6 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -1447,8 +1386,6 @@ static int test_add_too_many_rw_instructions(struct libkc *cam,
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= op_idx;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -1729,6 +1666,8 @@ static int test_operations(struct libkc *cam)
 
 static int test_export_import_operations(struct libkc *cam)
 {
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
 	struct libkc_operation *lco;
 	struct obj_entity *entity;
 	struct cam_operation *op;
@@ -1759,16 +1698,27 @@ static int test_export_import_operations(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= CAM_OPERATION_FLAG_EXPORT_FENCE;
 	op->operation_add.delay_ns	= 8888;
-	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
-
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_EVENT;
 	op->operation_add.deps[0].id	= event->id;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type			= CAM_OUT_FENCE_INSTRUCTION;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret) {
@@ -1776,15 +1726,14 @@ static int test_export_import_operations(struct libkc *cam)
 		goto out;
 	}
 
-	if (op->operation_add.fence_out == CAM_OP_NO_FENCE) {
-		pr_err("Unexpected fence out fd value: %d\n",
-		       op->operation_add.fence_out);
+	if (rw->of.id == CAM_OP_NO_FENCE) {
+		pr_err("Unexpected fence out fd value: %d\n", rw->of.id);
 		ret = -EINVAL;
 		goto out;
 	}
 
-	pr_info("Export syncfile fd: %d\n", op->operation_add.fence_out);
-	fence_out = op->operation_add.fence_out;
+	pr_info("Export syncfile fd: %d\n", rw->of.id);
+	fence_out = rw->of.id;
 
 	libkc_operation_put(lco);
 	lco = libkc_operation_get(3);
@@ -1794,8 +1743,6 @@ static int test_export_import_operations(struct libkc *cam)
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i + 1;
-		op->operation_add.fence_out	= 0;
-		op->operation_add.flags		= 0;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 		op->operation_add.entity	= entity->id;
@@ -1876,8 +1823,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -1910,8 +1855,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -1947,8 +1890,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 3;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -2034,8 +1975,6 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -2102,8 +2041,6 @@ static int test_root_entity_instance(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -2171,8 +2108,6 @@ static int test_entity_instance_limit(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -2248,8 +2183,6 @@ static int test_add_buffer(struct libkc *cam)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
@@ -2335,8 +2268,6 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
-	op->operation_add.fence_out	= 0;
-	op->operation_add.flags		= 0;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;

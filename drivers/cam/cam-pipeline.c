@@ -1172,19 +1172,19 @@ static int cam_fence_in_dependency_add(struct cam_pipeline *pipeline,
 }
 
 /**
- * cam_fence_out_dependency_add() - Create Out-Fence-to-OP dependency
- * @pipeline: pointer to CAM pipeline
- * @req: add request from user-space
+ * cam_out_fence_instruction() - Create Out-Fence-to-OP
  * @op: pointer to the dependent operation
+ * @insn: struct that will hold ID of exported fence
  *
  * Return: 0 on success or a negative error code otherwise.
  */
-static int cam_fence_out_dependency_add(struct cam_pipeline *pipeline,
-					struct cam_operation_add *req,
-					struct cam_obj_op *op)
+static int cam_out_fence_instruction(struct cam_obj_op *op,
+				     struct cam_out_fence_instruction *insn)
 {
+	struct cam_pipeline *pipeline = op->pipeline;
 	struct cam_obj_syncfile *sf;
 
+	insn->id = CAM_OP_NO_FENCE;
 	/*
 	 * We store syncfile pointer indirectly: syncfile is linked to this
 	 * OP.
@@ -1194,7 +1194,7 @@ static int cam_fence_out_dependency_add(struct cam_pipeline *pipeline,
 	if (!sf)
 		return -EINVAL;
 
-	req->fence_out = cam_out_syncfile_fd(sf);
+	insn->id = cam_out_syncfile_fd(sf);
 	return 0;
 }
 
@@ -1306,7 +1306,6 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 	op->exec_rw_list_addr	= (void *)CAM_OP_NO_RW_LIST;
 	op->exec_entity		= NULL;
 	op->exec_instance	= NULL;
-	req->fence_out		= CAM_OP_NO_FENCE;
 
 	if (req->entity == CAM_OP_NO_ENTITY &&
 	    req->rd_wr_list != CAM_OP_NO_RW_LIST)
@@ -1356,11 +1355,6 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 			goto error;
 	}
 
-	if (req->flags & CAM_OPERATION_FLAG_EXPORT_FENCE) {
-		if (cam_fence_out_dependency_add(pipeline, req, op))
-			goto error;
-	}
-
 	return 0;
 
 error:
@@ -1399,6 +1393,10 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 			break;
 		case CAM_INSTANCE_INSTRUCTION:
 			ret = cam_instance_instruction(op, &insn.in);
+			break;
+		case CAM_OUT_FENCE_INSTRUCTION:
+			ret = cam_out_fence_instruction(op, &insn.of);
+			ret |= copy_to_user(payload, &insn, sizeof(insn));
 			break;
 		}
 

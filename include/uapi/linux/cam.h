@@ -254,6 +254,15 @@ enum cam_op_instance_id {
 };
 
 /**
+ * struct cam_out_fence_instruction - Export fence instruction
+ *
+ * @id:		ID of the exported fence
+ */
+struct cam_out_fence_instruction {
+	__u32		id;
+};
+
+/**
  * struct cam_read_instruction - Operation read instruction
  *
  * @reg:	Register to perform operation on
@@ -290,12 +299,14 @@ struct cam_write_instruction {
  * @CAM_WRITE_INSTRUCTION:	Write instruction
  * @CAM_DMABUF_INSTRUCTION:	DMA buffer instruction
  * @CAM_INSTANCE_INSTRUCTION:	Entity instance instruction
+ * @CAM_OUT_FENCE_INSTRUCTION:	Export fence instruction
  */
 enum cam_rw_instruction_type {
 	CAM_READ_INSTRUCTION,
 	CAM_WRITE_INSTRUCTION,
 	CAM_DMABUF_INSTRUCTION,
 	CAM_INSTANCE_INSTRUCTION,
+	CAM_OUT_FENCE_INSTRUCTION,
 };
 
 /**
@@ -306,14 +317,16 @@ enum cam_rw_instruction_type {
  * @wr:		Used when type is CAM_WRITE_INSTRUCTION
  * @db:		Used when type is CAM_DMABUF_INSTRUCTION
  * @in:		Used when type is CAM_INSTANCE_INSTRUCTION
+ * @of:		Used when type is CAM_OUT_FENCE_INSTRUCTION
  */
 struct cam_rw_instruction {
 	__u32		type;
 	union {
-		struct cam_read_instruction	rd;
-		struct cam_write_instruction	wr;
-		struct cam_dmabuf_instruction	db;
-		struct cam_instance_instruction	in;
+		struct cam_read_instruction		rd;
+		struct cam_write_instruction		wr;
+		struct cam_dmabuf_instruction		db;
+		struct cam_instance_instruction		in;
+		struct cam_out_fence_instruction	of;
 		__u32				reserved[28];
 	};
 } __attribute__((packed));
@@ -370,16 +383,6 @@ enum cam_dependency_mode {
 };
 
 /**
- * enum cam_operation_flags - Operation flags
- *
- * @CAM_OPERATION_FLAG_EXPORT_FENCE:	Create and export out fence (sync_file)
- *					and copy fd to ->fence_out.
- */
-enum cam_operation_flags {
-	CAM_OPERATION_FLAG_EXPORT_FENCE	= _BITUL(0),
-};
-
-/**
  * enum operation_entity_id - Special value of operation entity ID
  *
  * @CAM_OP_NO_ENTITY:	Set when operation has no entity to be executed on
@@ -410,8 +413,6 @@ enum cam_no_rd_wr {
  * struct cam_operation_add - Add operation to the list
  *
  * @id:			ID of the operation
- * @fence_out:		fd used as output fence or CAM_OP_NO_FENCE
- * @flags:		Operation flags
  * @mode:		Dependency execution mode: CAM_DEPENDENCY_WEAK_ORDER
  *			or CAM_DEPENDENCY_STRICT_ORDER.
  * @deps:		Array that describes operation dependencies (if any).
@@ -426,8 +427,6 @@ enum cam_no_rd_wr {
  */
 struct cam_operation_add {
 	__u32			id;
-	__u32			fence_out;
-	__u32			flags;
 	/*
 	 * Pre-execution dependencies list and dependency execution mode
 	 */

@@ -165,26 +165,6 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 }
 ALLOW_ERROR_INJECTION(cam_ioctl_parse_query, ERRNO);
 
-static int cam_ioctl_operation_result_copy(struct cam_operation __user *payload,
-					   struct cam_operation *op)
-{
-	int ret;
-
-	switch (op->operation_type) {
-	case CAM_OPERATION_TYPE_ADD:
-		ret = put_user(op->operation_add.fence_out,
-			       &payload->operation_add.fence_out);
-		break;
-	case CAM_OPERATION_TYPE_REMOVE:
-		ret = 0;
-		break;
-	default:
-		ret = -EINVAL;
-	}
-
-	return ret;
-}
-
 /*
  * This will cancel successfully prepared OPs. Note that these OPs should not
  * be submitted.
@@ -252,7 +232,7 @@ static int cam_ioctl_operation_prepare(struct cam_fh *fh,
 			ret = -EINVAL;
 		}
 
-		if (ret || cam_ioctl_operation_result_copy(payload, &op)) {
+		if (ret) {
 			hdr->error = num_op;
 			return ret;
 		}
