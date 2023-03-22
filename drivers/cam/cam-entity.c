@@ -367,6 +367,9 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	struct cam_obj_instance *instance;
 	void *dev;
 
+	if (!(entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE))
+		return NULL;
+
 	if (!cam_valid_instance_id(id))
 		return NULL;
 
