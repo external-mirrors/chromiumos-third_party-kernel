@@ -2076,7 +2076,7 @@ out:
 	return ret;
 }
 
-static int test_entity_instance_limit(struct libkc *cam)
+static int test_entity_instance_avail_limit(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
 	struct cam_rw_instruction *rw;
@@ -2085,7 +2085,7 @@ static int test_entity_instance_limit(struct libkc *cam)
 	struct cam_operation *op;
 	int ret, rw_idx;
 
-	pr_info("Test entity instance limit\n");
+	pr_info("Test entity instances_avail limit\n");
 
 	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
 	if (!entity) {
@@ -2113,7 +2113,7 @@ static int test_entity_instance_limit(struct libkc *cam)
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
-	rw_list = libkc_rw_list_get(8);
+	rw_list = libkc_rw_list_get(3);
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	if (!rw_list) {
 		ret = -ENOMEM;
@@ -2782,9 +2782,9 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = test_entity_instance_limit(cam);
+	ret = test_entity_instance_avail_limit(cam);
 	if (ret) {
-		pr_err("FATAL: failure test_entity_instance_limit()\n");
+		pr_err("FATAL: failure test_entity_instance_avail_limit()\n");
 		return ret;
 	}
 
