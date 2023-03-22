@@ -225,8 +225,8 @@ enum cam_instruction_buffer_id {
 /**
  * enum cam_instance_instruction_op - Instance instruction operation type
  *
- * @CAM_OP_DMABUF_ADD:		Create entity intsance (context)
- * @CAM_OP_DMABUF_REMOVE:	Destroy entity instance (context)
+ * @CAM_OP_INSTANCE_CREATE:	Create entity intsance (context)
+ * @CAM_OP_INSTANCE_DESTROY:	Destroy entity instance (context)
  */
 enum cam_instance_instruction_op {
 	CAM_OP_INSTANCE_CREATE,
