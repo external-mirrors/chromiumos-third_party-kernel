@@ -386,7 +386,7 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	if (cam_obj_link(&instance->nsobj, &entity->nsobj))
 		goto error;
 
-	if (arch_atomic_dec_if_positive(&entity->nr_instances) < 0)
+	if (atomic_dec_if_positive(&entity->nr_instances) < 0)
 		goto error;
 
 	dev = cam_entity_driver_data(entity);
