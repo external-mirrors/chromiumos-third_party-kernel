@@ -168,6 +168,12 @@ static int meson_pwm_calc(struct meson_pwm *meson, struct pwm_device *pwm,
 	duty = state->duty_cycle;
 	period = state->period;
 
+	/*
+	 * Note this is wrong. The result is an output wave that isn't really
+	 * inverted and so is wrongly identified by .get_state as normal.
+	 * Fixing this needs some care however as some machines might rely on
+	 * this.
+	 */
 	if (state->polarity == PWM_POLARITY_INVERSED)
 		duty = period - duty;
 
@@ -303,6 +309,8 @@ static int meson_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 
 		meson_pwm_enable(meson, pwm);
 	}
+
+	state->polarity = PWM_POLARITY_NORMAL;
 
 	return 0;
 }
