@@ -281,6 +281,15 @@ error:
 	return NULL;
 }
 
+static bool cam_valid_instance_id(u32 id)
+{
+	if (id + CAM_OBJS_NS_INSTANCE_ID_START > CAM_OBJS_NS_INSTANCE_ID_END) {
+		pr_err("Invalid instance ID: %u\n", id);
+		return false;
+	}
+	return true;
+}
+
 /**
  * nsobj_to_cam_instance() - Get CAM instance pointer from the associated CAM
  * object
@@ -338,6 +347,9 @@ static void cam_instance_release(struct cam_obj *nsobj)
  */
 void cam_instance_destroy(struct cam_ns *ns, u32 id)
 {
+	if (!cam_valid_instance_id(id))
+		return;
+
 	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	cam_obj_remove_id(ns, CAM_OBJ_TYPE_INSTANCE, id);
 }
@@ -356,6 +368,9 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 {
 	struct cam_obj_instance *instance;
 	void *dev;
+
+	if (!cam_valid_instance_id(id))
+		return NULL;
 
 	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
@@ -400,6 +415,9 @@ error:
 struct cam_obj_instance *cam_instance_lookup(struct cam_ns *ns, u32 id)
 {
 	struct cam_obj *obj = NULL;
+
+	if (!cam_valid_instance_id(id))
+		return NULL;
 
 	id += CAM_OBJS_NS_INSTANCE_ID_START;
 	obj = cam_obj_lookup(ns, CAM_OBJ_TYPE_INSTANCE, id);

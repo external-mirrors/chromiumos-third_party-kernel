@@ -16,6 +16,15 @@
 
 #include <uapi/linux/cam.h>
 
+static bool cam_valid_buffer_id(u32 id)
+{
+	if (id > CAM_OBJS_NS_BUFFER_ID_END) {
+		pr_err("Invalid buffer ID: %u\n", id);
+		return false;
+	}
+	return true;
+}
+
 /**
  * nsobj_to_cam_buffer() - Get CAM buffer pointer from the associated CAM
  * object
@@ -77,7 +86,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 	struct cam_obj_buffer *buffer;
 	struct device *dev;
 
-	if (id > CAM_OBJS_NS_BUFFER_ID_END)
+	if (!cam_valid_buffer_id(id))
 		return NULL;
 
 	dev = entity->ops->device(cam_entity_driver_data(entity));
@@ -130,6 +139,8 @@ ALLOW_ERROR_INJECTION(cam_buffer_register, NULL);
  */
 void cam_buffer_unregister(struct cam_ns *ns, u32 id)
 {
+	if (!cam_valid_buffer_id(id))
+		return;
 	cam_obj_remove_id(ns, CAM_OBJ_TYPE_BUFFER, id);
 }
 EXPORT_SYMBOL_GPL(cam_buffer_unregister);
@@ -146,6 +157,9 @@ EXPORT_SYMBOL_GPL(cam_buffer_unregister);
 struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id)
 {
 	struct cam_obj *nsobj;
+
+	if (!cam_valid_buffer_id(id))
+		return NULL;
 
 	nsobj = cam_obj_lookup(ns, CAM_OBJ_TYPE_BUFFER, id);
 	if (!nsobj)
