@@ -383,11 +383,17 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 		     ns);
 	cam_obj_set_id(&instance->nsobj, id);
 
-	if (cam_obj_link(&instance->nsobj, &entity->nsobj))
-		goto error;
-
 	if (atomic_dec_if_positive(&entity->instances_avail) < 0)
 		goto error;
+
+	if (cam_obj_link(&instance->nsobj, &entity->nsobj)) {
+		/*
+		 * We failed to link instance to entity so we need to rollback
+		 * instances_avail changes.
+		 */
+		atomic_inc(&entity->instances_avail);
+		goto error;
+	}
 
 	dev = cam_entity_driver_data(entity);
 	instance->driver_data = entity->ops->instance_create(dev);
