@@ -411,7 +411,7 @@ static int vcam_probe(struct platform_device *pdev)
 		 * VCAM_INSTANCES_ENTITY_NAME supports instances unlike
 		 * the rest of entities
 		 */
-		if (obj == 0)
+		if (obj == ENTITY_INST)
 			instances = 2;
 
 		parent_id = cam_entity_id(vcam->root_entity);
