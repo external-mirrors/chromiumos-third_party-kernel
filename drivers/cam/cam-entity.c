@@ -213,7 +213,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
-	atomic_set(&entity->nr_instances, num_instances);
+	atomic_set(&entity->instances_avail, num_instances);
 	if (num_instances)
 		entity->flags |= CAM_ENTITY_FLAG_REQUIRE_INSTANCE;
 	entity->ops = ops;
@@ -260,7 +260,7 @@ struct cam_obj_entity *cam_root_entity_register(struct cam_device *cam)
 	if (!entity)
 		return NULL;
 
-	atomic_set(&entity->nr_instances, CAM_ENTITY_NO_INSTANCES);
+	atomic_set(&entity->instances_avail, CAM_ENTITY_NO_INSTANCES);
 	entity->ops = &root_entity_ops;
 	strlcpy(entity->name, "CAM root entity", CAM_ENTITY_NAME_SZ);
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
@@ -325,7 +325,7 @@ static void cam_instance_release(struct cam_obj *nsobj)
 		entity = nsobj_to_cam_entity(link);
 		if (entity) {
 			dev = cam_entity_driver_data(entity);
-			atomic_inc(&entity->nr_instances);
+			atomic_inc(&entity->instances_avail);
 			if (dev_data)
 				entity->ops->instance_destroy(dev, dev_data);
 		} else {
@@ -386,7 +386,7 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	if (cam_obj_link(&instance->nsobj, &entity->nsobj))
 		goto error;
 
-	if (atomic_dec_if_positive(&entity->nr_instances) < 0)
+	if (atomic_dec_if_positive(&entity->instances_avail) < 0)
 		goto error;
 
 	dev = cam_entity_driver_data(entity);

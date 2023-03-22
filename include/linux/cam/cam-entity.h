@@ -84,8 +84,8 @@ struct cam_obj_entity {
 	struct cam_obj		nsobj;
 	/** @ops: Read/Write execution callbacks */
 	struct cam_entity_ops	*ops;
-	/** @nr_instances: number of instances this entity can have */
-	atomic_t		nr_instances;
+	/** @instances_avail: number of instances an entity can have */
+	atomic_t		instances_avail;
 	/** @flags: Entity flags */
 	u32			flags;
 	/** @driver_data: Driver specific data */
