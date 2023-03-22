@@ -312,28 +312,26 @@ static struct cam_obj_instance *nsobj_to_cam_instance(struct cam_obj *nsobj)
 static void cam_instance_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_instance *instance = nsobj_to_cam_instance(nsobj);
+	struct cam_obj *link = cam_obj_linked_to(nsobj);
 	void *dev, *dev_data;
 
 	if (!instance)
 		return;
 
 	dev_data = instance->driver_data;
-	if (dev_data) {
-		struct cam_obj *link = cam_obj_linked_to(nsobj);
+	if (link) {
+		struct cam_obj_entity *entity;
 
-		if (link) {
-			struct cam_obj_entity *entity;
-
-			entity = nsobj_to_cam_entity(link);
-			if (entity) {
-				dev = cam_entity_driver_data(entity);
-				atomic_inc(&entity->nr_instances);
+		entity = nsobj_to_cam_entity(link);
+		if (entity) {
+			dev = cam_entity_driver_data(entity);
+			atomic_inc(&entity->nr_instances);
+			if (dev_data)
 				entity->ops->instance_destroy(dev, dev_data);
-			} else {
-				pr_err("Unable to destroy entity instance\n");
-			}
-			cam_obj_put(link);
+		} else {
+			pr_err("Unable to destroy entity instance\n");
 		}
+		cam_obj_put(link);
 	}
 
 	cam_obj_unlink(nsobj);
