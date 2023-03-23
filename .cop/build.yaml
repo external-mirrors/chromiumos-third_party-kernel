@@ -34,12 +34,13 @@ steps:
   timeout: "600s"
   entrypoint: 'bash'
   id: 'build_parent'
+  allowFailure: true
   args:
   - '-c'
   - |
         set -ve
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
-        CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1 || true
+        CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
 - name: 'gcr.io/${PROJECT_ID}/kcam'
   timeout: "600s"
   entrypoint: 'bash'
