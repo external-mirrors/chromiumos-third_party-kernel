@@ -241,6 +241,8 @@ void evdi_gem_free_object(struct drm_gem_object *gem_obj)
 
 	reservation_object_fini(&obj->_resv);
 	obj->resv = NULL;
+	drm_gem_object_release(&obj->base);
+	kfree(obj);
 }
 
 /*
