@@ -539,6 +539,7 @@ static struct edid *ps8640_bridge_get_edid(struct drm_bridge *bridge,
 					   struct drm_connector *connector)
 {
 	struct ps8640 *ps_bridge = bridge_to_ps8640(bridge);
+	struct device *dev = &ps_bridge->page[PAGE0_DP_CNTL]->dev;
 	bool poweroff = !ps_bridge->pre_enabled;
 
 	if (!ps_bridge->edid) {
@@ -566,6 +567,11 @@ static struct edid *ps8640_bridge_get_edid(struct drm_bridge *bridge,
 		 */
 		if (poweroff)
 			drm_bridge_chain_post_disable(bridge);
+	}
+
+	if (!ps_bridge->edid) {
+		dev_err(dev, "Failed to get EDID\n");
+		return NULL;
 	}
 
 	return drm_edid_duplicate(ps_bridge->edid);
