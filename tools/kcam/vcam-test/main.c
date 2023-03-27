@@ -1990,12 +1990,24 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	/* Conflicting buffer ID */
 	for_each_rw_instruction(rw_list, rw_idx, rw) {
 		rw->type	= CAM_DMABUF_INSTRUCTION;
+		rw->error	= 0;
 		rw->db.op	= CAM_OP_DMABUF_ADD;
 		rw->db.dma_fd	= buf->fd;
 		rw->db.buf_id	= 1;
 	}
 
 	ret = libkc_operation_ioctl(cam, lco);
+
+	for_each_rw_instruction(rw_list, rw_idx, rw) {
+		if (rw_idx == 0)
+			continue;
+		if (rw->error == 0) {
+			pr_err("Instruction error code is not set\n");
+			ret = -EINVAL;
+			break;
+		}
+	}
+
 	if (ret == 0) {
 		pr_err("Conflicting buffer ID test should fail %d\n", ret);
 		ret = -EINVAL;
