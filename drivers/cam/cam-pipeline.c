@@ -722,10 +722,8 @@ static int cam_run_dmabuf_instruction(struct cam_obj_op *op,
 	if (insn->op == CAM_OP_DMABUF_ADD)
 		return 0;
 
-	if (insn->op == CAM_OP_DMABUF_REMOVE) {
-		cam_buffer_unregister(&pipeline->objs, insn->buf_id);
-		return 0;
-	}
+	if (insn->op == CAM_OP_DMABUF_REMOVE)
+		return cam_buffer_unregister(&pipeline->objs, insn->buf_id);
 
 	pr_err("Unknown dmabuf instruction operation: %d\n", insn->op);
 	return -EINVAL;
@@ -739,10 +737,8 @@ static int cam_run_instance_instruction(struct cam_obj_op *op,
 	if (insn->op == CAM_OP_INSTANCE_CREATE)
 		return 0;
 
-	if (insn->op == CAM_OP_INSTANCE_DESTROY) {
-		cam_instance_destroy(&pipeline->objs, insn->id);
-		return 0;
-	}
+	if (insn->op == CAM_OP_INSTANCE_DESTROY)
+		return cam_instance_destroy(&pipeline->objs, insn->id);
 
 	pr_err("Unknown instance instruction operation: %d\n", insn->op);
 	return -EINVAL;
