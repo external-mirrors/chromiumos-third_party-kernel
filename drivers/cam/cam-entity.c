@@ -342,14 +342,16 @@ static void cam_instance_release(struct cam_obj *nsobj)
  * cam_instance_destroy() - Destroy entity instance (context)
  * @ns: namespace
  * @id: ID of the instance object
+ *
+ * Return: 0 on success or negative error code otherwise
  */
-void cam_instance_destroy(struct cam_ns *ns, u32 id)
+int cam_instance_destroy(struct cam_ns *ns, u32 id)
 {
 	if (!cam_valid_instance_id(id))
-		return;
+		return -EINVAL;
 
 	id += CAM_OBJS_NS_INSTANCE_ID_START;
-	cam_obj_remove_id(ns, CAM_OBJ_TYPE_INSTANCE, id);
+	return cam_obj_remove_id(ns, CAM_OBJ_TYPE_INSTANCE, id);
 }
 
 /**

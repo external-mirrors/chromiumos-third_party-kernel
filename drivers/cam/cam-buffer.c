@@ -136,12 +136,14 @@ ALLOW_ERROR_INJECTION(cam_buffer_register, NULL);
  * release) imported DMA buffer
  * @ns: pointer to CAM namespace
  * @id: ID of the namespace object
+ *
+ * Return: 0 on success or negative error code otherwise
  */
-void cam_buffer_unregister(struct cam_ns *ns, u32 id)
+int cam_buffer_unregister(struct cam_ns *ns, u32 id)
 {
 	if (!cam_valid_buffer_id(id))
-		return;
-	cam_obj_remove_id(ns, CAM_OBJ_TYPE_BUFFER, id);
+		return -EINVAL;
+	return cam_obj_remove_id(ns, CAM_OBJ_TYPE_BUFFER, id);
 }
 EXPORT_SYMBOL_GPL(cam_buffer_unregister);
 

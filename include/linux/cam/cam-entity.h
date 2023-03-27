@@ -169,7 +169,7 @@ int cam_enum_events(struct cam_device *cam,
 		    struct cam_query_events *query,
 		    struct cam_koutput *output);
 
-void cam_instance_destroy(struct cam_ns *ns, u32 id);
+int cam_instance_destroy(struct cam_ns *ns, u32 id);
 struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 					     struct cam_obj_entity *entity,
 					     u32 id);
