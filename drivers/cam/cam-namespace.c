@@ -251,7 +251,7 @@ int cam_obj_remove_id(struct cam_ns *ns, enum cam_obj_type type,
 		idr_remove(&ns->objs, id);
 		ret = 0;
 	} else {
-		ret = -EINVAL;
+		ret = -ENOENT;
 	}
 	up_write(&ns->lock);
 

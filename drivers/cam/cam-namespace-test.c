@@ -401,7 +401,7 @@ static void obj_remove_id(struct kunit *test)
 
 	// remove non existent obj
 	ret = cam_obj_remove_id(&ns, CAM_OBJ_TYPE_ENTITY, 42);
-	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+	KUNIT_EXPECT_EQ(test, ret, -ENOENT);
 
 	release_flag = false;
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
@@ -412,7 +412,7 @@ static void obj_remove_id(struct kunit *test)
 
 	// remove invalid type
 	ret = cam_obj_remove_id(&ns, CAM_OBJ_TYPE_ROOT, id);
-	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+	KUNIT_EXPECT_EQ(test, ret, -ENOENT);
 
 	// normal remove
 	ret = cam_obj_remove_id(&ns, CAM_OBJ_TYPE_ENTITY, id);
@@ -422,7 +422,7 @@ static void obj_remove_id(struct kunit *test)
 	//double remove
 	release_flag = false;
 	ret = cam_obj_remove_id(&ns, CAM_OBJ_TYPE_ENTITY, id);
-	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
+	KUNIT_EXPECT_EQ(test, ret, -ENOENT);
 	KUNIT_EXPECT_FALSE(test, release_flag);
 
 	cam_ns_release(&ns);
