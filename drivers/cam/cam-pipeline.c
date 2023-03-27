@@ -879,6 +879,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 
 		if (ret) {
 			pr_err("Operation execution error, aborting\n");
+			put_user(ret, &payload->error);
 			break;
 		}
 
@@ -1446,8 +1447,11 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 			break;
 		}
 
-		if (ret)
+		if (ret) {
+			pr_err("Failed instruction at prepare stage\n");
+			put_user(ret, &payload->error);
 			return ret;
+		}
 
 		payload++;
 	}

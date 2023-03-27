@@ -313,6 +313,7 @@ enum cam_rw_instruction_type {
  * struct cam_rw_instruction - Operation read/write instruction
  *
  * @type:	Type of instruction
+ * @error:	Instruction error code (if any)
  * @rd:		Used when type is CAM_READ_INSTRUCTION
  * @wr:		Used when type is CAM_WRITE_INSTRUCTION
  * @db:		Used when type is CAM_DMABUF_INSTRUCTION
@@ -321,6 +322,7 @@ enum cam_rw_instruction_type {
  */
 struct cam_rw_instruction {
 	__u32		type;
+	__s32		error;
 	union {
 		struct cam_read_instruction		rd;
 		struct cam_write_instruction		wr;
