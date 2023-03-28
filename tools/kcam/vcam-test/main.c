@@ -1221,6 +1221,7 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 			 */
 			for_each_rw_instruction(rw_list, rw_idx, rw) {
 				rw->type	= CAM_READ_INSTRUCTION;
+				rw->error	= 0;
 				rw->rd.reg	= 42;
 				rw->rd.size	= READ_BUFFER_SIZE;
 				rw->rd.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
@@ -1238,6 +1239,7 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 			 */
 			for_each_rw_instruction(rw_list, rw_idx, rw) {
 				rw->type	= CAM_WRITE_INSTRUCTION;
+				rw->error	= 0;
 				rw->wr.reg	= 42;
 				rw->wr.size	= sizeof(write_buffer);
 				rw->wr.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
@@ -1719,6 +1721,7 @@ static int test_export_import_operations(struct libkc *cam)
 	}
 
 	rw->type			= CAM_OUT_FENCE_INSTRUCTION;
+	rw->error			= 0;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret) {
@@ -1842,6 +1845,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_ADD;
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
@@ -1876,6 +1880,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 	rw->type	= CAM_READ_INSTRUCTION;
+	rw->error	= 0;
 	rw->rd.reg	= 42;
 	rw->rd.size	= READ_BUFFER_SIZE;
 	rw->rd.dbuf	= 1;
@@ -1911,6 +1916,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
 	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= 1;
@@ -2072,6 +2078,7 @@ static int test_root_entity_instance(struct libkc *cam)
 	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->error	= 0;
 	rw->in.op	= CAM_OP_INSTANCE_CREATE;
 	rw->in.id	= 1;
 
@@ -2134,6 +2141,7 @@ static int test_entity_instance_avail_limit(struct libkc *cam)
 
 	for_each_rw_instruction(rw_list, rw_idx, rw) {
 		rw->type	= CAM_INSTANCE_INSTRUCTION;
+		rw->error	= 0;
 		rw->in.op	= CAM_OP_INSTANCE_CREATE;
 		rw->in.id	= rw_idx;
 	}
@@ -2206,6 +2214,7 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->error	= 0;
 	rw->in.op	= CAM_OP_INSTANCE_CREATE;
 	rw->in.id	= 1;
 
@@ -2238,6 +2247,7 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	rw->type	= CAM_READ_INSTRUCTION;
+	rw->error	= 0;
 	rw->rd.reg	= 42;
 	rw->rd.size	= READ_BUFFER_SIZE;
 	rw->rd.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
@@ -2274,6 +2284,7 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->error	= 0;
 	rw->in.op	= CAM_OP_INSTANCE_DESTROY;
 	rw->in.id	= 1;
 
@@ -2361,6 +2372,7 @@ static int test_add_buffer(struct libkc *cam)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_ADD;
 	rw->db.dma_fd	= buf->fd;
 	rw->db.buf_id	= 1;
@@ -2446,6 +2458,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
 	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= buf->id;
