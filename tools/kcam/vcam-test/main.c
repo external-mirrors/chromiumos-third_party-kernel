@@ -1729,6 +1729,15 @@ static int test_export_import_operations(struct libkc *cam)
 		goto out;
 	}
 
+	ret = read_operations_completion_events(cam, 1);
+	if (ret != 1) {
+		pr_err("FATAL: unexpected completion read error: %d\n", ret);
+		ret = -EINVAL;
+		goto out;
+	} else {
+		ret = 0;
+	}
+
 	if (rw->of.id == CAM_OP_NO_FENCE) {
 		pr_err("Unexpected fence out fd value: %d\n", rw->of.id);
 		ret = -EINVAL;
@@ -1764,8 +1773,8 @@ static int test_export_import_operations(struct libkc *cam)
 
 	MAY_EXIT_AT();
 
-	ret = read_operations_completion_events(cam, 4);
-	if (ret != 4) {
+	ret = read_operations_completion_events(cam, 3);
+	if (ret != 3) {
 		pr_err("FATAL: unexpected completion read error: %d\n", ret);
 		ret = -EINVAL;
 		goto out;
