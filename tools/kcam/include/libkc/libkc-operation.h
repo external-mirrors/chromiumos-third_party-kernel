@@ -30,7 +30,7 @@ struct libkc_rw_list *libkc_rw_list_get(uint32_t num_rw_entries);
 void libkc_rw_list_put(struct libkc_rw_list *rwl);
 
 struct cam_operation *libkc_operation_at(struct libkc_operation *lco,
-					  u32 idx);
+					 u32 idx);
 
 #define for_each_cam_operation(q,i,e)					\
 	for ((i) = 0, (e) = libkc_operation_at((q), (i));		\
@@ -38,11 +38,13 @@ struct cam_operation *libkc_operation_at(struct libkc_operation *lco,
 	     (i)++, (e) = libkc_operation_at((q), (i)))
 
 struct cam_rw_instruction *libkc_rw_instruction_at(struct libkc_rw_list *rw,
-						    u32 idx);
+						   u32 idx);
 
 #define for_each_rw_instruction(q,i,e)					\
 	for ((i) = (0), (e) = libkc_rw_instruction_at((q), (i));	\
 	     (e) != NULL && (i) < (q)->num_ents;			\
 	     (i)++, (e) = libkc_rw_instruction_at((q), (i)))
 
+struct cam_rw_instruction *libkc_failed_instruction(struct cam_operation *op,
+						    u32 *idx);
 #endif /* LIBKC_OPERATION_H_ */

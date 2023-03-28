@@ -68,10 +68,42 @@ struct cam_rw_instruction *libkc_rw_instruction_at(struct libkc_rw_list *rw,
 	if (rw->num_ents == 0)
 		return NULL;
 
-	if (idx > rw->num_ents)
+	if (idx >= rw->num_ents)
 		return NULL;
 
 	return &rw->ents[idx];
+}
+
+struct cam_rw_instruction *libkc_failed_instruction(struct cam_operation *op,
+						    u32 *idx)
+{
+	struct libkc_rw_list *rw;
+
+	if (op->operation_type != CAM_OPERATION_TYPE_ADD)
+		return NULL;
+
+	if (op->operation_add.rd_wr_list == CAM_OP_NO_RW_LIST)
+		return NULL;
+
+	rw = (struct libkc_rw_list *)op->operation_add.rd_wr_list;
+	if (rw->num_ents == 0)
+		return NULL;
+
+	if (*idx >= rw->num_ents)
+		return NULL;
+
+	while (*idx < rw->num_ents) {
+		struct cam_rw_instruction *insn = &rw->ents[*idx];
+
+		*idx = *idx + 1;
+		if (insn->error == 0)
+			continue;
+		pr_err("Failed instruction at: %d, error: %d\n",
+		       *idx - 1, insn->error);
+		return insn;
+	}
+
+	return NULL;
 }
 
 struct libkc_rw_list *libkc_rw_list_get(uint32_t num_ents)

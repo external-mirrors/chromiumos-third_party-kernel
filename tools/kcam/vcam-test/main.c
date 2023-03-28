@@ -2003,22 +2003,18 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	}
 
 	ret = libkc_operation_ioctl(cam, lco);
-
-	for_each_rw_instruction(rw_list, rw_idx, rw) {
-		if (rw_idx == 0)
-			continue;
-		if (rw->error == 0) {
-			pr_err("Instruction error code is not set\n");
-			ret = -EINVAL;
-			break;
-		}
-	}
-
 	if (ret == 0) {
 		pr_err("Conflicting buffer ID test should fail %d\n", ret);
 		ret = -EINVAL;
 	} else {
 		ret = 0;
+	}
+
+	rw_idx = 0;
+	rw = libkc_failed_instruction(op, &rw_idx);
+	if (!rw) {
+		pr_err("Instruction error code is not set\n");
+		ret = -EINVAL;
 	}
 
 out:
