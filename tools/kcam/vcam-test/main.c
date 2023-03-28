@@ -2356,6 +2356,96 @@ out:
 	return ret;
 }
 
+static int test_destroy_unknown_instance(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	int ret, rw_idx;
+
+	pr_info("Test destroy unknown instance\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_INSTANCES_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 2;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->error	= 0;
+	rw->in.op	= CAM_OP_INSTANCE_DESTROY;
+	rw->in.id	= 777;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (!ret) {
+		ret = 0;
+	} else {
+		pr_err("Unknown instance destruction should fail\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, 1);
+	if (ret != 1) {
+		pr_err("Invalid number of completions %d\n", ret);
+		ret = -EINVAL;
+		goto out;
+	} else {
+		ret = 0;
+	}
+
+	rw_idx = 0;
+	rw = libkc_failed_instruction(op, &rw_idx);
+	if (!rw) {
+		pr_err("Instruction error code is not set\n");
+		ret = -EINVAL;
+		goto out;
+	}
+	if (rw->error != -ENOENT) {
+		pr_err("Unexpected RW error code: %d\n", rw->error);
+		ret = -EINVAL;
+	}
+
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_add_buffer(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2805,12 +2895,6 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_root_entity_instance(cam);
-	if (ret) {
-		pr_err("FATAL: failure test_root_entity_instance()\n");
-		goto out;
-	}
-
 	ret = test_add_buffer_cancellation(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_add_buffer_cancellation()\n");
@@ -2962,6 +3046,18 @@ int main(int argc, char *argv[])
 	ret = test_compound_buffer_operations(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_compound_buffer_operations()\n");
+		return ret;
+	}
+
+	ret = test_destroy_unknown_instance(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_destroy_unknown_instance()\n");
+		return ret;
+	}
+
+	ret = test_root_entity_instance(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_root_entity_instance()\n");
 		return ret;
 	}
 
