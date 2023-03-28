@@ -2541,6 +2541,97 @@ out:
 	return ret;
 }
 
+static int test_remove_unknown_buffer(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	int ret, rw_idx;
+
+	pr_info("Test REMOVE unknown buffer\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 2;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
+	rw->db.op	= CAM_OP_DMABUF_REMOVE;
+	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.buf_id	= 777;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (!ret) {
+		ret = 0;
+	} else {
+		pr_err("Unknown buffer removal should fail\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = read_operations_completion_events(cam, 1);
+	if (ret != 1) {
+		pr_err("Invalid number of completions %d\n", ret);
+		ret = -EINVAL;
+		goto out;
+	} else {
+		ret = 0;
+	}
+
+	rw_idx = 0;
+	rw = libkc_failed_instruction(op, &rw_idx);
+	if (!rw) {
+		pr_err("Instruction error code is not set\n");
+		ret = -EINVAL;
+		goto out;
+	}
+	if (rw->error != -ENOENT) {
+		pr_err("Unexpected RW error code: %d\n", rw->error);
+		ret = -EINVAL;
+	}
+
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_remove_buffers(struct libkc *cam)
 {
 	struct obj_buffer *buf;
@@ -2743,6 +2834,12 @@ static void *thread_fn(void *arg)
 		libkc_buffer_unregister(cam, buf);
 	}
 
+	ret = test_remove_unknown_buffer(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_remove_unknown_buffer()\n");
+		goto out;
+	}
+
 	pr_info("Test emergency pipeline drain\n");
 
 	/*
@@ -2889,6 +2986,12 @@ int main(int argc, char *argv[])
 	ret = test_remove_buffers(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_remove_buffers()\n");
+		return ret;
+	}
+
+	ret = test_remove_unknown_buffer(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_remove_unknown_buffer()\n");
 		return ret;
 	}
 
