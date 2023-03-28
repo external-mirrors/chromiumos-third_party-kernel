@@ -1264,6 +1264,14 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 		ret = 0;
 	}
 
+	for_each_cam_operation(lco, op_idx, op) {
+		rw_idx = 0;
+		if (libkc_failed_instruction(op, &rw_idx)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
 	ret = 0;
 	if (!strcmp(read_buffer, READ_BUFFER_POISON)) {
 		ret = -EINVAL;
@@ -1675,8 +1683,7 @@ static int test_export_import_operations(struct libkc *cam)
 	struct cam_operation *op;
 	struct obj_event *event;
 	int fence_out;
-	int ret;
-	int i;
+	int ret, i, rw_idx;
 
 	pr_info("Test fence export/import\n");
 
@@ -1781,6 +1788,15 @@ static int test_export_import_operations(struct libkc *cam)
 	} else {
 		ret = 0;
 	}
+
+	for_each_cam_operation(lco, i, op) {
+		rw_idx = 0;
+		if (libkc_failed_instruction(op, &rw_idx)) {
+			ret = -EINVAL;
+			break;
+		}
+	}
+
 	close(fence_out);
 out:
 	libkc_operation_put(lco);
@@ -1796,7 +1812,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	struct obj_entity *entity;
 	struct cam_operation *op;
 	char *read_buffer;
-	int ret;
+	int ret, op_idx, rw_idx;
 
 	pr_info("Test compound buffer operations\n");
 
@@ -1943,6 +1959,14 @@ static int test_compound_buffer_operations(struct libkc *cam)
 		ret = 0;
 	}
 
+	for_each_cam_operation(lco, op_idx, op) {
+		rw_idx = 0;
+		if (libkc_failed_instruction(op, &rw_idx)) {
+			ret = -EINVAL;
+			break;
+		}
+	}
+
 out:
 	libkc_dmabuf_put(buf);
 	libkc_operation_put(lco);
@@ -2020,8 +2044,7 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	}
 
 	rw_idx = 0;
-	rw = libkc_failed_instruction(op, &rw_idx);
-	if (!rw) {
+	if (!libkc_failed_instruction(op, &rw_idx)) {
 		pr_err("Instruction error code is not set\n");
 		ret = -EINVAL;
 	}
@@ -2039,7 +2062,7 @@ static int test_root_entity_instance(struct libkc *cam)
 	struct libkc_rw_list *rw_list;
 	struct obj_entity *entity;
 	struct cam_operation *op;
-	int ret;
+	int ret, rw_idx;
 
 	pr_info("Test %s instance\n", VCAM_ROOT_ENTITY_NAME);
 
@@ -2095,6 +2118,13 @@ static int test_root_entity_instance(struct libkc *cam)
 		ret = 0;
 	else
 		ret = -EINVAL;
+
+	rw_idx = 0;
+	if (!libkc_failed_instruction(op, &rw_idx)) {
+		pr_err("Instruction error code is not set\n");
+		ret = -EINVAL;
+	}
+
 out:
 	libkc_operation_put(lco);
 	return ret;
@@ -2156,6 +2186,13 @@ static int test_entity_instance_avail_limit(struct libkc *cam)
 		ret = 0;
 	else
 		ret = -EINVAL;
+
+	rw_idx = 0;
+	if (!libkc_failed_instruction(op, &rw_idx)) {
+		pr_err("Instruction error code is not set\n");
+		ret = -EINVAL;
+	}
+
 out:
 	libkc_operation_put(lco);
 	return ret;
@@ -2169,7 +2206,7 @@ static int test_entity_instance(struct libkc *cam)
 	struct obj_entity *entity;
 	struct obj_event *event;
 	struct cam_operation *op;
-	int ret, rw_idx;
+	int ret, op_idx, rw_idx;
 
 	pr_info("Test entity instance\n");
 
@@ -2306,6 +2343,14 @@ static int test_entity_instance(struct libkc *cam)
 		ret = 0;
 	}
 
+	for_each_cam_operation(lco, op_idx, op) {
+		rw_idx = 0;
+		if (libkc_failed_instruction(op, &rw_idx)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
 out:
 	libkc_operation_put(lco);
 	return ret;
@@ -2320,7 +2365,7 @@ static int test_add_buffer(struct libkc *cam)
 	struct obj_entity *entity;
 	struct cam_operation *op;
 	char *read_buffer;
-	int ret;
+	int ret, rw_idx;
 
 	pr_info("Test ADD buffer\n");
 
@@ -2395,6 +2440,12 @@ static int test_add_buffer(struct libkc *cam)
 		goto out;
 	}
 
+	rw_idx = 0;
+	if (libkc_failed_instruction(op, &rw_idx)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	pr_info("DMA buffer %d imported under ID %d\n",
 		buf->fd, rw->db.buf_id);
 
@@ -2419,7 +2470,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	struct libkc_rw_list *rw_list;
 	struct obj_entity *entity;
 	struct cam_operation *op;
-	int ret;
+	int ret, rw_idx;
 
 	pr_info("Test REMOVE buffers\n");
 
@@ -2480,6 +2531,11 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	} else {
 		ret = 0;
 	}
+
+	rw_idx = 0;
+	if (libkc_failed_instruction(op, &rw_idx))
+		ret = -EINVAL;
+
 out:
 	libkc_operation_put(lco);
 	return ret;
