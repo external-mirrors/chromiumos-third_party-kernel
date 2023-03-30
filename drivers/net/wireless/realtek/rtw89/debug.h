@@ -25,6 +25,9 @@ enum rtw89_debug_mask {
 	RTW89_DBG_BF = BIT(14),
 	RTW89_DBG_HW_SCAN = BIT(15),
 	RTW89_DBG_SAR = BIT(16),
+	RTW89_DBG_STATE = BIT(17),
+	RTW89_DBG_ACPI = BIT(21),
+	RTW89_DBG_EDCCA = BIT(22),
 
 	RTW89_DBG_UNEXP = BIT(31),
 };
@@ -53,12 +56,10 @@ static inline void rtw89_debugfs_init(struct rtw89_dev *rtwdev) {}
 
 #ifdef CONFIG_RTW89_DEBUGMSG
 extern unsigned int rtw89_debug_mask;
-#define rtw89_debug(rtwdev, a...) __rtw89_debug(rtwdev, ##a)
 
 __printf(3, 4)
-void __rtw89_debug(struct rtw89_dev *rtwdev,
-		   enum rtw89_debug_mask mask,
-		   const char *fmt, ...);
+void rtw89_debug(struct rtw89_dev *rtwdev, enum rtw89_debug_mask mask,
+		 const char *fmt, ...);
 static inline void rtw89_hex_dump(struct rtw89_dev *rtwdev,
 				  enum rtw89_debug_mask mask,
 				  const char *prefix_str,
@@ -69,6 +70,12 @@ static inline void rtw89_hex_dump(struct rtw89_dev *rtwdev,
 
 	print_hex_dump_bytes(prefix_str, DUMP_PREFIX_OFFSET, buf, len);
 }
+
+static inline bool rtw89_debug_is_enabled(struct rtw89_dev *rtwdev,
+					  enum rtw89_debug_mask mask)
+{
+	return !!(rtw89_debug_mask & mask);
+}
 #else
 static inline void rtw89_debug(struct rtw89_dev *rtwdev,
 			       enum rtw89_debug_mask mask,
@@ -77,6 +84,11 @@ static inline void rtw89_hex_dump(struct rtw89_dev *rtwdev,
 				  enum rtw89_debug_mask mask,
 				  const char *prefix_str,
 				  const void *buf, size_t len) {}
+static inline bool rtw89_debug_is_enabled(struct rtw89_dev *rtwdev,
+					  enum rtw89_debug_mask mask)
+{
+	return false;
+}
 #endif
 
 #endif

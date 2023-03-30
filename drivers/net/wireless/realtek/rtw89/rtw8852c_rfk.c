@@ -1229,11 +1229,8 @@ static void _iqk_info_iqk(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx,
 	u32 tmp;
 	bool flag;
 
-	iqk_info->thermal[path] =
-		ewma_thermal_read(&rtwdev->phystat.avg_thermal[path]);
-	iqk_info->thermal_rek_en = false;
-	rtw89_debug(rtwdev, RTW89_DBG_RFK, "[IQK]S%d_thermal = %d\n", path,
-		    iqk_info->thermal[path]);
+	rtw89_debug(rtwdev, RTW89_DBG_RFK, "[IQK]S%d_thermal = %lu\n", path,
+		    ewma_thermal_read(&rtwdev->phystat.avg_thermal[path]));
 	rtw89_debug(rtwdev, RTW89_DBG_RFK, "[IQK]S%d_LOK_COR_fail= %d\n", path,
 		    iqk_info->lok_cor_fail[0][path]);
 	rtw89_debug(rtwdev, RTW89_DBG_RFK, "[IQK]S%d_LOK_FIN_fail= %d\n", path,
@@ -1472,7 +1469,6 @@ static void _iqk_init(struct rtw89_dev *rtwdev)
 	iqk_info->iqk_sram_en = false;
 	iqk_info->iqk_cfir_en = false;
 	iqk_info->iqk_xym_en = false;
-	iqk_info->thermal_rek_en = false;
 	iqk_info->iqk_times = 0x0;
 
 	for (ch = 0; ch < RTW89_IQK_CHS_NR; ch++) {
@@ -1499,9 +1495,8 @@ static void _doiqk(struct rtw89_dev *rtwdev, bool force,
 	rtw89_btc_ntfy_wl_rfk(rtwdev, phy_map, BTC_WRFKT_IQK, BTC_WRFK_ONESHOT_START);
 
 	rtw89_debug(rtwdev, RTW89_DBG_RFK,
-		    "[IQK]==========IQK strat!!!!!==========\n");
+		    "[IQK]==========IQK start!!!!!==========\n");
 	iqk_info->iqk_times++;
-	iqk_info->kcount = 0;
 	iqk_info->version = RTW8852C_IQK_VER;
 
 	rtw89_debug(rtwdev, RTW89_DBG_RFK, "[IQK]Test Ver 0x%x\n", iqk_info->version);
@@ -2667,18 +2662,37 @@ static void _tssi_set_sys(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy,
 			  enum rtw89_rf_path path)
 {
 	const struct rtw89_chan *chan = rtw89_chan_get(rtwdev, RTW89_SUB_ENTITY_0);
+	enum rtw89_bandwidth bw = chan->band_width;
 	enum rtw89_band band = chan->band_type;
+	u32 clk = 0x0;
 
 	rtw89_rfk_parser(rtwdev, &rtw8852c_tssi_sys_defs_tbl);
 
-	if (path == RF_PATH_A)
+	switch (bw) {
+	case RTW89_CHANNEL_WIDTH_80:
+		clk = 0x1;
+		break;
+	case RTW89_CHANNEL_WIDTH_80_80:
+	case RTW89_CHANNEL_WIDTH_160:
+		clk = 0x2;
+		break;
+	default:
+		break;
+	}
+
+	if (path == RF_PATH_A) {
+		rtw89_phy_write32_mask(rtwdev, R_P0_TSSI_ADC_CLK,
+				       B_P0_TSSI_ADC_CLK, clk);
 		rtw89_rfk_parser_by_cond(rtwdev, band == RTW89_BAND_2G,
 					 &rtw8852c_tssi_sys_defs_2g_a_tbl,
 					 &rtw8852c_tssi_sys_defs_5g_a_tbl);
-	else
+	} else {
+		rtw89_phy_write32_mask(rtwdev, R_P1_TSSI_ADC_CLK,
+				       B_P1_TSSI_ADC_CLK, clk);
 		rtw89_rfk_parser_by_cond(rtwdev, band == RTW89_BAND_2G,
 					 &rtw8852c_tssi_sys_defs_2g_b_tbl,
 					 &rtw8852c_tssi_sys_defs_5g_b_tbl);
+	}
 }
 
 static void _tssi_ini_txpwr_ctrl_bb(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy,
