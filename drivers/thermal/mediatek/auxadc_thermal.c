@@ -1054,7 +1054,8 @@ static int mtk_thermal_bank_temperature(struct mtk_thermal_bank *bank)
 
 static int mtk_read_temp(struct thermal_zone_device *tz, int *temperature)
 {
-	struct mtk_thermal *mt = thermal_zone_device_priv(tz);
+	struct mtk_thermal_zone *mtz = tz->devdata;
+	struct mtk_thermal *mt = mtz->mt;
 	int i;
 	int tempmax = INT_MIN;
 
@@ -1075,7 +1076,8 @@ static int mtk_read_temp(struct thermal_zone_device *tz, int *temperature)
 
 static int mtk_read_sensor_temp(struct thermal_zone_device *tz, int *temperature)
 {
-	struct mtk_thermal *mt = tz->devdata;
+	struct mtk_thermal_zone *mtz = tz->devdata;
+	struct mtk_thermal *mt = mtz->mt;
 	const struct mtk_thermal_data *conf = mt->conf;
 	int id = tz->id - 1;
 	int temp = INT_MIN;
