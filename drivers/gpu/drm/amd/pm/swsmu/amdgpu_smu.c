@@ -2074,8 +2074,12 @@ static int smu_force_ppclk_levels(void *handle,
 		clk_type = SMU_DCEFCLK; break;
 	case PP_VCLK:
 		clk_type = SMU_VCLK; break;
+	case PP_VCLK1:
+		clk_type = SMU_VCLK1; break;
 	case PP_DCLK:
 		clk_type = SMU_DCLK; break;
+	case PP_DCLK1:
+		clk_type = SMU_DCLK1; break;
 	case OD_SCLK:
 		clk_type = SMU_OD_SCLK; break;
 	case OD_MCLK:
@@ -2461,8 +2465,12 @@ static enum smu_clk_type smu_convert_to_smuclk(enum pp_clock_type type)
 		clk_type = SMU_DCEFCLK; break;
 	case PP_VCLK:
 		clk_type = SMU_VCLK; break;
+	case PP_VCLK1:
+		clk_type = SMU_VCLK1; break;
 	case PP_DCLK:
 		clk_type = SMU_DCLK; break;
+	case PP_DCLK1:
+		clk_type = SMU_DCLK1; break;
 	case OD_SCLK:
 		clk_type = SMU_OD_SCLK; break;
 	case OD_MCLK:
