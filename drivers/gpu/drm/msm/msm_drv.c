@@ -13,6 +13,7 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/sched/types.h>
 
+#include <drm/drm_aperture.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
@@ -466,6 +467,13 @@ static int msm_drm_init(struct device *dev, const struct drm_driver *drv)
 	ret = component_bind_all(dev, ddev);
 	if (ret)
 		goto err_deinit_vram;
+
+	/* the fw fb could be anywhere in memory */
+	ret = drm_aperture_remove_framebuffers(drv);
+	if (ret)
+		goto err_msm_uninit;
+
+	dma_set_max_seg_size(dev, UINT_MAX);
 
 	msm_gem_shrinker_init(ddev);
 
