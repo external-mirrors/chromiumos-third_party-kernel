@@ -13,6 +13,7 @@
 #include <linux/sync_file.h>
 #include <linux/dma-buf.h>
 #include <linux/types.h>
+#include <linux/workqueue.h>
 
 /**
  * cam_obj_buffer - CAM buffer structure
@@ -35,6 +36,8 @@ struct cam_obj_buffer {
 	struct dma_buf_attachment	*dma_attach;
 	/** @dma_sgt: pointer to the sg_table object */
 	struct sg_table			*dma_sgt;
+	/** @release_work: Deferred buffer release */
+	struct work_struct	release_work;
 };
 
 struct cam_obj_entity;

@@ -42,15 +42,13 @@ static struct cam_obj_buffer *nsobj_to_cam_buffer(struct cam_obj *nsobj)
 
 /**
  * cam_buffer_release() - The release function of CAM buffer
- * @nsobj: pointer to CAM object that represents a CAM buffer
+ * @work: pointer to buffer deferred release work
  */
-static void cam_buffer_release(struct cam_obj *nsobj)
+static void cam_buffer_release(struct work_struct *work)
 {
-	struct cam_obj_buffer *buffer = nsobj_to_cam_buffer(nsobj);
+	struct cam_obj_buffer *buffer;
 
-	if (!buffer)
-		return;
-
+	buffer = container_of(work, struct cam_obj_buffer, release_work);
 	if (!IS_ERR_OR_NULL(buffer->dma_sgt)) {
 		dma_buf_unmap_attachment(buffer->dma_attach,
 					 buffer->dma_sgt,
@@ -66,6 +64,16 @@ static void cam_buffer_release(struct cam_obj *nsobj)
 		dma_buf_put(buffer->dma_buf);
 
 	kfree(buffer);
+}
+
+static void cam_instance_deferred_release(struct cam_obj *nsobj)
+{
+	struct cam_obj_buffer *buffer = nsobj_to_cam_buffer(nsobj);
+
+	if (!buffer)
+		return;
+
+	queue_work(system_long_wq, &buffer->release_work);
 }
 
 /**
@@ -99,9 +107,10 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 
 	cam_obj_init(&buffer->nsobj,
 		     CAM_OBJ_TYPE_BUFFER,
-		     cam_buffer_release,
+		     cam_instance_deferred_release,
 		     ns);
 	cam_obj_set_id(&buffer->nsobj, id);
+	INIT_WORK(&buffer->release_work, cam_buffer_release);
 
 	buffer->dma_buf = dma_buf_get(fd);
 	if (IS_ERR(buffer->dma_buf))
@@ -125,7 +134,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 	return buffer;
 
 error:
-	cam_buffer_release(&buffer->nsobj);
+	cam_buffer_release(&buffer->release_work);
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(cam_buffer_register);

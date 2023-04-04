@@ -10,6 +10,7 @@
 
 #include <linux/cam/cam-device.h>
 #include <linux/cam/cam-namespace.h>
+#include <linux/workqueue.h>
 
 struct cam_obj_entity;
 
@@ -104,6 +105,8 @@ struct cam_obj_instance {
 	struct cam_obj		nsobj;
 	/** @driver_data: Driver specific data */
 	void			*driver_data;
+	/** @release_work: Deferred instance release */
+	struct work_struct	release_work;
 };
 
 /**

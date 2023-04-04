@@ -307,17 +307,16 @@ static struct cam_obj_instance *nsobj_to_cam_instance(struct cam_obj *nsobj)
 
 /**
  * cam_instance_release() - The release function of CAM instance
- * @nsobj: pointer to CAM object that represents a CAM instance
+ * @work: pointer to instance deferred release work
  */
-static void cam_instance_release(struct cam_obj *nsobj)
+static void cam_instance_release(struct work_struct *work)
 {
-	struct cam_obj_instance *instance = nsobj_to_cam_instance(nsobj);
-	struct cam_obj *link = cam_obj_linked_to(nsobj);
+	struct cam_obj_instance *instance;
+	struct cam_obj *link;
 	void *dev, *dev_data;
 
-	if (!instance)
-		return;
-
+	instance = container_of(work, struct cam_obj_instance, release_work);
+	link = cam_obj_linked_to(&instance->nsobj);
 	dev_data = instance->driver_data;
 	if (link) {
 		struct cam_obj_entity *entity;
@@ -334,8 +333,18 @@ static void cam_instance_release(struct cam_obj *nsobj)
 		cam_obj_put(link);
 	}
 
-	cam_obj_unlink(nsobj);
+	cam_obj_unlink(&instance->nsobj);
 	kfree(instance);
+}
+
+static void cam_instance_deferred_release(struct cam_obj *nsobj)
+{
+	struct cam_obj_instance *instance = nsobj_to_cam_instance(nsobj);
+
+	if (!instance)
+		return;
+
+	queue_work(system_long_wq, &instance->release_work);
 }
 
 /**
@@ -381,9 +390,10 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 		return NULL;
 
 	cam_obj_init(&instance->nsobj, CAM_OBJ_TYPE_INSTANCE,
-		     cam_instance_release,
+		     cam_instance_deferred_release,
 		     ns);
 	cam_obj_set_id(&instance->nsobj, id);
+	INIT_WORK(&instance->release_work, cam_instance_release);
 
 	if (atomic_dec_if_positive(&entity->instances_avail) < 0)
 		goto error;
@@ -408,7 +418,7 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 	return instance;
 
 error:
-	cam_instance_release(&instance->nsobj);
+	cam_instance_release(&instance->release_work);
 	return NULL;
 }
 
