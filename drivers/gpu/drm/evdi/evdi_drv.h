@@ -41,7 +41,8 @@ struct evdi_device {
 	struct evdi_cursor *cursor;
 	bool cursor_events_enabled;
 
-	uint32_t sku_area_limit;
+	uint32_t pixel_area_limit;
+	uint32_t pixel_per_second_limit;
 
 	struct evdi_fbdev *fbdev;
 	struct evdi_painter *painter;
@@ -167,4 +168,3 @@ bool evdi_painter_i2c_data_notify(struct evdi_device *evdi,
 				struct i2c_msg *msg);
 int evdi_fb_get_bpp(uint32_t format);
 #endif
-
