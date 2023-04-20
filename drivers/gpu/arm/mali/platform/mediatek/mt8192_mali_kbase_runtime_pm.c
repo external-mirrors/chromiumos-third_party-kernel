@@ -16,10 +16,16 @@
 
 /* list of clocks required by GPU */
 static const char * const mt8192_gpu_clks[] = {
+#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+	/* Our old downstream code defines many clocks */
 	"clk_mux",
 	"clk_main_parent",
 	"clk_sub_parent",
 	"subsys_mfg_cg",
+#else
+	/* Upstream binding only uses one clock */
+	NULL,
+#endif
 };
 
 const struct mtk_hw_config mt8192_hw_config = {
@@ -46,7 +52,10 @@ const struct mtk_hw_config mt8192_hw_config = {
 };
 
 struct mtk_platform_context mt8192_platform_context = {
+#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
+	/* Since v6.1 all the auto-reparenting code has been merged */
 	.manual_mux_reparent = true,
+#endif
 	.config = &mt8192_hw_config,
 };
 
