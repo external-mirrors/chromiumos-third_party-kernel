@@ -20,6 +20,8 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 
+#include <linux/pinctrl/consumer.h>
+
 #include "cam_debug_util.h"
 #include "cam_cx_ipeak.h"
 
