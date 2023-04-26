@@ -12,6 +12,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/pinctrl/consumer.h>
 #include "cam_sensor_util.h"
 #include <cam_mem_mgr.h>
 #include "cam_res_mgr_api.h"
