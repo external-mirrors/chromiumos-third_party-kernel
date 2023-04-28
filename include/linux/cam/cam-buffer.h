@@ -24,12 +24,10 @@
 struct cam_obj_buffer {
 	/** @nsobj: namespace object */
 	struct cam_obj			nsobj;
-
 	/** @phys: the physical address of the buffer */
 	u64				phys;
-	/** @va: the virtual address of the buffer */
-	void				*va;
-
+	/** @vaddr: the virtual address of the buffer */
+	void				*vaddr;
 	/** @dma_buf: pointer to the target dma_buf object */
 	struct dma_buf			*dma_buf;
 	/** @dma_attach: pointer to the dma_buf_attachment object */
@@ -37,7 +35,7 @@ struct cam_obj_buffer {
 	/** @dma_sgt: pointer to the sg_table object */
 	struct sg_table			*dma_sgt;
 	/** @release_work: Deferred buffer release */
-	struct work_struct	release_work;
+	struct work_struct		release_work;
 };
 
 struct cam_obj_entity;

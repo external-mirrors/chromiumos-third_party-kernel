@@ -126,8 +126,6 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 		goto error;
 
 	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
-	buffer->va = sg_virt(buffer->dma_sgt->sgl);
-
 	if (cam_obj_insert(&buffer->nsobj))
 		goto error;
 
