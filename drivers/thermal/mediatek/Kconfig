@@ -10,7 +10,7 @@ config MTK_THERMAL
 if MTK_THERMAL
 
 config MTK_SOC_THERMAL
-	bool "Temperature sensor driver for mediatek SoCs"
+	bool "AUXADC temperature sensor driver for MediaTek SoCs"
 	depends on HAS_IOMEM
 	depends on CPU_FREQ
 	help
