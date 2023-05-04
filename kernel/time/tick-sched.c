@@ -1406,12 +1406,14 @@ static void tick_nohz_lowres_handler(struct clock_event_device *dev)
 	tick_sched_do_timer(ts, now);
 	tick_sched_handle(ts, regs);
 
+	ts->last_tick = now;
 	/*
 	 * In dynticks mode, tick reprogram is deferred:
 	 * - to the idle task if in dynticks-idle
 	 * - to IRQ exit if in full-dynticks.
 	 */
 	if (likely(!ts->tick_stopped)) {
+                hrtimer_set_expires(&ts->sched_timer, ts->last_tick);
 		hrtimer_forward(&ts->sched_timer, now, TICK_NSEC);
 		tick_program_event(hrtimer_get_expires(&ts->sched_timer), 1);
 	}
