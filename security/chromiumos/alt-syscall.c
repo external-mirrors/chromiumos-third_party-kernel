@@ -537,9 +537,8 @@ static int __init chromiumos_alt_syscall_init(void)
 	int err;
 
 #ifdef CONFIG_SYSCTL
-	if (!register_sysctl_paths(chromiumos_sysctl_path,
-				   chromiumos_sysctl_table))
-		pr_warn("Failed to register sysctl\n");
+	register_sysctl_init("kernel/chromiumos/alt_syscall",
+			     chromiumos_sysctl_table);
 #endif
 
 	err = arch_dup_sys_call_table(&default_table);
