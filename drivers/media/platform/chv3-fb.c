@@ -502,6 +502,7 @@ static int fb_remove(struct platform_device *pdev)
 
 static const struct of_device_id fb_match_table[] = {
 	{ .compatible = "google,fb-chameleonv3" },
+	{ },
 };
 
 static struct platform_driver fb_platform_driver = {
