@@ -32,13 +32,6 @@ static int allow_devmode_syscalls;
 static int zero;
 static int one = 1;
 
-static struct ctl_path chromiumos_sysctl_path[] = {
-        { .procname = "kernel", },
-        { .procname = "chromiumos", },
-        { .procname = "alt_syscall", },
-        { }
-};
-
 static struct ctl_table chromiumos_sysctl_table[] = {
         {
                 .procname       = "allow_devmode_syscalls",
