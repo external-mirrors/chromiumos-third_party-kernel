@@ -82,6 +82,16 @@ struct cam_query_operation_entry {
 } __attribute__((packed));
 
 /**
+ * struct cam_query_dmabuf_entry - Entry in DMA buffer query
+ *
+ * @id:			CAM ID that corresponds to the given DMA buffer
+ *			file descriptor (if any)
+ */
+struct cam_query_dmabuf_entry {
+	__u32		id;
+};
+
+/**
  * enum query_depth - Maximal depth of the query stack
  *
  * CAM_QUERY_EXACT_OBJECT:	Stack size to hold exactly one object
@@ -158,16 +168,26 @@ struct cam_query_operations {
 } __attribute__((packed));
 
 /**
+ * struct cam_query_dmabuf - Query DMA buffer
+ * @fd:			DMA buffer file descriptor
+ */
+struct cam_query_dmabuf {
+	__u32		fd;
+};
+
+/**
  * enum query_type - Types of CAM query ioctl
  *
  * @CAM_QUERY_TYPE_ENTITIES:	Query entity objects
  * @CAM_QUERY_TYPE_EVENTS:	Query event objects
  * @CAM_QUERY_TYPE_OPERATIONS:	Query operation objects
+ * @CAM_QUERY_TYPE_DMABUF:	Query DMA buffer object
  */
 enum query_type {
 	CAM_QUERY_TYPE_ENTITIES,
 	CAM_QUERY_TYPE_EVENTS,
 	CAM_QUERY_TYPE_OPERATIONS,
+	CAM_QUERY_TYPE_DMABUF,
 };
 
 /**
@@ -177,7 +197,7 @@ enum query_type {
  * @query_entities:	Used when query type is CAM_QUERY_TYPE_ENTITIES
  * @query_events:	Used when query type is CAM_QUERY_TYPE_EVENTS
  * @query_operations:	Used when query type is CAM_QUERY_TYPE_OPERATIONS
- *
+ * @query_dmabuf:	Used when query type is CAM_QUERY_TYPE_DMABUF
  */
 struct cam_query {
 	__u32		query_type;
@@ -185,6 +205,7 @@ struct cam_query {
 		struct cam_query_entities	query_entities;
 		struct cam_query_events		query_events;
 		struct cam_query_operations	query_operations;
+		struct cam_query_dmabuf		query_dmabuf;
 		__u8 max_query_size[128];
 	};
 } __attribute__((packed));
