@@ -33,7 +33,7 @@ static DECLARE_RWSEM(allowlist_sem);
 static bool drivers_allowlist_lockdown = true;
 static DECLARE_RWSEM(lockdown_sem);
 
-static ssize_t drivers_allowlist_show(struct bus_type *bus, char *buf)
+static ssize_t drivers_allowlist_show(const struct bus_type *bus, char *buf)
 {
 	size_t count = 0;
 	struct allowlist_entry *entry;
@@ -54,7 +54,7 @@ static ssize_t drivers_allowlist_show(struct bus_type *bus, char *buf)
 	return count;
 }
 
-static ssize_t drivers_allowlist_store(struct bus_type *bus, const char *buf,
+static ssize_t drivers_allowlist_store(const struct bus_type *bus, const char *buf,
 				       size_t count)
 {
 	struct allowlist_entry *entry;
@@ -111,7 +111,7 @@ out_kfree:
 }
 static BUS_ATTR_RW(drivers_allowlist);
 
-static ssize_t drivers_allowlist_lockdown_show(struct bus_type *bus, char *buf)
+static ssize_t drivers_allowlist_lockdown_show(const struct bus_type *bus, char *buf)
 {
 	int ret;
 
@@ -123,7 +123,7 @@ static ssize_t drivers_allowlist_lockdown_show(struct bus_type *bus, char *buf)
 }
 
 static ssize_t
-drivers_allowlist_lockdown_store(struct bus_type *bus, const char *buf,
+drivers_allowlist_lockdown_store(const struct bus_type *bus, const char *buf,
 				 size_t count)
 {
 	bool lockdown, state_changed = false;
