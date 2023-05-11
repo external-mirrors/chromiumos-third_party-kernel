@@ -1757,7 +1757,7 @@ static void query_state_filter(struct cam_pipeline *pipeline,
 }
 
 /**
- * cam_pipeline_query() - Response to user-space operation queries
+ * cam_enum_operations() - Response to user-space operation queries
  * @pipeline: pointer to CAM pipeline
  * @query: query request from user-space
  * @output: pointer to user-space buffer for the output
@@ -1767,9 +1767,9 @@ static void query_state_filter(struct cam_pipeline *pipeline,
  *
  * Return: 0 on success or a negative error code otherwise.
  */
-int cam_pipeline_query(struct cam_pipeline *pipeline,
-		       struct cam_query_operations *query,
-		       struct cam_koutput *output)
+int cam_enum_operations(struct cam_pipeline *pipeline,
+			struct cam_query_operations *query,
+			struct cam_koutput *output)
 {
 	int state;
 	int ret;
@@ -1824,7 +1824,7 @@ int cam_pipeline_query(struct cam_pipeline *pipeline,
 	query->num_ops = output->num_entries;
 	return 0;
 }
-ALLOW_ERROR_INJECTION(cam_pipeline_query, ERRNO);
+ALLOW_ERROR_INJECTION(cam_enum_operations, ERRNO);
 
 /**
  * cam_pipeline_destroy() - Destroy CAM execution pipeline

@@ -140,9 +140,9 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 					      &output);
 			break;
 		case CAM_QUERY_TYPE_OPERATIONS:
-			ret = cam_pipeline_query(&fh->pipeline,
-						 &query.query_operations,
-						 &output);
+			ret = cam_enum_operations(&fh->pipeline,
+						  &query.query_operations,
+						  &output);
 			break;
 		default:
 			ret = -EINVAL;

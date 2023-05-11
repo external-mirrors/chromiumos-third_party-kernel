@@ -149,9 +149,9 @@ int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 				struct cam_operation_add *op);
 
-int cam_pipeline_query(struct cam_pipeline *pipeline,
-		       struct cam_query_operations *query,
-		       struct cam_koutput *output);
+int cam_enum_operations(struct cam_pipeline *pipeline,
+			struct cam_query_operations *query,
+			struct cam_koutput *output);
 
 void cam_fire_active_signals(struct list_head *notify_active_chain);
 void cam_instance_fire_active_signals(struct cam_obj_instance *instance,
