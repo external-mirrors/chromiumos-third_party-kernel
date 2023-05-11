@@ -504,14 +504,14 @@ static void cam_drain_op_syncfiles(struct cam_obj_op *op)
 	}
 }
 
-static void cam_drain_op_callback(struct cam_obj *nsobj,
+static bool cam_drain_op_callback(struct cam_obj *nsobj,
 				  struct cam_ns_walk_control *ctl)
 {
 	struct cam_obj_op *op;
 
 	op = nsobj_to_cam_op(nsobj);
 	if (WARN_ON(!op))
-		return;
+		return false;
 
 	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
 
@@ -530,6 +530,7 @@ static void cam_drain_op_callback(struct cam_obj *nsobj,
 	 */
 	list_del_init(&op->io_queue_entry);
 	list_add(&op->io_queue_entry, &op->pipeline->io_queue);
+	return false;
 }
 
 /**
@@ -1724,7 +1725,7 @@ static bool pipeline_walk_query_callback(struct cam_obj *nsobj,
 	return cam_op_enum(op, ctl->data);
 }
 
-static void cam_ns_walk_callback(struct cam_obj *nsobj,
+static bool cam_ns_walk_callback(struct cam_obj *nsobj,
 				 struct cam_ns_walk_control *ctl)
 {
 	struct cam_obj_op *op;
@@ -1732,8 +1733,8 @@ static void cam_ns_walk_callback(struct cam_obj *nsobj,
 	bool valid;
 
 	op = nsobj_to_cam_op(nsobj);
-	if (!op)
-		return;
+	if (WARN_ON(!op))
+		return true;
 
 	/* This is racy but what can we do */
 	read_lock_irqsave(&op->notify_lock, flags);
@@ -1742,6 +1743,7 @@ static void cam_ns_walk_callback(struct cam_obj *nsobj,
 
 	if (valid)
 		cam_op_enum(op, ctl->data);
+	return false;
 }
 
 static void query_state_filter(struct cam_pipeline *pipeline,

@@ -877,22 +877,23 @@ int cam_enum_events(struct cam_device *cam,
  * @nsobj: pointer to CAM object that represents a CAM event
  * @ctl: auxiliary data
  */
-static void cam_drain_event_callback(struct cam_obj *nsobj,
+static bool cam_drain_event_callback(struct cam_obj *nsobj,
 				     struct cam_ns_walk_control *ctl)
 {
 	struct cam_obj_event *event;
 	unsigned long flags;
 
 	if (!(nsobj->type & CAM_OBJ_TYPE_EVENT))
-		return;
+		return false;
 
 	event = nsobj_to_cam_event(nsobj);
 	if (WARN_ON(!event))
-		return;
+		return true;
 
 	write_lock_irqsave(&event->notify_lock, flags);
 	cam_drain_active_signals(&event->notify_active_chain, ctl->data);
 	write_unlock_irqrestore(&event->notify_lock, flags);
+	return false;
 }
 
 /**

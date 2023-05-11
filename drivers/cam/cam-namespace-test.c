@@ -532,7 +532,7 @@ struct for_each_test {
 	unsigned long sum_ids;
 };
 
-static void for_each_test_callback(struct cam_obj *obj,
+static bool for_each_test_callback(struct cam_obj *obj,
 				   struct cam_ns_walk_control *ctl)
 {
 	struct for_each_test *fet;
@@ -540,6 +540,7 @@ static void for_each_test_callback(struct cam_obj *obj,
 	fet = ctl->data;
 	fet->n_objs++;
 	fet->sum_ids += cam_obj_id(obj);
+	return false;
 }
 
 #define N_OBJS 10UL

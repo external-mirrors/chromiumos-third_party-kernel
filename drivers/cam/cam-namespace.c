@@ -389,6 +389,7 @@ void cam_obj_deinit(struct cam_obj *nsobj)
 void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 {
 	struct cam_obj *nsobj;
+	bool ret = false;
 	u32 id;
 
 	if (WARN_ON(!ns))
@@ -407,8 +408,10 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 		if (!kref_get_unless_zero(&nsobj->kref))
 			continue;
 		if (nsobj->flags & CAM_OBJ_FLAG_ACTIVE)
-			ctl->cb(nsobj, ctl);
+			ret = ctl->cb(nsobj, ctl);
 		cam_obj_put(nsobj);
+		if (ret)
+			break;
 	}
 	up_read(&ns->lock);
 }

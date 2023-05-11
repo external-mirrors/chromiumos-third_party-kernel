@@ -119,7 +119,7 @@ struct cam_ns_walk_control {
 	/** @flags: auxiliary flags */
 	u32		flags;
 	/** @cb: callback operation to the (matched) namespace objects */
-	void (*cb)(struct cam_obj *nsobj, struct cam_ns_walk_control *ctl);
+	bool (*cb)(struct cam_obj *nsobj, struct cam_ns_walk_control *ctl);
 };
 
 void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl);
