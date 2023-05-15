@@ -23,6 +23,8 @@ static u32 query_num_entries(struct cam_query *q, u32 query_type)
 		return q->query_events.num_events;
 	case CAM_QUERY_TYPE_OPERATIONS:
 		return q->query_operations.num_ops;
+	case CAM_QUERY_TYPE_DMABUF:
+		return 1;
 	}
 
 	return 0;
@@ -41,6 +43,11 @@ u32 libkc_query_num_events(struct cam_query *q)
 u32 libkc_query_num_ops(struct cam_query *q)
 {
 	return query_num_entries(q, CAM_QUERY_TYPE_OPERATIONS);
+}
+
+u32 libkc_query_num_dmabufs(struct cam_query *q)
+{
+	return query_num_entries(q, CAM_QUERY_TYPE_DMABUF);
 }
 
 struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx)
