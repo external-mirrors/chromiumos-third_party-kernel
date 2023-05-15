@@ -227,16 +227,10 @@ static bool enum_buffer(struct cam_obj *nsobj, struct cam_ns_walk_control *ctl)
 	if (WARN_ON(!buffer))
 		return true;
 
-	dma_buf = dma_buf_get(ctl->flags);
-	if (IS_ERR(dma_buf))
-		return true;
-
-	if (buffer->dma_buf != dma_buf) {
-		dma_buf_put(dma_buf);
+	dma_buf = (struct dma_buf *)ctl->flags;
+	if (buffer->dma_buf != dma_buf)
 		return false;
-	}
 
-	dma_buf_put(dma_buf);
 	cam_output_next_entry(output, qent);
 	if (!qent)
 		return true;
@@ -253,6 +247,11 @@ int cam_enum_buffer(struct cam_pipeline *pipeline,
 		    struct cam_koutput *output)
 {
 	struct cam_ns_walk_control ctl;
+	struct dma_buf *dma_buf;
+
+	dma_buf = dma_buf_get(query->fd);
+	if (IS_ERR(dma_buf))
+		return -EINVAL;
 
 	/*
 	 * @FIXME
@@ -260,9 +259,10 @@ int cam_enum_buffer(struct cam_pipeline *pipeline,
 	 * namespace searching for DMA buffers.
 	 */
 	ctl.data	= output;
-	ctl.flags	= query->fd;
+	ctl.flags	= (u64)dma_buf;
 	ctl.cb		= enum_buffer;
 	cam_ns_for_each(&pipeline->objs, &ctl);
+	dma_buf_put(dma_buf);
 
 	if (!output->num_entries)
 		return -ENOENT;
