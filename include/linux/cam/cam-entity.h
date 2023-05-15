@@ -10,6 +10,7 @@
 
 #include <linux/cam/cam-device.h>
 #include <linux/cam/cam-namespace.h>
+#include <linux/dma-buf.h>
 #include <linux/workqueue.h>
 
 struct cam_obj_entity;
@@ -32,45 +33,56 @@ struct cam_entity_ops {
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*read)(void *, struct cam_read_instruction *);
+	int (*read)(void *dev, struct cam_read_instruction *rw);
 	/**
 	 * write(): the register write callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*write)(void *, struct cam_write_instruction *);
+	int (*write)(void *dev, struct cam_write_instruction *rw);
 	/**
 	 * instance_read(): entity instance register read callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*instance_read)(void *,
-			     struct cam_obj_instance *,
-			     struct cam_read_instruction *);
+	int (*instance_read)(void *dev,
+			     struct cam_obj_instance *instance,
+			     struct cam_read_instruction *rw);
 	/**
 	 * instance_write(): entity instance register write callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
-	int (*instance_write)(void *,
-			      struct cam_obj_instance *,
-			      struct cam_write_instruction *);
+	int (*instance_write)(void *dev,
+			      struct cam_obj_instance *instance,
+			      struct cam_write_instruction *rw);
 	/**
 	 * device(): pointer to device that this entity is attached to
 	 *
 	 * Return: pointer to device or NULL
 	 */
-	struct device *(*device)(void *);
+	struct device *(*device)(void *dev);
 	/**
 	 * instance_create(): callback to create entity instance
 	 *
 	 * Return: pointer to instance or NULL
 	 */
-	void *(*instance_create)(void *);
+	void *(*instance_create)(void *dev);
 	/**
 	 * instance_destroy(): callback to destroy entity instance
 	 */
-	void (*instance_destroy)(void *, void *);
+	void (*instance_destroy)(void *dev, void *data);
+	/**
+	 * dmabuf_add(): callback to create device-specifc DMA-buffer mapping
+	 *
+	 * Return: pointer to buffer mapping or NULL
+	 */
+	void *(*dmabuf_add)(void *dev, struct dma_buf *dma_buf);
+	/**
+	 * dmabuf_remove(): callback to destroy device-specific DMA-buffer
+	 * mapping
+	 */
+	void (*dmabuf_remove)(void *dev, void *data, struct dma_buf *dma_buf);
 };
 
 /**

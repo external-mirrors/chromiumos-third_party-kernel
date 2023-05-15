@@ -15,6 +15,8 @@
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
+struct cam_obj_entity;
+
 /**
  * cam_obj_buffer - CAM buffer structure
  *
@@ -24,21 +26,15 @@
 struct cam_obj_buffer {
 	/** @nsobj: namespace object */
 	struct cam_obj			nsobj;
-	/** @phys: the physical address of the buffer */
-	u64				phys;
-	/** @vaddr: the virtual address of the buffer */
-	void				*vaddr;
 	/** @dma_buf: pointer to the target dma_buf object */
 	struct dma_buf			*dma_buf;
-	/** @dma_attach: pointer to the dma_buf_attachment object */
-	struct dma_buf_attachment	*dma_attach;
-	/** @dma_sgt: pointer to the sg_table object */
-	struct sg_table			*dma_sgt;
+	/** @device_buffer: device-specific DMA-buffer mapping */
+	void				*driver_data;
+	/** @entity: CAM entity that imported this buffer */
+	struct cam_obj_entity		*entity;
 	/** @release_work: Deferred buffer release */
 	struct work_struct		release_work;
 };
-
-struct cam_obj_entity;
 
 struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 					   struct cam_obj_entity *entity,

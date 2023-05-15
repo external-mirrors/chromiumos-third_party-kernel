@@ -9,6 +9,7 @@
 #include <linux/cam/cam-device.h>
 #include <linux/cam/cam-entity.h>
 #include <linux/delay.h>
+#include <linux/dma-buf.h>
 #include <linux/hrtimer.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -64,6 +65,12 @@ struct vcam_exec_instance {
 
 struct vcam_entity_instance_data {
 	char				*buf;
+};
+
+struct vcam_buffer {
+	u64				phys;
+	struct dma_buf_attachment	*dma_attach;
+	struct sg_table			*dma_sgt;
 };
 
 static void *entity_instance_create(void *dev)
@@ -222,30 +229,55 @@ static struct cam_entity_ops entity_ops = {
 	.instance_destroy	= entity_instance_destroy,
 };
 
-static int dma_importer_read(void *dev, struct cam_read_instruction *rw)
+static void dmabuf_remove(void *dev, void *buf, struct dma_buf *dma_buf)
 {
-	struct cam_obj_buffer *buffer = (struct cam_obj_buffer *)rw->dbuf;
+	struct vcam_buffer *buffer;
 
-	pr_info("VCAM: DMA importer read: buffer_id: %lu\n",
-		cam_obj_id(&buffer->nsobj));
+	buffer = (struct vcam_buffer *)buf;
+	if (!IS_ERR_OR_NULL(buffer->dma_sgt))
+		dma_buf_unmap_attachment(buffer->dma_attach,
+					 buffer->dma_sgt,
+					 DMA_TO_DEVICE);
 
-	return 0;
+	if (!IS_ERR_OR_NULL(buffer->dma_attach))
+		dma_buf_detach(dma_buf, buffer->dma_attach);
+
+	kfree(buffer);
 }
 
-static int dma_importer_write(void *dev, struct cam_write_instruction *rw)
+static void *dmabuf_add(void *dev, struct dma_buf *dma_buf)
 {
-	struct cam_obj_buffer *buffer = (struct cam_obj_buffer *)rw->dbuf;
+	struct vcam_buffer *buffer;
+	struct vcam_device *vcam;
 
-	pr_info("VCAM: DMA importer write: buffer_id: %lu\n",
-		cam_obj_id(&buffer->nsobj));
+	vcam = (struct vcam_device *)dev;
+	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
+	if (!buffer)
+		return NULL;
 
-	return 0;
+	buffer->dma_attach = dma_buf_attach(dma_buf, vcam->dev);
+	if (IS_ERR(buffer->dma_attach))
+		goto error;
+
+	buffer->dma_sgt = dma_buf_map_attachment(buffer->dma_attach,
+						 DMA_TO_DEVICE);
+	if (IS_ERR(buffer->dma_sgt))
+		goto error;
+
+	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
+	return buffer;
+
+error:
+	dmabuf_remove(dev, buffer, dma_buf);
+	return NULL;
 }
 
 static struct cam_entity_ops dma_importer_entity_ops = {
-	.read		= dma_importer_read,
-	.write		= dma_importer_write,
-	.device		= entity_device,
+	.read			= entity_read,
+	.write			= entity_write,
+	.device			= entity_device,
+	.dmabuf_add		= dmabuf_add,
+	.dmabuf_remove		= dmabuf_remove,
 };
 
 static void trigger_event_on(struct vcam_device *vcam,
@@ -528,4 +560,5 @@ module_init(vcam_init);
 module_exit(vcam_exit);
 
 MODULE_DESCRIPTION("CAM test device driver");
+MODULE_IMPORT_NS(DMA_BUF);
 MODULE_LICENSE("GPL v2");

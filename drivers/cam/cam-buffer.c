@@ -51,16 +51,17 @@ static void cam_buffer_release(struct work_struct *work)
 	struct cam_obj_buffer *buffer;
 
 	buffer = container_of(work, struct cam_obj_buffer, release_work);
-	if (!IS_ERR_OR_NULL(buffer->dma_sgt)) {
-		dma_buf_unmap_attachment(buffer->dma_attach,
-					 buffer->dma_sgt,
-					 DMA_TO_DEVICE);
+
+	if (buffer->driver_data) {
+		void *dev = cam_entity_driver_data(buffer->entity);
+
+		buffer->entity->ops->dmabuf_remove(dev,
+						   buffer->driver_data,
+						   buffer->dma_buf);
 	}
 
-	if (!IS_ERR_OR_NULL(buffer->dma_attach)) {
-		dma_buf_detach(buffer->dma_buf,
-			       buffer->dma_attach);
-	}
+	if (buffer->entity)
+		cam_entity_put(buffer->entity);
 
 	if (!IS_ERR_OR_NULL(buffer->dma_buf))
 		dma_buf_put(buffer->dma_buf);
@@ -94,18 +95,19 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 					   u32 id)
 {
 	struct cam_obj_buffer *buffer;
-	struct device *dev;
+	void *dev;
 
 	if (!cam_valid_buffer_id(id))
 		return NULL;
 
-	dev = entity->ops->device(cam_entity_driver_data(entity));
-	if (!dev)
+	if (!cam_entity_get(entity))
 		return NULL;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
-	if (!buffer)
+	if (!buffer) {
+		cam_entity_put(entity);
 		return NULL;
+	}
 
 	cam_obj_init(&buffer->nsobj,
 		     CAM_OBJ_TYPE_BUFFER,
@@ -118,16 +120,12 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 	if (IS_ERR(buffer->dma_buf))
 		goto error;
 
-	buffer->dma_attach = dma_buf_attach(buffer->dma_buf, dev);
-	if (IS_ERR(buffer->dma_attach))
+	dev = cam_entity_driver_data(entity);
+	buffer->entity = entity;
+	buffer->driver_data = entity->ops->dmabuf_add(dev, buffer->dma_buf);
+	if (!buffer->driver_data)
 		goto error;
 
-	buffer->dma_sgt = dma_buf_map_attachment(buffer->dma_attach,
-						 DMA_TO_DEVICE);
-	if (IS_ERR(buffer->dma_sgt))
-		goto error;
-
-	buffer->phys = sg_dma_address(buffer->dma_sgt->sgl);
 	if (cam_obj_insert(&buffer->nsobj))
 		goto error;
 

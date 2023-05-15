@@ -59,7 +59,20 @@ static void *root_entity_instance_create(void *dev)
 	return NULL;
 }
 
-static void root_entity_instance_destroy(void *dev, void *instance_data)
+static void root_entity_instance_destroy(void *dev, void *data)
+{
+	WARN_ON(1);
+}
+
+static void *root_entity_dmabuf_add(void *dev, struct dma_buf *buffer)
+{
+	WARN_ON(1);
+	return NULL;
+}
+
+static void root_entity_dmabuf_remove(void *dev,
+				      void *data,
+				      struct dma_buf *dma_buf)
 {
 	WARN_ON(1);
 }
@@ -72,6 +85,8 @@ static struct cam_entity_ops root_entity_ops = {
 	.device			= root_entity_device,
 	.instance_create	= root_entity_instance_create,
 	.instance_destroy	= root_entity_instance_destroy,
+	.dmabuf_add		= root_entity_dmabuf_add,
+	.dmabuf_remove		= root_entity_dmabuf_remove,
 };
 
 /**
@@ -214,6 +229,10 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 		ops->instance_create = root_entity_instance_create;
 	if (!ops->instance_destroy)
 		ops->instance_destroy = root_entity_instance_destroy;
+	if (!ops->dmabuf_add)
+		ops->dmabuf_add = root_entity_dmabuf_add;
+	if (!ops->dmabuf_remove)
+		ops->dmabuf_remove = root_entity_dmabuf_remove;
 
 	entity = kzalloc(sizeof(*entity), GFP_KERNEL);
 	if (!entity)
