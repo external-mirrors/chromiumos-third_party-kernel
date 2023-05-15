@@ -13,7 +13,6 @@
 #include <linux/types.h>
 
 #define VCAM_ROOT_ENTITY_NAME		"VCAM main"
-#define VCAM_DMA_IMPORT_ENTITY_NAME	"DMA import"
 
 /*
  * Per VCAM implementation, FAST_IRQ entity is the one that triggers events

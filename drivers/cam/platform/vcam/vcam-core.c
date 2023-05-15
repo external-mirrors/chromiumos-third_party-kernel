@@ -33,7 +33,6 @@
 
 static const char *entity_names[] = {
 	VCAM_ROOT_ENTITY_NAME,
-	VCAM_DMA_IMPORT_ENTITY_NAME,
 	VCAM_INSTANCES_ENTITY_NAME,
 	VCAM_FAST_IRQ_ENTITY_NAME,
 	VCAM_SLOW_IRQ_ENTITY_NAME,
@@ -44,7 +43,6 @@ struct vcam_device {
 	struct cam_device		*cam;
 
 	struct cam_obj_entity		*root_entity;
-	struct cam_obj_entity		*dma_import_entity;
 	struct cam_obj_entity		*entities[3];
 	struct cam_obj_event		*events[3];
 
@@ -212,15 +210,6 @@ static int entity_instance_write(void *dev,
 	return record_event_instance(vcam, instance);
 }
 
-static struct cam_entity_ops entity_ops = {
-	.read			= entity_read,
-	.write			= entity_write,
-	.instance_read		= entity_instance_read,
-	.instance_write		= entity_instance_write,
-	.instance_create	= entity_instance_create,
-	.instance_destroy	= entity_instance_destroy,
-};
-
 static void dmabuf_remove(void *dev, void *buf, struct dma_buf *dma_buf)
 {
 	struct vcam_buffer *buffer;
@@ -264,9 +253,13 @@ error:
 	return NULL;
 }
 
-static struct cam_entity_ops dma_importer_entity_ops = {
+static struct cam_entity_ops entity_ops = {
 	.read			= entity_read,
 	.write			= entity_write,
+	.instance_read		= entity_instance_read,
+	.instance_write		= entity_instance_write,
+	.instance_create	= entity_instance_create,
+	.instance_destroy	= entity_instance_destroy,
 	.dmabuf_add		= dmabuf_add,
 	.dmabuf_remove		= dmabuf_remove,
 };
@@ -359,9 +352,6 @@ static void cam_objects_release(struct vcam_device *vcam)
 			cam_entity_unregister(vcam->entities[obj]);
 	}
 
-	if (vcam->dma_import_entity)
-		cam_entity_unregister(vcam->dma_import_entity);
-
 	if (vcam->root_entity)
 		cam_entity_unregister(vcam->root_entity);
 
@@ -411,19 +401,6 @@ static int vcam_probe(struct platform_device *pdev)
 	}
 
 	idx = 1;
-	parent_id = cam_entity_id(vcam->root_entity);
-	vcam->dma_import_entity = cam_entity_register(vcam->cam,
-						      parent_id,
-						      vcam,
-						      &dma_importer_entity_ops,
-						      CAM_ENTITY_NO_INSTANCES,
-						      entity_names[idx]);
-	if (!vcam->dma_import_entity) {
-		ret = -ENOMEM;
-		goto error;
-	}
-
-	idx = 2;
 	for (obj = 0; obj < ARRAY_SIZE(vcam->entities); obj++) {
 		u32 instances = CAM_ENTITY_NO_INSTANCES;
 		struct cam_obj_entity *entity;
@@ -454,7 +431,7 @@ static int vcam_probe(struct platform_device *pdev)
 
 	parent_obj = 0;
 	obj = 0;
-	idx = 2;
+	idx = 1;
 
 	while (obj < ARRAY_SIZE(vcam->events)) {
 		parent_id = cam_entity_id(vcam->entities[parent_obj]);

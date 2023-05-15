@@ -166,7 +166,7 @@ out:
 	return ret;
 }
 
-#define VCAM_ENTITIES_COUNT	6
+#define VCAM_ENTITIES_COUNT	5
 #define VCAM_EVENTS_COUNT	1
 
 static int test_compound_query_count(struct libkc *cam,
@@ -1815,10 +1815,10 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	pr_info("Test compound buffer operations\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
@@ -1985,10 +1985,10 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 
 	pr_info("Test ADD buffer cancellation\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
@@ -2069,10 +2069,10 @@ static int test_buffer_enumeration(struct libkc *cam)
 
 	pr_info("Test buffer enumeration\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
@@ -2625,10 +2625,10 @@ static int test_add_buffer(struct libkc *cam)
 
 	pr_info("Test ADD buffer\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
@@ -2730,10 +2730,10 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 
 	pr_info("Test REMOVE buffers\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
@@ -2808,10 +2808,10 @@ static int test_remove_unknown_buffer(struct libkc *cam)
 
 	pr_info("Test REMOVE unknown buffer\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
