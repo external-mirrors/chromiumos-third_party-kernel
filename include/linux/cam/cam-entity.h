@@ -142,7 +142,8 @@ u32 cam_entity_id(struct cam_obj_entity *ce);
 void *cam_entity_driver_data(struct cam_obj_entity *entity);
 
 struct cam_obj_entity *cam_entity_lookup(struct cam_device *cam, u32 id);
-void cam_entity_put(struct cam_obj_entity *ce);
+bool cam_entity_get(struct cam_obj_entity *entity);
+void cam_entity_put(struct cam_obj_entity *entity);
 
 struct cam_obj_event *cam_event_register(struct cam_device *cam,
 					 u32 entity_id,

@@ -137,6 +137,20 @@ void *cam_entity_driver_data(struct cam_obj_entity *entity)
 EXPORT_SYMBOL_GPL(cam_entity_driver_data);
 
 /**
+ * cam_entity_get() - Increments ref-counter of the CAM entity
+ * @entity: pointer to CAM entity
+ *
+ * Return: true if entity ref-count was incremented and false otherwise
+ */
+bool __must_check cam_entity_get(struct cam_obj_entity *entity)
+{
+	if (cam_obj_get(&entity->nsobj))
+		return true;
+
+	return false;
+}
+
+/**
  * cam_entity_put() - Decrements ref-counter of the CAM entity
  * @entity: pointer to CAM entity
  */
