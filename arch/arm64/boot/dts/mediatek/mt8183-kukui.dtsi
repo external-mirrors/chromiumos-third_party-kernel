@@ -305,6 +305,10 @@
 	};
 };
 
+&gic {
+	mediatek,broken-save-restore-fw;
+};
+
 &gpu {
 	/* supply-names property is non-standard */
 	supply-names = "mali";
