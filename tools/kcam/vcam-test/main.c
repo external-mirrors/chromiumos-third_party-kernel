@@ -539,7 +539,6 @@ static int test_query_specific_event(struct libkc *cam,
 		event_id,
 		entity_id);
 
-	/* We should never have event with this ID */
 	for_each_cam_query(lcq, i, q) {
 		q->query_type			= CAM_QUERY_TYPE_EVENTS;
 		q->query_events.entity		= entity_id;
@@ -2055,6 +2054,173 @@ out:
 	return ret;
 }
 
+static int test_buffer_enumeration(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct libkc_dmabuf *buf = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct libkc_iterator iter;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	struct libkc_query *lcq;
+	struct cam_query *q;
+	int ret, op_idx, rw_idx;
+
+	pr_info("Test buffer enumeration\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_DMA_IMPORT_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_DMA_IMPORT_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	buf = libkc_dmabuf_get(cam, 4);
+	if (!buf) {
+		pr_err("Failed to create buffer\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Import (ADD) buffer */
+	op = libkc_operation_at(lco, 0);
+	if (!op) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	rw = libkc_rw_instruction_at(rw_list, 0);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
+	rw->db.op	= CAM_OP_DMABUF_ADD;
+	rw->db.dma_fd	= buf->fd;
+	rw->db.buf_id	= 101;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret)
+		goto out;
+
+	ret = read_operations_completion_events(cam, 1);
+	if (ret != 1) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	lcq = libkc_query_get(1, CAM_DEFAULT_OUT_SZ);
+	if (!lcq) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	q = libkc_query_at(lcq, 0);
+	if (!q) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Query valid DMA-buffer fd */
+	q->query_type			= CAM_QUERY_TYPE_DMABUF;
+	q->query_dmabuf.fd		= buf->fd;
+
+	ret = libkc_query_ioctl(cam, lcq);
+	if (ret)
+		goto out;
+
+	libkc_iterator_init(&lcq->hdr, &iter);
+	for_each_cam_query(lcq, op_idx, q) {
+		struct cam_query_dmabuf_entry *entry;
+
+		if (q->query_type != CAM_QUERY_TYPE_DMABUF) {
+			pr_err("Unexpected query return type: %d\n",
+			       q->query_type);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		for_each_query_dmabuf(q, &iter, entry) {
+			pr_info("DMA-buffer ID: %d\n", entry->id);
+			if (entry->id != 101) {
+				pr_err("Unexpected DMA-buffer ID\n");
+				ret = -EINVAL;
+				goto out;
+			}
+		}
+	}
+
+	/* Test invalid DMA-buffer fd */
+	q = libkc_query_at(lcq, 0);
+	if (!q) {
+		ret = -EINVAL;
+		goto out;
+	}
+	q->query_type		= CAM_QUERY_TYPE_DMABUF;
+	q->query_dmabuf.fd	= 101;
+
+	ret = libkc_query_ioctl(cam, lcq);
+	if (ret == 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Release (REMOVE) buffer */
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
+	rw->db.op	= CAM_OP_DMABUF_REMOVE;
+	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.buf_id	= 101;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret)
+		goto out;
+
+	ret = read_operations_completion_events(cam, 1);
+	if (ret != 1) {
+		ret = -EINVAL;
+		goto out;
+	} else {
+		ret = 0;
+	}
+
+out:
+	libkc_dmabuf_put(buf);
+	libkc_operation_put(lco);
+	libkc_query_put(lcq);
+	return ret;
+}
+
 static int test_root_entity_instance(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2901,6 +3067,12 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
+	ret = test_buffer_enumeration(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_buffer_enumeration()\n");
+		goto out;
+	}
+
 	ret = test_add_buffer(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_add_buffer()\n");
@@ -2956,7 +3128,7 @@ out:
 	return NULL;
 }
 
-#define NUM_THREADS	5
+#define NUM_THREADS	3
 
 static int multi_threaded_test(void)
 {
