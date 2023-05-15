@@ -117,7 +117,7 @@ struct cam_ns_walk_control {
 	/** @data: pointer to auxiliary data */
 	void		*data;
 	/** @flags: auxiliary flags */
-	u32		flags;
+	u64		flags;
 	/** @cb: callback operation to the (matched) namespace objects */
 	bool (*cb)(struct cam_obj *nsobj, struct cam_ns_walk_control *ctl);
 };

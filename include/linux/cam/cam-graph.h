@@ -87,13 +87,11 @@ struct cam_graph_walk {
 	/** @data: pointer to auxiliary data e.g. output of a pipeline query */
 	void		*data;
 	/** @flags: auxiliary flag */
-	u32		flags;
-
+	u64		flags;
 	/** @match_type: the target type of a query e.g. entity or event */
 	u32		match_type;
 	/** @match_id: the target ID of a query, or CAM_QUERY_ALL_OBJECTS */
 	u32		match_id;
-
 	/** @cb: callback operation to the (matched) namespace objects */
 	bool		(*cb)(struct cam_obj *nsobj,
 			      struct cam_graph_walk *ctl);
