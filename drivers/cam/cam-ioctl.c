@@ -144,6 +144,11 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 						  &query.query_operations,
 						  &output);
 			break;
+		case CAM_QUERY_TYPE_DMABUF:
+			ret = cam_enum_buffer(&fh->pipeline,
+					      &query.query_dmabuf,
+					      &output);
+			break;
 		default:
 			ret = -EINVAL;
 		}

@@ -11,6 +11,8 @@
 #include <linux/cam/cam-device.h>
 #include <linux/cam/cam-entity.h>
 #include <linux/cam/cam-namespace.h>
+#include <linux/cam/cam-output.h>
+#include <linux/cam/cam-pipeline.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 
@@ -206,3 +208,64 @@ bool __must_check cam_buffer_get(struct cam_obj_buffer *buffer)
 	return false;
 }
 EXPORT_SYMBOL_GPL(cam_buffer_get);
+
+static bool enum_buffer(struct cam_obj *nsobj, struct cam_ns_walk_control *ctl)
+{
+	struct cam_query_dmabuf_entry *qent;
+	struct cam_obj_buffer *buffer;
+	struct cam_koutput *output;
+	struct dma_buf *dma_buf;
+
+	output = ctl->data;
+	if (!cam_output_has_buffer(output))
+		return true;
+
+	if (!(nsobj->type & CAM_OBJ_TYPE_BUFFER))
+		return false;
+
+	buffer = nsobj_to_cam_buffer(nsobj);
+	if (WARN_ON(!buffer))
+		return true;
+
+	dma_buf = dma_buf_get(ctl->flags);
+	if (IS_ERR(dma_buf))
+		return true;
+
+	if (buffer->dma_buf != dma_buf) {
+		dma_buf_put(dma_buf);
+		return false;
+	}
+
+	dma_buf_put(dma_buf);
+	cam_output_next_entry(output, qent);
+	if (!qent)
+		return true;
+
+	if (put_user(cam_obj_id(nsobj), &qent->id))
+		return true;
+
+	output->num_entries++;
+	return true;
+}
+
+int cam_enum_buffer(struct cam_pipeline *pipeline,
+		    struct cam_query_dmabuf *query,
+		    struct cam_koutput *output)
+{
+	struct cam_ns_walk_control ctl;
+
+	/*
+	 * @FIXME
+	 * This is a quick and dirty implementation that walks the entire
+	 * namespace searching for DMA buffers.
+	 */
+	ctl.data	= output;
+	ctl.flags	= query->fd;
+	ctl.cb		= enum_buffer;
+	cam_ns_for_each(&pipeline->objs, &ctl);
+
+	if (!output->num_entries)
+		return -ENOENT;
+	return 0;
+}
+ALLOW_ERROR_INJECTION(cam_enum_buffer, ERRNO);

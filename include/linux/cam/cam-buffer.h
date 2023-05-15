@@ -50,4 +50,11 @@ struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id);
 bool cam_buffer_get(struct cam_obj_buffer *buffer);
 void cam_buffer_put(struct cam_obj_buffer *buffer);
 
+struct cam_pipeline;
+struct cam_koutput;
+
+int cam_enum_buffer(struct cam_pipeline *pipeline,
+		    struct cam_query_dmabuf *query,
+		    struct cam_koutput *output);
+
 #endif /* __LINUX_CAM_BUFFER_H__ */
