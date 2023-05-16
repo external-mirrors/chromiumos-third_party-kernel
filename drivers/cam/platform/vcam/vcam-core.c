@@ -100,13 +100,6 @@ static void entity_instance_destroy(void *dev, void *instance_data)
 	kfree(data);
 }
 
-static struct device *entity_device(void *dev)
-{
-	struct vcam_device *vcam = dev;
-
-	return vcam->dev;
-}
-
 static int entity_read(void *dev, struct cam_read_instruction *rw)
 {
 	char dummy_buffer[32] = {};
@@ -224,7 +217,6 @@ static struct cam_entity_ops entity_ops = {
 	.write			= entity_write,
 	.instance_read		= entity_instance_read,
 	.instance_write		= entity_instance_write,
-	.device			= entity_device,
 	.instance_create	= entity_instance_create,
 	.instance_destroy	= entity_instance_destroy,
 };
@@ -275,7 +267,6 @@ error:
 static struct cam_entity_ops dma_importer_entity_ops = {
 	.read			= entity_read,
 	.write			= entity_write,
-	.device			= entity_device,
 	.dmabuf_add		= dmabuf_add,
 	.dmabuf_remove		= dmabuf_remove,
 };

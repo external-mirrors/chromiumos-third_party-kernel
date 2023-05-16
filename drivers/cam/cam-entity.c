@@ -47,12 +47,6 @@ static int root_entity_instance_write(void *dev,
 	return -EINVAL;
 }
 
-static struct device *root_entity_device(void *dev)
-{
-	WARN_ON(1);
-	return NULL;
-}
-
 static void *root_entity_instance_create(void *dev)
 {
 	WARN_ON(1);
@@ -82,7 +76,6 @@ static struct cam_entity_ops root_entity_ops = {
 	.write			= root_entity_write,
 	.instance_read		= root_entity_instance_read,
 	.instance_write		= root_entity_instance_write,
-	.device			= root_entity_device,
 	.instance_create	= root_entity_instance_create,
 	.instance_destroy	= root_entity_instance_destroy,
 	.dmabuf_add		= root_entity_dmabuf_add,
@@ -223,8 +216,6 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 		ops->read = root_entity_read;
 	if (!ops->write)
 		ops->write = root_entity_write;
-	if (!ops->device)
-		ops->device = root_entity_device;
 	if (!ops->instance_create)
 		ops->instance_create = root_entity_instance_create;
 	if (!ops->instance_destroy)

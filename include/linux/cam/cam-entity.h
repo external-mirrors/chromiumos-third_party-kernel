@@ -57,12 +57,6 @@ struct cam_entity_ops {
 			      struct cam_obj_instance *instance,
 			      struct cam_write_instruction *rw);
 	/**
-	 * device(): pointer to device that this entity is attached to
-	 *
-	 * Return: pointer to device or NULL
-	 */
-	struct device *(*device)(void *dev);
-	/**
 	 * instance_create(): callback to create entity instance
 	 *
 	 * Return: pointer to instance or NULL
