@@ -74,29 +74,51 @@ struct libkc_dmabuf *libkc_dmabuf_get(struct libkc *cam, u32 num_pages)
 	return buf;
 }
 
-struct libkc_buffers_list *libkc_buffers_list_get(u32 num_buffers)
+void libkc_buffers_list_put(struct libkc_buffers_list *list)
 {
-	struct libkc_buffers_list *buffers;
+	u32 i;
+
+	for (i = 0; i < list->size; i++) {
+		if (!list->bufs[i])
+			break;
+
+		libkc_dmabuf_put(list->bufs[i]);
+	}
+
+	free(list->ids);
+	free(list->bufs);
+	free(list);
+}
+
+struct libkc_buffers_list *libkc_buffers_list_get(struct libkc *cam,
+						  u32 num_buffers,
+						  u32 num_pages)
+{
+	struct libkc_buffers_list *list;
+	u32 i;
 
 	if (num_buffers == 0 || num_buffers > CAM_RW_INSN_MAX_NUM_BUFFERS)
 		return NULL;
 
-	buffers = calloc(1, sizeof(*buffers));
-	if (!buffers)
+	list = calloc(1, sizeof(*list));
+	if (!list)
 		return NULL;
 
-	buffers->list_sz = num_buffers;
-	buffers->list = calloc(num_buffers, sizeof(u64));
-	if (!buffers->list) {
-		free(buffers);
-		return NULL;
+	list->size	= num_buffers;
+	list->ids	= calloc(num_buffers, sizeof(u64));
+	list->bufs	= calloc(num_buffers, sizeof(struct libkc_dmabuf));
+	if (!list->ids || !list->bufs)
+		goto error;
+
+	for (i = 0; i < num_buffers; i++) {
+		list->bufs[i] = libkc_dmabuf_get(cam, num_pages);
+		if (!list->bufs[i])
+			goto error;
 	}
 
-	return buffers;
-}
+	return list;
 
-void libkc_buffers_list_put(struct libkc_buffers_list *buffers)
-{
-	free(buffers->list);
-	free(buffers);
+error:
+	libkc_buffers_list_put(list);
+	return NULL;
 }

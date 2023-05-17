@@ -1806,9 +1806,8 @@ out:
 
 static int test_compound_buffer_operations(struct libkc *cam)
 {
-	struct libkc_buffers_list *buffers = NULL;
+	struct libkc_buffers_list *buf_list = NULL;
 	struct libkc_operation *lco = NULL;
-	struct libkc_dmabuf *buf = NULL;
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
 	struct obj_entity *entity;
@@ -1825,9 +1824,9 @@ static int test_compound_buffer_operations(struct libkc *cam)
 		return -EINVAL;
 	}
 
-	buf = libkc_dmabuf_get(cam, 4);
-	if (!buf) {
-		pr_err("Failed to create buffer\n");
+	buf_list = libkc_buffers_list_get(cam, 1, 2);
+	if (!buf_list) {
+		pr_err("Failed to create buffers\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1871,11 +1870,12 @@ static int test_compound_buffer_operations(struct libkc *cam)
 		goto out;
 	}
 
-	rw->type	= CAM_DMABUF_INSTRUCTION;
-	rw->error	= 0;
-	rw->db.op	= CAM_OP_DMABUF_ADD;
-	rw->db.dma_fd	= buf->fd;
-	rw->db.buf_id	= 1;
+	rw->type		= CAM_DMABUF_INSTRUCTION;
+	rw->error		= 0;
+	rw->db.op		= CAM_OP_DMABUF_ADD;
+	rw->db.dma_fd		= buf_list->bufs[0]->fd;
+	rw->db.buf_id		= 1;
+	buf_list->ids[0]	= 1;
 
 	/* Use imported buffer */
 	op = libkc_operation_at(lco, 1);
@@ -1906,20 +1906,12 @@ static int test_compound_buffer_operations(struct libkc *cam)
 		goto out;
 	}
 
-	buffers = libkc_buffers_list_get(1);
-	if (!buffers) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	buffers->list[0]	= 1;
-
 	rw->type		= CAM_READ_INSTRUCTION;
 	rw->error		= 0;
 	rw->rd.reg		= 42;
 	rw->rd.size		= READ_BUFFER_SIZE;
-	rw->rd.num_buffers	= buffers->list_sz;
-	rw->rd.buffers_list	= (uint64_t)buffers->list;
+	rw->rd.num_buffers	= buf_list->size;
+	rw->rd.buffers_list	= (uint64_t)buf_list->ids;
 	rw->rd.ptr		= (uint64_t)read_buffer;
 
 	/* Release (REMOVE) buffer */
@@ -1955,7 +1947,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
 	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
-	rw->db.buf_id	= 1;
+	rw->db.buf_id	= buf_list->ids[0];
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
@@ -1979,8 +1971,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 out:
-	libkc_buffers_list_put(buffers);
-	libkc_dmabuf_put(buf);
+	libkc_buffers_list_put(buf_list);
 	libkc_operation_put(lco);
 	free(read_buffer);
 	return ret;
