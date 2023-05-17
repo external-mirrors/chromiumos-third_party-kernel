@@ -1824,7 +1824,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 		return -EINVAL;
 	}
 
-	buf_list = libkc_buffers_list_get(cam, 1, 2);
+	buf_list = libkc_buffers_list_get(cam, 2, 2);
 	if (!buf_list) {
 		pr_err("Failed to create buffers\n");
 		ret = -EINVAL;
@@ -1857,7 +1857,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
-	rw_list = libkc_rw_list_get(1);
+	rw_list = libkc_rw_list_get(2);
 	if (!rw_list) {
 		ret = -ENOMEM;
 		goto out;
@@ -1876,6 +1876,19 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	rw->db.dma_fd		= buf_list->bufs[0]->fd;
 	rw->db.buf_id		= 1;
 	buf_list->ids[0]	= 1;
+
+	rw = libkc_rw_instruction_at(rw_list, 1);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type		= CAM_DMABUF_INSTRUCTION;
+	rw->error		= 0;
+	rw->db.op		= CAM_OP_DMABUF_ADD;
+	rw->db.dma_fd		= buf_list->bufs[1]->fd;
+	rw->db.buf_id		= 2;
+	buf_list->ids[1]	= 2;
 
 	/* Use imported buffer */
 	op = libkc_operation_at(lco, 1);
@@ -1930,7 +1943,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
 	op->operation_add.deps[0].id	= 2;
 
-	rw_list = libkc_rw_list_get(1);
+	rw_list = libkc_rw_list_get(2);
 	if (!rw_list) {
 		ret = -ENOMEM;
 		goto out;
@@ -1948,6 +1961,18 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
 	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= buf_list->ids[0];
+
+	rw = libkc_rw_instruction_at(rw_list, 1);
+	if (!rw) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	rw->type	= CAM_DMABUF_INSTRUCTION;
+	rw->error	= 0;
+	rw->db.op	= CAM_OP_DMABUF_REMOVE;
+	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
+	rw->db.buf_id	= buf_list->ids[1];
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
