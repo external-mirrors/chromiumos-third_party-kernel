@@ -130,21 +130,35 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 
 		switch (query.query_type) {
 		case CAM_QUERY_TYPE_ENTITIES:
+			cam_ns_enumeration_begin(fh->cam);
 			ret = cam_enum_entities(fh->cam,
 						&query.query_entities,
 						&output);
+			cam_ns_enumeration_end(fh->cam);
 			break;
 		case CAM_QUERY_TYPE_EVENTS:
+			cam_ns_enumeration_begin(fh->cam);
 			ret = cam_enum_events(fh->cam,
 					      &query.query_events,
 					      &output);
+			cam_ns_enumeration_end(fh->cam);
 			break;
 		case CAM_QUERY_TYPE_OPERATIONS:
+			/*
+			 * OPERATIONS query is performed on a local namespace
+			 * (pipeline namespace), so no enumeration begin/end
+			 * is needed.
+			 */
 			ret = cam_enum_operations(&fh->pipeline,
 						  &query.query_operations,
 						  &output);
 			break;
 		case CAM_QUERY_TYPE_DMABUF:
+			/*
+			 * DMABUF query is performed on a local namespace
+			 * (pipeline namespace), so no enumeration begin/end
+			 * is needed.
+			 */
 			ret = cam_enum_buffer(&fh->pipeline,
 					      &query.query_dmabuf,
 					      &output);

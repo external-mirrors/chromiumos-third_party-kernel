@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/rwsem.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -44,6 +45,9 @@ struct cam_device {
 		 */
 		bool unregister_in_progress;
 	} uapi;
+
+	/** @ns_enum_lock: Namespace objects enumeration (query) lock */
+	struct rw_semaphore	ns_enum_lock;
 
 	/** @ns: CAM objects namespace */
 	struct cam_ns ns;
@@ -83,5 +87,10 @@ void cam_device_put(struct cam_device *cam);
 
 int cam_device_uapi_call_enter(struct cam_device *cam);
 void cam_device_uapi_call_exit(struct cam_device *cam);
+
+void cam_ns_enumeration_begin(struct cam_device *cam);
+void cam_ns_enumeration_end(struct cam_device *cam);
+void cam_ns_enumeration_forbid(struct cam_device *cam);
+void cam_ns_enumeration_permit(struct cam_device *cam);
 
 #endif /* __LINUX_CAM_DEVICE_H__ */

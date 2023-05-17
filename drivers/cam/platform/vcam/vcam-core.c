@@ -388,6 +388,7 @@ static int vcam_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	cam_ns_enumeration_forbid(vcam->cam);
 	idx = 0;
 	vcam->root_entity = cam_entity_register(vcam->cam,
 						CAM_OBJ_ID_ROOT,
@@ -452,6 +453,7 @@ static int vcam_probe(struct platform_device *pdev)
 		parent_obj++;
 	}
 
+	cam_ns_enumeration_permit(vcam->cam);
 	vcam->timer_start_ts = jiffies;
 	hrtimer_start(&vcam->event_timer_fast, 0, HRTIMER_MODE_REL);
 	hrtimer_start(&vcam->event_timer_slow, 0, HRTIMER_MODE_REL);
@@ -461,6 +463,7 @@ static int vcam_probe(struct platform_device *pdev)
 
 error:
 	cam_objects_release(vcam);
+	cam_ns_enumeration_permit(vcam->cam);
 	cam_device_put(vcam->cam);
 	kfree(vcam);
 	return ret;

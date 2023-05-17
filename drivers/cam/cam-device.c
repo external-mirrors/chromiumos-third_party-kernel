@@ -56,6 +56,7 @@ static int cam_device_init(struct cam_device *cam)
 	if (ret)
 		return ret;
 
+	init_rwsem(&cam->ns_enum_lock);
 	init_waitqueue_head(&cam->uapi.wait);
 
 	cam->devnode.bus = &cam_bus;
@@ -153,6 +154,67 @@ static void cam_device_unregister(struct cam_device *cam)
 
 	cdev_device_del(&cam->cdev, &cam->devnode);
 }
+
+/**
+ * cam_ns_enumeration_begin() - Namespace enumeration entry poit.
+ * @cam: pointer to CAM device
+ *
+ * Grabs namespce enumeration lock (read mode), so that drivers are not
+ * permitted to add new objects in the meantime.
+ *
+ * This should be called only for global namespace enumearion.
+ */
+void cam_ns_enumeration_begin(struct cam_device *cam)
+{
+	down_read(&cam->ns_enum_lock);
+}
+
+/**
+ * cam_ns_enumeration_end() - Namespace enumeration exit point.
+ * @cam: pointer to CAM device
+ *
+ * Releases namespace enumeration lock (read mode) so that drivers can
+ * modify namespace.
+ *
+ * This should be called only for global namespace enumeration.
+ */
+void cam_ns_enumeration_end(struct cam_device *cam)
+{
+	up_read(&cam->ns_enum_lock);
+}
+
+/**
+ * cam_ns_enumeration_forbid() - Namespace modification entry point.
+ * @cam: pointer to CAM device.
+ *
+ * Driver sometimes need to add several namespace objects which are linked
+ * to each other (graph) yet driver can only insert one object at a time,
+ * making it possible for user-space objects enumeration to race against
+ * drivers' namespace modification. This function forbids namespace
+ * enumeration and lets drivers to insert all the objects and properly
+ * link them.
+ *
+ * This should be called only for global namespace modification.
+ */
+void cam_ns_enumeration_forbid(struct cam_device *cam)
+{
+	down_write(&cam->ns_enum_lock);
+}
+EXPORT_SYMBOL_GPL(cam_ns_enumeration_forbid);
+
+/**
+ * cam_ns_enumeration_permit() - Namespace modification exit point.
+ * @cam: pointer to CAM device
+ *
+ * This unlocks namespace enumeration.
+ *
+ * This should be called only for global namespace modification.
+ */
+void cam_ns_enumeration_permit(struct cam_device *cam)
+{
+	up_write(&cam->ns_enum_lock);
+}
+EXPORT_SYMBOL_GPL(cam_ns_enumeration_permit);
 
 /**
  * cam_device_uapi_call_enter - UAPI call entry tracing
