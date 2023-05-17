@@ -78,6 +78,9 @@ struct libkc_buffers_list *libkc_buffers_list_get(u32 num_buffers)
 {
 	struct libkc_buffers_list *buffers;
 
+	if (num_buffers == 0 || num_buffers > CAM_RW_INSN_MAX_NUM_BUFFERS)
+		return NULL;
+
 	buffers = calloc(1, sizeof(*buffers));
 	if (!buffers)
 		return NULL;
