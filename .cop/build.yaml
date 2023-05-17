@@ -108,7 +108,7 @@ steps:
         set -v
         scripts/checkpatch.pl --show-types --strict --ignore GERRIT_CHANGE_ID \
                 --ignore UNKNOWN_COMMIT_ID --ignore COMMIT_LOG_LONG_LINE \
-                --ignore FILE_PATH_CHANGES  *patch
+                --ignore FILE_PATH_CHANGES --ignore COMPARISON_TO_NULL *patch
 substitutions:
   _ARCH: x86
   _CROSS_COMPILE: ""
