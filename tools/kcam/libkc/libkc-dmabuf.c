@@ -73,3 +73,27 @@ struct libkc_dmabuf *libkc_dmabuf_get(struct libkc *cam, u32 num_pages)
 
 	return buf;
 }
+
+struct libkc_buffers_list *libkc_buffers_list_get(u32 num_buffers)
+{
+	struct libkc_buffers_list *buffers;
+
+	buffers = calloc(1, sizeof(*buffers));
+	if (!buffers)
+		return NULL;
+
+	buffers->list_sz = num_buffers;
+	buffers->list = calloc(num_buffers, sizeof(u64));
+	if (!buffers->list) {
+		free(buffers);
+		return NULL;
+	}
+
+	return buffers;
+}
+
+void libkc_buffers_list_put(struct libkc_buffers_list *buffers)
+{
+	free(buffers->list);
+	free(buffers);
+}
