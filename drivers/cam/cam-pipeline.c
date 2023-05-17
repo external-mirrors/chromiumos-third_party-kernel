@@ -747,7 +747,7 @@ static int cam_run_instance_instruction(struct cam_obj_op *op,
 
 /*
  * cam_read_instruction() and cam_write_instruction() hold the reference of
- * DMA-buf objects only thought out corresponding entity call. If the driver
+ * DMA-buf objects only through out corresponding entity call. If the driver
  * needs to access that buffer from different context (e.g. IRQ which may
  * happen after entity call returns) the driver need to additionally increment
  * DMA-buf object's ref-count and decrement it once DMA-buf access is done.
@@ -756,17 +756,74 @@ static int cam_run_instance_instruction(struct cam_obj_op *op,
  * pipeline local namespace. However, we pass pointer to cam_obj_buffer object
  * down to the entity call.
  *
- * User-space provides us with buffer object ID, we overwrite that field with
- * a pointer to actual buffer object (if such object exists) right before
- * entity call. Both function operate on local (stack) copy of user-supplied
+ * User-space provides us with an array of buffer object IDs, we overwrite
+ * those IDs with pointers to actual buffer objects (if such objects exists)
+ * right before entity call. Functions operate on local copy of user-supplied
  * RW instruction.
  */
+static void cam_buffers_list_put(u32 num_buffers, u64 *list)
+{
+	u32 i;
+
+	if (!list)
+		return;
+
+	for (i = 0; i < num_buffers; i++) {
+		if (list[i]) {
+			struct cam_obj_buffer *buffer;
+
+			buffer = (struct cam_obj_buffer *)list[i];
+			cam_buffer_put(buffer);
+		}
+	}
+
+	kvfree(list);
+}
+
+static u64 *cam_buffers_list_get(struct cam_pipeline *pipeline,
+				 u32 num_buffers,
+				 u64 buffers_list)
+{
+	u64 __user *payload;
+	u64 *list;
+	u32 i;
+
+	if (num_buffers > CAM_RW_INSN_MAX_NUM_BUFFERS)
+		return NULL;
+
+	list = kvcalloc(num_buffers, sizeof(u64), GFP_KERNEL);
+	if (!list)
+		return NULL;
+
+	payload = (u64 *)buffers_list;
+	for (i = 0; i < num_buffers; i++) {
+		struct cam_obj_buffer *buffer;
+		u64 id;
+
+		if (copy_from_user(&id, payload, sizeof(id)))
+			goto error;
+
+		buffer = cam_buffer_lookup(&pipeline->objs, id);
+		if (!buffer)
+			goto error;
+
+		list[i] = (u64)buffer;
+		payload++;
+	}
+
+	return list;
+
+error:
+	cam_buffers_list_put(num_buffers, list);
+	return NULL;
+}
+
 static int cam_read_instruction(struct cam_obj_op *op,
 				struct cam_read_instruction *insn)
 {
 	struct cam_obj_entity *entity = op->exec_entity;
 	struct cam_pipeline *pipeline = op->pipeline;
-	struct cam_obj_buffer *buffer = NULL;
+	u64 *buffers_list;
 	void *dev;
 	int ret;
 
@@ -774,12 +831,14 @@ static int cam_read_instruction(struct cam_obj_op *op,
 	    !op->exec_instance)
 		return -EINVAL;
 
-	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
-		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
-		if (!buffer)
+	if (insn->num_buffers) {
+		buffers_list = cam_buffers_list_get(pipeline,
+						    insn->num_buffers,
+						    insn->buffers_list);
+		if (!buffers_list)
 			return -EINVAL;
 
-		insn->dbuf = (u64)buffer;
+		insn->buffers_list = (u64)buffers_list;
 	}
 
 	dev = cam_entity_driver_data(entity);
@@ -788,8 +847,8 @@ static int cam_read_instruction(struct cam_obj_op *op,
 	else
 		ret = entity->ops->instance_read(dev, op->exec_instance, insn);
 
-	if (buffer)
-		cam_buffer_put(buffer);
+	if (insn->num_buffers)
+		cam_buffers_list_put(insn->num_buffers, buffers_list);
 	return ret;
 }
 
@@ -798,7 +857,7 @@ static int cam_write_instruction(struct cam_obj_op *op,
 {
 	struct cam_obj_entity *entity = op->exec_entity;
 	struct cam_pipeline *pipeline = op->pipeline;
-	struct cam_obj_buffer *buffer = NULL;
+	u64 *buffers_list;
 	void *dev;
 	int ret;
 
@@ -806,12 +865,14 @@ static int cam_write_instruction(struct cam_obj_op *op,
 	    !op->exec_instance)
 		return -EINVAL;
 
-	if (insn->dbuf != CAM_RW_INSTRUCTION_NO_BUFFER) {
-		buffer = cam_buffer_lookup(&pipeline->objs, insn->dbuf);
-		if (!buffer)
+	if (insn->num_buffers) {
+		buffers_list = cam_buffers_list_get(pipeline,
+						    insn->num_buffers,
+						    insn->buffers_list);
+		if (!buffers_list)
 			return -EINVAL;
 
-		insn->dbuf = (u64)buffer;
+		insn->buffers_list = (u64)buffers_list;
 	}
 
 	dev = cam_entity_driver_data(entity);
@@ -820,8 +881,8 @@ static int cam_write_instruction(struct cam_obj_op *op,
 	else
 		ret = entity->ops->instance_write(dev, op->exec_instance, insn);
 
-	if (buffer)
-		cam_buffer_put(buffer);
+	if (insn->num_buffers)
+		cam_buffers_list_put(insn->num_buffers, buffers_list);
 	return ret;
 }
 

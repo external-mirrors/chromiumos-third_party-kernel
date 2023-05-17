@@ -1219,12 +1219,13 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 			 * RW 0 is register read
 			 */
 			for_each_rw_instruction(rw_list, rw_idx, rw) {
-				rw->type	= CAM_READ_INSTRUCTION;
-				rw->error	= 0;
-				rw->rd.reg	= 42;
-				rw->rd.size	= READ_BUFFER_SIZE;
-				rw->rd.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
-				rw->rd.ptr	= (uint64_t)read_buffer;
+				rw->type		= CAM_READ_INSTRUCTION;
+				rw->error		= 0;
+				rw->rd.reg		= 42;
+				rw->rd.size		= READ_BUFFER_SIZE;
+				rw->rd.num_buffers	= 0;
+				rw->rd.buffers_list	= 0x00;
+				rw->rd.ptr		= (uint64_t)read_buffer;
 			}
 			continue;
 		}
@@ -1237,12 +1238,13 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 			 * RW 1 is register write
 			 */
 			for_each_rw_instruction(rw_list, rw_idx, rw) {
-				rw->type	= CAM_WRITE_INSTRUCTION;
-				rw->error	= 0;
-				rw->wr.reg	= 42;
-				rw->wr.size	= sizeof(write_buffer);
-				rw->wr.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
-				rw->wr.ptr	= (uint64_t)write_buffer;
+				rw->type		= CAM_WRITE_INSTRUCTION;
+				rw->error		= 0;
+				rw->wr.reg		= 42;
+				rw->wr.size		= sizeof(write_buffer);
+				rw->wr.num_buffers	= 0;
+				rw->wr.buffers_list	= 0x00;
+				rw->wr.ptr		= (uint64_t)write_buffer;
 			}
 			continue;
 		}
@@ -1804,6 +1806,7 @@ out:
 
 static int test_compound_buffer_operations(struct libkc *cam)
 {
+	struct libkc_buffers_list *buffers = NULL;
 	struct libkc_operation *lco = NULL;
 	struct libkc_dmabuf *buf = NULL;
 	struct cam_rw_instruction *rw;
@@ -1903,12 +1906,21 @@ static int test_compound_buffer_operations(struct libkc *cam)
 		goto out;
 	}
 
-	rw->type	= CAM_READ_INSTRUCTION;
-	rw->error	= 0;
-	rw->rd.reg	= 42;
-	rw->rd.size	= READ_BUFFER_SIZE;
-	rw->rd.dbuf	= 1;
-	rw->rd.ptr	= (uint64_t)read_buffer;
+	buffers = libkc_buffers_list_get(1);
+	if (!buffers) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	buffers->list[0]	= 1;
+
+	rw->type		= CAM_READ_INSTRUCTION;
+	rw->error		= 0;
+	rw->rd.reg		= 42;
+	rw->rd.size		= READ_BUFFER_SIZE;
+	rw->rd.num_buffers	= buffers->list_sz;
+	rw->rd.buffers_list	= (uint64_t)buffers->list;
+	rw->rd.ptr		= (uint64_t)read_buffer;
 
 	/* Release (REMOVE) buffer */
 	op = libkc_operation_at(lco, 2);
@@ -1942,7 +1954,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
-	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= 1;
 
 	ret = libkc_operation_ioctl(cam, lco);
@@ -1967,6 +1979,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	}
 
 out:
+	libkc_buffers_list_put(buffers);
 	libkc_dmabuf_put(buf);
 	libkc_operation_put(lco);
 	free(read_buffer);
@@ -2199,7 +2212,7 @@ static int test_buffer_enumeration(struct libkc *cam)
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
-	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= 101;
 
 	ret = libkc_operation_ioctl(cam, lco);
@@ -2454,12 +2467,13 @@ static int test_entity_instance(struct libkc *cam)
 		goto out;
 	}
 
-	rw->type	= CAM_READ_INSTRUCTION;
-	rw->error	= 0;
-	rw->rd.reg	= 42;
-	rw->rd.size	= READ_BUFFER_SIZE;
-	rw->rd.dbuf	= CAM_RW_INSTRUCTION_NO_BUFFER;
-	rw->rd.ptr	= 0x00;
+	rw->type		= CAM_READ_INSTRUCTION;
+	rw->error		= 0;
+	rw->rd.reg		= 42;
+	rw->rd.size		= READ_BUFFER_SIZE;
+	rw->rd.num_buffers	= 0;
+	rw->rd.buffers_list	= 0x00;
+	rw->rd.ptr		= 0x00;
 
 	op = libkc_operation_at(lco, 2);
 	if (!op) {
@@ -2772,7 +2786,7 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
-	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= buf->id;
 
 	ret = libkc_operation_ioctl(cam, lco);
@@ -2850,7 +2864,7 @@ static int test_remove_unknown_buffer(struct libkc *cam)
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
 	rw->db.op	= CAM_OP_DMABUF_REMOVE;
-	rw->db.dma_fd	= CAM_RW_INSTRUCTION_NO_BUFFER;
+	rw->db.dma_fd	= CAM_DMABUF_INSTRUCTION_NO_BUFFER;
 	rw->db.buf_id	= 777;
 
 	ret = libkc_operation_ioctl(cam, lco);

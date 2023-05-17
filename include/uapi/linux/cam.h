@@ -211,6 +211,15 @@ struct cam_query {
 } __attribute__((packed));
 
 /**
+ * enum cam_dmabuf_instruction_id - Special RW instructions buffer_id values
+ *
+ * @CAM_DMABUF_INSTRUCTION_NO_BUFFER:	Operation does not need a DMA buffer
+ */
+enum cam_dmabuf_instruction_id {
+	CAM_DMABUF_INSTRUCTION_NO_BUFFER    = 0xffffffff,
+};
+
+/**
  * enum cam_dmabuf_instruction_op - DMA buffer instruction operation type
  *
  * @CAM_OP_DMABUF_ADD:		Add (import) DMA buffer
@@ -225,22 +234,13 @@ enum cam_dmabuf_instruction_op {
  * struct cam_dmabuf_instruction - Operation DMA buffer instruction
  *
  * @op:		DMA buffer operation
- * @dma_fd:	DMA buffer ID
+ * @dma_fd:	DMA buffer ID (or CAM_RW_INSTRUCTION_NO_BUFFER)
  * @buf_id:	Requested CAM object ID
  */
 struct cam_dmabuf_instruction {
 	__u32		op;
 	__u32		dma_fd;
 	__u32		buf_id;
-};
-
-/**
- * enum cam_instruction_buffer_id - Special RW instructions buffer_id values
- *
- * @CAM_RW_INSTRUCTION_NO_BUFFER:	Operation does not need a DMA buffer
- */
-enum cam_instruction_buffer_id {
-	CAM_RW_INSTRUCTION_NO_BUFFER	= 0xffffffff,
 };
 
 /**
@@ -283,33 +283,39 @@ struct cam_out_fence_instruction {
 	__u32		id;
 };
 
+#define CAM_RW_INSN_MAX_NUM_BUFFERS	1024
+
 /**
  * struct cam_read_instruction - Operation read instruction
  *
- * @reg:	Register to perform operation on
- * @size:	Size of blob data
- * @dbuf:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
- * @ptr:	User pointer to instruction blob
+ * @reg:		Register to perform operation on
+ * @size:		Size of blob data
+ * @num_buffers:	Number of DMA-buffer IDs in the buffers list (if any)
+ * @buffers_list:	Pointer to array of DMA-buffer IDs or 0x0
+ * @ptr:		User pointer to instruction blob
  */
 struct cam_read_instruction {
 	__u32		reg;
 	__u32		size;
-	__u64		dbuf;
+	__u32		num_buffers;
+	__u64		buffers_list;
 	__u64		ptr;
 } __attribute__((packed));
 
 /**
  * struct cam_write_instruction - Operation write instruction
  *
- * @reg:	Register to perform operation on
- * @size:	Size of blob data
- * @dbuf:	CAM ID of DMA buffer (or CAM_INSTRUCTION_NO_BUFFER)
- * @ptr:	User pointer to instruction blob
+ * @reg:		Register to perform operation on
+ * @size:		Size of blob data
+ * @num_buffers:	Number of DMA-buffer IDs in the buffers list (if any)
+ * @buffers_list:	Pointer to array of DMA-buffer IDs or 0x0
+ * @ptr:		User pointer to instruction blob
  */
 struct cam_write_instruction {
 	__u32		reg;
 	__u32		size;
-	__u64		dbuf;
+	__u32		num_buffers;
+	__u64		buffers_list;
 	__u64		ptr;
 } __attribute__((packed));
 
