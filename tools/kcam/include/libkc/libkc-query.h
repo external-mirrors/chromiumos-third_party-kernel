@@ -27,8 +27,9 @@ struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx);
 
 #define for_each_cam_query(q, i, e)					\
 	for ((i) = 0, (e) = libkc_query_at((q), (i));			\
-	     (e) != NULL && (i) < (q)->hdr.num_queries;			\
-	     (i)++, (e) = libkc_query_at((q), (i)))
+	     (i) < (q)->hdr.num_queries &&				\
+	     ((e) = libkc_query_at((q), (i)));				\
+	     (i)++)
 
 u32 libkc_query_num_entities(struct cam_query *q);
 

@@ -52,11 +52,16 @@ u32 libkc_query_num_dmabufs(struct cam_query *q)
 
 struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx)
 {
-	if (lcq->hdr.num_queries == 0)
+	if (lcq->hdr.num_queries == 0) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
-	if (idx > lcq->hdr.num_queries)
+	if (idx >= lcq->hdr.num_queries) {
+		pr_err("BOOM\n");
+		LIBKC_BUG();
 		return NULL;
+	}
 
 	return &lcq->ents[idx];
 }

@@ -12,11 +12,15 @@
 struct cam_completion *libkc_completion_at(struct libkc_completion *lcc,
 					   u32 idx)
 {
-	if (lcc->num_entries == 0)
+	if (lcc->num_entries == 0) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
-	if (idx > lcc->num_entries)
+	if (idx >= lcc->num_entries) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
 	return &lcc->entries[idx];
 }

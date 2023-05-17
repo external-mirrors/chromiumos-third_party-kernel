@@ -34,16 +34,18 @@ struct cam_operation *libkc_operation_at(struct libkc_operation *lco,
 
 #define for_each_cam_operation(q,i,e)					\
 	for ((i) = 0, (e) = libkc_operation_at((q), (i));		\
-	     (e) != NULL && (i) < (q)->hdr.num_queries;			\
-	     (i)++, (e) = libkc_operation_at((q), (i)))
+	     (i) < (q)->hdr.num_queries &&				\
+	     ((e) = libkc_operation_at((q), (i)));			\
+	     (i)++)
 
 struct cam_rw_instruction *libkc_rw_instruction_at(struct libkc_rw_list *rw,
 						   u32 idx);
 
 #define for_each_rw_instruction(q,i,e)					\
 	for ((i) = (0), (e) = libkc_rw_instruction_at((q), (i));	\
-	     (e) != NULL && (i) < (q)->num_ents;			\
-	     (i)++, (e) = libkc_rw_instruction_at((q), (i)))
+	     (i) < (q)->num_ents &&					\
+	     ((e) = libkc_rw_instruction_at((q), (i)));			\
+	     (i)++)
 
 struct cam_rw_instruction *libkc_failed_instruction(struct cam_operation *op,
 						    u32 *idx);

@@ -27,7 +27,8 @@ struct cam_completion *libkc_completion_at(struct libkc_completion *lcc,
 
 #define for_each_cam_completion(c,i,e)				\
 	for ((i) = 0, (e) = libkc_completion_at((c), (i));	\
-	     (e) != NULL && (i) < (c)->num_entries;		\
-	     (i)++, (e) = libkc_completion_at((c), (i)))
+	     (i) < (c)->num_entries &&				\
+	     ((e) = libkc_completion_at((c), (i)));		\
+	     (i)++)
 
 #endif /* LIBKC_OPERATION_H_ */

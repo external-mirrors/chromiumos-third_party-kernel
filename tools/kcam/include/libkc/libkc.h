@@ -34,6 +34,12 @@
 
 #include <libkc/vcam_objects.h>
 
+#define LIBKC_BUG()					\
+	do {						\
+		pr_err("BUG. Assertion failed\n");	\
+		abort();				\
+	} while (0)
+
 struct libkc {
 	int32_t			fd;
 	int32_t			mem_fd;

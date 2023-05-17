@@ -9,11 +9,15 @@
 
 struct cam_operation *libkc_operation_at(struct libkc_operation *lco, u32 idx)
 {
-	if (lco->hdr.num_queries == 0)
+	if (lco->hdr.num_queries == 0) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
-	if (idx > lco->hdr.num_queries)
+	if (idx >= lco->hdr.num_queries) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
 	return &lco->ents[idx];
 }
@@ -65,11 +69,15 @@ struct libkc_operation *libkc_operation_get(uint32_t num_operations)
 struct cam_rw_instruction *libkc_rw_instruction_at(struct libkc_rw_list *rw,
 						   u32 idx)
 {
-	if (rw->num_ents == 0)
+	if (rw->num_ents == 0) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
-	if (idx >= rw->num_ents)
+	if (idx >= rw->num_ents) {
+		LIBKC_BUG();
 		return NULL;
+	}
 
 	return &rw->ents[idx];
 }

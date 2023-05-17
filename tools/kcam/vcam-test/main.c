@@ -180,10 +180,6 @@ static int test_compound_query_count(struct libkc *cam,
 	pr_info("Test test_compound_query_count()\n");
 
 	q = libkc_query_at(lcq, 0);
-	if (!q) {
-		pr_err("Unable to get query\n");
-		return -EINVAL;
-	}
 
 	q->query_type			= CAM_QUERY_TYPE_ENTITIES;
 	q->query_entities.id		= CAM_OBJ_ID_ROOT;
@@ -197,10 +193,6 @@ static int test_compound_query_count(struct libkc *cam,
 	}
 
 	q = libkc_query_at(lcq, 1);
-	if (!q) {
-		pr_err("Unable to get query\n");
-		return -EINVAL;
-	}
 
 	q->query_type			= CAM_QUERY_TYPE_EVENTS;
 	q->query_events.entity		= entity->id;
@@ -214,10 +206,6 @@ static int test_compound_query_count(struct libkc *cam,
 	}
 
 	q = libkc_query_at(lcq, 2);
-	if (!q) {
-		pr_err("Unable to get query\n");
-		return -EINVAL;
-	}
 
 	q->query_type			= CAM_QUERY_TYPE_EVENTS;
 	q->query_events.entity		= entity->id;
@@ -265,10 +253,6 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 	pr_info("Test test_compound_query()\n");
 
 	q = libkc_query_at(lcq, 0);
-	if (!q) {
-		pr_err("Unable to get query\n");
-		return -EINVAL;
-	}
 
 	q->query_type			= CAM_QUERY_TYPE_ENTITIES;
 	q->query_entities.id		= CAM_OBJ_ID_ROOT;
@@ -282,10 +266,6 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 	}
 
 	q = libkc_query_at(lcq, 1);
-	if (!q) {
-		pr_err("Unable to get query\n");
-		return -EINVAL;
-	}
 
 	q->query_type			= CAM_QUERY_TYPE_EVENTS;
 	q->query_events.entity		= entity->id;
@@ -299,10 +279,6 @@ static int test_compound_query(struct libkc *cam, struct libkc_query *lcq)
 	}
 
 	q = libkc_query_at(lcq, 2);
-	if (!q) {
-		pr_err("Unable to get query\n");
-		return -EINVAL;
-	}
 
 	q->query_type			= CAM_QUERY_TYPE_EVENTS;
 	q->query_events.entity		= entity->id;
@@ -800,8 +776,6 @@ static int add_single_invalid_operation(struct libkc *cam,
 		id_dep, event_entity, event_id, fence_in);
 
 	op = libkc_operation_at(lco, 0);
-	if (!op)
-		return -EINVAL;
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
@@ -1321,10 +1295,6 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 		return -EINVAL;
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
@@ -1390,10 +1360,6 @@ static int test_add_too_many_rw_instructions(struct libkc *cam,
 		return -EINVAL;
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= op_idx;
@@ -1701,10 +1667,6 @@ static int test_export_import_operations(struct libkc *cam)
 		return -EINVAL;
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
@@ -1723,10 +1685,6 @@ static int test_export_import_operations(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type			= CAM_OUT_FENCE_INSTRUCTION;
 	rw->error			= 0;
@@ -1845,10 +1803,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	/* Import (ADD) buffer */
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -1865,10 +1819,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type		= CAM_DMABUF_INSTRUCTION;
 	rw->error		= 0;
@@ -1878,10 +1828,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	buf_list->ids[0]	= 1;
 
 	rw = libkc_rw_instruction_at(rw_list, 1);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type		= CAM_DMABUF_INSTRUCTION;
 	rw->error		= 0;
@@ -1892,10 +1838,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	/* Use imported buffer */
 	op = libkc_operation_at(lco, 1);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
@@ -1914,10 +1856,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type		= CAM_READ_INSTRUCTION;
 	rw->error		= 0;
@@ -1929,10 +1867,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	/* Release (REMOVE) buffer */
 	op = libkc_operation_at(lco, 2);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 3;
@@ -1951,10 +1885,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
@@ -1963,10 +1893,6 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	rw->db.buf_id	= buf_list->ids[0];
 
 	rw = libkc_rw_instruction_at(rw_list, 1);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
@@ -2035,10 +1961,6 @@ static int test_add_buffer_cancellation(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -2120,10 +2042,6 @@ static int test_buffer_enumeration(struct libkc *cam)
 
 	/* Import (ADD) buffer */
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -2140,10 +2058,6 @@ static int test_buffer_enumeration(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
@@ -2168,10 +2082,6 @@ static int test_buffer_enumeration(struct libkc *cam)
 	}
 
 	q = libkc_query_at(lcq, 0);
-	if (!q) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	/* Query valid DMA-buffer fd */
 	q->query_type			= CAM_QUERY_TYPE_DMABUF;
@@ -2204,10 +2114,7 @@ static int test_buffer_enumeration(struct libkc *cam)
 
 	/* Test invalid DMA-buffer fd */
 	q = libkc_query_at(lcq, 0);
-	if (!q) {
-		ret = -EINVAL;
-		goto out;
-	}
+
 	q->query_type		= CAM_QUERY_TYPE_DMABUF;
 	q->query_dmabuf.fd	= 101;
 
@@ -2275,10 +2182,6 @@ static int test_root_entity_instance(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -2295,10 +2198,6 @@ static int test_root_entity_instance(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
@@ -2350,10 +2249,6 @@ static int test_entity_instance_avail_limit(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -2425,10 +2320,6 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -2445,10 +2336,6 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
@@ -2456,10 +2343,6 @@ static int test_entity_instance(struct libkc *cam)
 	rw->in.id	= 1;
 
 	op = libkc_operation_at(lco, 1);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
@@ -2478,10 +2361,6 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type		= CAM_READ_INSTRUCTION;
 	rw->error		= 0;
@@ -2492,10 +2371,6 @@ static int test_entity_instance(struct libkc *cam)
 	rw->rd.ptr		= 0x00;
 
 	op = libkc_operation_at(lco, 2);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 3;
@@ -2516,10 +2391,6 @@ static int test_entity_instance(struct libkc *cam)
 	}
 
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
@@ -2577,10 +2448,6 @@ static int test_destroy_unknown_instance(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
@@ -2597,10 +2464,6 @@ static int test_destroy_unknown_instance(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
@@ -2682,10 +2545,6 @@ static int test_add_buffer(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 1;
@@ -2702,10 +2561,6 @@ static int test_add_buffer(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
@@ -2774,10 +2629,6 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
@@ -2794,10 +2645,6 @@ static int test_remove_buffer(struct libkc *cam, struct obj_buffer *buf)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
@@ -2852,10 +2699,6 @@ static int test_remove_unknown_buffer(struct libkc *cam)
 	}
 
 	op = libkc_operation_at(lco, 0);
-	if (!op) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	op->operation_type		= CAM_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 2;
@@ -2872,10 +2715,6 @@ static int test_remove_unknown_buffer(struct libkc *cam)
 
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	rw = libkc_rw_instruction_at(rw_list, 0);
-	if (!rw) {
-		ret = -EINVAL;
-		goto out;
-	}
 
 	rw->type	= CAM_DMABUF_INSTRUCTION;
 	rw->error	= 0;
