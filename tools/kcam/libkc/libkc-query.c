@@ -13,6 +13,7 @@ static u32 query_num_entries(struct cam_query *q, u32 query_type)
 		pr_err("Mismatch. Query type: %d expected: %d\n",
 		       q->query_type,
 		       query_type);
+		LIBKC_BUG();
 		return 0;
 	}
 
@@ -27,6 +28,7 @@ static u32 query_num_entries(struct cam_query *q, u32 query_type)
 		return 1;
 	}
 
+	LIBKC_BUG();
 	return 0;
 }
 
