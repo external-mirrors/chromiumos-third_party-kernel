@@ -12,3 +12,4 @@ ARM
    pvtime
    ptp_kvm
    vcpu-features
+   get_cur_cpufreq
