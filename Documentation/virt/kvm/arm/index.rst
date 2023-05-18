@@ -14,3 +14,4 @@ ARM
    ptp_kvm
    vcpu-features
    get_cur_cpufreq
+   util_hint
