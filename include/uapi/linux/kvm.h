@@ -935,6 +935,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_X86_GUEST_MODE 238
 #define KVM_CAP_GET_CUR_CPUFREQ 512
 #define KVM_CAP_UTIL_HINT 513
+#define KVM_CAP_GET_CPUFREQ_TBL 514
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
