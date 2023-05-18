@@ -34,29 +34,33 @@ struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx);
 u32 libkc_query_num_entities(struct cam_query *q);
 
 #define for_each_query_entity(q, i, e)					\
-	for ((i)->offt = 0, (e) = (i)->base;				\
-	     (i)->offt < libkc_query_num_entities((q));			\
-	     (i)->offt++, (i)->base += sizeof(*(e)), (e) = (i)->base)
+	for ((i)->offt = 0;						\
+	     (i)->offt < libkc_query_num_entities((q)) &&		\
+	     ((e) = (i)->base) && ((i)->base += sizeof(*(e)));		\
+	     (i)->offt++)
 
 u32 libkc_query_num_events(struct cam_query *q);
 
 #define for_each_query_event(q, i, e)					\
-	for ((i)->offt = 0, (e) = (i)->base;				\
-	     (i)->offt < libkc_query_num_events((q));			\
-	     (i)->offt++, (i)->base += sizeof(*(e)), (e) = (i)->base)
+	for ((i)->offt = 0;						\
+	     (i)->offt < libkc_query_num_events((q)) &&			\
+	     ((e) = (i)->base) && ((i)->base += sizeof(*(e)));		\
+	     (i)->offt++)
 
 u32 libkc_query_num_ops(struct cam_query *q);
 
 #define for_each_query_operation(q, i, e)				\
-	for ((i)->offt = 0, (e) = (i)->base;				\
-	     (i)->offt < libkc_query_num_ops((q));			\
-	     (i)->offt++, (i)->base += sizeof(*(e)), (e) = (i)->base)
+	for ((i)->offt = 0;						\
+	     (i)->offt < libkc_query_num_ops((q)) &&			\
+	     ((e) = (i)->base) && ((i)->base += sizeof(*(e)));		\
+	     (i)->offt++)
 
 u32 libkc_query_num_dmabufs(struct cam_query *q);
 
 #define for_each_query_dmabuf(q, i, e)					\
-	for ((i)->offt = 0, (e) = (i)->base;				\
-	     (i)->offt < libkc_query_num_dmabufs((q));			\
-	     (i)->offt++, (i)->base += sizeof(*(e)), (e) = (i)->base)
+	for ((i)->offt = 0;						\
+	     (i)->offt < libkc_query_num_dmabufs((q)) &&		\
+	     ((e) = (i)->base) && ((i)->base += sizeof(*(e)));		\
+	     (i)->offt++)
 
 #endif /* LIBKC_QUERY_H_ */
