@@ -38,12 +38,22 @@ static int (*_psp_send_i2c_req)(struct psp_i2c_req *req);
 /* Helper to verify status returned by PSP */
 static int check_i2c_req_sts(struct psp_i2c_req *req)
 {
-	u32 status;
+	u32 reg;
+	int status;
 
-	/* Status field in command-response buffer is updated by PSP */
-	status = READ_ONCE(req->hdr.status);
+	if (req) {
+		/* Status field in command-response buffer is updated by PSP */
+		reg = READ_ONCE(req->hdr.status);
+	} else {
+		status = psp_smn_read(PSP_MBOX_CMD_OFFSET, &reg);
+		if (status) {
+			dev_err(psp_i2c_dev, "Failed to read PSP mbox status: %i\n", status);
+			return -EIO;
+		}
+		reg &= ~PSP_MBOX_FIELDS_READY;
+	}
 
-	switch (status) {
+	switch (reg) {
 	case PSP_I2C_REQ_STS_OK:
 		return 0;
 	case PSP_I2C_REQ_STS_BUS_BUSY:
