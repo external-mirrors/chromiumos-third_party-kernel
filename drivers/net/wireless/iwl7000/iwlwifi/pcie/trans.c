@@ -2136,11 +2136,8 @@ static void iwl_trans_pcie_removal_wk(struct work_struct *wk)
 	pci_lock_rescan_remove();
 	pci_dev_put(pdev);
 	pci_stop_and_remove_bus_device(pdev);
-	if (removal->rescan && bus) {
-		if (bus->parent)
-			bus = bus->parent;
-		pci_rescan_bus(bus);
-	}
+	if (removal->rescan && bus && bus->parent)
+		pci_rescan_bus(bus->parent);
 	pci_unlock_rescan_remove();
 
 	kfree(removal);
