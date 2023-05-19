@@ -152,20 +152,18 @@ static inline struct user_namespace *to_user_ns(struct ns_common *ns)
 
 static struct user_namespace *get_ns_from_fd(int fd)
 {
-	struct file *file;
 	struct ns_common *ns;
 	struct user_namespace *user_ns = ERR_PTR(-EINVAL);
+	struct fd f = fdget(fd);
+	if (!f.file)
+		return ERR_PTR(-EBADF);
 
-	file = proc_ns_fget(fd);
-	if (IS_ERR(file))
-		return ERR_CAST(file);
-
-	ns = get_proc_ns(file_inode(file));
+	ns = get_proc_ns(file_inode(f.file));
 #ifdef CONFIG_USER_NS
 	if (ns->ops == &userns_operations)
 		user_ns = to_user_ns(ns);
 #endif
-	fput(file);
+	fput(f.file);
 	return user_ns;
 }
 
