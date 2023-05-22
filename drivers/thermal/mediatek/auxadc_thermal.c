@@ -2133,6 +2133,7 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	struct device_node *auxadc, *apmixedsys, *np = pdev->dev.of_node;
 	struct mtk_thermal *mt;
 	struct thermal_zone_device *tzdev;
+	struct mtk_thermal_zone *tz;
 
 	mt = devm_kzalloc(&pdev->dev, sizeof(*mt), GFP_KERNEL);
 	if (!mt)
@@ -2159,9 +2160,9 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	}
 
 	mt->auxadc_base = devm_of_iomap(&pdev->dev, auxadc, 0, NULL);
-	if (IS_ERR(auxadc_base)) {
+	if (IS_ERR(mt->auxadc_base)) {
 		of_node_put(auxadc);
-		return PTR_ERR(auxadc_base);
+		return PTR_ERR(mt->auxadc_base);
 	}
 
 	mt->auxadc_phys_base = of_get_phys_base(auxadc);
@@ -2180,9 +2181,9 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 	}
 
 	mt->apmixed_base = devm_of_iomap(&pdev->dev, apmixedsys, 0, NULL);
-	if (IS_ERR(apmixed_base)) {
+	if (IS_ERR(mt->apmixed_base)) {
 		of_node_put(apmixedsys);
-		return PTR_ERR(apmixed_base);
+		return PTR_ERR(mt->apmixed_base);
 	}
 
 	mt->apmixed_phys_base = of_get_phys_base(apmixedsys);
@@ -2254,7 +2255,7 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 			}
 		}
 
-		ret = devm_thermal_add_hwmon_sysfs(t&pdev->dev,zdev);
+		ret = devm_thermal_add_hwmon_sysfs(&pdev->dev,tzdev);
 		if (ret)
 			dev_warn(&pdev->dev, "error in thermal_add_hwmon_sysfs: %d\n", ret);
 	}
@@ -2271,16 +2272,6 @@ err_disable_clk_auxadc:
 	clk_disable_unprepare(mt->clk_auxadc);
 
 	return ret;
-}
-
-static int mtk_thermal_remove(struct platform_device *pdev)
-{
-	struct mtk_thermal *mt = platform_get_drvdata(pdev);
-
-	clk_disable_unprepare(mt->clk_peri_therm);
-	clk_disable_unprepare(mt->clk_auxadc);
-
-	return 0;
 }
 
 static int __maybe_unused mtk_thermal_suspend(struct device *dev)
