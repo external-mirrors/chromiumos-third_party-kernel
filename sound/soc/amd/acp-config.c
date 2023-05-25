@@ -160,4 +160,26 @@ struct snd_soc_acpi_mach snd_soc_acpi_amd_rmb_sof_machines[] = {
 };
 EXPORT_SYMBOL(snd_soc_acpi_amd_rmb_sof_machines);
 
+
+struct snd_soc_acpi_mach snd_soc_acpi_amd_phx_sof_machines[] = {
+	{
+		.id = "AMDI1019",
+		.drv_name = "phx-dsp",
+		.pdata = &acp_quirk_data,
+		.fw_filename = "sof-phx.ri",
+		.sof_tplg_filename = "sof-acp-phx.tplg",
+	},
+	{
+		.id = "RTL5682",
+		.drv_name = "rt5682s-hs-rt1019",
+		.pdata = &acp_quirk_data,
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &amp_rt1019,
+		.fw_filename = "sof-phx.ri",
+		.sof_tplg_filename = "sof-phx-rt5682s-rt1019.tplg",
+	},
+	{},
+};
+EXPORT_SYMBOL(snd_soc_acpi_amd_phx_sof_machines);
+
 MODULE_LICENSE("Dual BSD/GPL");
