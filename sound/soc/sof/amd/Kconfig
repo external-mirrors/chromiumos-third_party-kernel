@@ -42,4 +42,12 @@ config SND_SOC_SOF_AMD_REMBRANDT
 	  Say Y if you want to enable SOF on Rembrandt.
 	  If unsure select "N".
 
+config SND_SOC_SOF_AMD_PHOENIX
+	tristate "SOF support for PHOENIX"
+	depends on SND_SOC_SOF_PCI
+	select SND_SOC_SOF_AMD_COMMON
+	help
+	  Select this option for SOF support on AMD Phoenix platform
+	  Say Y if you want to enable SOF on Phoenix.
+	  If unsure select "N".
 endif
