@@ -12,7 +12,7 @@
 #include <linux/rwsem.h>
 #include <linux/types.h>
 #include <linux/kref.h>
-#include <linux/idr.h>
+#include <linux/xarray.h>
 
 #include <uapi/linux/cam.h>
 
@@ -100,9 +100,9 @@ enum cam_id_policy {
  * cam_ns - CAM file handle namespace
  */
 struct cam_ns {
-	/** @objs: IDR to lookup namespace objects in */
-	struct idr		objs;
-	/** @lock: IDR lock */
+	/** @objs: XArray to lookup namespace objects in */
+	struct xarray		objs;
+	/** @lock: XArray lock */
 	struct rw_semaphore	lock;
 	/** @id_pol: ID Allocation policy */
 	enum cam_id_policy	id_pol;
