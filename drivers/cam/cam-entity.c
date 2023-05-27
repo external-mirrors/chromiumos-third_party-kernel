@@ -900,6 +900,8 @@ int cam_enum_events(struct cam_device *cam,
  * cam_drain_event_callback() - Callback to exhaust all the active event signals
  * @nsobj: pointer to CAM object that represents a CAM event
  * @ctl: auxiliary data
+ *
+ * Return: true if namespace walk should terminate and false otherwise.
  */
 static bool cam_drain_event_callback(struct cam_obj *nsobj,
 				     struct cam_ns_walk_control *ctl)
