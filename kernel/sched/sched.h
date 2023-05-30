@@ -10,6 +10,7 @@
 #include <linux/sched/cpufreq.h>
 #include <linux/sched/deadline.h>
 #include <linux/sched.h>
+#include <linux/sched/latsense.h>
 #include <linux/sched/loadavg.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/rseq_api.h>
@@ -416,6 +417,8 @@ struct task_group {
 	struct uclamp_se	uclamp_req[UCLAMP_CNT];
 	/* Effective clamp values used for a task group */
 	struct uclamp_se	uclamp[UCLAMP_CNT];
+	/* Latency-sensitive flag used for a task group */
+	unsigned int		latency_sensitive;
 #endif
 
 };
@@ -1772,6 +1775,13 @@ queue_balance_callback(struct rq *rq,
 	for (__sd = rcu_dereference_check_sched_domain(cpu_rq(cpu)->sd); \
 			__sd; __sd = __sd->parent)
 
+/* A mask of all the SD flags that have the SDF_SHARED_CHILD metaflag */
+#define SD_FLAG(name, mflags) (name * !!((mflags) & SDF_SHARED_CHILD)) |
+static const unsigned int SD_SHARED_CHILD_MASK =
+#include <linux/sched/sd_flags.h>
+0;
+#undef SD_FLAG
+
 /**
  * highest_flag_domain - Return highest sched_domain containing flag.
  * @cpu:	The CPU whose highest level of sched domain is to
@@ -1779,16 +1789,25 @@ queue_balance_callback(struct rq *rq,
  * @flag:	The flag to check for the highest sched_domain
  *		for the given CPU.
  *
- * Returns the highest sched_domain of a CPU which contains the given flag.
+ * Returns the highest sched_domain of a CPU which contains @flag. If @flag has
+ * the SDF_SHARED_CHILD metaflag, all the children domains also have @flag.
  */
 static inline struct sched_domain *highest_flag_domain(int cpu, int flag)
 {
 	struct sched_domain *sd, *hsd = NULL;
 
 	for_each_domain(cpu, sd) {
-		if (!(sd->flags & flag))
+		if (sd->flags & flag) {
+			hsd = sd;
+			continue;
+		}
+
+		/*
+		 * Stop the search if @flag is known to be shared at lower
+		 * levels. It will not be found further up.
+		 */
+		if (flag & SD_SHARED_CHILD_MASK)
 			break;
-		hsd = sd;
 	}
 
 	return hsd;
@@ -2462,6 +2481,9 @@ extern void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags);
 extern const_debug unsigned int sysctl_sched_nr_migrate;
 extern const_debug unsigned int sysctl_sched_migration_cost;
 
+extern unsigned int sysctl_iowait_reset_ticks;
+extern unsigned int sysctl_iowait_apply_ticks;
+
 #ifdef CONFIG_SCHED_DEBUG
 extern unsigned int sysctl_sched_latency;
 extern unsigned int sysctl_sched_min_granularity;
@@ -3073,6 +3095,11 @@ out:
 	return clamp(util, min_util, max_util);
 }
 
+static inline bool uclamp_boosted(struct task_struct *p)
+{
+	return uclamp_eff_value(p, UCLAMP_MIN) > 0;
+}
+
 /* Is the rq being capped/throttled by uclamp_max? */
 static inline bool uclamp_rq_is_capped(struct rq *rq)
 {
@@ -3117,6 +3144,11 @@ unsigned long uclamp_rq_util_with(struct rq *rq, unsigned long util,
 	return util;
 }
 
+static inline bool uclamp_boosted(struct task_struct *p)
+{
+	return false;
+}
+
 static inline bool uclamp_rq_is_capped(struct rq *rq) { return false; }
 
 static inline bool uclamp_is_used(void)
@@ -3143,6 +3175,34 @@ static inline bool uclamp_rq_is_idle(struct rq *rq)
 	return false;
 }
 #endif /* CONFIG_UCLAMP_TASK */
+
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+static inline bool uclamp_latency_sensitive(struct task_struct *p)
+{
+	struct cgroup_subsys_state *css = task_css(p, cpu_cgrp_id);
+	struct task_group *tg;
+
+#ifdef CONFIG_PROC_LATSENSE
+	/* Over CGroup interface with task-interface. */
+	if (p->proc_latency_sensitive)
+		return true;
+#endif
+
+	if (!css)
+		return false;
+	tg = container_of(css, struct task_group, css);
+
+	return tg->latency_sensitive;
+}
+#else
+static inline bool uclamp_latency_sensitive(struct task_struct *p)
+{
+#ifdef CONFIG_PROC_LATSENSE
+	return !!p->proc_latency_sensitive;
+#endif
+	return false;
+}
+#endif /* CONFIG_UCLAMP_TASK_GROUP */
 
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
 static inline unsigned long cpu_util_irq(struct rq *rq)
