@@ -82,7 +82,7 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 		return -E2BIG;
 	}
 
-	if (chip->is_suspended) {
+	if (chip->flags & TPM_CHIP_FLAG_SUSPENDED) {
 		dev_warn(&chip->dev, "blocking transmit while suspended\n");
 		return -EAGAIN;
 	}
@@ -416,8 +416,6 @@ int tpm_pm_suspend(struct device *dev)
 		tpm_put_ops(chip);
 	}
 
-	if (!rc)
-		chip->is_suspended = true;
 suspended:
 	chip->flags |= TPM_CHIP_FLAG_SUSPENDED;
 
