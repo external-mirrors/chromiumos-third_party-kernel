@@ -1868,18 +1868,18 @@ struct test_clear_young_arg {
 	unsigned long *bitmap;
 };
 
-static int stage2_test_clear_young(u64 addr, u64 end, u32 level, kvm_pte_t *ptep,
-				   enum kvm_pgtable_walk_flags flag, void *const ctx)
+static int stage2_test_clear_young(const struct kvm_pgtable_visit_ctx *ctx,
+					enum kvm_pgtable_walk_flags visit)
 {
-	gfn_t gfn = addr / PAGE_SIZE;
-	kvm_pte_t old = READ_ONCE(*ptep);
+	gfn_t gfn = ctx->addr / PAGE_SIZE;
+	kvm_pte_t old = READ_ONCE(*ctx->ptep);
 	kvm_pte_t new = old & ~KVM_PTE_LEAF_ATTR_LO_S2_AF;
-	struct test_clear_young_arg *arg = ctx;
+	struct test_clear_young_arg *arg = ctx->arg;
 
-	VM_WARN_ON_ONCE(!page_count(virt_to_page(ptep)));
+	VM_WARN_ON_ONCE(!page_count(virt_to_page(ctx->ptep)));
 	VM_WARN_ON_ONCE(gfn < arg->range->start || gfn >= arg->range->end);
 
-	if (kvm_pte_table(old, level))
+	if (kvm_pte_table(old, ctx->level))
 		return 0;
 
 	if (!kvm_pte_valid(new))
@@ -1890,7 +1890,7 @@ static int stage2_test_clear_young(u64 addr, u64 end, u32 level, kvm_pte_t *ptep
 
 	/* see the comments on the generic kvm_arch_has_test_clear_young() */
 	if (__test_and_change_bit(arg->lsb_gfn - gfn, arg->bitmap))
-		cmpxchg64(ptep, old, new);
+		cmpxchg64(ctx->ptep, old, new);
 
 	return 0;
 }
