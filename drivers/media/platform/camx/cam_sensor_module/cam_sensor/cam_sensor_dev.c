@@ -129,8 +129,7 @@ static int cam_sensor_init_subdev_params(struct cam_sensor_ctrl_t *s_ctrl)
 	return rc;
 }
 
-static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client,
-	const struct i2c_device_id *id)
+static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client)
 {
 	int32_t rc = 0;
 	int i = 0;
