@@ -138,14 +138,14 @@ static int cam_actuator_init_subdev(struct cam_actuator_ctrl_t *a_ctrl)
 	return rc;
 }
 
-static int32_t cam_actuator_driver_i2c_probe(struct i2c_client *client,
-	const struct i2c_device_id *id)
+static int32_t cam_actuator_driver_i2c_probe(struct i2c_client *client)
 {
 	int32_t                         rc = 0;
 	int32_t                         i = 0;
 	struct cam_actuator_ctrl_t      *a_ctrl;
 	struct cam_hw_soc_info          *soc_info = NULL;
 	struct cam_actuator_soc_private *soc_private = NULL;
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 
 	if (client == NULL || id == NULL) {
 		CAM_ERR(CAM_ACTUATOR, "Invalid Args client: %pK id: %pK",
