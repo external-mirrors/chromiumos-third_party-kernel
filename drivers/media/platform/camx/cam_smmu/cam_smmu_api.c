@@ -865,9 +865,9 @@ int cam_smmu_alloc_firmware(int32_t smmu_hdl,
 		goto vunmap;
 	}
 	dma_unmap_sg_attrs(icp_fw.fw_dev, sgt.sgl, sgt.orig_nents, DMA_BIDIRECTIONAL, 0);
-
+	
 	domain = iommu_cb_set.cb_info[idx].domain;
-	rc = iommu_map_sg(domain, firmware_start, sgt.sgl, sgt.orig_nents, IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV);
+	rc = iommu_map_sg(domain, firmware_start, sgt.sgl, sgt.orig_nents, IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
 	sg_free_table(&sgt);
 
 	if (rc < firmware_len) {
@@ -1022,7 +1022,8 @@ int cam_smmu_alloc_qdss(int32_t smmu_hdl,
 		qdss_start,
 		qdss_phy_addr,
 		qdss_len,
-		IOMMU_READ|IOMMU_WRITE);
+		IOMMU_READ|IOMMU_WRITE,
+		GFP_KERNEL);
 
 	if (rc) {
 		CAM_ERR(CAM_SMMU, "Failed to map QDSS into IOMMU");
