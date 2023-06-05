@@ -85,7 +85,7 @@ int cam_obj_insert(struct cam_obj *nsobj)
 	down_write(&ns->lock);
 	switch (ns->id_pol) {
 	case CAM_NS_POL_UNIQUE_ID:
-		ret = xa_alloc(&ns->objs, &id, nsobj,
+		ret = xa_alloc(&ns->objs_table, &id, nsobj,
 			       XA_LIMIT(ns->next_id, CAM_NS_UNIQUE_ID_END),
 			       GFP_KERNEL);
 		if (!ret) {
@@ -97,7 +97,8 @@ int cam_obj_insert(struct cam_obj *nsobj)
 		break;
 	case CAM_NS_POL_USER_ID:
 		ns->next_id = cam_obj_id(nsobj);
-		ret = xa_insert(&ns->objs, ns->next_id, nsobj, GFP_KERNEL);
+		ret = xa_insert(&ns->objs_table, ns->next_id, nsobj,
+				GFP_KERNEL);
 		/*
 		 * Unify error codes for double insert case. See
 		 * CAM_OBJ_FLAG_ACTIVE branch earlier.
@@ -159,7 +160,8 @@ static struct cam_obj *__cam_obj_lookup(struct cam_ns *ns,
 	 * object's refcounter. The caller of this function should do it
 	 * when needed.
 	 */
-	nsobj = (struct cam_obj *)xa_find(&ns->objs, &id, UINT_MAX, XA_PRESENT);
+	nsobj = (struct cam_obj *)xa_find(&ns->objs_table, &id, UINT_MAX,
+					  XA_PRESENT);
 	if (!nsobj)
 		return NULL;
 	if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
@@ -216,7 +218,7 @@ void cam_obj_remove(struct cam_obj *nsobj)
 		return;
 
 	down_write(&ns->lock);
-	xa_erase(&ns->objs, cam_obj_id(nsobj));
+	xa_erase(&ns->objs_table, cam_obj_id(nsobj));
 	up_write(&ns->lock);
 
 	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
@@ -249,7 +251,7 @@ int cam_obj_remove_id(struct cam_ns *ns, enum cam_obj_type type,
 	down_write(&ns->lock);
 	nsobj = __cam_obj_lookup(ns, type, id);
 	if (nsobj) {
-		xa_erase(&ns->objs, id);
+		xa_erase(&ns->objs_table, id);
 		ret = 0;
 	} else {
 		ret = -ENOENT;
@@ -403,7 +405,7 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 		return;
 
 	down_read(&ns->lock);
-	xa_for_each(&ns->objs, id, nsobj) {
+	xa_for_each(&ns->objs_table, id, nsobj) {
 		if (!kref_get_unless_zero(&nsobj->kref))
 			continue;
 		if (nsobj->flags & CAM_OBJ_FLAG_ACTIVE)
@@ -432,8 +434,8 @@ int cam_ns_init(struct cam_ns *ns, enum cam_id_policy id_policy)
 	}
 
 	init_rwsem(&ns->lock);
-	xa_init(&ns->objs);
-	xa_init_flags(&ns->objs, XA_FLAGS_ALLOC);
+	xa_init(&ns->objs_table);
+	xa_init_flags(&ns->objs_table, XA_FLAGS_ALLOC);
 	ns->next_id	= CAM_NS_UNIQUE_ID_START;
 	ns->id_pol	= id_policy;
 	return 0;
@@ -452,7 +454,7 @@ void cam_ns_release(struct cam_ns *ns)
 		return;
 
 	down_read(&ns->lock);
-	xa_for_each(&ns->objs, id, nsobj) {
+	xa_for_each(&ns->objs_table, id, nsobj) {
 		if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
 			continue;
 		/*
@@ -464,7 +466,7 @@ void cam_ns_release(struct cam_ns *ns)
 		cam_obj_put(nsobj);
 	}
 	up_read(&ns->lock);
-	xa_destroy(&ns->objs);
+	xa_destroy(&ns->objs_table);
 }
 
 #ifdef CONFIG_CAM_KUNIT_TESTS

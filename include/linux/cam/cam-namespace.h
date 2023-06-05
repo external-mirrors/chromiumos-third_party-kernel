@@ -101,7 +101,7 @@ enum cam_id_policy {
  */
 struct cam_ns {
 	/** @objs: XArray to lookup namespace objects in */
-	struct xarray		objs;
+	struct xarray		objs_table;
 	/** @lock: XArray lock */
 	struct rw_semaphore	lock;
 	/** @id_pol: ID Allocation policy */
