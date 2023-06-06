@@ -35,7 +35,7 @@ static void cam_obj_final_put(struct kref *kref)
 }
 
 /**
- * cam_obj_put() - decrement object refcounter
+ * cam_obj_put() - decrement object refcount
  * @nsobj: pointer to object.
  *
  * There is no corresponding cam_obj_get() method, all objects
@@ -80,9 +80,12 @@ int cam_obj_insert(struct cam_obj *nsobj)
 	 * publicly available.
 	 */
 	cam_obj_get(nsobj);
-	nsobj->flags |= CAM_OBJ_FLAG_ACTIVE;
 
+	/* The object is not ACTIVE yet */
 	down_write(&ns->lock);
+	list_add(&nsobj->list_entry, &ns->objs_list);
+	up_write(&ns->lock);
+
 	switch (ns->id_pol) {
 	case CAM_NS_POL_UNIQUE_ID:
 		ret = xa_alloc(&ns->objs_table, &id, nsobj,
@@ -96,8 +99,7 @@ int cam_obj_insert(struct cam_obj *nsobj)
 		}
 		break;
 	case CAM_NS_POL_USER_ID:
-		ns->next_id = cam_obj_id(nsobj);
-		ret = xa_insert(&ns->objs_table, ns->next_id, nsobj,
+		ret = xa_insert(&ns->objs_table, cam_obj_id(nsobj), nsobj,
 				GFP_KERNEL);
 		/*
 		 * Unify error codes for double insert case. See
@@ -109,12 +111,19 @@ int cam_obj_insert(struct cam_obj *nsobj)
 	default:
 		ret = -EINVAL;
 	}
+
+	if (!ret) {
+		/* Mark object as ACTIVE */
+		down_write(&ns->lock);
+		nsobj->flags |= CAM_OBJ_FLAG_ACTIVE;
+		up_write(&ns->lock);
+		return 0;
+	}
+
+	down_write(&ns->lock);
+	list_del_init(&nsobj->list_entry);
 	up_write(&ns->lock);
 
-	if (!ret)
-		return 0;
-
-	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
 	cam_obj_put(nsobj);
 	return ret;
 }
@@ -149,29 +158,6 @@ int cam_obj_move(struct cam_obj *nsobj, unsigned long *id)
 }
 ALLOW_ERROR_INJECTION(cam_obj_move, ERRNO);
 
-static struct cam_obj *__cam_obj_lookup(struct cam_ns *ns,
-					enum cam_obj_type type,
-					unsigned long id)
-{
-	struct cam_obj *nsobj;
-
-	/*
-	 * Note that this function is internal and it does not increment
-	 * object's refcounter. The caller of this function should do it
-	 * when needed.
-	 */
-	nsobj = (struct cam_obj *)xa_find(&ns->objs_table, &id, UINT_MAX,
-					  XA_PRESENT);
-	if (!nsobj)
-		return NULL;
-	if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
-		return NULL;
-	if (!(nsobj->type & type))
-		return NULL;
-
-	return nsobj;
-}
-
 /**
  * cam_obj_lookup() - Lookup object by ID and return a pointer to it if
  * found
@@ -183,7 +169,7 @@ static struct cam_obj *__cam_obj_lookup(struct cam_ns *ns,
  * of the found object and intended object type match, just to make sure
  * that intentions are aligned with the actions.
  *
- * Returned object has its refcounter incremented.
+ * Returned object has its refcount incremented.
  *
  * Return: Pointer to object, or NULL otherwise.
  */
@@ -193,12 +179,31 @@ struct cam_obj *cam_obj_lookup(struct cam_ns *ns,
 {
 	struct cam_obj *nsobj;
 
-	down_read(&ns->lock);
-	nsobj = __cam_obj_lookup(ns, type, id);
-	if (nsobj && !kref_get_unless_zero(&nsobj->kref))
+	/*
+	 * It's not enough to just safely xa_load() the object as we need to
+	 * test its type/etc. before we return the pointer. This requires
+	 * guarantees that object is not released concurrently as long as
+	 * cam_obj_lookup() access its flags. We can protect this entire
+	 * function with RCU read side lock and queue_rcu_work() deferred
+	 * cam_obj_final_put(), but locking the objs_table should work just
+	 * fine.
+	 */
+	xa_lock(&ns->objs_table);
+	nsobj = xa_load(&ns->objs_table, id);
+	if (!nsobj)
+		goto out;
+	if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE)) {
 		nsobj = NULL;
-	up_read(&ns->lock);
-
+		goto out;
+	}
+	if (!(nsobj->type & type)) {
+		nsobj = NULL;
+		goto out;
+	}
+	if (!kref_get_unless_zero(&nsobj->kref))
+		nsobj = NULL;
+out:
+	xa_unlock(&ns->objs_table);
 	return nsobj;
 }
 
@@ -210,6 +215,7 @@ struct cam_obj *cam_obj_lookup(struct cam_ns *ns,
 void cam_obj_remove(struct cam_obj *nsobj)
 {
 	struct cam_ns *ns = nsobj->ns;
+	unsigned long id;
 
 	if (WARN_ON(!ns))
 		return;
@@ -217,11 +223,14 @@ void cam_obj_remove(struct cam_obj *nsobj)
 	if (WARN_ON(!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE)))
 		return;
 
+	id = cam_obj_id(nsobj);
+	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
+	xa_erase(&ns->objs_table, id);
+
 	down_write(&ns->lock);
-	xa_erase(&ns->objs_table, cam_obj_id(nsobj));
+	list_del_init(&nsobj->list_entry);
 	up_write(&ns->lock);
 
-	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
 	cam_obj_put(nsobj);
 }
 
@@ -243,24 +252,26 @@ int cam_obj_remove_id(struct cam_ns *ns, enum cam_obj_type type,
 		      unsigned long id)
 {
 	struct cam_obj *nsobj;
-	int ret;
 
 	if (WARN_ON(ns == NULL))
 		return -EINVAL;
 
+	nsobj = cam_obj_lookup(ns, type, id);
+	if (!nsobj)
+		return -ENOENT;
+
+	nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
+	xa_erase(&ns->objs_table, id);
+
 	down_write(&ns->lock);
-	nsobj = __cam_obj_lookup(ns, type, id);
-	if (nsobj) {
-		xa_erase(&ns->objs_table, id);
-		ret = 0;
-	} else {
-		ret = -ENOENT;
-	}
+	list_del_init(&nsobj->list_entry);
 	up_write(&ns->lock);
 
-	if (nsobj)
-		cam_obj_put(nsobj);
-	return ret;
+	/* Put additional cam_obj_lookup() refcount increment */
+	cam_obj_put(nsobj);
+	/* Put initial cam_obj_insert() refcount */
+	cam_obj_put(nsobj);
+	return 0;
 }
 
 /**
@@ -280,25 +291,19 @@ bool cam_obj_check_type(struct cam_obj *nsobj, enum cam_obj_type type)
 }
 
 /**
- * cam_obj_get() - Increments refcounter of a valid NS object.
+ * cam_obj_get() - Increments refcount of a valid NS object.
  * @nsobj: namespace object.
  *
- * Return: NULL if the object's refcounter was not incremented.
+ * Return: NULL if the object's refcount was not incremented.
  */
 struct cam_obj *cam_obj_get(struct cam_obj *nsobj)
 {
 	struct cam_ns *ns = nsobj->ns;
-	bool ret;
 
 	if (WARN_ON(!ns))
 		return NULL;
 
-	/*
-	 * @FIXME: maybe take ns read lock here
-	 */
-	ret = kref_get_unless_zero(&nsobj->kref);
-
-	if (!ret)
+	if (!kref_get_unless_zero(&nsobj->kref))
 		return NULL;
 	return nsobj;
 }
@@ -346,7 +351,7 @@ int cam_obj_set_id(struct cam_obj *nsobj, unsigned long id)
  * cam_obj_init() - Initialise newly created namespace object
  * @nsobj: object to init
  * @type: type of the object
- * @release: cleanout callback, called when refcount goes to 0
+ * @release: clean-out callback, called when refcount goes to 0
  * @ns: namespace this object belongs to
  */
 void cam_obj_init(struct cam_obj *nsobj,
@@ -363,6 +368,7 @@ void cam_obj_init(struct cam_obj *nsobj,
 	nsobj->release = release;
 	nsobj->ns = ns;
 	cam_graph_node_init(nsobj);
+	INIT_LIST_HEAD(&nsobj->list_entry);
 }
 
 /**
@@ -383,8 +389,8 @@ void cam_obj_deinit(struct cam_obj *nsobj)
 /**
  * cam_ns_for_each() - Walks the namespace and calls callback on all active and
  * valid namespace objects
- * @ns: nemspace to walk
- * @ctl: auxilary data
+ * @ns: namespace to walk
+ * @ctl: auxiliary data
  *
  * Callback will be called only on ACTIVE objects, with properly incremented
  * ref-counter.
@@ -393,7 +399,6 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 {
 	struct cam_obj *nsobj;
 	bool ret = false;
-	unsigned long id;
 
 	if (WARN_ON(!ns))
 		return;
@@ -404,8 +409,13 @@ void cam_ns_for_each(struct cam_ns *ns, struct cam_ns_walk_control *ctl)
 	if (!ctl->cb)
 		return;
 
+	/**
+	 * This iterates only over enumerate-able objects (not all
+	 * namespace objects are enumerate-able), IOW the objects that
+	 * are on the objs_list list with CAM_OBJ_FLAG_ACTIVE bit set.
+	 */
 	down_read(&ns->lock);
-	xa_for_each(&ns->objs_table, id, nsobj) {
+	list_for_each_entry(nsobj, &ns->objs_list, list_entry) {
 		if (!kref_get_unless_zero(&nsobj->kref))
 			continue;
 		if (nsobj->flags & CAM_OBJ_FLAG_ACTIVE)
@@ -433,11 +443,12 @@ int cam_ns_init(struct cam_ns *ns, enum cam_id_policy id_policy)
 		return -EINVAL;
 	}
 
-	init_rwsem(&ns->lock);
 	xa_init(&ns->objs_table);
 	xa_init_flags(&ns->objs_table, XA_FLAGS_ALLOC);
 	ns->next_id	= CAM_NS_UNIQUE_ID_START;
 	ns->id_pol	= id_policy;
+	init_rwsem(&ns->lock);
+	INIT_LIST_HEAD(&ns->objs_list);
 	return 0;
 }
 
@@ -453,19 +464,25 @@ void cam_ns_release(struct cam_ns *ns)
 	if (WARN_ON(!ns))
 		return;
 
-	down_read(&ns->lock);
-	xa_for_each(&ns->objs_table, id, nsobj) {
+	down_write(&ns->lock);
+	while (!list_empty(&ns->objs_list)) {
+		nsobj = list_first_entry(&ns->objs_list,
+					 struct cam_obj,
+					 list_entry);
+
+		list_del_init(&nsobj->list_entry);
+
 		if (!(nsobj->flags & CAM_OBJ_FLAG_ACTIVE))
 			continue;
-		/*
-		 * Deactivate dangling objects: we are about to destroy the
-		 * namespace so release() function, which can be called after
-		 * cam_ns_release(), cannot access IDA.
-		 */
+
+		id = cam_obj_id(nsobj);
 		nsobj->flags &= ~CAM_OBJ_FLAG_ACTIVE;
+		xa_erase(&ns->objs_table, id);
 		cam_obj_put(nsobj);
 	}
-	up_read(&ns->lock);
+	up_write(&ns->lock);
+
+	WARN_ON(!xa_empty(&ns->objs_table));
 	xa_destroy(&ns->objs_table);
 }
 

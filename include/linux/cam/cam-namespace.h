@@ -102,8 +102,10 @@ enum cam_id_policy {
 struct cam_ns {
 	/** @objs: XArray to lookup namespace objects in */
 	struct xarray		objs_table;
-	/** @lock: XArray lock */
+	/** @lock: objs_list lock */
 	struct rw_semaphore	lock;
+	/** @objs_list: List of namespace objects */
+	struct list_head	objs_list;
 	/** @id_pol: ID Allocation policy */
 	enum cam_id_policy	id_pol;
 	/** @next_id: Next id to be used for unique ids */
@@ -152,6 +154,8 @@ struct cam_obj {
 	struct cam_graph_node	gnode;
 	/** @ns: pointer to the namespace this object belongs to */
 	struct cam_ns		*ns;
+	/** @list_entry: Object's list entry in namespace objects list */
+	struct list_head	list_entry;
 };
 
 unsigned long cam_obj_id(struct cam_obj *nsobj);
