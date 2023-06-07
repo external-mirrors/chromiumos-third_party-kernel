@@ -209,6 +209,8 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	struct cam_obj_entity *link;
 	va_list args;
 
+	lockdep_assert_held_write(&cam->ns_enum_lock);
+
 	if (WARN_ON(!ops))
 		return NULL;
 
@@ -688,6 +690,8 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	char name[CAM_EVENT_NAME_SZ];
 	struct cam_obj_event *event;
 	va_list args;
+
+	lockdep_assert_held_write(&cam->ns_enum_lock);
 
 	event = kzalloc(sizeof(*event), GFP_KERNEL);
 	if (!event)
