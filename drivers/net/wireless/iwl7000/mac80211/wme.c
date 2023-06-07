@@ -211,7 +211,7 @@ u16 ieee80211_select_queue(struct ieee80211_sub_if_data *sdata,
 		if (sta)
 			break;
 
-		ra = sdata->vif.cfg.ap_addr;
+		ra = sdata->deflink.u.mgd.bssid;
 		break;
 	case NL80211_IFTYPE_ADHOC:
 		ra = skb->data;
