@@ -50,7 +50,7 @@ static struct sk_buff *ieee80211_clean_skb(struct sk_buff *skb,
 
 	if (present_fcs_len)
 		__pskb_trim(skb, skb->len - present_fcs_len);
-	pskb_pull(skb, rtap_space);
+	__pskb_pull(skb, rtap_space);
 
 	/* After pulling radiotap header, clear all flags that indicate
 	 * info on skb->data.
@@ -83,7 +83,7 @@ static struct sk_buff *ieee80211_clean_skb(struct sk_buff *skb,
 
 	memmove(skb->data + IEEE80211_HT_CTL_LEN, skb->data,
 		hdrlen - IEEE80211_HT_CTL_LEN);
-	pskb_pull(skb, IEEE80211_HT_CTL_LEN);
+	__pskb_pull(skb, IEEE80211_HT_CTL_LEN);
 
 	return skb;
 }
@@ -4345,7 +4345,6 @@ void ieee80211_check_fast_rx(struct sta_info *sta)
 		.vif_type = sdata->vif.type,
 		.control_port_protocol = sdata->control_port_protocol,
 	}, *old, *new = NULL;
-	u32 offload_flags;
 	bool set_offload = false;
 	bool assign = false;
 	bool offload;
@@ -4461,10 +4460,10 @@ void ieee80211_check_fast_rx(struct sta_info *sta)
 	if (assign)
 		new = kmemdup(&fastrx, sizeof(fastrx), GFP_KERNEL);
 
-	offload_flags = get_bss_sdata(sdata)->vif.offload_flags;
-	offload = offload_flags & IEEE80211_OFFLOAD_DECAP_ENABLED;
+	offload = assign &&
+		  (sdata->vif.offload_flags & IEEE80211_OFFLOAD_DECAP_ENABLED);
 
-	if (assign && offload)
+	if (offload)
 		set_offload = !test_and_set_sta_flag(sta, WLAN_STA_DECAP_OFFLOAD);
 	else
 		set_offload = test_and_clear_sta_flag(sta, WLAN_STA_DECAP_OFFLOAD);
@@ -4702,7 +4701,7 @@ static bool ieee80211_invoke_fast_rx(struct ieee80211_rx_data *rx,
 
 	if (!(status->rx_flags & IEEE80211_RX_AMSDU)) {
 		if (!pskb_may_pull(skb, snap_offs + sizeof(*payload)))
-			return false;
+			goto drop;
 
 		payload = (void *)(skb->data + snap_offs);
 
@@ -4850,9 +4849,6 @@ static bool ieee80211_prepare_and_rx_handle(struct ieee80211_rx_data *rx,
 		 */
 		shwt = skb_hwtstamps(rx->skb);
 		shwt->hwtstamp = skb_hwtstamps(skb)->hwtstamp;
-
-		/* reload hdr since we need it below */
-		hdr = (void *)rx->skb->data;
 	}
 
 	if (unlikely(link_sta)) {
