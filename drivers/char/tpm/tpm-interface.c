@@ -443,7 +443,6 @@ int tpm_pm_resume(struct device *dev)
 	 * activate before the chip has been fully resumed.
 	 */
 	wmb();
-	chip->is_suspended = false;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tpm_pm_resume);
