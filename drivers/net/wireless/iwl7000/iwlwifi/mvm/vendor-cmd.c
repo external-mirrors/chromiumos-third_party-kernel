@@ -29,7 +29,7 @@ static int iwl_mvm_netlink_notifier(struct notifier_block *nb,
 
 	spin_lock_bh(&device_list_lock);
 	list_for_each_entry(mvm, &device_list, list) {
-		if (mvm->csi_portid == notify->portid)
+		if (mvm->csi_portid == netlink_notify_portid(notify))
 			mvm->csi_portid = 0;
 	}
 	spin_unlock_bh(&device_list_lock);
