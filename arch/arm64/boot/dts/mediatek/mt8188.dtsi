@@ -3400,6 +3400,44 @@
 
 		};
 
+		aie: aie@15310000 {
+			compatible = "mediatek,mt8188-aie", "mediatek,aie-hw3.1";
+			reg = <0 0x15310000 0 0x1000>;
+			interrupts = <GIC_SPI 787 IRQ_TYPE_LEVEL_HIGH 0>;
+			mediatek,larb = <&larb12>;
+			iommus = <&vpp_iommu M4U_PORT_L12_FDVT_RDA_0>,
+				 <&vpp_iommu M4U_PORT_L12_FDVT_RDB_0>,
+				 <&vpp_iommu M4U_PORT_L12_FDVT_WRA_0>,
+				 <&vpp_iommu M4U_PORT_L12_FDVT_WRB_0>;
+			power-domains = <&spm MT8188_POWER_DOMAIN_IPE>;
+			clocks = <&imgsys CLK_IMGSYS_MAIN_IPE>,
+				 <&ipesys CLK_IPE_FDVT>,
+				 <&ipesys CLK_IPE_SMI_LARB12>,
+				 <&ipesys CLK_IPESYS_TOP>;
+			clock-names = "IMG_IPE",
+				      "IPE_FDVT",
+				      "IPE_SMI_LARB12",
+				      "IPE_TOP";
+			operating-points-v2 = <&opp_table_ipe>;
+			dvfsrc-vcore-supply = <&vmm_proxy_label>;
+#if 0
+			interconnects =
+				<&mmqos MASTER_LARB_PORT(M4U_PORT_L12_FDVT_RDA_0)
+				 &mmqos SLAVE_COMMON(1)>,
+				<&mmqos MASTER_LARB_PORT(M4U_PORT_L12_FDVT_RDB_0)
+				 &mmqos SLAVE_COMMON(1)>,
+				<&mmqos MASTER_LARB_PORT(M4U_PORT_L12_FDVT_WRA_0)
+				 &mmqos SLAVE_COMMON(1)>,
+				<&mmqos MASTER_LARB_PORT(M4U_PORT_L12_FDVT_WRB_0)
+				 &mmqos SLAVE_COMMON(1)>;
+			interconnect-names = "l12_fdvt_rda",
+					     "l12_fdvt_rdb",
+					     "l12_fdvt_wra",
+					     "l12_fdvt_wrb";
+
+#endif
+			};
+
 		ipesys: clock-controller@15330000 {
 			compatible = "mediatek,mt8188-ipesys";
 			reg = <0 0x15330000 0 0x1000>;
