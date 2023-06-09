@@ -1,0 +1,12 @@
+*.lo
+*.la
+m4/
+*Makefile
+*Makefile.in
+config.*
+aclocal.m4
+configure
+libtool
+stamp-h1
+autom4te.cache/
+build-aux
