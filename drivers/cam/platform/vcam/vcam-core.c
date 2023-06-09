@@ -10,6 +10,7 @@
 #include <linux/cam/cam-entity.h>
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-resv.h>
 #include <linux/hrtimer.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -215,10 +216,13 @@ static void dmabuf_remove(void *dev, void *buf, struct dma_buf *dma_buf)
 	struct vcam_buffer *buffer;
 
 	buffer = (struct vcam_buffer *)buf;
-	if (!IS_ERR_OR_NULL(buffer->dma_sgt))
+	if (!IS_ERR_OR_NULL(buffer->dma_sgt)) {
+		dma_resv_lock(buffer->dma_attach->dmabuf->resv, NULL);
 		dma_buf_unmap_attachment(buffer->dma_attach,
 					 buffer->dma_sgt,
 					 DMA_TO_DEVICE);
+		dma_resv_unlock(buffer->dma_attach->dmabuf->resv);
+	}
 
 	if (!IS_ERR_OR_NULL(buffer->dma_attach))
 		dma_buf_detach(dma_buf, buffer->dma_attach);
@@ -240,8 +244,10 @@ static void *dmabuf_add(void *dev, struct dma_buf *dma_buf)
 	if (IS_ERR(buffer->dma_attach))
 		goto error;
 
+	dma_resv_lock(buffer->dma_attach->dmabuf->resv, NULL);
 	buffer->dma_sgt = dma_buf_map_attachment(buffer->dma_attach,
 						 DMA_TO_DEVICE);
+	dma_resv_unlock(buffer->dma_attach->dmabuf->resv);
 	if (IS_ERR(buffer->dma_sgt))
 		goto error;
 
