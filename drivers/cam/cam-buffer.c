@@ -69,7 +69,7 @@ static void cam_buffer_release(struct work_struct *work)
 	kfree(buffer);
 }
 
-static void cam_instance_deferred_release(struct cam_obj *nsobj)
+static void cam_buffer_deferred_release(struct cam_obj *nsobj)
 {
 	struct cam_obj_buffer *buffer = nsobj_to_cam_buffer(nsobj);
 
@@ -111,7 +111,7 @@ struct cam_obj_buffer *cam_buffer_register(struct cam_ns *ns,
 
 	cam_obj_init(&buffer->nsobj,
 		     CAM_OBJ_TYPE_BUFFER,
-		     cam_instance_deferred_release,
+		     cam_buffer_deferred_release,
 		     ns);
 	cam_obj_set_id(&buffer->nsobj, id);
 	INIT_WORK(&buffer->release_work, cam_buffer_release);
