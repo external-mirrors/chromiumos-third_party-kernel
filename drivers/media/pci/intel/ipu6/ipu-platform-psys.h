@@ -4,6 +4,8 @@
 #ifndef IPU_PLATFORM_PSYS_H
 #define IPU_PLATFORM_PSYS_H
 
+#include <linux/cam/cam-entity.h>
+
 #include "ipu-psys.h"
 #include <uapi/linux/ipu-psys.h>
 
@@ -44,7 +46,6 @@ enum ipu_psys_ppg_state {
 
 struct ipu_psys_ppg {
 	struct ipu_psys_pg *kpg;
-	struct ipu_psys_fh *fh;
 	struct list_head list;
 	struct list_head sched_list;
 	u64 token;
@@ -56,6 +57,8 @@ struct ipu_psys_ppg {
 	enum ipu_psys_ppg_state state;
 	u32 pri_base;
 	int pri_dynamic;
+
+	struct ipu_psys *psys;
 };
 
 struct ipu_psys_buffer_set {
@@ -72,7 +75,5 @@ int ipu_psys_kcmd_start(struct ipu_psys *psys, struct ipu_psys_kcmd *kcmd);
 void ipu_psys_kcmd_complete(struct ipu_psys_ppg *kppg,
 			    struct ipu_psys_kcmd *kcmd,
 			    int error);
-int ipu_psys_fh_init(struct ipu_psys_fh *fh);
-int ipu_psys_fh_deinit(struct ipu_psys_fh *fh);
 
 #endif /* IPU_PLATFORM_PSYS_H */

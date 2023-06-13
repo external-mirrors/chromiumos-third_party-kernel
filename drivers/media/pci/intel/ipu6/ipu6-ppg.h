@@ -19,8 +19,7 @@ enum ipu_psys_power_gating_state {
 	PSYS_POWER_GATED
 };
 
-int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd,
-			    struct ipu_psys_ppg *kppg);
+int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd);
 struct ipu_psys_kcmd *ipu_psys_ppg_get_stop_kcmd(struct ipu_psys_ppg *kppg);
 void ipu_psys_scheduler_remove_kppg(struct ipu_psys_ppg *kppg,
 				    enum SCHED_LIST type);

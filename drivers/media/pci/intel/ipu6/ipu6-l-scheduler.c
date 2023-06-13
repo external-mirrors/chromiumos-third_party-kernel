@@ -49,7 +49,7 @@ void ipu_psys_scheduler_remove_kppg(struct ipu_psys_ppg *kppg,
 {
 	struct sched_list *sc_list = get_sc_list(type);
 	struct ipu_psys_ppg *tmp0, *tmp1;
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_psys *psys = kppg->psys;
 
 	mutex_lock(&sc_list->lock);
 	list_for_each_entry_safe(tmp0, tmp1, &sc_list->list, sched_list) {
@@ -64,19 +64,18 @@ void ipu_psys_scheduler_remove_kppg(struct ipu_psys_ppg *kppg,
 	mutex_unlock(&sc_list->lock);
 }
 
-void ipu_psys_scheduler_add_kppg(struct ipu_psys_ppg *kppg,
-				 enum SCHED_LIST type)
+void ipu_psys_scheduler_add_kppg(struct ipu_psys_ppg *kppg, enum SCHED_LIST type)
 {
 	int cur_pri = kppg->pri_base + kppg->pri_dynamic;
 	struct sched_list *sc_list = get_sc_list(type);
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_psys *psys = kppg->psys;
 	struct ipu_psys_ppg *tmp0, *tmp1;
 
 	dev_dbg(&psys->adev->dev,
-		"add to %s list, kppg(%d 0x%p) state %d prio(%d %d) fh 0x%p\n",
+		"add to %s list, kppg(%d 0x%p) state %d prio(%d %d)\n",
 		type == SCHED_START_LIST ? "start" : "stop",
 		kppg->kpg->pg->ID, kppg, kppg->state,
-		kppg->pri_base, kppg->pri_dynamic, kppg->fh);
+		kppg->pri_base, kppg->pri_dynamic);
 
 	mutex_lock(&sc_list->lock);
 	if (list_empty(&sc_list->list)) {
@@ -93,9 +92,9 @@ void ipu_psys_scheduler_add_kppg(struct ipu_psys_ppg *kppg,
 		int tmp_pri = tmp0->pri_base + tmp0->pri_dynamic;
 
 		dev_dbg(&psys->adev->dev,
-			"found kppg(%d 0x%p), state %d pri(%d %d) fh 0x%p\n",
+			"found kppg(%d 0x%p), state %d pri(%d %d)\n",
 			tmp0->kpg->pg->ID, tmp0, tmp0->state,
-			tmp0->pri_base, tmp0->pri_dynamic, tmp0->fh);
+			tmp0->pri_base, tmp0->pri_dynamic);
 
 		if (type == SCHED_START_LIST && tmp_pri > cur_pri) {
 			list_add(&kppg->sched_list, tmp0->sched_list.prev);
@@ -114,7 +113,7 @@ out:
 static int ipu_psys_detect_resource_contention(struct ipu_psys_ppg *kppg)
 {
 	struct ipu_psys_resource_pool *try_res_pool;
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_psys *psys = kppg->psys;
 	int ret = 0;
 	int state;
 
@@ -153,14 +152,14 @@ static void ipu_psys_scheduler_ppg_sort(struct ipu_psys *psys, bool *stopping)
 {
 	struct ipu_psys_ppg *kppg, *tmp;
 	struct ipu_psys_scheduler *sched;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -183,7 +182,7 @@ static void ipu_psys_scheduler_ppg_sort(struct ipu_psys *psys, bool *stopping)
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 }
 
@@ -300,14 +299,14 @@ static bool ipu_psys_scheduler_ppg_enqueue_bufset(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 	bool resched = false;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -315,14 +314,14 @@ static bool ipu_psys_scheduler_ppg_enqueue_bufset(struct ipu_psys *psys)
 			if (ipu_psys_ppg_enqueue_bufsets(kppg))
 				resched = true;
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 
 	return resched;
 }
 
 /*
- * This function will check all kppgs within fhs, and if kppg state
+ * This function will check all kppgs within instances, and if kppg state
  * is STOP or SUSPEND, l-scheduler will call ppg function to stop
  * or suspend it and update stop list
  */
@@ -331,14 +330,14 @@ static bool ipu_psys_scheduler_ppg_halt(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 	bool stopping_exit = false;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -358,7 +357,7 @@ static bool ipu_psys_scheduler_ppg_halt(struct ipu_psys *psys)
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 	return stopping_exit;
 }
@@ -412,13 +411,13 @@ static void ipu_psys_scheduler_kcmd_set(struct ipu_psys *psys)
 	struct ipu_psys_kcmd *kcmd;
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -434,7 +433,7 @@ static void ipu_psys_scheduler_kcmd_set(struct ipu_psys *psys)
 			ipu_psys_update_ppg_state_by_kcmd(psys, kppg, kcmd);
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 }
 
@@ -442,13 +441,13 @@ static bool is_ready_to_enter_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -457,19 +456,19 @@ static bool is_ready_to_enter_power_gating(struct ipu_psys *psys)
 			if (!list_empty(&kppg->kcmds_new_list) ||
 			    !list_empty(&kppg->kcmds_processing_list)) {
 				mutex_unlock(&kppg->mutex);
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				return false;
 			}
 			if (!(kppg->state == PPG_STATE_RUNNING ||
 			      kppg->state == PPG_STATE_STOPPED ||
 			      kppg->state == PPG_STATE_SUSPENDED)) {
 				mutex_unlock(&kppg->mutex);
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				return false;
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 
 	return true;
@@ -479,13 +478,13 @@ static bool has_pending_kcmd(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -494,12 +493,12 @@ static bool has_pending_kcmd(struct ipu_psys *psys)
 			if (!list_empty(&kppg->kcmds_new_list) ||
 			    !list_empty(&kppg->kcmds_processing_list)) {
 				mutex_unlock(&kppg->mutex);
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				return true;
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 
 	return false;
@@ -520,7 +519,7 @@ static bool ipu_psys_scheduler_enter_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 
 	if (!enable_power_gating)
 		return false;
@@ -536,11 +535,11 @@ static bool ipu_psys_scheduler_enter_power_gating(struct ipu_psys *psys)
 		return false;
 
 	/* Suspend ppgs one by one */
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -549,7 +548,7 @@ static bool ipu_psys_scheduler_enter_power_gating(struct ipu_psys *psys)
 			if (kppg->state == PPG_STATE_RUNNING) {
 				kppg->state = PPG_STATE_SUSPEND;
 				mutex_unlock(&kppg->mutex);
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				return true;
 			}
 
@@ -557,14 +556,14 @@ static bool ipu_psys_scheduler_enter_power_gating(struct ipu_psys *psys)
 			    kppg->state != PPG_STATE_STOPPED) {
 				/* Can't enter power gating */
 				mutex_unlock(&kppg->mutex);
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				/* Need re-run l-scheduler to suspend ppg? */
 				return (kppg->state & PPG_STATE_STOP ||
 					kppg->state == PPG_STATE_SUSPEND);
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 
 	psys->power_gating = PSYS_POWER_GATED;
@@ -580,10 +579,10 @@ void ipu_psys_run_next(struct ipu_psys *psys)
 	/* Wait FW callback if there are stopping/suspending/running ppg */
 	bool wait_fw_finish = false;
 	/*
-	 * Code below will crash if fhs is empty. Normally this
+	 * Code below will crash if instances is empty. Normally this
 	 * shouldn't happen.
 	 */
-	if (list_empty(&psys->fhs)) {
+	if (list_empty(&psys->instances)) {
 		WARN_ON(1);
 		return;
 	}

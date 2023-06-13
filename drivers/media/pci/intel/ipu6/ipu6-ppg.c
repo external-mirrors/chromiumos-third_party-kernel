@@ -3,6 +3,8 @@
 
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
+#include <linux/cam/cam-buffer.h>
+#include <linux/cam/cam-entity.h>
 
 #include <asm/cacheflush.h>
 
@@ -46,10 +48,10 @@ struct ipu_psys_kcmd *ipu_psys_ppg_get_stop_kcmd(struct ipu_psys_ppg *kppg)
 }
 
 static struct ipu_psys_buffer_set *
-__get_buf_set(struct ipu_psys_fh *fh, size_t buf_set_size)
+__get_buf_set(struct ipu_kcam_psys_instance *instance, size_t buf_set_size)
 {
 	struct ipu_psys_buffer_set *kbuf_set;
-	struct ipu_psys_scheduler *sched = &fh->sched;
+	struct ipu_psys_scheduler *sched = &instance->sched;
 
 	mutex_lock(&sched->bs_mutex);
 	list_for_each_entry(kbuf_set, &sched->buf_sets, list) {
@@ -67,7 +69,7 @@ __get_buf_set(struct ipu_psys_fh *fh, size_t buf_set_size)
 	if (!kbuf_set)
 		return NULL;
 
-	kbuf_set->kaddr = dma_alloc_attrs(&fh->psys->adev->dev,
+	kbuf_set->kaddr = dma_alloc_attrs(&instance->psys->adev->dev,
 					  buf_set_size, &kbuf_set->dma_addr,
 					  GFP_KERNEL, 0);
 	if (!kbuf_set->kaddr) {
@@ -85,18 +87,20 @@ __get_buf_set(struct ipu_psys_fh *fh, size_t buf_set_size)
 }
 
 static struct ipu_psys_buffer_set *
-ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd,
-			   struct ipu_psys_ppg *kppg)
+ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_psys_fh *fh = kcmd->fh;
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_kcam_psys_instance *instance;
+	struct ipu_psys *psys;
 	struct ipu_psys_buffer_set *kbuf_set;
 	size_t buf_set_size;
 	u32 *keb;
 
+	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	psys = instance->psys;
+
 	buf_set_size = ipu_fw_psys_ppg_get_buffer_set_size(kcmd);
 
-	kbuf_set = __get_buf_set(fh, buf_set_size);
+	kbuf_set = __get_buf_set(instance, buf_set_size);
 	if (!kbuf_set) {
 		dev_err(&psys->adev->dev, "failed to create buffer set\n");
 		return NULL;
@@ -115,15 +119,18 @@ ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd,
 	return kbuf_set;
 }
 
-int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd,
-			    struct ipu_psys_ppg *kppg)
+int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_kcam_psys_instance *instance;
+	struct ipu_psys *psys;
 	struct ipu_psys_buffer_set *kbuf_set;
 	unsigned int i;
 	int ret;
 
-	kbuf_set = ipu_psys_create_buffer_set(kcmd, kppg);
+	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	psys = instance->psys;
+
+	kbuf_set = ipu_psys_create_buffer_set(kcmd);
 	if (!kbuf_set) {
 		ret = -EINVAL;
 		goto error;
@@ -133,14 +140,15 @@ int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd,
 
 	for (i = 0; i < kcmd->nbuffers; i++) {
 		struct ipu_fw_psys_terminal *terminal;
+		struct ipu_kcam_psys_dbuf *dbuf;
 		u32 buffer;
 
-		terminal = ipu_fw_psys_pg_get_terminal(kcmd, i);
+		terminal = ipu_fw_psys_pg_get_terminal(kcmd->kpg, i);
 		if (!terminal)
 			continue;
 
-		buffer = (u32)kcmd->kbufs[i]->dma_addr +
-				    kcmd->buffers[i].data_offset;
+		dbuf = cam_buffer_driver_data(kcmd->kcam_buffers[i]);
+		buffer = (u32)dbuf->dma_addr + kcmd->buffers[i].data_offset;
 
 		ret = ipu_fw_psys_ppg_set_buffer_set(kcmd, terminal, i, buffer);
 		if (ret) {
@@ -167,14 +175,10 @@ void ipu_psys_ppg_complete(struct ipu_psys *psys, struct ipu_psys_ppg *kppg)
 	mutex_lock(&kppg->mutex);
 	old_ppg_state = kppg->state;
 	if (kppg->state == PPG_STATE_STOPPING) {
-		struct ipu_psys_kcmd tmp_kcmd = {
-			.kpg = kppg->kpg,
-		};
-
 		kppg->state = PPG_STATE_STOPPED;
 		ipu_psys_free_resources(&kppg->kpg->resource_alloc,
 					&psys->resource_pool_running);
-		queue_id = ipu_fw_psys_ppg_get_base_queue_id(&tmp_kcmd);
+		queue_id = ipu_fw_psys_ppg_get_base_queue_id(kppg);
 		ipu_psys_free_cmd_queue_resource(&psys->resource_pool_running,
 						 queue_id);
 		pm_runtime_put(&psys->adev->dev);
@@ -203,7 +207,7 @@ void ipu_psys_ppg_complete(struct ipu_psys *psys, struct ipu_psys_ppg *kppg)
 
 int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 {
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_psys *psys = kppg->psys;
 	struct ipu_psys_kcmd *kcmd = ipu_psys_ppg_get_kcmd(kppg,
 						KCMD_STATE_PPG_START);
 	unsigned int i;
@@ -215,13 +219,13 @@ int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 	}
 
 	dev_dbg(&psys->adev->dev, "start ppg id %d, addr 0x%p\n",
-		ipu_fw_psys_pg_get_id(kcmd), kppg);
+		ipu_fw_psys_pg_get_id(kcmd->kpg), kppg);
 
 	kppg->state = PPG_STATE_STARTING;
 	for (i = 0; i < kcmd->nbuffers; i++) {
 		struct ipu_fw_psys_terminal *terminal;
 
-		terminal = ipu_fw_psys_pg_get_terminal(kcmd, i);
+		terminal = ipu_fw_psys_pg_get_terminal(kcmd->kpg, i);
 		if (!terminal)
 			continue;
 
@@ -233,7 +237,7 @@ int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 		}
 	}
 
-	ret = ipu_fw_psys_pg_submit(kcmd);
+	ret = ipu_fw_psys_pg_submit(kcmd->kpg);
 	if (ret) {
 		dev_err(&psys->adev->dev, "failed to submit kcmd!\n");
 		return ret;
@@ -283,15 +287,14 @@ error:
 
 int ipu_psys_ppg_resume(struct ipu_psys_ppg *kppg)
 {
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_psys *psys = kppg->psys;
 	struct ipu_psys_kcmd tmp_kcmd = {
 		.kpg = kppg->kpg,
-		.fh = kppg->fh,
 	};
 	int ret;
 
 	dev_dbg(&psys->adev->dev, "resume ppg id %d, addr 0x%p\n",
-		ipu_fw_psys_pg_get_id(&tmp_kcmd), kppg);
+		ipu_fw_psys_pg_get_id(kppg->kpg), kppg);
 
 	kppg->state = PPG_STATE_RESUMING;
 	if (enable_suspend_resume) {
@@ -305,14 +308,14 @@ int ipu_psys_ppg_resume(struct ipu_psys_ppg *kppg)
 			return -EIO;
 		}
 
-		ret = ipu_fw_psys_ppg_resume(&tmp_kcmd);
+		ret = ipu_fw_psys_ppg_resume(kppg, psys);
 		if (ret) {
 			dev_err(&psys->adev->dev, "failed to resume ppg\n");
 			goto error;
 		}
 	} else {
 		kppg->kpg->pg->state = IPU_FW_PSYS_PROCESS_GROUP_READY;
-		ret = ipu_fw_psys_pg_submit(&tmp_kcmd);
+		ret = ipu_fw_psys_pg_submit(kppg->kpg);
 		if (ret) {
 			dev_err(&psys->adev->dev, "failed to submit kcmd!\n");
 			return ret;
@@ -355,37 +358,34 @@ int ipu_psys_ppg_stop(struct ipu_psys_ppg *kppg)
 {
 	struct ipu_psys_kcmd *kcmd = ipu_psys_ppg_get_kcmd(kppg,
 							   KCMD_STATE_PPG_STOP);
-	struct ipu_psys *psys = kppg->fh->psys;
-	struct ipu_psys_kcmd kcmd_temp;
+	struct ipu_psys *psys = kppg->psys;
+	struct ipu_psys_pg *kpg;
 	int ppg_id, ret = 0;
 
 	if (kcmd) {
 		list_move_tail(&kcmd->list, &kppg->kcmds_processing_list);
+		kpg = kcmd->kpg;
 	} else {
 		dev_dbg(&psys->adev->dev, "Exceptional stop happened!\n");
-		kcmd_temp.kpg = kppg->kpg;
-		kcmd_temp.fh = kppg->fh;
-		kcmd = &kcmd_temp;
 		/* delete kppg in stop list to avoid this ppg resuming */
 		ipu_psys_scheduler_remove_kppg(kppg, SCHED_STOP_LIST);
+		kpg = kppg->kpg;
 	}
 
-	ppg_id = ipu_fw_psys_pg_get_id(kcmd);
+	ppg_id = ipu_fw_psys_pg_get_id(kppg->kpg);
 	dev_dbg(&psys->adev->dev, "stop ppg(%d, addr 0x%p)\n", ppg_id, kppg);
 
 	if (kppg->state & PPG_STATE_SUSPENDED) {
 		if (enable_suspend_resume) {
 			dev_dbg(&psys->adev->dev, "need resume before stop!\n");
-			kcmd_temp.kpg = kppg->kpg;
-			kcmd_temp.fh = kppg->fh;
-			ret = ipu_fw_psys_ppg_resume(&kcmd_temp);
+			ret = ipu_fw_psys_ppg_resume(kppg, psys);
 			if (ret)
 				dev_err(&psys->adev->dev,
 					"ppg(%d) failed to resume\n", ppg_id);
-		} else if (kcmd != &kcmd_temp) {
+		} else if (kcmd) {
 			ipu_psys_free_cmd_queue_resource(
 				&psys->resource_pool_running,
-				ipu_fw_psys_ppg_get_base_queue_id(kcmd));
+				ipu_fw_psys_ppg_get_base_queue_id(kppg));
 			ipu_psys_kcmd_complete(kppg, kcmd, 0);
 			dev_dbg(&psys->adev->dev,
 				"s_change:%s %p %d -> %d\n", __func__,
@@ -400,32 +400,30 @@ int ipu_psys_ppg_stop(struct ipu_psys_ppg *kppg)
 	dev_dbg(&psys->adev->dev, "s_change:%s %p %d -> %d\n",
 		__func__, kppg, kppg->state, PPG_STATE_STOPPING);
 	kppg->state = PPG_STATE_STOPPING;
-	ret = ipu_fw_psys_pg_abort(kcmd);
-	if (ret)
+	ret = ipu_fw_psys_pg_abort(kppg->kpg, psys);
+	if (ret) {
+		if (ret == -ENODATA)
+			kcmd->pg_user = NULL;
 		dev_err(&psys->adev->dev, "ppg(%d) failed to abort\n", ppg_id);
+	}
 
 	return ret;
 }
 
 int ipu_psys_ppg_suspend(struct ipu_psys_ppg *kppg)
 {
-	struct ipu_psys *psys = kppg->fh->psys;
-	struct ipu_psys_kcmd tmp_kcmd = {
-		.kpg = kppg->kpg,
-		.fh = kppg->fh,
-	};
-	int ppg_id = ipu_fw_psys_pg_get_id(&tmp_kcmd);
+	struct ipu_psys *psys = kppg->psys;
+	int ppg_id = ipu_fw_psys_pg_get_id(kppg->kpg);
 	int ret = 0;
 
 	dev_dbg(&psys->adev->dev, "suspend ppg(%d, addr 0x%p)\n", ppg_id, kppg);
-
 	dev_dbg(&psys->adev->dev, "s_change:%s %p %d -> %d\n",
 		__func__, kppg, kppg->state, PPG_STATE_SUSPENDING);
 	kppg->state = PPG_STATE_SUSPENDING;
 	if (enable_suspend_resume)
-		ret = ipu_fw_psys_ppg_suspend(&tmp_kcmd);
+		ret = ipu_fw_psys_ppg_suspend(kppg, psys);
 	else
-		ret = ipu_fw_psys_pg_abort(&tmp_kcmd);
+		ret = ipu_fw_psys_pg_abort(kppg->kpg, psys);
 	if (ret)
 		dev_err(&psys->adev->dev, "failed to %s ppg(%d)\n",
 			enable_suspend_resume ? "suspend" : "stop", ret);
@@ -447,7 +445,7 @@ static bool ipu_psys_ppg_is_bufset_existing(struct ipu_psys_ppg *kppg)
 bool ipu_psys_ppg_enqueue_bufsets(struct ipu_psys_ppg *kppg)
 {
 	struct ipu_psys_kcmd *kcmd, *kcmd0;
-	struct ipu_psys *psys = kppg->fh->psys;
+	struct ipu_psys *psys = kppg->psys;
 	bool need_resume = false;
 
 	mutex_lock(&kppg->mutex);
@@ -474,9 +472,9 @@ bool ipu_psys_ppg_enqueue_bufsets(struct ipu_psys_ppg *kppg)
 				list_move_tail(&kcmd->list,
 					       &kppg->kcmds_processing_list);
 				dev_dbg(&psys->adev->dev,
-					"kppg %d %p queue kcmd 0x%p fh 0x%p\n",
-					ipu_fw_psys_pg_get_id(kcmd),
-					kppg, kcmd, kcmd->fh);
+					"kppg %d %p queue kcmd 0x%p\n",
+					ipu_fw_psys_pg_get_id(kcmd->kpg),
+					kppg, kcmd);
 			}
 		}
 	}
@@ -489,14 +487,14 @@ void ipu_psys_enter_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 	int ret = 0;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -520,7 +518,7 @@ void ipu_psys_enter_power_gating(struct ipu_psys *psys)
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 }
 
@@ -528,14 +526,14 @@ void ipu_psys_exit_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
+	struct ipu_kcam_psys_instance *instance;
 	int ret = 0;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		mutex_lock(&fh->mutex);
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		mutex_lock(&instance->mutex);
+		sched = &instance->sched;
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
@@ -555,6 +553,6 @@ void ipu_psys_exit_power_gating(struct ipu_psys *psys)
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 }

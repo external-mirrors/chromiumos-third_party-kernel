@@ -542,12 +542,13 @@ int ipu6_fw_psys_get_program_manifest_by_process(
 #if defined(DEBUG) || defined(CONFIG_DYNAMIC_DEBUG) || \
 	(defined(CONFIG_DYNAMIC_DEBUG_CORE) && defined(DYNAMIC_DEBUG_MODULE))
 void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
-			  struct ipu_psys_kcmd *kcmd, const char *note)
+			  struct ipu_psys_pg *pg, const char *note)
 {
-	struct ipu_fw_psys_process_group *pg = kcmd->kpg->pg;
-	u32 pgid = pg->ID;
-	u8 processes = pg->process_count;
-	u16 *process_offset_table = (u16 *)((char *)pg + pg->processes_offset);
+	struct ipu_fw_psys_process_group *fw_pg = pg->pg;
+	u32 pgid = fw_pg->ID;
+	u8 processes = fw_pg->process_count;
+	u16 *process_offset_table = (u16 *)((char *)fw_pg +
+					    fw_pg->processes_offset);
 	unsigned int p, chn, mem, mem_id;
 	unsigned int mem_type, max_mem_id, dev_chn;
 
@@ -571,7 +572,7 @@ void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 	for (p = 0; p < processes; p++) {
 		struct ipu_fw_psys_process *process =
 		    (struct ipu_fw_psys_process *)
-		    ((char *)pg + process_offset_table[p]);
+		    ((char *)fw_pg + process_offset_table[p]);
 		struct ipu6_fw_psys_process_ext *pm_ext =
 		    (struct ipu6_fw_psys_process_ext *)((u8 *)process
 		    + process->process_extension_offset);
@@ -598,7 +599,7 @@ void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 }
 #else
 void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
-			  struct ipu_psys_kcmd *kcmd, const char *note)
+			  struct ipu_psys_pg *pg, const char *note)
 {
 	if (ipu_ver == IPU_VER_6SE || ipu_ver == IPU_VER_6 ||
 	    ipu_ver == IPU_VER_6EP || ipu_ver == IPU_VER_6EP_MTL)

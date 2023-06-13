@@ -38,6 +38,7 @@ struct ipu_psys_event {
  * @data_offset:offset to valid data
  * @bytes_used:	amount of valid data including offset
  * @flags:	flags
+ * @kcam_buf_id:KCAM buffer object ID
  */
 struct ipu_psys_buffer {
 	uint64_t len;
@@ -49,7 +50,8 @@ struct ipu_psys_buffer {
 	uint32_t data_offset;
 	uint32_t bytes_used;
 	uint32_t flags;
-	uint32_t reserved[2];
+	uint32_t kcam_buf_id;
+	uint32_t reserved[1];
 } __attribute__ ((packed));
 
 #define IPU_BUFFER_FLAG_INPUT	(1 << 0)
@@ -64,6 +66,12 @@ struct ipu_psys_buffer {
 #define	IPU_PSYS_CMD_PRIORITY_LOW	2
 #define	IPU_PSYS_CMD_PRIORITY_NUM	3
 
+enum ipu_psys_command_type {
+	CMD_TYPE_START,
+	CMD_TYPE_ENQUEUE,
+	CMD_TYPE_STOP
+};
+
 /**
  * struct ipu_psys_command - processing command
  * @issue_id:		unique id for the command set by user
@@ -71,7 +79,6 @@ struct ipu_psys_buffer {
  * @priority:		priority of the command
  * @pg_manifest:	userspace pointer to program group manifest
  * @buffers:		userspace pointers to array of psys dma buf structs
- * @pg:			process group DMA-BUF handle
  * @pg_manifest_size:	size of program group manifest
  * @bufcount:		number of buffers in buffers array
  * @min_psys_freq:	minimum psys frequency in MHz used for this cmd
@@ -84,12 +91,12 @@ struct ipu_psys_buffer {
  * Specifies a processing command with input and output buffers.
  */
 struct ipu_psys_command {
+	enum ipu_psys_command_type type;
 	uint64_t issue_id;
 	uint64_t user_token;
 	uint32_t priority;
 	void __user *pg_manifest;
 	struct ipu_psys_buffer __user *buffers;
-	int pg;
 	uint32_t pg_manifest_size;
 	uint32_t bufcount;
 	uint32_t min_psys_freq;
@@ -98,7 +105,7 @@ struct ipu_psys_command {
 	uint32_t terminal_enable_bitmap[4];
 	uint32_t routing_enable_bitmap[4];
 	uint32_t rbm[5];
-	uint32_t reserved[2];
+	uint32_t reserved[3];
 } __attribute__ ((packed));
 
 struct ipu_psys_manifest {
@@ -108,9 +115,8 @@ struct ipu_psys_manifest {
 	uint32_t reserved[5];
 } __attribute__ ((packed));
 
+/* these are actually not the ioctl() commands when KCAM is used */
 #define IPU_IOC_QUERYCAP _IOR('A', 1, struct ipu_psys_capability)
-#define IPU_IOC_MAPBUF _IOWR('A', 2, int)
-#define IPU_IOC_UNMAPBUF _IOWR('A', 3, int)
 #define IPU_IOC_GETBUF _IOWR('A', 4, struct ipu_psys_buffer)
 #define IPU_IOC_PUTBUF _IOWR('A', 5, struct ipu_psys_buffer)
 #define IPU_IOC_QCMD _IOWR('A', 6, struct ipu_psys_command)
