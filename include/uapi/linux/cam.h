@@ -572,7 +572,7 @@ enum cam_completion_type {
 /**
  * struct cam_completion - Operation completion event
  *
- * @ts:			Completion timestamp
+ * @seqno:		Sequence Number
  * @id:			Operation ID
  * @type:		Type of event (executed, deleted, buffer overflow)
  */
