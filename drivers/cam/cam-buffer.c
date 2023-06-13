@@ -207,6 +207,12 @@ bool __must_check cam_buffer_get(struct cam_obj_buffer *buffer)
 }
 EXPORT_SYMBOL_GPL(cam_buffer_get);
 
+void *cam_buffer_driver_data(struct cam_obj_buffer *buffer)
+{
+	return buffer->driver_data;
+}
+EXPORT_SYMBOL_GPL(cam_buffer_driver_data);
+
 static bool enum_buffer(struct cam_obj *nsobj, struct cam_ns_walk_control *ctl)
 {
 	struct cam_query_dmabuf_entry *qent;

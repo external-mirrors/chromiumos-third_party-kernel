@@ -46,6 +46,8 @@ struct cam_obj_buffer *cam_buffer_lookup(struct cam_ns *ns, u32 id);
 bool cam_buffer_get(struct cam_obj_buffer *buffer);
 void cam_buffer_put(struct cam_obj_buffer *buffer);
 
+void *cam_buffer_driver_data(struct cam_obj_buffer *buffer);
+
 struct cam_pipeline;
 struct cam_koutput;
 
