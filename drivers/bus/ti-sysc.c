@@ -978,6 +978,8 @@ static int sysc_reset(struct sysc *ddata)
 	val = sysc_read(ddata, offset);
 	val |= (0x1 << ddata->cap->regbits->srst_shift);
 	sysc_write(ddata, offset, val);
+	/* Flush posted write */
+	val = sysc_read_sysconfig(ddata);
 
 	/* Poll on reset status */
 	offset = ddata->offsets[SYSC_SYSSTATUS];
