@@ -261,6 +261,7 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	unsigned int offset;
 	unsigned int i;
 	unsigned int application;
+	bool dg_tsn_large_fixup = false;
 
 	application = hid_lookup_collection(parser, HID_COLLECTION_APPLICATION);
 
@@ -302,6 +303,18 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	usages = max_t(unsigned, parser->local.usage_index,
 				 parser->global.report_count);
 
+	/* Recognize a Usage(Digitizers.Transducer Serial Number) of 64 bits,
+	 * for special processing later; we need to reserve two usages now.
+	 */
+	if (usages == 1 &&
+	    parser->global.report_size == 64 &&
+	    parser->local.usage[0] == (HID_UP_DIGITIZER | 0x005b) &&
+	    parser->global.report_count == 1 &&
+	    parser->local.usage_index == 1) {
+		dg_tsn_large_fixup = true;
+		usages = 2;
+	}
+
 	field = hid_register_field(report, usages);
 	if (!field)
 		return 0;
@@ -335,11 +348,21 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	field->unit_exponent = parser->global.unit_exponent;
 	field->unit = parser->global.unit;
 
+	/* Fix up that particular report, split it into two distinct 32-bit fields.
+	 */
+	if (dg_tsn_large_fixup) {
+		/* Convert second half into Usage(Digitizers.Transducer Serial Number Second 32 Bits) */
+		field->usage[1].hid = (HID_UP_DIGITIZER | 0x006e);
+		field->report_size = 32;
+		field->report_count = 2;
+	}
+
 	return 0;
 }
 
 /*
- * Read data value from item.
+ * Read data value from global items, which are
+ * a maximum of 32 bits in size.
  */
 
 static u32 item_udata(struct hid_item *item)
@@ -713,7 +736,7 @@ static void hid_device_release(struct device *dev)
 
 /*
  * Fetch a report description item from the data stream. We support long
- * items, though they are not used yet.
+ * items, though there are not yet any defined uses for them.
  */
 
 static u8 *fetch_item(__u8 *start, __u8 *end, struct hid_item *item)
@@ -749,6 +772,7 @@ static u8 *fetch_item(__u8 *start, __u8 *end, struct hid_item *item)
 	item->format = HID_ITEM_FORMAT_SHORT;
 	item->size = b & 3;
 
+	/* Map size values 0,1,2,3 to actual sizes 0,1,2,4 */
 	switch (item->size) {
 	case 0:
 		return start;
@@ -767,7 +791,7 @@ static u8 *fetch_item(__u8 *start, __u8 *end, struct hid_item *item)
 		return start;
 
 	case 3:
-		item->size++;
+		item->size = 4;
 		if ((end - start) < 4)
 			return NULL;
 		item->data.u32 = get_unaligned_le32(start);
@@ -1309,9 +1333,7 @@ alloc_err:
 EXPORT_SYMBOL_GPL(hid_open_report);
 
 /*
- * Convert a signed n-bit integer to signed 32-bit integer. Common
- * cases are done through the compiler, the screwed things has to be
- * done by hand.
+ * Convert a signed n-bit integer to signed 32-bit integer.
  */
 
 static s32 snto32(__u32 value, unsigned n)
@@ -1322,12 +1344,7 @@ static s32 snto32(__u32 value, unsigned n)
 	if (n > 32)
 		n = 32;
 
-	switch (n) {
-	case 8:  return ((__s8)value);
-	case 16: return ((__s16)value);
-	case 32: return ((__s32)value);
-	}
-	return value & (1 << (n - 1)) ? value | (~0U << n) : value;
+	return sign_extend32(value, n - 1);
 }
 
 s32 hid_snto32(__u32 value, unsigned n)
@@ -2587,64 +2604,84 @@ bool hid_compare_device_paths(struct hid_device *hdev_a,
 }
 EXPORT_SYMBOL_GPL(hid_compare_device_paths);
 
+static bool hid_check_device_match(struct hid_device *hdev,
+				   struct hid_driver *hdrv,
+				   const struct hid_device_id **id)
+{
+	*id = hid_match_device(hdev, hdrv);
+	if (!*id)
+		return -ENODEV;
+
+	if (hdrv->match)
+		return hdrv->match(hdev, hid_ignore_special_drivers);
+
+	/*
+	 * hid-generic implements .match(), so we must be dealing with a
+	 * different HID driver here, and can simply check if
+	 * hid_ignore_special_drivers is set or not.
+	 */
+	return !hid_ignore_special_drivers;
+}
+
+static int __hid_device_probe(struct hid_device *hdev, struct hid_driver *hdrv)
+{
+	const struct hid_device_id *id;
+	int ret;
+
+	if (!hid_check_device_match(hdev, hdrv, &id))
+		return -ENODEV;
+
+	hdev->devres_group_id = devres_open_group(&hdev->dev, NULL, GFP_KERNEL);
+	if (!hdev->devres_group_id)
+		return -ENOMEM;
+
+	/* reset the quirks that has been previously set */
+	hdev->quirks = hid_lookup_quirk(hdev);
+	hdev->driver = hdrv;
+
+	if (hdrv->probe) {
+		ret = hdrv->probe(hdev, id);
+	} else { /* default probe */
+		ret = hid_open_report(hdev);
+		if (!ret)
+			ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+	}
+
+	/*
+	 * Note that we are not closing the devres group opened above so
+	 * even resources that were attached to the device after probe is
+	 * run are released when hid_device_remove() is executed. This is
+	 * needed as some drivers would allocate additional resources,
+	 * for example when updating firmware.
+	 */
+
+	if (ret) {
+		devres_release_group(&hdev->dev, hdev->devres_group_id);
+		hid_close_report(hdev);
+		hdev->driver = NULL;
+	}
+
+	return ret;
+}
+
 static int hid_device_probe(struct device *dev)
 {
-	struct hid_driver *hdrv = to_hid_driver(dev->driver);
 	struct hid_device *hdev = to_hid_device(dev);
-	const struct hid_device_id *id;
+	struct hid_driver *hdrv = to_hid_driver(dev->driver);
 	int ret = 0;
 
-	if (down_interruptible(&hdev->driver_input_lock)) {
-		ret = -EINTR;
-		goto end;
-	}
-	hdev->io_started = false;
+	if (down_interruptible(&hdev->driver_input_lock))
+		return -EINTR;
 
+	hdev->io_started = false;
 	clear_bit(ffs(HID_STAT_REPROBED), &hdev->status);
 
-	if (!hdev->driver) {
-		id = hid_match_device(hdev, hdrv);
-		if (id == NULL) {
-			ret = -ENODEV;
-			goto unlock;
-		}
+	if (!hdev->driver)
+		ret = __hid_device_probe(hdev, hdrv);
 
-		if (hdrv->match) {
-			if (!hdrv->match(hdev, hid_ignore_special_drivers)) {
-				ret = -ENODEV;
-				goto unlock;
-			}
-		} else {
-			/*
-			 * hid-generic implements .match(), so if
-			 * hid_ignore_special_drivers is set, we can safely
-			 * return.
-			 */
-			if (hid_ignore_special_drivers) {
-				ret = -ENODEV;
-				goto unlock;
-			}
-		}
-
-		/* reset the quirks that has been previously set */
-		hdev->quirks = hid_lookup_quirk(hdev);
-		hdev->driver = hdrv;
-		if (hdrv->probe) {
-			ret = hdrv->probe(hdev, id);
-		} else { /* default probe */
-			ret = hid_open_report(hdev);
-			if (!ret)
-				ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
-		}
-		if (ret) {
-			hid_close_report(hdev);
-			hdev->driver = NULL;
-		}
-	}
-unlock:
 	if (!hdev->io_started)
 		up(&hdev->driver_input_lock);
-end:
+
 	return ret;
 }
 
@@ -2662,6 +2699,10 @@ static void hid_device_remove(struct device *dev)
 			hdrv->remove(hdev);
 		else /* default remove */
 			hid_hw_stop(hdev);
+
+		/* Release all devres resources allocated by the driver */
+		devres_release_group(&hdev->dev, hdev->devres_group_id);
+
 		hid_close_report(hdev);
 		hdev->driver = NULL;
 	}
