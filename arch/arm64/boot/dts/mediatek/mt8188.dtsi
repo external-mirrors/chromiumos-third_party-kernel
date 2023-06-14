@@ -2911,6 +2911,8 @@
 
 			operating-points-v2 = <&opp_table_img>, <&opp_table_ipe>;
 			dvfsrc-vmm-supply = <&vmm_proxy_label>;
+			assigned-clocks = <&topckgen CLK_TOP_IMG>;
+			assigned-clock-parents = <&apmixedsys CLK_APMIXED_IMGPLL>;
 #if 0
 			interconnects =
 				<&mmqos MASTER_LARB_PORT(M4U_PORT_L9_IMGI_T1_A)
