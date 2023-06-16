@@ -12,55 +12,32 @@ extern struct miscdevice mausb_host_dev;
 
 static void __mausb_ip_set_options(struct socket *sock, bool udp)
 {
-	u32 optval = 0;
-	unsigned int optlen = sizeof(optval);
-	int status = 0;
-	struct timeval timeo = {.tv_sec = 0, .tv_usec = 500000U };
-	struct timeval send_timeo = {.tv_sec = 1, .tv_usec = 0 };
+	int val;
+	struct sock *sk = sock->sk;
 
-	if (!udp) {
-		optval = 1;
-		status = kernel_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
-					   (char *)&optval, optlen);
-		if (status < 0)
-			dev_warn(mausb_host_dev.this_device, "Failed to set tcp no delay option: status=%d",
-				 status);
-	}
+	if (!udp)
+		tcp_sock_set_nodelay(sk);
 
-	status = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO_OLD,
-				   (char *)&timeo, sizeof(timeo));
+	sock_set_sndtimeo(sk, 1);
 
-	if (status < 0)
-		dev_warn(mausb_host_dev.this_device, "Failed to set recv timeout option: status=%d",
-			 status);
+	lock_sock_nested(sk, 0);
 
-	status = kernel_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO_OLD,
-				   (char *)&send_timeo, sizeof(send_timeo));
+	// Half a second timeout.
+	sk->sk_rcvtimeo = min_t(int, DIV_ROUND_UP(HZ, 2), MAX_SCHEDULE_TIMEOUT);
 
-	if (status < 0)
-		dev_warn(mausb_host_dev.this_device, "Failed to set snd timeout option: status=%d",
-			 status);
+	val = min_t(u32, 0, sysctl_wmem_max);
+	val = min_t(int, val, INT_MAX / 2);
+	sk->sk_userlocks |= SOCK_SNDBUF_LOCK;
+	WRITE_ONCE(sk->sk_sndbuf, max_t(int, val * 2, SOCK_MIN_SNDBUF));
 
-	optval = MAUSB_LINK_BUFF_SIZE;
-	status  = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVBUF,
-				    (char *)&optval, optlen);
-	if (status < 0)
-		dev_warn(mausb_host_dev.this_device, "Failed to set recv buffer size: status=%d",
-			 status);
+	val = min_t(u32, 0, sysctl_rmem_max);
+	val = min_t(int, val, INT_MAX / 2);
+	sk->sk_userlocks |= SOCK_RCVBUF_LOCK;
+	WRITE_ONCE(sk->sk_rcvbuf, max_t(int, val * 2, SOCK_MIN_RCVBUF));
 
-	optval = MAUSB_LINK_BUFF_SIZE;
-	status  = kernel_setsockopt(sock, SOL_SOCKET, SO_SNDBUF,
-				    (char *)&optval, optlen);
-	if (status < 0)
-		dev_warn(mausb_host_dev.this_device, "Failed to set send buffer size: status=%d",
-			 status);
+	release_sock(sk);
 
-	optval = MAUSB_LINK_TOS_LEVEL_EF;
-	status  = kernel_setsockopt(sock, IPPROTO_IP, IP_TOS,
-				    (char *)&optval, optlen);
-	if (status < 0)
-		dev_warn(mausb_host_dev.this_device, "Failed to set QOS: status=%d",
-			 status);
+	ip_sock_set_tos(sk, MAUSB_LINK_TOS_LEVEL_EF);
 }
 
 static void __mausb_ip_connect(struct work_struct *work)
@@ -171,14 +148,7 @@ static int __mausb_ip_recv(struct mausb_ip_ctx *ip_ctx)
 		}
 
 		if (!ip_ctx->udp) {
-			status = kernel_setsockopt(client_socket, IPPROTO_TCP,
-						   TCP_QUICKACK,
-						   (char *)&optval,
-						   sizeof(optval));
-			if (status != 0) {
-				dev_warn(mausb_host_dev.this_device, "Setting TCP_QUICKACK failed, status=%d",
-					 status);
-			}
+			tcp_sock_set_quickack(client_socket->sk, optval);
 		}
 
 		status = kernel_recvmsg(client_socket, &msghd, &vec, 1,
