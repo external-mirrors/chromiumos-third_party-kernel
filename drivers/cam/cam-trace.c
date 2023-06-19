@@ -2,7 +2,7 @@
 /*
  * CAM tracepoints
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #define CREATE_TRACE_POINTS

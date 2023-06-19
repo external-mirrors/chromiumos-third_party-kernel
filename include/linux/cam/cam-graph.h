@@ -2,7 +2,7 @@
 /*
  * CAM graph object
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef __LINUX_CAM_GRAPH_H__

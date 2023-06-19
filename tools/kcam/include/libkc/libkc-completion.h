@@ -2,7 +2,7 @@
 /*
  * libkc completion event
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef LIBKC_COMPLETION_H_

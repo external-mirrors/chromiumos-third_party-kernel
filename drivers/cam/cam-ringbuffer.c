@@ -2,7 +2,7 @@
 /*
  * CAM completion events ring buffer
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #define pr_fmt(fmt) "cam-ringbuffer: " fmt

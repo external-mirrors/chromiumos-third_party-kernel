@@ -2,7 +2,7 @@
 /*
  * CAM file handle namespace
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef __LINUX_CAM_NAMESPACE_H__

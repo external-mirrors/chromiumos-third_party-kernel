@@ -2,7 +2,7 @@
 /*
  * libkc events
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #include <unistd.h>

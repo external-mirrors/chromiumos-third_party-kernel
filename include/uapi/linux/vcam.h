@@ -2,7 +2,7 @@
 /*
  * VCAM test driver
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef __UAPI_LINUX_VCAM_H__

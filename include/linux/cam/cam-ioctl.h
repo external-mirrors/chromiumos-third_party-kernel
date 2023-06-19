@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef __LINUX_CAM_IOCTL_H__

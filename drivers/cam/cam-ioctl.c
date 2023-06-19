@@ -2,8 +2,8 @@
 /*
  * CAM IOCTL handling
  *
- * Copyright (C) 2022 Google LLC
- * Copyright (C) 2020 Intel Corporation
+ * Copyright (C) Google LLC
+ * Copyright (C) Intel Corporation
  */
 
 #define pr_fmt(fmt) "cam-ioctl: " fmt

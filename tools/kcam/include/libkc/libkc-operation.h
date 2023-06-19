@@ -2,7 +2,7 @@
 /*
  * libkc operation
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef LIBKC_OPERATION_H_

@@ -2,7 +2,7 @@
 /*
  * libkc helpers
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #include <syslog.h>

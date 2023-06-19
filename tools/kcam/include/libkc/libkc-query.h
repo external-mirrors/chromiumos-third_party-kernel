@@ -2,7 +2,7 @@
 /*
  * libkc
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef LIBKC_QUERY_H_

@@ -2,7 +2,7 @@
 /*
  * CAM objects namespace
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #define pr_fmt(fmt) "cam-namespace: " fmt

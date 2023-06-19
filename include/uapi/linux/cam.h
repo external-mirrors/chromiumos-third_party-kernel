@@ -2,8 +2,7 @@
 /*
  * include/uapi/linux/cam.h
  *
- * Copyright (C) 2022 Google LLC
- * Copyright (C) 2020 Intel Corporation
+ * Copyright (C) Google LLC
  */
 
 #ifndef __UAPI_LINUX_CAM_H__

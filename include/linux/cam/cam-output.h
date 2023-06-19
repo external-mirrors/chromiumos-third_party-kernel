@@ -2,8 +2,8 @@
 /*
  * CAM user space output
  *
- * Copyright (C) 2022 Google LLC
- * Copyright (c) 2021 Intel Corporation
+ * Copyright (C) Google LLC
+ * Copyright (c) Intel Corporation
  */
 
 #ifndef __LINUX_CAM_OUTPUT_H__

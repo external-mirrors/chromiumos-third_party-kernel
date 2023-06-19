@@ -2,7 +2,7 @@
 /*
  * libkc and VCAM test tool
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #include <getopt.h>

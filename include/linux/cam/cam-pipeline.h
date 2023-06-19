@@ -2,7 +2,7 @@
 /*
  * CAM requests execution pipeline
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) Google LLC
  */
 
 #ifndef __LINUX_CAM_PIPELINE_H__
@@ -19,7 +19,7 @@
 /**
  * cam_pipeline - CAM execution pipeline
  *
- * @TODO more details? (io_uring etc?)
+ * @TODO add documentation
  */
 struct cam_pipeline {
 	/** @ops: Operations namespace */
