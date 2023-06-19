@@ -2476,14 +2476,16 @@ mtk_dp_bridge_mode_valid(struct drm_bridge *bridge,
 {
 	struct mtk_dp *mtk_dp = mtk_dp_from_bridge(bridge);
 	u32 bpp = info->color_formats & DRM_COLOR_FORMAT_YCBCR422 ? 16 : 24;
+	u32 lane_count_min = min_t(u32, drm_dp_max_lane_count(mtk_dp->rx_cap),
+		mtk_dp->max_lanes);
 	u32 rate = min_t(u32, drm_dp_max_link_rate(mtk_dp->rx_cap) *
-			      drm_dp_max_lane_count(mtk_dp->rx_cap),
+			      lane_count_min,
 			 drm_dp_bw_code_to_link_rate(mtk_dp->max_linkrate) *
-			 mtk_dp->max_lanes);
+			 lane_count_min);
 
-	if (rate < mode->clock * bpp / 8)
+	if (rate * 97 / 100 < (mode->clock * bpp / 8) ) {
 		return MODE_CLOCK_HIGH;
-
+	}
 	return MODE_OK;
 }
 
