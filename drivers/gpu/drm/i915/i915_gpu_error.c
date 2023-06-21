@@ -32,6 +32,8 @@
 #include <linux/zlib.h>
 #include <linux/ascii85.h>
 
+#include <drm/drm_print.h>
+
 #include "i915_drv.h"
 
 static const char *engine_str(int engine)
@@ -176,6 +178,21 @@ static void i915_error_puts(struct drm_i915_error_state_buf *e,
 
 #define err_printf(e, ...) i915_error_printf(e, __VA_ARGS__)
 #define err_puts(e, s) i915_error_puts(e, s)
+
+static void __i915_printfn_error(struct drm_printer *p, struct va_format *vaf)
+{
+	i915_error_vprintf(p->arg, vaf->fmt, *vaf->va);
+}
+
+static inline struct drm_printer
+i915_error_printer(struct drm_i915_error_state_buf *e)
+{
+	struct drm_printer p = {
+		.printfn = __i915_printfn_error,
+		.arg = e,
+	};
+	return p;
+}
 
 #ifdef CONFIG_DRM_I915_COMPRESS_ERROR
 
@@ -525,9 +542,9 @@ static void print_error_obj(struct drm_i915_error_state_buf *m,
 static void err_print_capabilities(struct drm_i915_error_state_buf *m,
 				   const struct intel_device_info *info)
 {
-#define PRINT_FLAG(x)  err_printf(m, #x ": %s\n", yesno(info->x))
-	DEV_INFO_FOR_EACH_FLAG(PRINT_FLAG);
-#undef PRINT_FLAG
+	struct drm_printer p = i915_error_printer(m);
+
+	intel_device_info_dump_flags(info, &p);
 }
 
 static __always_inline void err_print_param(struct drm_i915_error_state_buf *m,
@@ -565,6 +582,20 @@ static void err_print_pciid(struct drm_i915_error_state_buf *m,
 	err_printf(m, "PCI Subsystem: %04x:%04x\n",
 		   pdev->subsystem_vendor,
 		   pdev->subsystem_device);
+}
+
+static void err_print_uc(struct drm_i915_error_state_buf *m,
+			 const struct i915_error_uc *error_uc)
+{
+	struct drm_printer p = i915_error_printer(m);
+	const struct i915_gpu_state *error =
+		container_of(error_uc, typeof(*error), uc);
+
+	if (!error->device_info.has_guc)
+		return;
+
+	intel_uc_fw_dump(&error_uc->guc_fw, &p);
+	intel_uc_fw_dump(&error_uc->huc_fw, &p);
 }
 
 int i915_error_state_to_str(struct drm_i915_error_state_buf *m,
@@ -751,6 +782,7 @@ int i915_error_state_to_str(struct drm_i915_error_state_buf *m,
 
 	err_print_capabilities(m, &error->device_info);
 	err_print_params(m, &error->params);
+	err_print_uc(m, &error->uc);
 
 	if (m->bytes == 0 && m->err)
 		return m->err;
@@ -809,6 +841,14 @@ static __always_inline void free_param(const char *type, void *x)
 		kfree(*(void **)x);
 }
 
+static void cleanup_uc_state(struct i915_gpu_state *error)
+{
+	struct i915_error_uc *error_uc = &error->uc;
+
+	kfree(error_uc->guc_fw.path);
+	kfree(error_uc->huc_fw.path);
+}
+
 void __i915_gpu_state_free(struct kref *error_ref)
 {
 	struct i915_gpu_state *error =
@@ -847,6 +887,8 @@ void __i915_gpu_state_free(struct kref *error_ref)
 #define FREE(T, x, ...) free_param(#T, &error->params.x);
 	I915_PARAMS_FOR_EACH(FREE);
 #undef FREE
+
+	cleanup_uc_state(error);
 
 	kfree(error);
 }
@@ -1535,6 +1577,26 @@ static void i915_capture_pinned_buffers(struct drm_i915_private *dev_priv,
 	error->pinned_bo = bo;
 }
 
+static void capture_uc_state(struct i915_gpu_state *error)
+{
+	struct drm_i915_private *i915 = error->i915;
+	struct i915_error_uc *error_uc = &error->uc;
+
+	/* Capturing uC state won't be useful if there is no GuC */
+	if (!error->device_info.has_guc)
+		return;
+
+	error_uc->guc_fw = i915->guc.fw;
+	error_uc->huc_fw = i915->huc.fw;
+
+	/* Non-default firmware paths will be specified by the modparam.
+	 * As modparams are generally accesible from the userspace make
+	 * explicit copies of the firmware paths.
+	 */
+	error_uc->guc_fw.path = kstrdup(i915->guc.fw.path, GFP_ATOMIC);
+	error_uc->huc_fw.path = kstrdup(i915->huc.fw.path, GFP_ATOMIC);
+}
+
 static void i915_gem_capture_guc_log_buffer(struct drm_i915_private *dev_priv,
 					    struct i915_gpu_state *error)
 {
@@ -1685,6 +1747,8 @@ static int capture(void *data)
 #define DUP(T, x, ...) dup_param(#T, &error->params.x);
 	I915_PARAMS_FOR_EACH(DUP);
 #undef DUP
+
+	capture_uc_state(error);
 
 	i915_capture_gen_state(error->i915, error);
 	i915_capture_reg_state(error->i915, error);

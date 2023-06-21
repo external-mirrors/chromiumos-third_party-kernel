@@ -57,14 +57,14 @@ static int i915_capabilities(struct seq_file *m, void *data)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 	const struct intel_device_info *info = INTEL_INFO(dev_priv);
+	struct drm_printer p = drm_seq_file_printer(m);
 
 	seq_printf(m, "gen: %d\n", INTEL_GEN(dev_priv));
 	seq_printf(m, "platform: %s\n", intel_platform_name(info->platform));
 	seq_printf(m, "pch: %d\n", INTEL_PCH_TYPE(dev_priv));
 
-#define PRINT_FLAG(x)  seq_printf(m, #x ": %s\n", yesno(info->x))
-	DEV_INFO_FOR_EACH_FLAG(PRINT_FLAG);
-#undef PRINT_FLAG
+	intel_device_info_dump_flags(info, &p);
+	intel_device_info_dump_runtime(info, &p);
 
 	kernel_param_lock(THIS_MODULE);
 #define PRINT_PARAM(T, x, ...) seq_print_param(m, #x, #T, &i915_modparams.x);
@@ -1076,13 +1076,8 @@ static int i915_frequency_info(struct seq_file *m, void *unused)
 		rpdownei = I915_READ(GEN6_RP_CUR_DOWN_EI) & GEN6_CURIAVG_MASK;
 		rpcurdown = I915_READ(GEN6_RP_CUR_DOWN) & GEN6_CURBSYTAVG_MASK;
 		rpprevdown = I915_READ(GEN6_RP_PREV_DOWN) & GEN6_CURBSYTAVG_MASK;
-		if (INTEL_GEN(dev_priv) >= 9)
-			cagf = (rpstat & GEN9_CAGF_MASK) >> GEN9_CAGF_SHIFT;
-		else if (IS_HASWELL(dev_priv) || IS_BROADWELL(dev_priv))
-			cagf = (rpstat & HSW_CAGF_MASK) >> HSW_CAGF_SHIFT;
-		else
-			cagf = (rpstat & GEN6_CAGF_MASK) >> GEN6_CAGF_SHIFT;
-		cagf = intel_gpu_freq(dev_priv, cagf);
+		cagf = intel_gpu_freq(dev_priv,
+				      intel_get_cagf(dev_priv, rpstat));
 
 		intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
 
@@ -2287,27 +2282,13 @@ static int i915_llc(struct seq_file *m, void *data)
 static int i915_huc_load_status_info(struct seq_file *m, void *data)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
-	struct intel_uc_fw *huc_fw = &dev_priv->huc.fw;
+	struct drm_printer p;
 
 	if (!HAS_HUC_UCODE(dev_priv))
 		return 0;
 
-	seq_puts(m, "HuC firmware status:\n");
-	seq_printf(m, "\tpath: %s\n", huc_fw->path);
-	seq_printf(m, "\tfetch: %s\n",
-		intel_uc_fw_status_repr(huc_fw->fetch_status));
-	seq_printf(m, "\tload: %s\n",
-		intel_uc_fw_status_repr(huc_fw->load_status));
-	seq_printf(m, "\tversion wanted: %d.%d\n",
-		huc_fw->major_ver_wanted, huc_fw->minor_ver_wanted);
-	seq_printf(m, "\tversion found: %d.%d\n",
-		huc_fw->major_ver_found, huc_fw->minor_ver_found);
-	seq_printf(m, "\theader: offset is %d; size = %d\n",
-		huc_fw->header_offset, huc_fw->header_size);
-	seq_printf(m, "\tuCode: offset is %d; size = %d\n",
-		huc_fw->ucode_offset, huc_fw->ucode_size);
-	seq_printf(m, "\tRSA: offset is %d; size = %d\n",
-		huc_fw->rsa_offset, huc_fw->rsa_size);
+	p = drm_seq_file_printer(m);
+	intel_uc_fw_dump(&dev_priv->huc.fw, &p);
 
 	intel_runtime_pm_get(dev_priv);
 	seq_printf(m, "\nHuC status 0x%08x:\n", I915_READ(HUC_STATUS2));
@@ -2319,29 +2300,14 @@ static int i915_huc_load_status_info(struct seq_file *m, void *data)
 static int i915_guc_load_status_info(struct seq_file *m, void *data)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
-	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
+	struct drm_printer p;
 	u32 tmp, i;
 
 	if (!HAS_GUC_UCODE(dev_priv))
 		return 0;
 
-	seq_printf(m, "GuC firmware status:\n");
-	seq_printf(m, "\tpath: %s\n",
-		guc_fw->path);
-	seq_printf(m, "\tfetch: %s\n",
-		intel_uc_fw_status_repr(guc_fw->fetch_status));
-	seq_printf(m, "\tload: %s\n",
-		intel_uc_fw_status_repr(guc_fw->load_status));
-	seq_printf(m, "\tversion wanted: %d.%d\n",
-		guc_fw->major_ver_wanted, guc_fw->minor_ver_wanted);
-	seq_printf(m, "\tversion found: %d.%d\n",
-		guc_fw->major_ver_found, guc_fw->minor_ver_found);
-	seq_printf(m, "\theader: offset is %d; size = %d\n",
-		guc_fw->header_offset, guc_fw->header_size);
-	seq_printf(m, "\tuCode: offset is %d; size = %d\n",
-		guc_fw->ucode_offset, guc_fw->ucode_size);
-	seq_printf(m, "\tRSA: offset is %d; size = %d\n",
-		guc_fw->rsa_offset, guc_fw->rsa_size);
+	p = drm_seq_file_printer(m);
+	intel_uc_fw_dump(&dev_priv->guc.fw, &p);
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -3225,12 +3191,24 @@ static int i915_engine_info(struct seq_file *m, void *unused)
 		   yesno(dev_priv->gt.awake));
 	seq_printf(m, "Global active requests: %d\n",
 		   dev_priv->gt.active_requests);
+	seq_printf(m, "CS timestamp frequency: %u kHz\n",
+		   dev_priv->info.cs_timestamp_frequency_khz);
 
 	p = drm_seq_file_printer(m);
 	for_each_engine(engine, dev_priv, id)
 		intel_engine_dump(engine, &p);
 
 	intel_runtime_pm_put(dev_priv);
+
+	return 0;
+}
+
+static int i915_rcs_topology(struct seq_file *m, void *unused)
+{
+	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	struct drm_printer p = drm_seq_file_printer(m);
+
+	intel_device_info_dump_topology(&INTEL_INFO(dev_priv)->sseu, &p);
 
 	return 0;
 }
@@ -4403,7 +4381,7 @@ static void cherryview_sseu_device_status(struct drm_i915_private *dev_priv,
 			continue;
 
 		sseu->slice_mask = BIT(0);
-		sseu->subslice_mask |= BIT(ss);
+		sseu->subslice_mask[0] |= BIT(ss);
 		eu_cnt = ((sig1[ss] & CHV_EU08_PG_ENABLE) ? 0 : 2) +
 			 ((sig1[ss] & CHV_EU19_PG_ENABLE) ? 0 : 2) +
 			 ((sig1[ss] & CHV_EU210_PG_ENABLE) ? 0 : 2) +
@@ -4450,7 +4428,7 @@ static void gen10_sseu_device_status(struct drm_i915_private *dev_priv,
 			continue;
 
 		sseu->slice_mask |= BIT(s);
-		sseu->subslice_mask = info->sseu.subslice_mask;
+		sseu->subslice_mask[s] = info->sseu.subslice_mask[s];
 
 		for (ss = 0; ss < ss_max; ss++) {
 			unsigned int eu_cnt;
@@ -4505,8 +4483,8 @@ static void gen9_sseu_device_status(struct drm_i915_private *dev_priv,
 		sseu->slice_mask |= BIT(s);
 
 		if (IS_GEN9_BC(dev_priv))
-			sseu->subslice_mask =
-				INTEL_INFO(dev_priv)->sseu.subslice_mask;
+			sseu->subslice_mask[s] =
+				INTEL_INFO(dev_priv)->sseu.subslice_mask[s];
 
 		for (ss = 0; ss < ss_max; ss++) {
 			unsigned int eu_cnt;
@@ -4516,7 +4494,7 @@ static void gen9_sseu_device_status(struct drm_i915_private *dev_priv,
 					/* skip disabled subslice */
 					continue;
 
-				sseu->subslice_mask |= BIT(ss);
+				sseu->subslice_mask[s] |= BIT(ss);
 			}
 
 			eu_cnt = 2 * hweight32(eu_reg[2*s + ss/2] &
@@ -4538,9 +4516,12 @@ static void broadwell_sseu_device_status(struct drm_i915_private *dev_priv,
 	sseu->slice_mask = slice_info & GEN8_LSLICESTAT_MASK;
 
 	if (sseu->slice_mask) {
-		sseu->subslice_mask = INTEL_INFO(dev_priv)->sseu.subslice_mask;
 		sseu->eu_per_subslice =
 				INTEL_INFO(dev_priv)->sseu.eu_per_subslice;
+		for (s = 0; s < fls(sseu->slice_mask); s++) {
+			sseu->subslice_mask[s] =
+				INTEL_INFO(dev_priv)->sseu.subslice_mask[s];
+		}
 		sseu->eu_total = sseu->eu_per_subslice *
 				 sseu_subslice_total(sseu);
 
@@ -4559,6 +4540,7 @@ static void i915_print_sseu_info(struct seq_file *m, bool is_available_info,
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
 	const char *type = is_available_info ? "Available" : "Enabled";
+	int s;
 
 	seq_printf(m, "  %s Slice Mask: %04x\n", type,
 		   sseu->slice_mask);
@@ -4566,10 +4548,10 @@ static void i915_print_sseu_info(struct seq_file *m, bool is_available_info,
 		   hweight8(sseu->slice_mask));
 	seq_printf(m, "  %s Subslice Total: %u\n", type,
 		   sseu_subslice_total(sseu));
-	seq_printf(m, "  %s Subslice Mask: %04x\n", type,
-		   sseu->subslice_mask);
-	seq_printf(m, "  %s Subslice Per Slice: %u\n", type,
-		   hweight8(sseu->subslice_mask));
+	for (s = 0; s < fls(sseu->slice_mask); s++) {
+		seq_printf(m, "  %s Slice%i subslices: %u\n", type,
+			   s, hweight8(sseu->subslice_mask[s]));
+	}
 	seq_printf(m, "  %s EU Total: %u\n", type,
 		   sseu->eu_total);
 	seq_printf(m, "  %s EU Per Subslice: %u\n", type,
@@ -4603,6 +4585,10 @@ static int i915_sseu_status(struct seq_file *m, void *unused)
 
 	seq_puts(m, "SSEU Device Status\n");
 	memset(&sseu, 0, sizeof(sseu));
+	sseu.max_slices = INTEL_INFO(dev_priv)->sseu.max_slices;
+	sseu.max_subslices = INTEL_INFO(dev_priv)->sseu.max_subslices;
+	sseu.max_eus_per_subslice =
+		INTEL_INFO(dev_priv)->sseu.max_eus_per_subslice;
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -4773,6 +4759,7 @@ static const struct drm_info_list i915_debugfs_list[] = {
 	{"i915_dmc_info", i915_dmc_info, 0},
 	{"i915_display_info", i915_display_info, 0},
 	{"i915_engine_info", i915_engine_info, 0},
+	{"i915_rcs_topology", i915_rcs_topology, 0},
 	{"i915_semaphore_status", i915_semaphore_status, 0},
 	{"i915_shared_dplls_info", i915_shared_dplls_info, 0},
 	{"i915_dp_mst_info", i915_dp_mst_info, 0},

@@ -48,6 +48,8 @@
 
 #include "i915_drv.h"
 #include "i915_trace.h"
+#include "i915_pmu.h"
+#include "i915_query.h"
 #include "i915_vgpu.h"
 #include "intel_drv.h"
 #include "intel_uc.h"
@@ -412,9 +414,12 @@ static int i915_getparam(struct drm_device *dev, void *data,
 			return -ENODEV;
 		break;
 	case I915_PARAM_SUBSLICE_MASK:
-		value = INTEL_INFO(dev_priv)->sseu.subslice_mask;
+		value = INTEL_INFO(dev_priv)->sseu.subslice_mask[0];
 		if (!value)
 			return -ENODEV;
+		break;
+	case I915_PARAM_CS_TIMESTAMP_FREQUENCY:
+		value = 1000 * INTEL_INFO(dev_priv)->cs_timestamp_frequency_khz;
 		break;
 	default:
 		DRM_DEBUG("Unknown parameter %d\n", param->param);
@@ -878,6 +883,10 @@ static int i915_driver_init_early(struct drm_i915_private *dev_priv,
 	memcpy(device_info, match_info, sizeof(*device_info));
 	device_info->device_id = dev_priv->drm.pdev->device;
 
+	BUILD_BUG_ON(INTEL_MAX_PLATFORMS >
+		     sizeof(device_info->platform_mask) * BITS_PER_BYTE);
+	device_info->platform_mask = BIT(device_info->platform);
+
 	BUG_ON(device_info->gen > sizeof(device_info->gen_mask) * BITS_PER_BYTE);
 	device_info->gen_mask = BIT(device_info->gen - 1);
 
@@ -1080,6 +1089,11 @@ static int i915_driver_init_hw(struct drm_i915_private *dev_priv)
 		return -ENODEV;
 
 	intel_device_info_runtime_init(dev_priv);
+	if (drm_debug & DRM_UT_DRIVER) {
+		struct drm_printer p = drm_debug_printer("i915 device info:");
+
+		intel_device_info_dump_runtime(&dev_priv->info, &p);
+	}
 
 	intel_sanitize_options(dev_priv);
 
@@ -1207,6 +1221,7 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
 	struct drm_device *dev = &dev_priv->drm;
 
 	i915_gem_shrinker_init(dev_priv);
+	i915_pmu_register(dev_priv);
 
 	/*
 	 * Notify a valid surface after modesetting,
@@ -1261,6 +1276,7 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 	intel_opregion_unregister(dev_priv);
 
 	i915_perf_unregister(dev_priv);
+	i915_pmu_unregister(dev_priv);
 
 	i915_teardown_sysfs(dev_priv);
 	i915_guc_log_unregister(dev_priv);
@@ -2747,6 +2763,7 @@ static const struct drm_ioctl_desc i915_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(I915_PERF_OPEN, i915_perf_open_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_ADD_CONFIG, i915_perf_add_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(I915_PERF_REMOVE_CONFIG, i915_perf_remove_config_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(I915_QUERY, i915_query_ioctl, DRM_UNLOCKED|DRM_RENDER_ALLOW),
 };
 
 static struct drm_driver driver = {
