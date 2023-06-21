@@ -139,6 +139,7 @@ struct acp_dsp_stream {
 	int stream_tag;
 	int active;
 	unsigned int reg_offset;
+	size_t posn_offset;
 };
 
 /* Common device data struct for ACP devices */
@@ -155,18 +156,6 @@ struct acp_dev_data {
 	struct acp_dsp_stream stream_buf[ACP_MAX_STREAM];
 	struct acp_dsp_stream *dtrace_stream;
 	struct pci_dev *smn_dev;
-};
-
-enum acp_pcm_types {
-	I2S_BT = 0,
-	I2S_SP,
-	PDM_DMIC,
-	PCM_NONE,
-};
-
-struct acp_pcm_table {
-	u8 pcm_index;
-	char *pcm_name;
 };
 
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
@@ -220,7 +209,8 @@ int acp_pcm_open(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
 int acp_pcm_close(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
 int acp_pcm_hw_params(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
 		      struct snd_pcm_hw_params *params, struct sof_ipc_stream_params *ipc_params);
-snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
+snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev,
+				  struct snd_pcm_substream *substream);
 
 extern const struct snd_sof_dsp_ops sof_renoir_ops;
 

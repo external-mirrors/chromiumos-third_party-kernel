@@ -9,6 +9,7 @@
 #include "intel_pxp_irq.h"
 #include "intel_pxp_session.h"
 #include "intel_pxp_tee.h"
+#include "gem/i915_gem_context.h"
 #include "gt/intel_context.h"
 #include "i915_drv.h"
 
@@ -317,6 +318,58 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 	return 0;
 }
 
+void intel_pxp_invalidate(struct intel_pxp *pxp)
+{
+	struct drm_i915_private *i915 = pxp_to_gt(pxp)->i915;
+	struct i915_gem_context *ctx, *cn;
+
+	/* ban all contexts marked as protected */
+	spin_lock_irq(&i915->gem.contexts.lock);
+	list_for_each_entry_safe(ctx, cn, &i915->gem.contexts.list, link) {
+		struct i915_gem_engines_iter it;
+		struct intel_context *ce;
+
+		if (!kref_get_unless_zero(&ctx->ref))
+			continue;
+
+		if (likely(!i915_gem_context_uses_protected_content(ctx))) {
+			i915_gem_context_put(ctx);
+			continue;
+		}
+
+		spin_unlock_irq(&i915->gem.contexts.lock);
+
+		/*
+		 * By the time we get here we are either going to suspend with
+		 * quiesced execution or the HW keys are already long gone and
+		 * in this case it is worthless to attempt to close the context
+		 * and wait for its execution. It will hang the GPU if it has
+		 * not already. So, as a fast mitigation, we can ban the
+		 * context as quick as we can. That might race with the
+		 * execbuffer, but currently this is the best that can be done.
+		 */
+		for_each_gem_engine(ce, i915_gem_context_lock_engines(ctx), it)
+			intel_context_ban(ce, NULL);
+		i915_gem_context_unlock_engines(ctx);
+
+		/*
+		 * The context has been banned, no need to keep the wakeref.
+		 * This is safe from races because the only other place this
+		 * is touched is context_release and we're holding a ctx ref
+		 */
+		if (ctx->pxp_wakeref) {
+			intel_runtime_pm_put(&i915->runtime_pm,
+					     ctx->pxp_wakeref);
+			ctx->pxp_wakeref = 0;
+		}
+
+		spin_lock_irq(&i915->gem.contexts.lock);
+		list_safe_reset_next(ctx, cn, link);
+		i915_gem_context_put(ctx);
+	}
+	spin_unlock_irq(&i915->gem.contexts.lock);
+}
+
 static int pxp_set_session_status(struct intel_pxp *pxp,
 				  struct downstream_drm_i915_pxp_ops *pxp_ops,
 				  struct drm_file *drmfile)
@@ -324,10 +377,13 @@ static int pxp_set_session_status(struct intel_pxp *pxp,
 	struct downstream_drm_i915_pxp_set_session_status_params params;
 	struct downstream_drm_i915_pxp_set_session_status_params __user *uparams =
 		u64_to_user_ptr(pxp_ops->params);
+	u32 session_id;
 	int ret = 0;
 
 	if (copy_from_user(&params, uparams, sizeof(params)) != 0)
 		return -EFAULT;
+
+	session_id = params.pxp_tag & DOWNSTREAM_DRM_I915_PXP_TAG_SESSION_ID_MASK;
 
 	switch (params.req_session_state) {
 	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_ID_INIT:
@@ -337,11 +393,11 @@ static int pxp_set_session_status(struct intel_pxp *pxp,
 		break;
 	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_IN_PLAY:
 		ret = intel_pxp_sm_ioctl_mark_session_in_play(pxp, drmfile,
-							      params.pxp_tag);
+							      session_id);
 		break;
 	case DOWNSTREAM_DRM_I915_PXP_REQ_SESSION_TERMINATE:
 		ret = intel_pxp_sm_ioctl_terminate_session(pxp, drmfile,
-							   params.pxp_tag);
+							   session_id);
 		break;
 	default:
 		ret = -EINVAL;

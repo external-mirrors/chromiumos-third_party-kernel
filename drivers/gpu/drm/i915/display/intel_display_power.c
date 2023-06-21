@@ -342,11 +342,13 @@ static enum phy icl_aux_pw_to_phy(struct drm_i915_private *i915,
 
 static void hsw_wait_for_power_well_enable(struct drm_i915_private *dev_priv,
 					   struct i915_power_well *power_well,
-					   bool timeout_expected)
+					   bool timeout_expected,
+					   enum phy phy)
 {
 	const struct i915_power_well_regs *regs = power_well->desc->hsw.regs;
 	int pw_idx = power_well->desc->hsw.idx;
 	int enable_delay = power_well->desc->hsw.fixed_enable_delay;
+	int pw_timeout = 1;
 
 	/*
 	 * For some power wells we're not supposed to watch the status bit for
@@ -358,11 +360,21 @@ static void hsw_wait_for_power_well_enable(struct drm_i915_private *dev_priv,
 		return;
 	}
 
+	/*
+	 * WA_14017248603: adlp
+	 * Type-C Phy are taking longer than expected for AUX IO Power Enabling.
+	 * Increase timeout to 500ms.
+	 */
+	if (IS_ALDERLAKE_P(dev_priv) && phy != PHY_NONE &&
+	    intel_phy_is_tc(dev_priv, phy))
+		pw_timeout = 500;
+
 	/* Timeout for PW1:10 us, AUX:not specified, other PWs:20 us. */
 	if (intel_de_wait_for_set(dev_priv, regs->driver,
-				  HSW_PWR_WELL_CTL_STATE(pw_idx), 1)) {
-		drm_dbg_kms(&dev_priv->drm, "%s power well enable timeout\n",
-			    power_well->desc->name);
+				  HSW_PWR_WELL_CTL_STATE(pw_idx), pw_timeout)) {
+		drm_dbg_kms(&dev_priv->drm,
+			    "%s power well enable timeout (%d ms)\n",
+			    power_well->desc->name, pw_timeout);
 
 		drm_WARN_ON(&dev_priv->drm, !timeout_expected);
 
@@ -450,7 +462,7 @@ static void hsw_power_well_enable(struct drm_i915_private *dev_priv,
 	intel_de_write(dev_priv, regs->driver,
 		       val | HSW_PWR_WELL_CTL_REQ(pw_idx));
 
-	hsw_wait_for_power_well_enable(dev_priv, power_well, false);
+	hsw_wait_for_power_well_enable(dev_priv, power_well, false, PHY_NONE);
 
 	if (power_well->desc->hsw.has_fuses) {
 		enum skl_power_gate pg;
@@ -502,7 +514,7 @@ icl_combo_phy_aux_power_well_enable(struct drm_i915_private *dev_priv,
 			       val | ICL_LANE_ENABLE_AUX);
 	}
 
-	hsw_wait_for_power_well_enable(dev_priv, power_well, false);
+	hsw_wait_for_power_well_enable(dev_priv, power_well, false, phy);
 
 	/* Display WA #1178: icl */
 	if (pw_idx >= ICL_PW_CTL_IDX_AUX_A && pw_idx <= ICL_PW_CTL_IDX_AUX_B &&
@@ -608,6 +620,7 @@ icl_tc_phy_aux_power_well_enable(struct drm_i915_private *dev_priv,
 	enum aux_ch aux_ch = icl_aux_pw_to_ch(power_well);
 	struct intel_digital_port *dig_port = aux_ch_to_digital_port(dev_priv, aux_ch);
 	const struct i915_power_well_regs *regs = power_well->desc->hsw.regs;
+	enum phy phy = icl_aux_pw_to_phy(dev_priv, power_well);
 	bool is_tbt = power_well->desc->hsw.is_tc_tbt;
 	bool timeout_expected;
 	u32 val;
@@ -633,7 +646,8 @@ icl_tc_phy_aux_power_well_enable(struct drm_i915_private *dev_priv,
 	if (DISPLAY_VER(dev_priv) == 11 && intel_tc_cold_requires_aux_pw(dig_port))
 		icl_tc_cold_exit(dev_priv);
 
-	hsw_wait_for_power_well_enable(dev_priv, power_well, timeout_expected);
+	hsw_wait_for_power_well_enable(dev_priv, power_well, timeout_expected,
+				       phy);
 
 	if (DISPLAY_VER(dev_priv) >= 12 && !is_tbt) {
 		enum tc_port tc_port;

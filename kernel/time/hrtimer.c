@@ -1683,7 +1683,13 @@ void hrtimer_interrupt(struct clock_event_device *dev)
 	unsigned long flags;
 	int retries = 0;
 
-	BUG_ON(!cpu_base->hres_active);
+	/*
+	 * TODO: This is a BUG_ON() in upstream, but is required
+	 * to prevent a crash when transitioning from high to low res.
+	 * We need to find a way to keep the BUG_ON in highres mode.
+	 */
+	if (!cpu_base->hres_active)
+		return;
 	cpu_base->nr_events++;
 	dev->next_event = KTIME_MAX;
 
@@ -2024,6 +2030,7 @@ SYSCALL_DEFINE2(nanosleep, struct __kernel_timespec __user *, rqtp,
 	if (!timespec64_valid(&tu))
 		return -EINVAL;
 
+	current->restart_block.fn = do_no_restart_syscall;
 	current->restart_block.nanosleep.type = rmtp ? TT_NATIVE : TT_NONE;
 	current->restart_block.nanosleep.rmtp = rmtp;
 	return hrtimer_nanosleep(timespec64_to_ktime(tu), HRTIMER_MODE_REL,
@@ -2045,6 +2052,7 @@ SYSCALL_DEFINE2(nanosleep_time32, struct old_timespec32 __user *, rqtp,
 	if (!timespec64_valid(&tu))
 		return -EINVAL;
 
+	current->restart_block.fn = do_no_restart_syscall;
 	current->restart_block.nanosleep.type = rmtp ? TT_COMPAT : TT_NONE;
 	current->restart_block.nanosleep.compat_rmtp = rmtp;
 	return hrtimer_nanosleep(timespec64_to_ktime(tu), HRTIMER_MODE_REL,
@@ -2159,10 +2167,82 @@ int hrtimers_dead_cpu(unsigned int scpu)
 
 #endif /* CONFIG_HOTPLUG_CPU */
 
+#ifdef CONFIG_HIGH_RES_TIMERS
+
+void tick_nohz_switch_to_nohz(void);
+static void hrtimer_smp_call(void *info)
+{
+	struct hrtimer_cpu_base *base = this_cpu_ptr(&hrtimer_bases);
+	bool hres = *((bool *)info);
+
+	if (hres == __hrtimer_hres_active(base))
+		return;
+
+	if (!hres) {
+		/*
+		 * The tick_sched device is no longer going to be an 'hrtimer',
+		 * In 'nohz' mode, the the tick_sched timer's callback function
+		 * is NULL. Not doing this and receiving any hrtimer_interrupt(s)
+		 * will cause null pointer derefs. Make sure the timer is canceled
+		 * since if it may have been a true hrtimer in its past life.
+		 */
+		tick_cancel_sched_timer(smp_processor_id());
+
+		tick_nohz_switch_to_nohz();
+		base->hres_active = 0;
+		hrtimer_resolution = LOW_RES_NSEC;
+		return;
+	}
+	hrtimer_switch_to_hres();
+}
+
+static int hrtimer_hres_handler(struct ctl_table *table, int write,
+			      void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret = 0;
+	bool hres;
+
+	if (!write) {
+		ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	} else {
+		hres = ((char *)buffer)[0] != '0';
+		if (hrtimer_hres_enabled == hres)
+			return ret;
+
+		if (hres)
+			printk("Trying to switch to high res\n");
+		else
+			printk("Trying to switch to low res\n");
+
+		smp_call_function(hrtimer_smp_call, &hres, true);
+		hrtimer_hres_enabled = hres;
+	}
+
+	return ret;
+}
+
+static struct ctl_table timer_hres_sysctl[] = {
+	{
+		.procname	= "timer_highres",
+		.data		= &hrtimer_hres_enabled,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= hrtimer_hres_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{}
+};
+
+#endif /* CONFIG_HIGH_RES_TIMERS */
+
 void __init hrtimers_init(void)
 {
 	hrtimers_prepare_cpu(smp_processor_id());
 	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
+#ifdef CONFIG_HIGH_RES_TIMERS
+	register_sysctl("kernel", timer_hres_sysctl);
+#endif /* CONFIG_HIGH_RES_TIMERS */
 }
 
 /**

@@ -55,6 +55,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
+#include <linux/mmu_notifier.h>
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -183,6 +184,8 @@ struct scan_control {
  * From 0 .. 200.  Higher means more swappy.
  */
 int vm_swappiness = 60;
+
+struct kernfs_node *lru_gen_admin_node;
 
 static void set_task_reclaim_state(struct task_struct *task,
 				   struct reclaim_state *rs)
@@ -3697,6 +3700,99 @@ static void walk_mm(struct lruvec *lruvec, struct mm_struct *mm, struct lru_gen_
 	} while (err == -EAGAIN);
 }
 
+static bool mmu_notifier_start_batch(struct mm_struct *mm, void *priv)
+{
+#ifdef CONFIG_MEMCG
+	struct lru_gen_mm_walk *walk = priv;
+	struct mem_cgroup *memcg = lruvec_memcg(walk->lruvec);
+
+	VM_BUG_ON(!rcu_read_lock_held());
+	if (memcg && atomic_read(&memcg->moving_account))
+		return false;
+#endif
+	VM_BUG_ON(!rcu_read_lock_held());
+	return !mm_is_oom_victim(mm);
+}
+
+static bool mmu_notifier_end_batch(void *priv, bool last)
+{
+	struct lru_gen_mm_walk *walk = priv;
+
+	VM_BUG_ON(!rcu_read_lock_held());
+
+	if (!last && walk->batched < MAX_LRU_BATCH)
+		return false;
+
+	reset_batch_size(walk->lruvec, walk);
+
+	return true;
+}
+
+static struct page *mmu_notifier_get_page(void *priv, unsigned long pfn, bool young)
+{
+	struct page *page;
+	struct lru_gen_mm_walk *walk = priv;
+	struct mem_cgroup *memcg = lruvec_memcg(walk->lruvec);
+	struct pglist_data *pgdat = lruvec_pgdat(walk->lruvec);
+	unsigned long start_pfn = pgdat->node_start_pfn;
+	unsigned long end_pfn = pgdat_end_pfn(pgdat);
+
+	if (pfn == -1 || is_zero_pfn(pfn))
+		return NULL;
+
+	if (!young) {
+		walk->mm_stats[MM_LEAF_OLD]++;
+		return NULL;
+	}
+
+	VM_BUG_ON(!pfn_valid(pfn));
+	if (pfn < start_pfn || pfn >= end_pfn)
+		return NULL;
+
+	page = compound_head(pfn_to_page(pfn));
+	if (page_to_nid(page) != pgdat->node_id)
+		return NULL;
+
+	if (page_memcg_rcu(page) != memcg)
+		return NULL;
+
+	if (!PageLRU(page))
+		return NULL;
+
+	return get_page_unless_zero(page) ? page : NULL;
+}
+
+static void mmu_notifier_update_page(void *priv, struct page *page)
+{
+	struct lru_gen_mm_walk *walk = priv;
+	struct mem_cgroup *memcg = lruvec_memcg(walk->lruvec);
+	int old_gen, new_gen = lru_gen_from_seq(walk->max_seq);
+
+	if (page_memcg_rcu(page) != memcg)
+		return;
+
+	if (!PageLRU(page))
+		return;
+
+	old_gen = page_update_gen(page, new_gen);
+	if (old_gen >= 0 && old_gen != new_gen)
+		update_batch_size(walk, page, old_gen, new_gen);
+	walk->mm_stats[MM_LEAF_YOUNG]++;
+}
+
+static void call_mmu_notifier(struct lru_gen_mm_walk *args, struct mm_struct *mm)
+{
+	struct mmu_notifier_walk walk = {
+		.start_batch = mmu_notifier_start_batch,
+		.end_batch = mmu_notifier_end_batch,
+		.get_page = mmu_notifier_get_page,
+		.update_page = mmu_notifier_update_page,
+		.private = args,
+	};
+
+	mmu_notifier_clear_young_walk(mm, &walk);
+}
+
 static struct lru_gen_mm_walk *set_mm_walk(struct pglist_data *pgdat)
 {
 	struct lru_gen_mm_walk *walk = current->reclaim_state->mm_walk;
@@ -3905,8 +4001,10 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 
 	do {
 		success = iterate_mm_list(lruvec, walk, &mm);
-		if (mm)
+		if (mm) {
 			walk_mm(lruvec, mm, walk);
+			call_mmu_notifier(walk, mm);
+		}
 
 		cond_resched();
 	} while (mm);
@@ -3922,6 +4020,7 @@ done:
 	VM_WARN_ON_ONCE(max_seq != READ_ONCE(lrugen->max_seq));
 
 	inc_max_seq(lruvec, can_swap, force_scan);
+	kernfs_notify(lru_gen_admin_node);
 	/* either this sees any waiters or they will see updated max_seq */
 	if (wq_has_sleeper(&lruvec->mm_state.wait))
 		wake_up_all(&lruvec->mm_state.wait);
@@ -4831,6 +4930,15 @@ unlock:
  *                          sysfs interface
  ******************************************************************************/
 
+static int run_aging(struct lruvec *lruvec, unsigned long seq, struct scan_control *sc,
+		     bool can_swap, bool force_scan);
+
+static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_control *sc,
+			int swappiness, unsigned long nr_to_reclaim);
+
+static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
+		   struct scan_control *sc, int swappiness, unsigned long opt);
+
 static ssize_t show_min_ttl(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%u\n", jiffies_to_msecs(READ_ONCE(lru_gen_min_ttl)));
@@ -4902,9 +5010,162 @@ static struct kobj_attribute lru_gen_enabled_attr = __ATTR(
 	enabled, 0644, show_enabled, store_enabled
 );
 
+static int print_node_mglru(struct lruvec *lruvec, char *buf, int orig_pos)
+{
+	unsigned long seq;
+	struct lru_gen_struct *lrugen = &lruvec->lrugen;
+
+	DEFINE_MAX_SEQ(lruvec);
+	DEFINE_MIN_SEQ(lruvec);
+
+	int print_pos = orig_pos;
+
+	seq = min(min_seq[0], min_seq[1]);
+
+	for (; seq <= max_seq; seq++) {
+		int gen, type, zone;
+		unsigned int msecs;
+
+		gen = lru_gen_from_seq(seq);
+		msecs = jiffies_to_msecs(jiffies - READ_ONCE(lrugen->timestamps[gen]));
+
+		print_pos += snprintf(buf + print_pos, PAGE_SIZE - print_pos,
+			" %10lu %10u", seq, msecs);
+
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			long size = 0;
+
+			if (seq < min_seq[type]) {
+				print_pos += snprintf(buf + print_pos,
+					PAGE_SIZE - print_pos, "         -0 ");
+				continue;
+			}
+
+			for (zone = 0; zone < MAX_NR_ZONES; zone++)
+				size += READ_ONCE(lrugen->nr_pages[gen][type][zone]);
+
+			print_pos += snprintf(buf + print_pos,
+				PAGE_SIZE - print_pos, " %10lu ", max(size, 0L));
+		}
+
+		print_pos += snprintf(buf + print_pos, PAGE_SIZE - print_pos, "\n");
+
+	}
+
+	return print_pos - orig_pos;
+}
+
+static ssize_t show_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct lruvec *lruvec;
+	struct mem_cgroup *memcg;
+
+	char *path = kvmalloc(PATH_MAX, GFP_KERNEL);
+	int buf_len = 0;
+
+	if (!path)
+		return -EINVAL;
+	path[0] = 0;
+	buf[0] = 0;
+	memcg = mem_cgroup_iter(NULL, NULL, NULL);
+	do {
+		int nid;
+
+		for_each_node_state(nid, N_MEMORY) {
+			lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+			if (lruvec) {
+				if (nid == first_memory_node) {
+#ifdef CONFIG_MEMCG
+					if (memcg)
+						cgroup_path(memcg->css.cgroup, path, PATH_MAX);
+					else
+						path[0] = 0;
+#endif
+					buf_len += snprintf(buf + buf_len, PAGE_SIZE - buf_len,
+						"memcg %5hu %s\n", mem_cgroup_id(memcg), path);
+				}
+
+				buf_len += snprintf(buf + buf_len, PAGE_SIZE - buf_len,
+					" node %5d\n", nid);
+				buf_len += print_node_mglru(lruvec, buf, buf_len);
+			}
+		}
+	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)));
+
+	if (buf_len >= PAGE_SIZE)
+		buf_len = PAGE_SIZE - 1;
+	buf[buf_len] = 0;
+
+	kvfree(path);
+
+	return buf_len;
+}
+
+static ssize_t store_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *attr,
+				const char *src, size_t len)
+{
+	void *buf;
+	char *cur, *next;
+	int err = 0;
+	struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+	};
+
+	buf = kvmalloc(len + 1, GFP_USER);
+	if (!buf)
+		return -ENOMEM;
+
+	memcpy(buf, src, len);
+
+	next = buf;
+	next[len] = '\0';
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+
+	while ((cur = strsep(&next, ",;\n"))) {
+		int n;
+		int end;
+		char cmd;
+		unsigned int memcg_id;
+		unsigned int nid;
+		unsigned long seq;
+		unsigned int swappiness = -1;
+		unsigned long opt = -1;
+
+		cur = skip_spaces(cur);
+		if (!*cur)
+			continue;
+
+		n = sscanf(cur, "%c %u %u %lu %n %u %n %lu %n", &cmd, &memcg_id, &nid,
+			   &seq, &end, &swappiness, &end, &opt, &end);
+		if (n < 4 || cur[end]) {
+			err = -EINVAL;
+			break;
+		}
+
+		err = run_cmd(cmd, memcg_id, nid, seq, &sc, swappiness, opt);
+		if (err)
+			break;
+	}
+
+	set_task_reclaim_state(current, NULL);
+	kvfree(buf);
+
+	return err ? : len;
+}
+
+static struct kobj_attribute lru_gen_admin_attr = __ATTR(
+	admin, 0644, show_lru_gen_admin, store_lru_gen_admin
+);
+
 static struct attribute *lru_gen_attrs[] = {
 	&lru_gen_min_ttl_attr.attr,
 	&lru_gen_enabled_attr.attr,
+	&lru_gen_admin_attr.attr,
 	NULL
 };
 
@@ -5321,11 +5582,14 @@ void lru_gen_exit_memcg(struct mem_cgroup *memcg)
 
 static int __init init_lru_gen(void)
 {
+	struct kernfs_node *tmp;
 	BUILD_BUG_ON(MIN_NR_GENS + 1 >= MAX_NR_GENS);
 	BUILD_BUG_ON(BIT(LRU_GEN_WIDTH) <= MAX_NR_GENS);
 
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
+	tmp = kernfs_find_and_get(mm_kobj->sd, "lru_gen");
+	lru_gen_admin_node = kernfs_find_and_get(tmp, "admin");
 
 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);

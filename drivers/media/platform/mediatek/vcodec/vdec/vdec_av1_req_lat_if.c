@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2022 MediaTek Inc.
+ * Copyright (c) 2023 MediaTek Inc.
  * Author: Xiaoyong Lu <xiaoyong.lu@mediatek.com>
  */
 
@@ -1319,7 +1319,8 @@ static void vdec_av1_slice_setup_uh(struct vdec_av1_slice_instance *instance,
 	uh->mi_rows = ((uh->frame_height + 7) >> 3) << 1;
 	uh->reduced_tx_set = FH_FLAG(ctrl_fh, REDUCED_TX_SET);
 	uh->tx_mode = ctrl_fh->tx_mode;
-	uh->uniform_tile_spacing_flag = FH_FLAG(ctrl_fh, UNIFORM_TILE_SPACING);
+	uh->uniform_tile_spacing_flag =
+		BIT_FLAG(&ctrl_fh->tile_info, V4L2_AV1_TILE_INFO_FLAG_UNIFORM_TILE_SPACING);
 	uh->interpolation_filter = ctrl_fh->interpolation_filter;
 	uh->allow_warped_motion = FH_FLAG(ctrl_fh, ALLOW_WARPED_MOTION);
 	uh->is_motion_mode_switchable = FH_FLAG(ctrl_fh, IS_MOTION_MODE_SWITCHABLE);
@@ -2071,7 +2072,7 @@ static int vdec_av1_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 		goto err_free_fb_out;
 	}
 	if (instance->inneracing_mode)
-		vdec_msg_queue_qbuf(&ctx->dev->msg_queue_core_ctx, lat_buf);
+		vdec_msg_queue_qbuf(&ctx->msg_queue.core_ctx, lat_buf);
 
 	if (instance->irq_enabled) {
 		ret = mtk_vcodec_wait_for_done_ctx(ctx, MTK_INST_IRQ_RECEIVED,
@@ -2110,14 +2111,17 @@ static int vdec_av1_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 	vdec_msg_queue_update_ube_wptr(&ctx->msg_queue, vsi->trans.dma_addr_end);
 
 	if (!instance->inneracing_mode)
-		vdec_msg_queue_qbuf(&ctx->dev->msg_queue_core_ctx, lat_buf);
+		vdec_msg_queue_qbuf(&ctx->msg_queue.core_ctx, lat_buf);
 	memcpy(&instance->slots, &vsi->slots, sizeof(instance->slots));
 
 	return 0;
 
 err_free_fb_out:
 	vdec_msg_queue_qbuf(&ctx->msg_queue.lat_ctx, lat_buf);
-	mtk_vcodec_err(instance, "slice dec number: %d err: %d", pfc->seq, ret);
+
+	if (pfc)
+		mtk_vcodec_err(instance, "slice dec number: %d err: %d", pfc->seq, ret);
+
 	return ret;
 }
 

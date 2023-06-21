@@ -1321,7 +1321,7 @@ static const struct intel_cdclk_vals adlp_cdclk_table[] = {
 	{ .refclk = 24000, .cdclk = 192000, .divider = 2, .ratio = 16 },
 	{ .refclk = 24000, .cdclk = 312000, .divider = 2, .ratio = 26 },
 	{ .refclk = 24000, .cdclk = 552000, .divider = 2, .ratio = 46 },
-	{ .refclk = 24400, .cdclk = 648000, .divider = 2, .ratio = 54 },
+	{ .refclk = 24000, .cdclk = 648000, .divider = 2, .ratio = 54 },
 
 	{ .refclk = 38400, .cdclk = 179200, .divider = 3, .ratio = 14 },
 	{ .refclk = 38400, .cdclk = 192000, .divider = 2, .ratio = 10 },
@@ -2289,13 +2289,11 @@ int intel_crtc_compute_min_cdclk(const struct intel_crtc_state *crtc_state)
 	min_cdclk = max(intel_planes_min_cdclk(crtc_state), min_cdclk);
 
 	/*
-	 * VDSC engine can process only 1 pixel per Cd clock.
-	 * In case VDSC is used and max slice count == 1,
-	 * max supported pixel clock should be 100% of CD clock.
-	 * Then do min_cdclk and pixel clock comparison to get cdclk.
+	 * When we decide to use only one VDSC engine, since
+	 * each VDSC operates with 1 ppc throughput, pixel clock
+	 * cannot be higher than the VDSC clock (cdclk)
 	 */
-	if (crtc_state->dsc.compression_enable &&
-	    crtc_state->dsc.slice_count == 1)
+	if (crtc_state->dsc.compression_enable && !crtc_state->dsc.dsc_split)
 		min_cdclk = max(min_cdclk, (int)crtc_state->pixel_rate);
 
 	/*

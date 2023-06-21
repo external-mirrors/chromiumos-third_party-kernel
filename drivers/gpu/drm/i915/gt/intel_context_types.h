@@ -40,7 +40,8 @@ struct intel_context_ops {
 
 	int (*alloc)(struct intel_context *ce);
 
-	void (*ban)(struct intel_context *ce, struct i915_request *rq);
+	void (*revoke)(struct intel_context *ce, struct i915_request *rq,
+		       unsigned int preempt_timeout_ms);
 
 	int (*pre_pin)(struct intel_context *ce, struct i915_gem_ww_ctx *ww, void **vaddr);
 	int (*pin)(struct intel_context *ce, void *vaddr);
@@ -58,9 +59,13 @@ struct intel_context_ops {
 	void (*reset)(struct intel_context *ce);
 	void (*destroy)(struct kref *kref);
 
-	/* virtual engine/context interface */
+	/* virtual/parallel engine/context interface */
 	struct intel_context *(*create_virtual)(struct intel_engine_cs **engine,
-						unsigned int count);
+						unsigned int count,
+						unsigned long flags);
+	struct intel_context *(*create_parallel)(struct intel_engine_cs **engines,
+						 unsigned int num_siblings,
+						 unsigned int width);
 	struct intel_engine_cs *(*get_sibling)(struct intel_engine_cs *engine,
 					       unsigned int sibling);
 };
@@ -116,6 +121,9 @@ struct intel_context {
 #define CONTEXT_NOPREEMPT		8
 #define CONTEXT_LRCA_DIRTY		9
 #define CONTEXT_GUC_INIT		10
+#define CONTEXT_PERMA_PIN		11
+#define CONTEXT_IS_PARKING		12
+#define CONTEXT_EXITING			13
 
 	struct {
 		u64 timeout_us;
@@ -205,21 +213,79 @@ struct intel_context {
 	struct {
 		/**
 		 * @id: handle which is used to uniquely identify this context
-		 * with the GuC, protected by guc->contexts_lock
+		 * with the GuC, protected by guc->submission_state.lock
 		 */
 		u16 id;
 		/**
 		 * @ref: the number of references to the guc_id, when
 		 * transitioning in and out of zero protected by
-		 * guc->contexts_lock
+		 * guc->submission_state.lock
 		 */
 		atomic_t ref;
 		/**
 		 * @link: in guc->guc_id_list when the guc_id has no refs but is
-		 * still valid, protected by guc->contexts_lock
+		 * still valid, protected by guc->submission_state.lock
 		 */
 		struct list_head link;
 	} guc_id;
+
+	/**
+	 * @destroyed_link: link in guc->submission_state.destroyed_contexts, in
+	 * list when context is pending to be destroyed (deregistered with the
+	 * GuC), protected by guc->submission_state.lock
+	 */
+	struct list_head destroyed_link;
+
+	/** @parallel: sub-structure for parallel submission members */
+	struct {
+		union {
+			/**
+			 * @child_list: parent's list of children
+			 * contexts, no protection as immutable after context
+			 * creation
+			 */
+			struct list_head child_list;
+			/**
+			 * @child_link: child's link into parent's list of
+			 * children
+			 */
+			struct list_head child_link;
+		};
+		/** @parent: pointer to parent if child */
+		struct intel_context *parent;
+		/**
+		 * @last_rq: last request submitted on a parallel context, used
+		 * to insert submit fences between requests in the parallel
+		 * context
+		 */
+		struct i915_request *last_rq;
+		/**
+		 * @fence_context: fence context composite fence when doing
+		 * parallel submission
+		 */
+		u64 fence_context;
+		/**
+		 * @seqno: seqno for composite fence when doing parallel
+		 * submission
+		 */
+		u32 seqno;
+		/** @number_children: number of children if parent */
+		u8 number_children;
+		/** @child_index: index into child_list if child */
+		u8 child_index;
+		/** @guc: GuC specific members for parallel submission */
+		struct {
+			/** @wqi_head: head pointer in work queue */
+			u16 wqi_head;
+			/** @wqi_tail: tail pointer in work queue */
+			u16 wqi_tail;
+			/**
+			 * @parent_page: page in context state (ce->state) used
+			 * by parent for work queue, process descriptor
+			 */
+			u8 parent_page;
+		} guc;
+	} parallel;
 
 #ifdef CONFIG_DRM_I915_SELFTEST
 	/**

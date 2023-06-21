@@ -15,25 +15,19 @@
 
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/version.h>
 #include <linux/device.h>
-#if KERNEL_VERSION(5, 5, 0) <= LINUX_VERSION_CODE || defined(EL8)
+#include <linux/i2c.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_vblank.h>
-#else
-#include <drm/drmP.h>
-#endif
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_rect.h>
 #include <drm/drm_gem.h>
-#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE || defined(EL8)
+#include <drm/drm_framebuffer.h>
 #include <linux/dma-resv.h>
-#else
-#include <linux/reservation.h>
-#endif
+
 #include "evdi_debug.h"
 
 
@@ -46,7 +40,8 @@ struct evdi_device {
 	struct evdi_cursor *cursor;
 	bool cursor_events_enabled;
 
-	uint32_t sku_area_limit;
+	uint32_t pixel_area_limit;
+	uint32_t pixel_per_second_limit;
 
 	struct evdi_fbdev *fbdev;
 	struct evdi_painter *painter;
@@ -61,14 +56,11 @@ struct evdi_gem_object {
 	unsigned int pages_pin_count;
 	struct mutex pages_lock;
 	void *vmapping;
+	bool vmap_is_iomem;
 	struct sg_table *sg;
-#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE || defined(EL8)
 	struct dma_resv *resv;
 	struct dma_resv _resv;
-#else
-	struct reservation_object *resv;
-	struct reservation_object _resv;
-#endif
+	bool allow_sw_cursor_rect_updates;
 };
 
 #define to_evdi_bo(x) container_of(x, struct evdi_gem_object, base)
@@ -88,8 +80,6 @@ int evdi_connector_init(struct drm_device *dev, struct drm_encoder *encoder);
 
 struct drm_encoder *evdi_encoder_init(struct drm_device *dev);
 
-int evdi_driver_load(struct drm_device *dev, unsigned long flags);
-void evdi_driver_unload(struct drm_device *dev);
 int evdi_driver_open(struct drm_device *drm_dev, struct drm_file *file);
 void evdi_driver_preclose(struct drm_device *dev, struct drm_file *file_priv);
 void evdi_driver_postclose(struct drm_device *dev, struct drm_file *file_priv);
@@ -97,6 +87,7 @@ void evdi_driver_postclose(struct drm_device *dev, struct drm_file *file_priv);
 #ifdef CONFIG_COMPAT
 long evdi_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 #endif
+
 
 #ifdef CONFIG_FB
 int evdi_fbdev_init(struct drm_device *dev);
@@ -129,11 +120,7 @@ int evdi_gem_vmap(struct evdi_gem_object *obj);
 void evdi_gem_vunmap(struct evdi_gem_object *obj);
 int evdi_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
 
-#if KERNEL_VERSION(4, 17, 0) <= LINUX_VERSION_CODE
 vm_fault_t evdi_gem_fault(struct vm_fault *vmf);
-#else
-int evdi_gem_fault(struct vm_fault *vmf);
-#endif
 
 bool evdi_painter_is_connected(struct evdi_painter *painter);
 void evdi_painter_close(struct evdi_device *evdi, struct drm_file *file);

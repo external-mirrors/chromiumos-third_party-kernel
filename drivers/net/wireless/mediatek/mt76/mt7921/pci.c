@@ -108,9 +108,10 @@ static void mt7921e_unregister_device(struct mt7921_dev *dev)
 		napi_disable(&dev->mt76.napi[i]);
 	cancel_delayed_work_sync(&pm->ps_work);
 	cancel_work_sync(&pm->wake_work);
+	cancel_work_sync(&dev->reset_work);
 
 	mt7921_tx_token_put(dev);
-	mt7921_mcu_drv_pmctrl(dev);
+	__mt7921_mcu_drv_pmctrl(dev);
 	mt7921_dma_cleanup(dev);
 	mt7921_wfsys_reset(dev);
 	mt7921_mcu_exit(dev);
@@ -284,6 +285,8 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 		ret = -ENOMEM;
 		goto err_free_pci_vec;
 	}
+
+	pci_set_drvdata(pdev, mdev);
 
 	dev = container_of(mdev, struct mt7921_dev, mt76);
 	dev->hif_ops = &mt7921_pcie_ops;
@@ -489,6 +492,11 @@ failed:
 }
 #endif /* CONFIG_PM */
 
+static void mt7921_pci_shutdown(struct pci_dev *pdev)
+{
+	mt7921_pci_remove(pdev);
+}
+
 struct pci_driver mt7921_pci_driver = {
 	.name		= KBUILD_MODNAME,
 	.id_table	= mt7921_pci_device_table,
@@ -498,6 +506,7 @@ struct pci_driver mt7921_pci_driver = {
 	.suspend	= mt7921_pci_suspend,
 	.resume		= mt7921_pci_resume,
 #endif /* CONFIG_PM */
+	.shutdown	= mt7921_pci_shutdown,
 };
 
 module_pci_driver(mt7921_pci_driver);
