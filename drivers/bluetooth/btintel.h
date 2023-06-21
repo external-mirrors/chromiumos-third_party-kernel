@@ -147,13 +147,14 @@ struct intel_debug_features {
 	__u8    page1[16];
 } __packed;
 
+#define INTEL_TLV_TYPE_ID		0x01
+
+#define INTEL_TLV_SYSTEM_EXCEPTION	0x00
+#define INTEL_TLV_FATAL_EXCEPTION	0x01
+#define INTEL_TLV_DEBUG_EXCEPTION	0x02
+#define INTEL_TLV_TEST_EXCEPTION	0xDE
+
 #define INTEL_HW_VARIANT(cnvx_bt)	((u8)(((cnvx_bt) & 0x003f0000) >> 16))
-
-#define INTEL_TLV_TYPE_ID		0x1
-
-#define INTEL_TLV_SYSTEM_EXCEPTION	0x0
-#define INTEL_TLV_FATAL_EXCEPTION	0x1
-#define INTEL_TLV_DEBUG_EXCEPTION	0x2
 
 #if IS_ENABLED(CONFIG_BT_INTEL)
 
@@ -332,6 +333,6 @@ static inline bool btintel_pull_quality_report_data(struct sk_buff *skb)
 static int btintel_register_devcoredump_support(struct hci_dev *hdev,
 						const char *driver_name)
 {
-		return -EOPNOTSUPP;
+	return -EOPNOTSUPP;
 }
 #endif

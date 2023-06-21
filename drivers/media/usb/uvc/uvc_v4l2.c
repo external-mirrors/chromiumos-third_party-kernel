@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/bits.h>
 #include <linux/compat.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -84,7 +85,7 @@ static int uvc_ioctl_ctrl_map(struct uvc_video_chain *chain,
 			goto free_map;
 		}
 
-		map->menu_count = xmap->menu_count;
+		map->menu_mask = GENMASK(xmap->menu_count - 1, 0);
 		break;
 
 	default:

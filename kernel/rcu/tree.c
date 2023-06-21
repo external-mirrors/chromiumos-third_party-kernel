@@ -370,6 +370,14 @@ static bool rcu_dynticks_in_eqs(int snap)
 	return !(snap & RCU_DYNTICK_CTRL_CTR);
 }
 
+/* Return true if the specified CPU is currently idle from an RCU viewpoint.  */
+bool rcu_is_idle_cpu(int cpu)
+{
+	struct rcu_dynticks *rdtp = &per_cpu(rcu_dynticks, cpu);
+
+	return rcu_dynticks_in_eqs(rcu_dynticks_snap(rdtp));
+}
+
 /*
  * Return true if the CPU corresponding to the specified rcu_dynticks
  * structure has spent some time in an extended quiescent state since

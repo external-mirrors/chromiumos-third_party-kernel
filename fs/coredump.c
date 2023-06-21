@@ -216,6 +216,8 @@ static int format_corename(struct core_name *cn, struct coredump_params *cprm,
 			return -ENOMEM;
 		(*argv)[(*argc)++] = 0;
 		++pat_ptr;
+		if (!(*pat_ptr))
+			return -ENOMEM;
 	}
 
 	/* Repeat as long as we have more pattern to process and more output
@@ -227,7 +229,8 @@ static int format_corename(struct core_name *cn, struct coredump_params *cprm,
 		 */
 		if (ispipe) {
 			if (isspace(*pat_ptr)) {
-				was_space = true;
+				if (cn->used != 0)
+					was_space = true;
 				pat_ptr++;
 				continue;
 			} else if (was_space) {
