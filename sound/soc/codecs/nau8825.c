@@ -911,6 +911,32 @@ static bool nau8825_volatile_reg(struct device *dev, unsigned int reg)
 	}
 }
 
+static int nau8825_fepga_event(struct snd_soc_dapm_widget *w,
+			       struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+	struct nau8825 *nau8825 = snd_soc_component_get_drvdata(component);
+
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		regmap_update_bits(nau8825->regmap, NAU8825_REG_FEPGA,
+				   NAU8825_ACDC_CTRL_MASK,
+				   NAU8825_ACDC_VREF_MICP | NAU8825_ACDC_VREF_MICN);
+		regmap_update_bits(nau8825->regmap, NAU8825_REG_BOOST,
+				   NAU8825_DISCHRG_EN, NAU8825_DISCHRG_EN);
+		msleep(40);
+		regmap_update_bits(nau8825->regmap, NAU8825_REG_BOOST,
+				   NAU8825_DISCHRG_EN, 0);
+		regmap_update_bits(nau8825->regmap, NAU8825_REG_FEPGA,
+				   NAU8825_ACDC_CTRL_MASK, 0);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 static int nau8825_adc_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
@@ -919,7 +945,7 @@ static int nau8825_adc_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-		msleep(125);
+		msleep(nau8825->adc_delay);
 		regmap_update_bits(nau8825->regmap, NAU8825_REG_ENA_CTRL,
 			NAU8825_ENABLE_ADC, NAU8825_ENABLE_ADC);
 		break;
@@ -1127,8 +1153,8 @@ static const struct snd_soc_dapm_widget nau8825_dapm_widgets[] = {
 	SND_SOC_DAPM_INPUT("MIC"),
 	SND_SOC_DAPM_MICBIAS("MICBIAS", NAU8825_REG_MIC_BIAS, 8, 0),
 
-	SND_SOC_DAPM_PGA("Frontend PGA", NAU8825_REG_POWER_UP_CONTROL, 14, 0,
-		NULL, 0),
+	SND_SOC_DAPM_PGA_E("Frontend PGA", NAU8825_REG_POWER_UP_CONTROL, 14, 0,
+			   NULL, 0, nau8825_fepga_event, SND_SOC_DAPM_POST_PMU),
 
 	SND_SOC_DAPM_ADC_E("ADC", NULL, SND_SOC_NOPM, 0, 0,
 		nau8825_adc_event, SND_SOC_DAPM_POST_PMU |
@@ -2752,6 +2778,7 @@ static void nau8825_print_device_properties(struct nau8825 *nau8825)
 	dev_dbg(dev, "crosstalk-enable:     %d\n",
 			nau8825->xtalk_enable);
 	dev_dbg(dev, "adcout-drive-strong:  %d\n", nau8825->adcout_ds);
+	dev_dbg(dev, "adc-delay-ms:         %d\n", nau8825->adc_delay);
 }
 
 static int nau8825_read_device_properties(struct device *dev,
@@ -2819,6 +2846,11 @@ static int nau8825_read_device_properties(struct device *dev,
 	nau8825->xtalk_enable = device_property_read_bool(dev,
 		"nuvoton,crosstalk-enable");
 	nau8825->adcout_ds = device_property_read_bool(dev, "nuvoton,adcout-drive-strong");
+	ret = device_property_read_u32(dev, "nuvoton,adc-delay-ms", &nau8825->adc_delay);
+	if (ret)
+		nau8825->adc_delay = 125;
+	if (nau8825->adc_delay < 125 || nau8825->adc_delay > 500)
+		dev_warn(dev, "Please set the suitable delay time!\n");
 
 	nau8825->mclk = devm_clk_get(dev, "mclk");
 	if (PTR_ERR(nau8825->mclk) == -EPROBE_DEFER) {

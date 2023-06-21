@@ -721,13 +721,6 @@ SND_SOC_DAILINK_DEF(dmic_codec,
 		DAILINK_COMP_ARRAY(COMP_CODEC("dmic-codec", "dmic-hifi")));
 
 /* Declare ACP CPU components */
-static struct snd_soc_dai_link_component dummy_codec[] = {
-	{
-		.name = "snd-soc-dummy",
-		.dai_name = "snd-soc-dummy-dai",
-	}
-};
-
 static struct snd_soc_dai_link_component platform_component[] = {
 	{
 		 .name = "acp_asoc_renoir.0",
@@ -838,8 +831,8 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].no_pcm = 1;
 		if (!drv_data->hs_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->hs_codec_id == RT5682) {
 			links[i].codecs = rt5682;
@@ -869,8 +862,8 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].no_pcm = 1;
 		if (!drv_data->hs_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->hs_codec_id == NAU8825) {
 			links[i].codecs = nau8825;
@@ -899,8 +892,8 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].no_pcm = 1;
 		if (!drv_data->amp_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->amp_codec_id == RT1019) {
 			links[i].codecs = rt1019;
@@ -936,8 +929,8 @@ int acp_sofdsp_dai_links_create(struct snd_soc_card *card)
 		links[i].no_pcm = 1;
 		if (!drv_data->amp_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->amp_codec_id == MAX98360A) {
 			links[i].codecs = max98360a;
@@ -1007,8 +1000,8 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		links[i].dpcm_capture = 1;
 		if (!drv_data->hs_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->hs_codec_id == RT5682) {
 			links[i].codecs = rt5682;
@@ -1041,8 +1034,8 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		links[i].dpcm_capture = 1;
 		if (!drv_data->hs_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->hs_codec_id == NAU8825) {
 			links[i].codecs = nau8825;
@@ -1069,8 +1062,8 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		links[i].dpcm_playback = 1;
 		if (!drv_data->amp_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->amp_codec_id == RT1019) {
 			links[i].codecs = rt1019;
@@ -1104,8 +1097,8 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		links[i].dpcm_playback = 1;
 		if (!drv_data->amp_codec_id) {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		if (drv_data->amp_codec_id == MAX98360A) {
 			links[i].codecs = max98360a;
@@ -1132,8 +1125,8 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 			links[i].num_codecs = ARRAY_SIZE(dmic_codec);
 		} else {
 			/* Use dummy codec if codec id not specified */
-			links[i].codecs = dummy_codec;
-			links[i].num_codecs = ARRAY_SIZE(dummy_codec);
+			links[i].codecs = &asoc_dummy_dlc;
+			links[i].num_codecs = 1;
 		}
 		links[i].cpus = pdm_dmic;
 		links[i].num_cpus = ARRAY_SIZE(pdm_dmic);

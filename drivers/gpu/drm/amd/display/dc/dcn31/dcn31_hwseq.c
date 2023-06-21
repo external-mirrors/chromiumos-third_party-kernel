@@ -89,7 +89,8 @@ static void enable_memory_low_power(struct dc *dc)
 		REG_UPDATE(MMHUBBUB_MEM_PWR_CNTL, VGA_MEM_PWR_FORCE, 1);
 	}
 
-	if (dc->debug.enable_mem_low_power.bits.mpc)
+	if (dc->debug.enable_mem_low_power.bits.mpc &&
+		dc->res_pool->mpc->funcs->set_mpc_mem_lp_mode)
 		dc->res_pool->mpc->funcs->set_mpc_mem_lp_mode(dc->res_pool->mpc);
 
 
@@ -141,7 +142,8 @@ void dcn31_init_hw(struct dc *dc)
 
 	if (!dcb->funcs->is_accelerated_mode(dcb)) {
 		hws->funcs.bios_golden_init(dc);
-		hws->funcs.disable_vga(dc->hwseq);
+		if (hws->funcs.disable_vga)
+			hws->funcs.disable_vga(dc->hwseq);
 	}
 	// Initialize the dccg
 	if (res_pool->dccg->funcs->dccg_init)
@@ -284,7 +286,7 @@ void dcn31_init_hw(struct dc *dc)
 	if (dc->clk_mgr->funcs->notify_wm_ranges)
 		dc->clk_mgr->funcs->notify_wm_ranges(dc->clk_mgr);
 
-	if (dc->clk_mgr->funcs->set_hard_max_memclk)
+	if (dc->clk_mgr->funcs->set_hard_max_memclk && !dc->clk_mgr->dc_mode_softmax_enabled)
 		dc->clk_mgr->funcs->set_hard_max_memclk(dc->clk_mgr);
 
 	if (dc->res_pool->hubbub->funcs->force_pstate_change_control)

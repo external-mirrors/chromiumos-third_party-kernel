@@ -17,8 +17,8 @@
 /* The module ID includes the id of the library it is part of at offset 12 */
 #define SOF_IPC4_MOD_LIB_ID_SHIFT	12
 
-static size_t sof_ipc4_fw_parse_ext_man(struct snd_sof_dev *sdev,
-					struct sof_ipc4_fw_library *fw_lib)
+static ssize_t sof_ipc4_fw_parse_ext_man(struct snd_sof_dev *sdev,
+					 struct sof_ipc4_fw_library *fw_lib)
 {
 	struct sof_ipc4_fw_data *ipc4_data = sdev->private;
 	const struct firmware *fw = fw_lib->sof_fw.fw;
@@ -112,16 +112,13 @@ static size_t sof_ipc4_fw_parse_ext_man(struct snd_sof_dev *sdev,
 				return -EINVAL;
 			}
 
-			/* a module's config is always the same size */
-			fw_module->bss_size = fm_config[fm_entry->cfg_offset].is_bytes;
+			fw_module->fw_mod_cfg = &fm_config[fm_entry->cfg_offset];
 
 			dev_dbg(sdev->dev,
 				"module %s: UUID %pUL cfg_count: %u, bss_size: %#x\n",
 				fm_entry->name, &fm_entry->uuid, fm_entry->cfg_count,
-				fw_module->bss_size);
+				fm_config[fm_entry->cfg_offset].is_bytes);
 		} else {
-			fw_module->bss_size = 0;
-
 			dev_dbg(sdev->dev, "module %s: UUID %pUL\n", fm_entry->name,
 				&fm_entry->uuid);
 		}
@@ -141,7 +138,7 @@ static size_t sof_ipc4_fw_parse_basefw_ext_man(struct snd_sof_dev *sdev)
 {
 	struct sof_ipc4_fw_data *ipc4_data = sdev->private;
 	struct sof_ipc4_fw_library *fw_lib;
-	size_t payload_offset;
+	ssize_t payload_offset;
 	int ret;
 
 	fw_lib = devm_kzalloc(sdev->dev, sizeof(*fw_lib), GFP_KERNEL);
@@ -170,7 +167,7 @@ static int sof_ipc4_load_library_by_uuid(struct snd_sof_dev *sdev,
 	struct sof_ipc4_fw_data *ipc4_data = sdev->private;
 	struct sof_ipc4_fw_library *fw_lib;
 	const char *fw_filename;
-	size_t payload_offset;
+	ssize_t payload_offset;
 	int ret, i, err;
 
 	if (!sdev->pdata->fw_lib_prefix) {
@@ -383,6 +380,17 @@ int sof_ipc4_query_fw_configuration(struct snd_sof_dev *sdev)
 			if (!ipc4_data->max_libs_count)
 				ipc4_data->max_libs_count = 1;
 			break;
+		case SOF_IPC4_FW_CFG_MAX_PPL_COUNT:
+			ipc4_data->max_num_pipelines = *tuple->value;
+			trace_sof_ipc4_fw_config(sdev, "Max PPL count %d",
+						 ipc4_data->max_num_pipelines);
+			if (ipc4_data->max_num_pipelines <= 0) {
+				dev_err(sdev->dev, "Invalid max_num_pipelines %d",
+					ipc4_data->max_num_pipelines);
+				ret = -EINVAL;
+				goto out;
+			}
+			break;
 		default:
 			break;
 		}
@@ -413,6 +421,71 @@ int sof_ipc4_reload_fw_libraries(struct snd_sof_dev *sdev)
 	}
 
 	return ret;
+}
+
+/**
+ * sof_ipc4_update_cpc_from_manifest - Update the cpc in base config from manifest
+ * @sdev: SOF device
+ * @fw_module: pointer struct sof_ipc4_fw_module to parse
+ * @basecfg: Pointer to the base_config to update
+ */
+void sof_ipc4_update_cpc_from_manifest(struct snd_sof_dev *sdev,
+				       struct sof_ipc4_fw_module *fw_module,
+				       struct sof_ipc4_base_module_cfg *basecfg)
+{
+	const struct sof_man4_module_config *fw_mod_cfg;
+	u32 cpc_pick = 0;
+	u32 max_cpc = 0;
+	const char *msg;
+	int i;
+
+	if (!fw_module->fw_mod_cfg) {
+		msg = "No mod_cfg available for CPC lookup in the firmware file's manifest";
+		goto no_cpc;
+	}
+
+	/*
+	 * Find the best matching (highest) CPC value based on the module's
+	 * IBS/OBS configuration inferred from the audio format selection.
+	 *
+	 * The CPC value in each module config entry has been measured and
+	 * recorded as a IBS/OBS/CPC triplet and stored in the firmware file's
+	 * manifest
+	 */
+	fw_mod_cfg = fw_module->fw_mod_cfg;
+	for (i = 0; i < fw_module->man4_module_entry.cfg_count; i++) {
+		if (basecfg->obs == fw_mod_cfg[i].obs &&
+		    basecfg->ibs == fw_mod_cfg[i].ibs &&
+		    cpc_pick < fw_mod_cfg[i].cpc)
+			cpc_pick = fw_mod_cfg[i].cpc;
+
+		if (max_cpc < fw_mod_cfg[i].cpc)
+			max_cpc = fw_mod_cfg[i].cpc;
+	}
+
+	basecfg->cpc = cpc_pick;
+
+	/* We have a matching configuration for CPC */
+	if (basecfg->cpc)
+		return;
+
+	/*
+	 * No matching IBS/OBS found, the firmware manifest is missing
+	 * information in the module's module configuration table.
+	 */
+	if (!max_cpc)
+		msg = "No CPC value available in the firmware file's manifest";
+	else if (!cpc_pick)
+		msg = "No CPC match in the firmware file's manifest";
+
+no_cpc:
+	dev_warn(sdev->dev, "%s (UUID: %pUL): %s (ibs/obs: %u/%u)\n",
+		 fw_module->man4_module_entry.name,
+		 &fw_module->man4_module_entry.uuid, msg, basecfg->ibs,
+		 basecfg->obs);
+	dev_warn_once(sdev->dev, "Please try to update the firmware.\n");
+	dev_warn_once(sdev->dev, "If the issue persists, file a bug at\n");
+	dev_warn_once(sdev->dev, "https://github.com/thesofproject/sof/issues/\n");
 }
 
 const struct sof_ipc_fw_loader_ops ipc4_loader_ops = {

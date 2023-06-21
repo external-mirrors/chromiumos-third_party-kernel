@@ -993,4 +993,17 @@ struct display_endpoint_id {
 	enum display_endpoint_type ep_type;
 };
 
+#if defined(CONFIG_DRM_AMD_SECURE_DISPLAY)
+struct otg_phy_mux {
+	uint8_t phy_output_num;
+	uint8_t otg_output_num;
+};
+#endif
+
+enum dc_hpd_enable_select {
+	HPD_EN_FOR_ALL_EDP = 0,
+	HPD_EN_FOR_PRIMARY_EDP_ONLY,
+	HPD_EN_FOR_SECONDARY_EDP_ONLY,
+};
+
 #endif /* DC_TYPES_H_ */

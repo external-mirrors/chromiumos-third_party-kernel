@@ -19,7 +19,6 @@
 #include "intel_cdclk.h"
 #include "intel_display.h"
 #include "intel_display_power.h"
-#include "intel_dmc.h"
 #include "intel_dpll_mgr.h"
 #include "intel_fbc.h"
 #include "intel_global_state.h"
@@ -40,6 +39,7 @@ struct intel_cdclk_vals;
 struct intel_color_funcs;
 struct intel_crtc;
 struct intel_crtc_state;
+struct intel_dmc;
 struct intel_dpll_funcs;
 struct intel_dpll_mgr;
 struct intel_fbdev;
@@ -85,6 +85,7 @@ struct intel_wm_funcs {
 	void (*optimize_watermarks)(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc);
 	int (*compute_global_watermarks)(struct intel_atomic_state *state);
+	void (*get_hw_state)(struct drm_i915_private *i915);
 };
 
 struct intel_audio {
@@ -233,7 +234,7 @@ struct intel_wm {
 		struct g4x_wm_values g4x;
 	};
 
-	u8 max_level;
+	u8 num_levels;
 
 	/*
 	 * Should be held around atomic WM register writing; also
@@ -330,6 +331,11 @@ struct intel_display {
 	} dkl;
 
 	struct {
+		struct intel_dmc *dmc;
+		intel_wakeref_t wakeref;
+	} dmc;
+
+	struct {
 		/* VLV/CHV/BXT/GLK DSI MMIO register base address */
 		u32 mmio_base;
 	} dsi;
@@ -368,9 +374,15 @@ struct intel_display {
 	} gmbus;
 
 	struct {
-		struct i915_hdcp_comp_master *master;
+		struct i915_hdcp_master *master;
 		bool comp_added;
 
+		/*
+		 * HDCP message struct for allocation of memory which can be
+		 * reused when sending message to gsc cs.
+		 * this is only populated post Meteorlake
+		 */
+		struct intel_hdcp_gsc_message *hdcp_message;
 		/* Mutex to protect the above hdcp component related values. */
 		struct mutex comp_mutex;
 	} hdcp;
@@ -446,7 +458,6 @@ struct intel_display {
 
 	/* Grouping using named structs. Keep sorted. */
 	struct intel_audio audio;
-	struct intel_dmc dmc;
 	struct intel_dpll dpll;
 	struct intel_fbc *fbc[I915_MAX_FBCS];
 	struct intel_frontbuffer_tracking fb_tracking;

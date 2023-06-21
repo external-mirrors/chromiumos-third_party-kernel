@@ -138,8 +138,6 @@ struct tpm_chip {
 	int dev_num;		/* /dev/tpm# */
 	unsigned long is_open;	/* only one allowed */
 
-	bool is_suspended;
-
 	char hwrng_name[64];
 	struct hwrng hwrng;
 
@@ -255,20 +253,6 @@ enum tpm2_capabilities {
 	TPM2_CAP_TPM_PROPERTIES = 6,
 };
 
-enum tpm2_properties {
-	TPM_PT_TOTAL_COMMANDS		= 0x0129,
-	TPM2_PT_NONE			= 0,
-	TPM2_PT_GROUP			= 0x100,
-	TPM2_PT_FIXED			= TPM2_PT_GROUP,
-	TPM2_PT_VAR			= TPM2_PT_GROUP * 2,
-	TPM2_PT_PERMANENT		= TPM2_PT_VAR + 0,
-	TPM2_PT_STARTUP_CLEAR		= TPM2_PT_VAR + 1,
-	TPM2_PT_LOCKOUT_COUNTER		= TPM2_PT_VAR + 14,
-	TPM2_PT_MAX_AUTH_FAIL		= TPM2_PT_VAR + 15,
-	TPM2_PT_LOCKOUT_INTERVAL	= TPM2_PT_VAR + 16,
-	TPM2_PT_LOCKOUT_RECOVERY	= TPM2_PT_VAR + 17,
-};
-
 enum tpm2_attr_permanent {
 	TPM2_ATTR_OWNER_AUTH_SET	= BIT(0),
 	TPM2_ATTR_ENDORSEMENT_AUTH_SET	= BIT(1),
@@ -302,13 +286,15 @@ enum tpm2_cc_attrs {
 #define TPM_VID_ATML     0x1114
 
 enum tpm_chip_flags {
-	TPM_CHIP_FLAG_TPM2		= BIT(1),
-	TPM_CHIP_FLAG_IRQ		= BIT(2),
-	TPM_CHIP_FLAG_VIRTUAL		= BIT(3),
-	TPM_CHIP_FLAG_HAVE_TIMEOUTS	= BIT(4),
-	TPM_CHIP_FLAG_ALWAYS_POWERED	= BIT(5),
+	TPM_CHIP_FLAG_BOOTSTRAPPED		= BIT(0),
+	TPM_CHIP_FLAG_TPM2			= BIT(1),
+	TPM_CHIP_FLAG_IRQ			= BIT(2),
+	TPM_CHIP_FLAG_VIRTUAL			= BIT(3),
+	TPM_CHIP_FLAG_HAVE_TIMEOUTS		= BIT(4),
+	TPM_CHIP_FLAG_ALWAYS_POWERED		= BIT(5),
 	TPM_CHIP_FLAG_FIRMWARE_POWER_MANAGED	= BIT(6),
-	TPM_CHIP_FLAG_FIRMWARE_UPGRADE	= BIT(7),
+	TPM_CHIP_FLAG_FIRMWARE_UPGRADE		= BIT(7),
+	TPM_CHIP_FLAG_SUSPENDED			= BIT(8),
 };
 
 #define to_tpm_chip(d) container_of(d, struct tpm_chip, dev)

@@ -272,6 +272,14 @@ struct vmw_crtc_state {
 	struct drm_crtc_state base;
 };
 
+struct vmw_cursor_plane_state {
+	struct ttm_buffer_object *bo;
+	struct ttm_bo_kmap_obj map;
+	bool mapped;
+	s32 hotspot_x;
+	s32 hotspot_y;
+};
+
 /**
  * Derived class for plane state object
  *
@@ -295,11 +303,8 @@ struct vmw_plane_state {
 	/* For CPU Blit */
 	unsigned int cpp;
 
-	struct {
-		struct ttm_buffer_object *bo;
-		struct ttm_bo_kmap_obj map;
-		bool mapped;
-	} cursor;
+	bool surf_mapped;
+	struct vmw_cursor_plane_state cursor;
 };
 
 
@@ -457,13 +462,6 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 			struct vmw_surface *surface,
 			bool only_2d,
 			const struct drm_mode_fb_cmd2 *mode_cmd);
-int vmw_kms_fbdev_init_data(struct vmw_private *dev_priv,
-			    unsigned unit,
-			    u32 max_width,
-			    u32 max_height,
-			    struct drm_connector **p_con,
-			    struct drm_crtc **p_crtc,
-			    struct drm_display_mode **p_mode);
 void vmw_guess_mode_timing(struct drm_display_mode *mode);
 void vmw_kms_update_implicit_fb(struct vmw_private *dev_priv);
 void vmw_kms_create_implicit_placement_property(struct vmw_private *dev_priv);
@@ -514,11 +512,6 @@ void vmw_du_connector_destroy_state(struct drm_connector *connector,
  */
 int vmw_kms_ldu_init_display(struct vmw_private *dev_priv);
 int vmw_kms_ldu_close_display(struct vmw_private *dev_priv);
-int vmw_kms_ldu_do_bo_dirty(struct vmw_private *dev_priv,
-			    struct vmw_framebuffer *framebuffer,
-			    unsigned int flags, unsigned int color,
-			    struct drm_clip_rect *clips,
-			    unsigned int num_clips, int increment);
 int vmw_kms_update_proxy(struct vmw_resource *res,
 			 const struct drm_clip_rect *clips,
 			 unsigned num_clips,

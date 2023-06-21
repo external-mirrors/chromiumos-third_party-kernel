@@ -750,7 +750,7 @@ void intel_gt_sysfs_pm_init(struct intel_gt *gt, struct kobject *kobj)
 	if (ret)
 		gt_warn(gt, "failed to create punit_req_freq_mhz sysfs (%pe)", ERR_PTR(ret));
 
-	if (GRAPHICS_VER(gt->i915) >= 11) {
+	if (i915_mmio_reg_valid(intel_gt_perf_limit_reasons_reg(gt))) {
 		ret = sysfs_create_files(kobj, throttle_reason_attrs);
 		if (ret)
 			gt_warn(gt, "failed to create throttle sysfs files (%pe)", ERR_PTR(ret));

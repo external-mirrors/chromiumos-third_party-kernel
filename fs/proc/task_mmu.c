@@ -2220,7 +2220,8 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 		for (vma = start, next = find_vma(mm, vma->vm_end); vma && next != start;
 		    (vma = next ? next :
 		    /* Only loop around if we didn't start at mm->mmap. */
-		    (start != find_vma(mm, 0) ? find_vma(mm, 0) : NULL))) {
+		    (start != find_vma(mm, 0) ? find_vma(mm, 0) : NULL)),
+		    (next = vma ? find_vma(mm, vma->vm_end) : NULL)) {
 			if (!reclaim_data.nr_to_try)
 				break;
 			if (is_vm_hugetlb_page(vma))
@@ -2275,8 +2276,6 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 			} else
 				walk_page_range(mm, vma->vm_start, vma->vm_end,
 				    &reclaim_walk, (void*)&reclaim_data);
-
-			vma = find_vma(mm, vma->vm_end);
 		}
 		flush_tlb_mm(mm);
 		mmap_read_unlock(mm);

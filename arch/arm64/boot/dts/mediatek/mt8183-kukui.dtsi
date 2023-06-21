@@ -310,22 +310,14 @@
 	};
 };
 
+&gic {
+	mediatek,broken-save-restore-fw;
+};
+
 &gpu {
-	supply-names = "mali","mali_sram";
+	/* supply-names property is non-standard */
+	supply-names = "mali";
 	mali-supply = <&mt6358_vgpu_reg>;
-	mali_sram-supply = <&mt6358_vsram_gpu_reg>;
-	operating-points-v2 = <&gpu_opp_table>;
-	power_model@0 {
-		compatible = "arm,mali-simple-power-model";
-		static-coefficient = <2427750>;
-		dynamic-coefficient = <4687>;
-		ts = <20000 2000 (-20) 2>;
-		thermal-zone = "cpu_thermal";
-	};
-	power_model@1 {
-		compatible = "arm,mali-g72-power-model";
-		scale = <15000>;
-	};
 };
 
 &i2c0 {
@@ -454,6 +446,14 @@
 	Avdd-supply = <&mt6358_vaud28_reg>;
 };
 
+&mt6358_vgpu_reg {
+	regulator-min-microvolt = <625000>;
+	regulator-max-microvolt = <900000>;
+
+	regulator-coupled-with = <&mt6358_vsram_gpu_reg>;
+	regulator-coupled-max-spread = <100000>;
+};
+
 &mt6358_vsim1_reg {
 	regulator-min-microvolt = <2700000>;
 	regulator-max-microvolt = <2700000>;
@@ -462,6 +462,14 @@
 &mt6358_vsim2_reg {
 	regulator-min-microvolt = <2700000>;
 	regulator-max-microvolt = <2700000>;
+};
+
+&mt6358_vsram_gpu_reg {
+	regulator-min-microvolt = <850000>;
+	regulator-max-microvolt = <1000000>;
+
+	regulator-coupled-with = <&mt6358_vgpu_reg>;
+	regulator-coupled-max-spread = <100000>;
 };
 
 &pio {

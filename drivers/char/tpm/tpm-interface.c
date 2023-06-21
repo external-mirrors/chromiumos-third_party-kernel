@@ -82,7 +82,7 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 		return -E2BIG;
 	}
 
-	if (chip->is_suspended) {
+	if (chip->flags & TPM_CHIP_FLAG_SUSPENDED) {
 		dev_warn(&chip->dev, "blocking transmit while suspended\n");
 		return -EAGAIN;
 	}
@@ -416,9 +416,9 @@ int tpm_pm_suspend(struct device *dev)
 		tpm_put_ops(chip);
 	}
 
-	if (!rc)
-		chip->is_suspended = true;
 suspended:
+	chip->flags |= TPM_CHIP_FLAG_SUSPENDED;
+
 	if (rc)
 		dev_err(dev, "Ignoring error %d while suspending\n", rc);
 	return 0;
@@ -436,7 +436,14 @@ int tpm_pm_resume(struct device *dev)
 	if (chip == NULL)
 		return -ENODEV;
 
-	chip->is_suspended = false;
+	chip->flags &= ~TPM_CHIP_FLAG_SUSPENDED;
+
+	/*
+	 * Guarantee that SUSPENDED is written last, so that hwrng does not
+	 * activate before the chip has been fully resumed.
+	 */
+	wmb();
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tpm_pm_resume);
