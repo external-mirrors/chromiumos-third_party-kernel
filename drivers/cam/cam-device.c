@@ -25,9 +25,6 @@
 #define CAM_DEVICE_COUNT		1
 
 static dev_t cam_dev_t;
-static struct bus_type cam_bus = {
-	.name = CAM_NAME,
-};
 static struct cam_device *cam_device;
 
 static inline struct cam_device *devnode_to_cam(struct device *dev)
@@ -59,7 +56,6 @@ static int cam_device_init(struct cam_device *cam)
 	init_rwsem(&cam->ns_enum_lock);
 	init_waitqueue_head(&cam->uapi.wait);
 
-	cam->devnode.bus = &cam_bus;
 	cam->devnode.release = cam_devnode_release;
 	device_initialize(&cam->devnode);
 
@@ -286,23 +282,17 @@ static int __init cam_init(void)
 		return ret;
 	}
 
-	ret = bus_register(&cam_bus);
-	if (ret < 0) {
-		pr_warn("can't register bus for " CAM_NAME "\n");
-		goto err_unregister_chrdev_region;
-	}
-
 	cam = kzalloc(sizeof(*cam), GFP_KERNEL);
 	if (!cam) {
 		ret = -ENOMEM;
-		goto err_bus_unregister;
+		goto err_unregister_chrdev_region;
 	}
 
 	ret = cam_device_init(cam);
 	if (ret) {
 		pr_warn("can't initialize cam_device\n");
 		kfree(cam);
-		goto err_bus_unregister;
+		goto err_unregister_chrdev_region;
 	}
 
 	ret = cam_device_register(cam, THIS_MODULE);
@@ -317,13 +307,8 @@ static int __init cam_init(void)
 
 err_cam_put:
 	cam_device_put(cam);
-
-err_bus_unregister:
-	bus_unregister(&cam_bus);
-
 err_unregister_chrdev_region:
 	unregister_chrdev_region(cam_dev_t, CAM_DEVICE_COUNT);
-
 	return ret;
 }
 
@@ -331,7 +316,6 @@ static void __exit cam_exit(void)
 {
 	cam_device_unregister(cam_device);
 	cam_device_put(cam_device);
-	bus_unregister(&cam_bus);
 	unregister_chrdev_region(cam_dev_t, CAM_DEVICE_COUNT);
 }
 
