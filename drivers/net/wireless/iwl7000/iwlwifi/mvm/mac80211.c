@@ -1372,8 +1372,18 @@ int iwl_mvm_mac_start(struct ieee80211_hw *hw)
 
 	for (retry = 0; retry <= max_retry; retry++) {
 		ret = __iwl_mvm_mac_start(mvm);
-		if (!ret || mvm->pldr_sync)
+		if (!ret)
 			break;
+
+		/*
+		 * In PLDR sync PCI re-enumeration is needed. no point to retry
+		 * mac start before that.
+		 */
+		if (mvm->pldr_sync) {
+			iwl_mei_alive_notif(false);
+			iwl_trans_pcie_remove(mvm->trans, true);
+			break;
+		}
 
 		IWL_ERR(mvm, "mac start retry %d\n", retry);
 	}
