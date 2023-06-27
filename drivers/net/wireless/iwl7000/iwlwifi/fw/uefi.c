@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright(c) 2021-2023 Intel Corporation
+ * Copyright(c) 2021-2022 Intel Corporation
  */
 
 #include "iwl-drv.h"
@@ -129,9 +129,9 @@ done:
 	return 0;
 }
 
-int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
-				const u8 *data, size_t len,
-				struct iwl_pnvm_image *pnvm_data)
+static int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
+				       const u8 *data, size_t len,
+				       struct iwl_pnvm_image *pnvm_data)
 {
 	const struct iwl_ucode_tlv *tlv;
 
@@ -187,15 +187,17 @@ int iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
 	return -ENOENT;
 }
 
-u8 *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
+int iwl_uefi_get_reduced_power(struct iwl_trans *trans,
+			       struct iwl_pnvm_image *pnvm_data)
 {
 	struct pnvm_sku_package *package;
 	unsigned long package_size;
 	efi_status_t status;
-	u8 *data;
+	int ret;
+	size_t len = 0;
 
 	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
-		return ERR_PTR(-ENODEV);
+		return -ENODEV;
 
 	/*
 	 * TODO: we hardcode a maximum length here, because reading
@@ -206,7 +208,7 @@ u8 *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 
 	package = kmalloc(package_size, GFP_KERNEL);
 	if (!package)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	status = efi.get_variable(IWL_UEFI_REDUCED_POWER_NAME, &IWL_EFI_VAR_GUID,
 				  NULL, &package_size, package);
@@ -215,22 +217,23 @@ u8 *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 			     "Reduced Power UEFI variable not found 0x%lx (len %lu)\n",
 			     status, package_size);
 		kfree(package);
-		return ERR_PTR(-ENOENT);
+		return -ENOENT;
 	}
 
 	IWL_DEBUG_FW(trans, "Read reduced power from UEFI with size %lu\n",
 		     package_size);
+	len = package_size;
 
 	IWL_DEBUG_FW(trans, "rev %d, total_size %d, n_skus %d\n",
 		     package->rev, package->total_size, package->n_skus);
 
-	*len = package_size - sizeof(*package);
-	data = kmemdup(package->data, *len, GFP_KERNEL);
-	if (!data)
-		return ERR_PTR(-ENOMEM);
+	ret = iwl_uefi_reduce_power_parse(trans, package->data,
+					  len - sizeof(*package),
+					  pnvm_data);
+
 	kfree(package);
 
-	return data;
+	return ret;
 }
 
 static int iwl_uefi_step_parse(struct uefi_cnv_common_step_data *common_step_data,

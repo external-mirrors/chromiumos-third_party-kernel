@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
- * Copyright (C) 2013-2015, 2019-2020, 2022-2023 Intel Corporation
+ * Copyright (C) 2013-2015, 2019-2020, 2022 Intel Corporation
  * Copyright (C) 2016 Intel Deutschland GmbH
  */
 #include <linux/types.h>
@@ -27,7 +27,6 @@ struct iwl_dbg_cfg current_dbg_config = {
 	.name = IWL_ ## name,
 #define IWL_DBG_CFG_STR(name) /* no default */
 #define IWL_DBG_CFG_NODEF(type, name) /* no default */
-#define IWL_DBG_CFG_DEF(type, name, v) .name = v,
 #define IWL_DBG_CFG_BIN(name) /* nothing, default empty */
 #define IWL_DBG_CFG_BINA(name, max) /* nothing, default empty */
 #define IWL_MOD_PARAM(type, name) /* nothing, default empty */
@@ -39,7 +38,6 @@ struct iwl_dbg_cfg current_dbg_config = {
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
-#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
@@ -140,7 +138,6 @@ void iwl_dbg_cfg_free(struct iwl_dbg_cfg *dbgcfg)
 #define IWL_DBG_CFG_STR(n)				\
 	kfree(dbgcfg->n);
 #define IWL_DBG_CFG_NODEF(t, n) /* nothing */
-#define IWL_DBG_CFG_DEF(t, n, v) /* nothing */
 #define IWL_DBG_CFG_BIN(n)				\
 	do {						\
 		kfree(dbgcfg->n.data);			\
@@ -166,7 +163,6 @@ void iwl_dbg_cfg_free(struct iwl_dbg_cfg *dbgcfg)
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
-#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
@@ -197,7 +193,6 @@ static const struct iwl_dbg_cfg_loader iwl_dbg_cfg_loaders[] = {
 		.loader = dbg_cfg_load_str,			\
 	},
 #define IWL_DBG_CFG_NODEF(t, n) IWL_DBG_CFG(t, n)
-#define IWL_DBG_CFG_DEF(t, n, v) IWL_DBG_CFG(t, n)
 #define IWL_DBG_CFG_BIN(n) /* not using this */
 #define IWL_DBG_CFG_BINA(n, max) /* not using this */
 #define IWL_DBG_CFG_RANGE(t, n, _min, _max)			\
@@ -215,7 +210,6 @@ static const struct iwl_dbg_cfg_loader iwl_dbg_cfg_loaders[] = {
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
-#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
@@ -243,7 +237,7 @@ static void iwl_dbg_cfg_parse_fw_dbg_preset(struct iwl_dbg_cfg *dbgcfg,
 
 	dbgcfg->FW_DBG_DOMAIN &= 0xffff;
 	if (preset != IWL_FW_INI_PRESET_DISABLE)
-		dbgcfg->FW_DBG_DOMAIN |= BIT(IWL_FW_DBG_DOMAIN_POS + preset);
+		dbgcfg->FW_DBG_DOMAIN |= BIT(16 + preset);
 
 	printk(KERN_INFO "iwlwifi debug config: FW_DBG_PRESET=%d => FW_DBG_DOMAIN=0x%x\n",
 	       preset, dbgcfg->FW_DBG_DOMAIN);
@@ -324,7 +318,6 @@ void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg)
 
 #define IWL_DBG_CFG(t, n) /* handled above */
 #define IWL_DBG_CFG_NODEF(t, n) /* handled above */
-#define IWL_DBG_CFG_DEF(t, n, v) /* handled above */
 #define IWL_DBG_CFG_BIN(n)						\
 		if (strncmp(#n, line, strlen(#n)) == 0 &&		\
 		    line[strlen(#n)] == '=') {				\
@@ -373,7 +366,6 @@ void iwl_dbg_cfg_load_ini(struct device *dev, struct iwl_dbg_cfg *dbgcfg)
 #undef IWL_DBG_CFG
 #undef IWL_DBG_CFG_STR
 #undef IWL_DBG_CFG_NODEF
-#undef IWL_DBG_CFG_DEF
 #undef IWL_DBG_CFG_BIN
 #undef IWL_DBG_CFG_BINA
 #undef IWL_DBG_CFG_RANGE
