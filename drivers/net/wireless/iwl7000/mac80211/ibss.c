@@ -9,7 +9,7 @@
  * Copyright 2009, Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright(c) 2016 Intel Deutschland GmbH
- * Copyright(c) 2018-2023 Intel Corporation
+ * Copyright(c) 2018-2022 Intel Corporation
  */
 
 #include <linux/delay.h>
@@ -226,7 +226,7 @@ static void __ieee80211_sta_join_ibss(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_mgmt *mgmt;
 	struct cfg80211_bss *bss;
-	u64 bss_change;
+	u32 bss_change;
 	struct cfg80211_chan_def chandef;
 	struct ieee80211_channel *chan;
 	struct beacon_data *presp;
@@ -478,8 +478,7 @@ static void ieee80211_sta_join_ibss(struct ieee80211_sub_if_data *sdata,
 }
 
 int ieee80211_ibss_csa_beacon(struct ieee80211_sub_if_data *sdata,
-			      struct cfg80211_csa_settings *csa_settings,
-			      u64 *changed)
+			      struct cfg80211_csa_settings *csa_settings)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 	struct beacon_data *presp, *old_presp;
@@ -521,11 +520,10 @@ int ieee80211_ibss_csa_beacon(struct ieee80211_sub_if_data *sdata,
 	if (old_presp)
 		kfree_rcu(old_presp, rcu_head);
 
-	*changed |= BSS_CHANGED_BEACON;
-	return 0;
+	return BSS_CHANGED_BEACON;
 }
 
-int ieee80211_ibss_finish_csa(struct ieee80211_sub_if_data *sdata, u64 *changed)
+int ieee80211_ibss_finish_csa(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_ibss *ifibss = &sdata->u.ibss;
 	struct cfg80211_bss *cbss;
@@ -554,7 +552,7 @@ int ieee80211_ibss_finish_csa(struct ieee80211_sub_if_data *sdata, u64 *changed)
 	ifibss->chandef = sdata->deflink.csa_chandef;
 
 	/* generate the beacon */
-	return ieee80211_ibss_csa_beacon(sdata, NULL, changed);
+	return ieee80211_ibss_csa_beacon(sdata, NULL);
 }
 
 void ieee80211_ibss_stop(struct ieee80211_sub_if_data *sdata)
@@ -1704,7 +1702,7 @@ void ieee80211_ibss_notify_scan_completed(struct ieee80211_local *local)
 int ieee80211_ibss_join(struct ieee80211_sub_if_data *sdata,
 			struct cfg80211_ibss_params *params)
 {
-	u64 changed = 0;
+	u32 changed = 0;
 	u32 rate_flags;
 	struct ieee80211_supported_band *sband;
 	enum ieee80211_chanctx_mode chanmode;
