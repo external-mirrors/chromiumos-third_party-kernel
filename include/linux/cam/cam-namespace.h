@@ -144,8 +144,6 @@ void cam_ns_release(struct cam_ns *ns);
  * - Object lifetime is managed by embedded kref in the object
  */
 struct cam_obj {
-	/** @node: rhash table entry */
-	struct rhash_head	node;
 	/** @id: lookup ID of this object */
 	unsigned long		id;
 	/** @type: object type */
