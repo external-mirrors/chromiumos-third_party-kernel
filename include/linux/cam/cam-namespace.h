@@ -113,6 +113,12 @@ struct cam_ns {
 };
 
 /**
+ * This does not take the namespace lock, so should be used with caution
+ */
+#define cam_ns_for_each_obj_safe(obj, tmp, ns)			\
+	list_for_each_entry_safe((obj), (tmp), &(ns)->objs_list, list_entry)
+
+/**
  * cam_ns_walk_control - CAM namespace walk control
  */
 struct cam_ns_walk_control {
