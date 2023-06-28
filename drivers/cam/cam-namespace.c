@@ -10,7 +10,6 @@
 #include <linux/cam/cam-namespace.h>
 #include <linux/cam/cam-device.h>
 #include <uapi/linux/cam.h>
-#include <linux/rcupdate.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 

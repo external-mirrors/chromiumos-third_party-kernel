@@ -14,7 +14,6 @@
 #include <linux/cam/cam-pipeline.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/rculist.h>
 #include <linux/slab.h>
 
 #include <trace/events/cam.h>

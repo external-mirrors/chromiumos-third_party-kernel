@@ -273,9 +273,6 @@ int cam_enum_graph_objects(struct cam_graph_walk *ctl,
 		cam_graph_stack_pop(&st);
 
 		/*
-		 * Object enumeration might_fault() so we need to unlock RCU,
-		 * we hold object's refcounter.
-		 *
 		 * We need to match object here as well for the case when
 		 * we look for a particular child object
 		 */

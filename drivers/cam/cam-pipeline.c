@@ -524,9 +524,9 @@ static bool cam_drain_op_callback(struct cam_obj *nsobj,
 
 	/*
 	 * Note we cannot remove OP from namespace here, because we are
-	 * under RCU read-side lock. We instead add OPs to IO-queue and
-	 * then remove (flush) all queued OPs, outside of RCU read-side
-	 * lock.
+	 * under namespace lock. We instead add OPs to IO-queue and
+	 * then remove (flush) all queued OPs, outside of the scope of
+	 * namspace lock.
 	 */
 	list_del_init(&op->io_queue_entry);
 	list_add(&op->io_queue_entry, &op->pipeline->io_queue);
@@ -1747,9 +1747,6 @@ int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 	return 0;
 }
 
-/*
- * This function is called under RCU, so it cannot sleep.
- */
 static bool cam_op_enum(struct cam_obj_op *op, struct cam_koutput *output)
 {
 	struct cam_query_operation_entry *qent;
