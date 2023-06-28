@@ -504,67 +504,38 @@ static void cam_drain_op_syncfiles(struct cam_obj_op *op)
 	}
 }
 
-static bool cam_drain_op_callback(struct cam_obj *nsobj,
-				  struct cam_ns_walk_control *ctl)
-{
-	struct cam_obj_op *op;
-
-	op = nsobj_to_cam_op(nsobj);
-	if (WARN_ON(!op))
-		return false;
-
-	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
-
-	/*
-	 * OPs have pending and active signals chains, all of which
-	 * need to be drained becuase they hold refcounters.
-	 */
-	drain_notify_chain(&op->notify_active_chain);
-	drain_notify_chain(&op->notify_pending_chain);
-
-	/*
-	 * Note we cannot remove OP from namespace here, because we are
-	 * under namespace lock. We instead add OPs to IO-queue and
-	 * then remove (flush) all queued OPs, outside of the scope of
-	 * namspace lock.
-	 */
-	list_del_init(&op->io_queue_entry);
-	list_add(&op->io_queue_entry, &op->pipeline->io_queue);
-	return false;
-}
-
 /**
- * cam_drain_ops() - Drain signals from both pending and active chains of a
- * pipeline
+ * cam_drain_ops() - Drains operations from the pipeline. This must be used
+ * only from the pipeline (emergency) termination path.
  * @pipeline: pointer to CAM pipeline
  */
 static void cam_drain_ops(struct cam_pipeline *pipeline)
 {
-	struct cam_ns_walk_control ctl = {};
+	struct cam_obj *nsobj;
+	struct cam_obj *save;
 
-	ctl.cb		= cam_drain_op_callback;
-	cam_ns_for_each(&pipeline->ops, &ctl);
-}
+	cam_ns_for_each_obj_safe(nsobj, save, &pipeline->ops) {
+		struct cam_obj_op *op;
 
-/**
- * cam_flush_ops() - Flush and unregister all the operations of a pipeline
- * @pipeline: pointer to CAM pipeline
- *
- * Flush all the operations in the IO-queue.
- */
-static void cam_flush_ops(struct cam_pipeline *pipeline)
-{
-	struct cam_obj_op *op;
+		op = nsobj_to_cam_op(nsobj);
+		if (WARN_ON(!op))
+			return;
 
-	while (!list_empty(&pipeline->io_queue)) {
-		op = list_first_entry(&pipeline->io_queue,
-				      struct cam_obj_op,
-				      io_queue_entry);
-		list_del(&op->io_queue_entry);
-
+		cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
+		/*
+		 * OPs have pending and active signals chains, all of which
+		 * need to be drained because they hold refcounts.
+		 */
+		drain_notify_chain(&op->notify_active_chain);
+		drain_notify_chain(&op->notify_pending_chain);
 		cam_drain_op_syncfiles(op);
 		cam_obj_remove(&op->nsobj);
-		cam_obj_deinit(&op->nsobj);
+		/*
+		 * We cannot deinit OP nsobj at this point, as we still
+		 * may have other operations in the objs_list that hold
+		 * reference to this OP (dependency, etc.)
+		 */
+		cam_op_put(op);
 	}
 }
 
@@ -1086,7 +1057,6 @@ static int cam_pipeline_io_worker(void *data)
 	 */
 	cam_drain_events(pipeline);
 	cam_drain_ops(pipeline);
-	cam_flush_ops(pipeline);
 
 	mutex_lock(&pipeline->io_release_lock);
 	pipeline->io_thread = NULL;
