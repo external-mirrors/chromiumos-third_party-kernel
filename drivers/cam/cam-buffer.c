@@ -273,3 +273,26 @@ int cam_enum_buffer(struct cam_pipeline *pipeline,
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_enum_buffer, ERRNO);
+
+/**
+ * cam_drain_buffers() - Drains pipeline buffers. This must be used
+ * only from the pipeline (emergency) termination path.
+ * @pipeline: pointer to CAM pipeline
+ *
+ * Return: 0 on success or negative error code otherwise
+ */
+int cam_drain_buffers(struct cam_pipeline *pipeline)
+{
+	struct cam_obj *nsobj;
+	struct cam_obj *save;
+	int ret;
+
+	cam_ns_for_each_obj_safe(nsobj, save, &pipeline->objs) {
+		if (cam_obj_type(nsobj) != CAM_OBJ_TYPE_BUFFER)
+			continue;
+		ret = cam_buffer_unregister(&pipeline->objs, cam_obj_id(nsobj));
+		if (ret)
+			return ret;
+	}
+	return 0;
+}

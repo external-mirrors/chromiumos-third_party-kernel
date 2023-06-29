@@ -1056,6 +1056,7 @@ static int cam_pipeline_io_worker(void *data)
 	 * OPs.
 	 */
 	cam_drain_events(pipeline);
+	cam_drain_buffers(pipeline);
 	cam_drain_ops(pipeline);
 
 	mutex_lock(&pipeline->io_release_lock);

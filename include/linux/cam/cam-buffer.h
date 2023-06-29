@@ -55,4 +55,6 @@ int cam_enum_buffer(struct cam_pipeline *pipeline,
 		    struct cam_query_dmabuf *query,
 		    struct cam_koutput *output);
 
+int cam_drain_buffers(struct cam_pipeline *pipeline);
+
 #endif /* __LINUX_CAM_BUFFER_H__ */
