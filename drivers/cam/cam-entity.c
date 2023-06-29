@@ -243,7 +243,7 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 		entity->flags |= CAM_ENTITY_FLAG_REQUIRE_INSTANCE;
 	entity->ops = ops;
 	entity->driver_data = driver_data;
-	strlcpy(entity->name, name, CAM_ENTITY_NAME_SZ);
+	strscpy(entity->name, name, CAM_ENTITY_NAME_SZ);
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
 		     &cam->ns);
 
@@ -287,7 +287,7 @@ struct cam_obj_entity *cam_root_entity_register(struct cam_device *cam)
 
 	atomic_set(&entity->instances_avail, CAM_ENTITY_NO_INSTANCES);
 	entity->ops = &root_entity_ops;
-	strlcpy(entity->name, "CAM root entity", CAM_ENTITY_NAME_SZ);
+	strscpy(entity->name, "CAM root entity", CAM_ENTITY_NAME_SZ);
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
 		     &cam->ns);
 
@@ -704,7 +704,7 @@ struct cam_obj_event *cam_event_register(struct cam_device *cam,
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
-	strlcpy(event->name, name, CAM_EVENT_NAME_SZ);
+	strscpy(event->name, name, CAM_EVENT_NAME_SZ);
 	INIT_LIST_HEAD(&event->notify_active_chain);
 	rwlock_init(&event->notify_lock);
 	cam_obj_init(&event->nsobj, CAM_OBJ_TYPE_EVENT, cam_event_release,

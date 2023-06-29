@@ -134,7 +134,7 @@ struct cam_obj_syncfile *cam_in_syncfile_register(struct cam_device *cam,
 
 	INIT_LIST_HEAD(&sf->in.notify_active_chain);
 	rwlock_init(&sf->in.notify_lock);
-	strlcpy(sf->name, name, CAM_SYNCFILE_NAME_SZ);
+	strscpy(sf->name, name, CAM_SYNCFILE_NAME_SZ);
 	cam_obj_init(&sf->nsobj,
 		     CAM_OBJ_TYPE_IN_SYNCFILE,
 		     cam_in_syncfile_release,
@@ -262,7 +262,7 @@ struct cam_obj_syncfile *cam_out_syncfile_register(struct cam_device *cam,
 	spin_lock_init(&sf->out.context_lock);
 	atomic64_set(&sf->out.fence_seqno, 0);
 	sf->out.fd = -1;
-	strlcpy(sf->name, name, CAM_SYNCFILE_NAME_SZ);
+	strscpy(sf->name, name, CAM_SYNCFILE_NAME_SZ);
 	cam_obj_init(&sf->nsobj,
 		     CAM_OBJ_TYPE_OUT_SYNCFILE,
 		     cam_out_syncfile_release,
