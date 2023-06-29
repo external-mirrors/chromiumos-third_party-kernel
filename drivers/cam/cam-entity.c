@@ -820,7 +820,7 @@ out:
  */
 static u32 entity_depth_limit(struct cam_query_entities *query)
 {
-	return min((u32)query->maxdepth, (u32)CAM_GRAPH_STACK_DEPTH);
+	return min_t(u32, query->maxdepth, CAM_GRAPH_STACK_DEPTH);
 }
 
 /**
