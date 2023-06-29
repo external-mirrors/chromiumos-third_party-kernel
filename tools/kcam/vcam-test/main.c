@@ -2288,6 +2288,86 @@ out:
 	return ret;
 }
 
+static int test_create_entity_instance(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct cam_rw_instruction *rw;
+	struct libkc_rw_list *rw_list;
+	struct obj_entity *entity;
+	struct obj_event *event;
+	struct cam_operation *op;
+	int ret, op_idx, rw_idx;
+
+	pr_info("Test create entity instance\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_FAST_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	event = libkc_entity_first_event(entity);
+	if (!event) {
+		pr_err("Unable to find event\n");
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+
+	rw_list = libkc_rw_list_get(1);
+	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+	if (!rw_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	rw = libkc_rw_instruction_at(rw_list, 0);
+
+	rw->type	= CAM_INSTANCE_INSTRUCTION;
+	rw->error	= 0;
+	rw->in.op	= CAM_OP_INSTANCE_CREATE;
+	rw->in.id	= 1;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret)
+		goto out;
+
+	ret = read_operations_completion_events(cam, 1);
+	if (ret != 1) {
+		pr_err("FATAL: read_operations_completion_events() failed\n");
+		ret = -EINVAL;
+		goto out;
+	} else {
+		ret = 0;
+	}
+
+	for_each_cam_operation(lco, op_idx, op) {
+		rw_idx = 0;
+		if (libkc_failed_instruction(op, &rw_idx)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_entity_instance(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -3129,6 +3209,22 @@ int main(int argc, char *argv[])
 	ret = test_remove_unknown_buffer(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_remove_unknown_buffer()\n");
+		return ret;
+	}
+
+	pr_info("Test emergency pipeline buffer/instance drain\n");
+
+	/* Add buffer for pipeline buffer-drain test */
+	ret = test_add_buffer(cam);
+	if (ret) {
+		pr_err("FATAL: can't add buffer\n");
+		return ret;
+	}
+
+	/* Create entity instance for pipeline instance-drain test */
+	ret = test_create_entity_instance(cam);
+	if (ret) {
+		pr_err("FATAL: can't create instance\n");
 		return ret;
 	}
 
