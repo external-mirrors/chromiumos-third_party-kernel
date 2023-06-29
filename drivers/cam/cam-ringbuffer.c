@@ -16,7 +16,7 @@
 #include <linux/slab.h>
 
 #define CIRC_ADD(rb, pos)			\
-	((pos) + (rb)->entry_sz) & ((rb)->buffer_sz - 1)
+	(((pos) + (rb)->entry_sz) & ((rb)->buffer_sz - 1))
 
 bool cam_ringbuffer_has_entry(struct cam_ringbuffer *rb)
 {
