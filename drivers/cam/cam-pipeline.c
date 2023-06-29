@@ -1056,6 +1056,7 @@ static int cam_pipeline_io_worker(void *data)
 	 * OPs.
 	 */
 	cam_drain_events(pipeline);
+	cam_drain_instances(pipeline);
 	cam_drain_buffers(pipeline);
 	cam_drain_ops(pipeline);
 

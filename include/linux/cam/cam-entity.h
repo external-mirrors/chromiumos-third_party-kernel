@@ -192,4 +192,6 @@ void *cam_instance_driver_data(struct cam_obj_instance *instance);
 struct cam_pipeline;
 
 int cam_drain_events(struct cam_pipeline *pipeline);
+int cam_drain_instances(struct cam_pipeline *pipeline);
+
 #endif /* __LINUX_CAM_ENTITY_H__ */

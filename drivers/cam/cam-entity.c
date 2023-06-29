@@ -940,3 +940,29 @@ int cam_drain_events(struct cam_pipeline *pipeline)
 	cam_ns_for_each(&pipeline->cam->ns, &ctl);
 	return 0;
 }
+
+/**
+ * cam_drain_instances() - Drains pipeline entities instances. This must be used
+ * only from the pipeline (emergency) termination path.
+ * @pipeline: pointer to CAM pipeline
+ *
+ * Return: 0 on success or negative error code otherwise.
+ */
+int cam_drain_instances(struct cam_pipeline *pipeline)
+{
+	struct cam_obj *nsobj;
+	struct cam_obj *save;
+	int ret;
+
+	cam_ns_for_each_obj_safe(nsobj, save, &pipeline->objs) {
+		if (cam_obj_type(nsobj) != CAM_OBJ_TYPE_INSTANCE)
+			continue;
+
+		ret = cam_obj_remove_id(&pipeline->objs,
+					CAM_OBJ_TYPE_INSTANCE,
+					cam_obj_id(nsobj));
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
