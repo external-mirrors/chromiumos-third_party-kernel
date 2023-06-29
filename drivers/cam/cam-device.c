@@ -141,7 +141,7 @@ static void cam_device_unregister(struct cam_device *cam)
 	spin_lock(&cam->uapi.wait.lock);
 	cam->uapi.unregister_in_progress = true;
 	if (cam->uapi.calls_in_progress)
-	        wait_event_interruptible_locked(cam->uapi.wait,
+		wait_event_interruptible_locked(cam->uapi.wait,
 						!cam->uapi.calls_in_progress);
 	spin_unlock(&cam->uapi.wait.lock);
 
