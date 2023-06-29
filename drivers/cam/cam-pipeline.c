@@ -1050,10 +1050,10 @@ static int cam_pipeline_io_worker(void *data)
 
 	/*
 	 * We don't have execution IO thread running anymore, but we still
-	 * have driver's entities and fence, which can signal OPs. Drain
+	 * have driver's entities and DMA fences, which can signal OPs. Drain
 	 * events' and fences' signals first then drain signals (pending
-	 * and active ones) of all the OPs. Lastly remove and deinit drained
-	 * OPs.
+	 * and active ones) of all the OPs. Then destroy all pipeline-owned
+	 * objects: DMA buffers, entity instances, operations.
 	 */
 	cam_drain_events(pipeline);
 	cam_drain_instances(pipeline);
