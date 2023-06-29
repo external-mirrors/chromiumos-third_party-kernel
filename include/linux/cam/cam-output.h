@@ -37,6 +37,6 @@ bool cam_output_has_buffer(struct cam_koutput *output);
 void *__cam_output_next_entry(struct cam_koutput *output, size_t sz);
 
 #define cam_output_next_entry(output, obj)			\
-	(obj) = __cam_output_next_entry((output), sizeof(*(obj)))
+	((obj) = __cam_output_next_entry((output), sizeof(*(obj))))
 
 #endif /* __LINUX_CAM_OUTPUT_H__ */
