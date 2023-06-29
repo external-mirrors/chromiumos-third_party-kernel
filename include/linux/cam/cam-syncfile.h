@@ -43,8 +43,10 @@ struct cam_obj_syncfile {
 			struct dma_fence_cb	cb;
 			/** @notify_lock: protects list of signals */
 			rwlock_t		notify_lock;
-			/** @notify_active_chain: list of operations that are
-			 *			  blocked on us */
+			/**
+			 * @notify_active_chain: list of operations that are
+			 * blocked on us
+			 */
 			struct list_head	notify_active_chain;
 		} in;
 	};
