@@ -23,7 +23,7 @@ static void __mausb_ip_set_options(struct socket *sock, bool udp)
 	lock_sock_nested(sk, 0);
 
 	// Half a second timeout.
-	sk->sk_rcvtimeo = min_t(int, DIV_ROUND_UP(HZ, 2), MAX_SCHEDULE_TIMEOUT);
+	sk->sk_rcvtimeo = min_t(long, DIV_ROUND_UP(HZ, 2), MAX_SCHEDULE_TIMEOUT);
 
 	val = min_t(u32, 0, sysctl_wmem_max);
 	val = min_t(int, val, INT_MAX / 2);
