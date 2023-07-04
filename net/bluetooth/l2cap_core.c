@@ -5614,6 +5614,18 @@ static inline int l2cap_conn_param_update_req(struct l2cap_conn *conn,
 	memset(&rsp, 0, sizeof(rsp));
 
 	err = hci_check_conn_params(min, max, latency, to_multiplier);
+	if (err) {
+		BT_WARN("Invalid conn params min 0x%4.4x max 0x%4.4x latency: 0x%4.4x TO: 0x%4.4x",
+			min, max, latency, to_multiplier);
+
+		err = hci_check_conn_params_legacy(min, max, latency,
+						   to_multiplier);
+		if (!err) {
+			/* latency is invalid, cap it to the max allowed */
+			latency = min(499, (to_multiplier * 4 / max) - 1);
+		}
+	}
+
 	if (err)
 		rsp.result = cpu_to_le16(L2CAP_CONN_PARAM_REJECTED);
 	else
@@ -6374,9 +6386,14 @@ static inline int l2cap_le_command_rej(struct l2cap_conn *conn,
 	if (!chan)
 		goto done;
 
+	chan = l2cap_chan_hold_unless_zero(chan);
+	if (!chan)
+		goto done;
+
 	l2cap_chan_lock(chan);
 	l2cap_chan_del(chan, ECONNREFUSED);
 	l2cap_chan_unlock(chan);
+	l2cap_chan_put(chan);
 
 done:
 	mutex_unlock(&conn->chan_lock);
