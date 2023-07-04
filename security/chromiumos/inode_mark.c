@@ -218,8 +218,7 @@ chromiumos_inode_mark_create(
 		inode_mark->policies[i] = CHROMIUMOS_INODE_POLICY_INHERIT;
 
 	inode_mark->policies[type] = policy;
-	ret = fsnotify_add_mark_locked(&inode_mark->mark, &inode->i_fsnotify_marks,
-				       type, false, NULL);
+	ret = fsnotify_add_inode_mark_locked(&inode_mark->mark, inode, 0);
 	if (ret)
 		goto out;
 
