@@ -17,7 +17,7 @@
 #include <linux/slab.h>
 
 /**
- * cam_graph_node_init() - Init graph node
+ * cam_graph_node_init() - Initialise graph node
  * @nsobj: pointer to namespace object that holds graph object
  */
 void cam_graph_node_init(struct cam_obj *nsobj)
@@ -238,7 +238,7 @@ bool cam_graph_walk_match_obj(struct cam_obj *nsobj,
 }
 
 /**
- * cam_enum_graph_objects() - Walk through the subgraph of a CAM object and
+ * cam_enum_graph_objects() - Walk through the sub-graph of the CAM object and
  * enumerate its children
  * @ctl: auxiliary data
  * @nsobj: pointer to CAM object

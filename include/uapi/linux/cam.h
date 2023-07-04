@@ -245,7 +245,7 @@ struct cam_dmabuf_instruction {
 /**
  * enum cam_instance_instruction_op - Instance instruction operation type
  *
- * @CAM_OP_INSTANCE_CREATE:	Create entity intsance (context)
+ * @CAM_OP_INSTANCE_CREATE:	Create entity instance (context)
  * @CAM_OP_INSTANCE_DESTROY:	Destroy entity instance (context)
  */
 enum cam_instance_instruction_op {

@@ -394,7 +394,7 @@ int cam_instance_destroy(struct cam_ns *ns, u32 id)
  * @entity: CAM entity
  * @id: ID of the instance (context) object
  *
- * Return: NULL on error or CAM intance pointer otherwise
+ * Return: NULL on error or CAM instance pointer otherwise
  */
 struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 					     struct cam_obj_entity *entity,

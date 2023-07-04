@@ -65,7 +65,7 @@ int cam_ringbuffer_write(struct cam_ringbuffer *rb,
 	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) < rb->entry_sz) {
 		/*
 		 * We just move ahead, user-space should consume completions
-		 * and see a gap in seqno
+		 * and detect a gap in sequential numbers.
 		 */
 		rb->tail = CIRC_ADD(rb, rb->tail);
 	}

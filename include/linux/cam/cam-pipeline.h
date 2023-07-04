@@ -83,7 +83,7 @@ struct cam_op_signal {
 	struct cam_obj			*target;
 	/** @entry: List entry in the pending/active lists */
 	struct list_head		entry;
-	/** @instance: ID of enity instance */
+	/** @instance: ID of entity instance */
 	u32				instance;
 	/** @activate: Function that activates pending signal */
 	bool (*activate)(struct cam_op_signal *sig);

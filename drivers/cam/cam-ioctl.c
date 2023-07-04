@@ -324,7 +324,7 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 	ret = cam_ioctl_operation_submit(fh, hdr, payload);
 	if (ret) {
 		/*
-		 * We failed at submit() stage. Only unsubmitted OPs
+		 * We failed at submit() stage. Only not-yet-submitted OPs
 		 * can be cancelled as it may be too late to cancel
 		 * the submitted ones.
 		 */

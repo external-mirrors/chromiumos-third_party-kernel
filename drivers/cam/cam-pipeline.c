@@ -867,10 +867,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 	if (op->exec_rw_list_addr == CAM_OP_NO_RW_LIST)
 		return;
 
-	/*
-	 * @FIXME: entity_ops may be updated soon, but at this point we
-	 * execute OPs only on entities
-	 */
+	/* At this point OPs require an entity to be run against */
 	if (!op->exec_entity)
 		return;
 

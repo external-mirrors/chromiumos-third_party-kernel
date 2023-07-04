@@ -152,13 +152,13 @@ static void cam_device_unregister(struct cam_device *cam)
 }
 
 /**
- * cam_ns_enumeration_begin() - Namespace enumeration entry poit.
+ * cam_ns_enumeration_begin() - Namespace enumeration entry point.
  * @cam: pointer to CAM device
  *
- * Grabs namespce enumeration lock (read mode), so that drivers are not
+ * Grabs namespace enumeration lock (read mode), so that drivers are not
  * permitted to add new objects in the meantime.
  *
- * This should be called only for global namespace enumearion.
+ * This should be called only for global namespace enumeration.
  */
 void cam_ns_enumeration_begin(struct cam_device *cam)
 {
@@ -221,7 +221,7 @@ EXPORT_SYMBOL_GPL(cam_ns_enumeration_permit);
  * cam_device_unregister().
  *
  * If the device is being unregistered, this function will return an error that
- * must be forwarded by the caller to userspace, returning from the UAPI call
+ * must be forwarded by the caller to user-space, returning from the UAPI call
  * immediately.
  *
  * Return: 0 on success or an error code otherwise

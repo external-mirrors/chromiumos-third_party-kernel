@@ -67,7 +67,7 @@ struct cam_entity_ops {
 	 */
 	void (*instance_destroy)(void *dev, void *data);
 	/**
-	 * dmabuf_add(): callback to create device-specifc DMA-buffer mapping
+	 * dmabuf_add(): callback to create device-specific DMA-buffer mapping
 	 *
 	 * Return: pointer to buffer mapping or NULL
 	 */
