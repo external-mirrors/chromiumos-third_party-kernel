@@ -176,7 +176,7 @@ ipu_kcam_buffer_lookup(struct ipu_psys *psys, struct dma_buf *dbuf)
 	mutex_lock(&psys->mutex);
 	list_for_each_entry(b, &psys->bufmap, bufmap_list) {
 		if (b->dma_buf == dbuf) {
-			if (!kref_get_unless_zero(&b->kref))
+			if (kref_get_unless_zero(&b->kref))
 				buf = b;
 			break;
 		}
