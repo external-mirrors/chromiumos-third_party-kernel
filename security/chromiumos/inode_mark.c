@@ -162,10 +162,8 @@ chromiumos_super_block_create(struct super_block *sb)
 	sbm->sb = sb;
 	sbm->fsn_group = fsnotify_alloc_group(&chromiumos_fsn_ops, 0);
 	if (IS_ERR(sbm->fsn_group)) {
-		int ret = PTR_ERR(sbm->fsn_group);
-
 		kfree(sbm);
-		return ERR_PTR(ret);
+		return ERR_CAST(sbm->fsn_group);
 	}
 	sbm->fsn_group->private = sbm;
 	hlist_add_head_rcu(&sbm->node, hlist);
