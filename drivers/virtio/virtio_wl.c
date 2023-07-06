@@ -1474,7 +1474,7 @@ static int probe_common(struct virtio_device *vdev)
 		goto free_vi;
 	}
 
-	vi->class = class_create(THIS_MODULE, "wl");
+	vi->class = class_create("wl");
 	if (IS_ERR(vi->class)) {
 		ret = PTR_ERR(vi->class);
 		pr_warn("virtwl: failed to create wl class: %d\n", ret);
