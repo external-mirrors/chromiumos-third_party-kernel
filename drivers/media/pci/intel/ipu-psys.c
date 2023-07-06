@@ -56,7 +56,6 @@ static int psys_runtime_pm_suspend(struct device *dev);
 #define pm_runtime_put_autosuspend(d)		0
 #endif
 
-static dev_t ipu_psys_dev_t;
 static DECLARE_BITMAP(ipu_psys_devices, IPU_PSYS_NUM_DEVICES);
 static DEFINE_MUTEX(ipu_psys_mutex);
 
@@ -106,28 +105,6 @@ struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size)
 	return kpg;
 }
 
-static int ipu_psys_open(struct inode *inode, struct file *file)
-{
-	WARN_ON(1);
-
-	return 0;
-}
-
-static int ipu_psys_release(struct inode *inode, struct file *file)
-{
-	WARN_ON(1);
-
-	return 0;
-}
-
-static unsigned int ipu_psys_poll(struct file *file,
-				  struct poll_table_struct *wait)
-{
-	WARN_ON(1);
-
-	return 0;
-}
-
 long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 		      struct ipu_psys *psys)
 {
@@ -174,24 +151,6 @@ long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ipu_get_manifest);
-
-static long ipu_psys_ioctl(struct file *file, unsigned int cmd,
-			   unsigned long arg)
-{
-	WARN_ON(1);
-	return -ENOTTY;
-}
-
-static const struct file_operations ipu_psys_fops = {
-	.open = ipu_psys_open,
-	.release = ipu_psys_release,
-	.unlocked_ioctl = ipu_psys_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = ipu_psys_compat_ioctl32,
-#endif
-	.poll = ipu_psys_poll,
-	.owner = THIS_MODULE,
-};
 
 static void ipu_psys_dev_release(struct device *dev)
 {
@@ -607,7 +566,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 	struct ipu_device *isp = adev->isp;
 	struct ipu_psys_pg *kpg, *kpg0;
 	struct ipu_psys *psys;
-	unsigned int minor;
+	unsigned int id;
 	int i, rval = -E2BIG;
 
 	/* firmware is not ready, so defer the probe */
@@ -620,8 +579,8 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	mutex_lock(&ipu_psys_mutex);
 
-	minor = find_next_zero_bit(ipu_psys_devices, IPU_PSYS_NUM_DEVICES, 0);
-	if (minor == IPU_PSYS_NUM_DEVICES) {
+	id = find_next_zero_bit(ipu_psys_devices, IPU_PSYS_NUM_DEVICES, 0);
+	if (id == IPU_PSYS_NUM_DEVICES) {
 		dev_err(&adev->dev, "too many devices\n");
 		goto out_unlock;
 	}
@@ -632,6 +591,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 		goto out_unlock;
 	}
 
+	psys->id = id;
 	psys->adev = adev;
 	psys->pdata = adev->pdata;
 	psys->icache_prefetch_sp = 0;
@@ -640,17 +600,6 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	ipu_trace_init(adev->isp, psys->pdata->base, &adev->dev,
 		       psys_trace_blocks);
-
-	cdev_init(&psys->cdev, &ipu_psys_fops);
-	psys->cdev.owner = ipu_psys_fops.owner;
-
-	rval = cdev_add(&psys->cdev, MKDEV(MAJOR(ipu_psys_dev_t), minor), 1);
-	if (rval) {
-		dev_err(&adev->dev, "cdev_add failed (%d)\n", rval);
-		goto out_unlock;
-	}
-
-	set_bit(minor, ipu_psys_devices);
 
 	spin_lock_init(&psys->ready_lock);
 	spin_lock_init(&psys->pgs_lock);
@@ -729,9 +678,8 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	psys->dev.parent = &adev->dev;
 	psys->dev.bus = &ipu_psys_bus;
-	psys->dev.devt = MKDEV(MAJOR(ipu_psys_dev_t), minor);
 	psys->dev.release = ipu_psys_dev_release;
-	dev_set_name(&psys->dev, "ipu-psys%d", minor);
+	dev_set_name(&psys->dev, "ipu-psys%d", id);
 	rval = device_register(&psys->dev);
 	if (rval < 0) {
 		dev_err(&psys->dev, "psys device_register failed\n");
@@ -747,6 +695,8 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 	pm_runtime_use_autosuspend(&psys->adev->dev);
 	pm_runtime_mark_last_busy(&psys->adev->dev);
 
+	set_bit(id, ipu_psys_devices);
+
 	mutex_unlock(&ipu_psys_mutex);
 
 #ifdef CONFIG_DEBUG_FS
@@ -756,14 +706,15 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	adev->isp->cpd_fw_reload = &cpd_fw_reload;
 
-	dev_info(&adev->dev, "psys probe minor: %d\n", minor);
+	dev_info(&adev->dev, "psys probe id: %d\n", id);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
 
-	rval = ipu_kcam_init(adev, minor);
+	rval = ipu_kcam_init(adev, id);
 	if (rval < 0) {
 		dev_err(&adev->dev, "kcam initialization failed\n");
-		goto out_release_fw_com;
+		put_device(&psys->dev);
+		return rval;
 	}
 
 	return 0;
@@ -780,7 +731,6 @@ out_free_pgs:
 	ipu_psys_resource_pool_cleanup(&psys->resource_pool_running);
 out_mutex_destroy:
 	mutex_destroy(&psys->mutex);
-	cdev_del(&psys->cdev);
 	if (psys->sched_cmd_thread) {
 		kthread_stop(psys->sched_cmd_thread);
 		psys->sched_cmd_thread = NULL;
@@ -835,8 +785,7 @@ static void ipu_psys_remove(struct ipu_bus_device *adev)
 
 	device_unregister(&psys->dev);
 
-	clear_bit(MINOR(psys->cdev.dev), ipu_psys_devices);
-	cdev_del(&psys->cdev);
+	clear_bit(psys->id, ipu_psys_devices);
 
 	mutex_unlock(&ipu_psys_mutex);
 
@@ -891,25 +840,13 @@ static struct ipu_bus_driver ipu_psys_driver = {
 
 static int __init ipu_psys_init(void)
 {
-	int rval = alloc_chrdev_region(&ipu_psys_dev_t, 0,
-				       IPU_PSYS_NUM_DEVICES, IPU_PSYS_NAME);
+	int rval = bus_register(&ipu_psys_bus);
 	if (rval) {
-		pr_err("can't alloc psys chrdev region (%d)\n", rval);
+		pr_warn("can't register psys bus (%d)\n", rval);
 		return rval;
 	}
 
-	rval = bus_register(&ipu_psys_bus);
-	if (rval) {
-		pr_warn("can't register psys bus (%d)\n", rval);
-		goto out_bus_register;
-	}
-
 	ipu_bus_register_driver(&ipu_psys_driver);
-
-	return rval;
-
-out_bus_register:
-	unregister_chrdev_region(ipu_psys_dev_t, IPU_PSYS_NUM_DEVICES);
 
 	return rval;
 }
@@ -918,7 +855,6 @@ static void __exit ipu_psys_exit(void)
 {
 	ipu_bus_unregister_driver(&ipu_psys_driver);
 	bus_unregister(&ipu_psys_bus);
-	unregister_chrdev_region(ipu_psys_dev_t, IPU_PSYS_NUM_DEVICES);
 }
 
 static const struct pci_device_id ipu_pci_tbl[] = {

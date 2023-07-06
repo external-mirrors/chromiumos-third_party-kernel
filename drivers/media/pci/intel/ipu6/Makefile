@@ -53,10 +53,6 @@ intel-ipu6-psys-objs			+= ipu-fw-resources.o \
 					   ipu6ep-fw-resources.o \
 					   ../ipu-fw-psys.o
 
-ifeq ($(CONFIG_COMPAT),y)
-intel-ipu6-psys-objs			+= ../ipu-psys-compat32.o
-endif
-
 intel-ipu6-psys-objs			+= ../ipu-kcam.o
 
 obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6-psys.o

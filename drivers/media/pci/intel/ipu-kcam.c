@@ -342,7 +342,7 @@ static struct cam_entity_ops kcam_entity_ops = {
 	.dmabuf_remove		= ipu_kcam_dmabuf_remove,
 };
 
-int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int minor)
+int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int id)
 {
 	struct cam_device *kcam;
 	struct cam_obj_entity *kcam_entity;
@@ -365,7 +365,7 @@ int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int minor)
 					  &kcam_entity_ops,
 					  U32_MAX >> 1,
 					  "PSYS%d",
-					  minor);
+					  id);
 	if (!kcam_entity) {
 		ret = -ENOMEM;
 		goto out_kcam_put;
@@ -374,7 +374,7 @@ int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int minor)
 	kcam_event = cam_event_register(kcam,
 					cam_entity_id(kcam_entity),
 					"PSYS%d",
-					minor);
+					id);
 
 	if (!kcam_event) {
 		ret = -ENOMEM;

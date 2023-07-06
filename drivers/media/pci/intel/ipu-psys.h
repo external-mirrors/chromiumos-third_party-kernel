@@ -4,7 +4,6 @@
 #ifndef IPU_PSYS_H
 #define IPU_PSYS_H
 
-#include <linux/cdev.h>
 #include <linux/workqueue.h>
 #include <linux/kref.h>
 
@@ -82,8 +81,8 @@ struct cam_obj_event;
 struct cam_obj_buffer;
 struct ipu_psys {
 	struct ipu_psys_capability caps;
-	struct cdev cdev;
 	struct device dev;
+	unsigned int id;
 
 	struct mutex mutex;	/* Psys various */
 	int ready; /* psys fw status */
@@ -196,13 +195,10 @@ struct ipu_psys_kbuffer {
 	size_t npages;
 };
 
-#define inode_to_ipu_psys(inode) \
-	container_of((inode)->i_cdev, struct ipu_psys, cdev)
-
-#ifdef CONFIG_COMPAT
-long ipu_psys_compat_ioctl32(struct file *file, unsigned int cmd,
-			     unsigned long arg);
-#endif
+static inline struct device *psys_to_device(struct ipu_psys *psys)
+{
+	return &psys->adev->auxdev.dev;
+}
 
 void ipu_psys_setup_hw(struct ipu_psys *psys);
 void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on);
