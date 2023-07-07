@@ -20,6 +20,29 @@
 #include "acp.h"
 #include "acp-dsp-offset.h"
 
+#define CLK5_CLK_PLL_PWR_REQ_N0		0X0006C2C0
+#define CLK5_SPLL_FIELD_2_N0		0X0006C114
+#define CLK5_CLK_PLL_REQ_N0		0X0006C0DC
+#define CLK5_CLK_DFSBYPASS_CONTR	0X0006C2C8
+#define CLK5_CLK_DFS_CNTL_N0		0X0006C1A4
+
+#define PLL_AUTO_STOP_REQ		BIT(4)
+#define PLL_AUTO_START_REQ		BIT(0)
+#define PLL_FRANCE_EN			BIT(4)
+#define EXIT_DPF_BYPASS_0		BIT(16)
+#define EXIT_DPF_BYPASS_1		BIT(17)
+#define CLK0_DIVIDER			0X30
+
+union clk5_pll_req_no {
+       struct {
+               u32 fb_mult_int : 9;
+               u32 reserved : 3;
+               u32 pll_spine_div : 4;
+               u32 gb_mult_frac : 16;
+       } bitfields, bits;
+       u32 clk5_pll_req_no_reg;
+};
+
 static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
 {
 	pci_write_config_dword(dev, 0x60, smn_addr);
@@ -34,6 +57,37 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
 	pci_read_config_dword(dev, 0x64, data);
 
 	return 0;
+}
+
+void master_clock_generate(struct acp_dev_data *adata)
+{
+	struct snd_sof_dev *sdev = adata->dev;
+	union clk5_pll_req_no clk5_pll;
+	u32 data;
+
+	/* Clk5 pll register values to get mclk as 196.6MHz*/
+	clk5_pll.bits.fb_mult_int = 0x31;
+	clk5_pll.bits.pll_spine_div = 0;
+	clk5_pll.bits.gb_mult_frac = 0x26E9;
+
+	snd_sof_dsp_write(sdev, ACP_DSP_BAR, 0x105c, 0x1);
+	smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, &data);
+	smn_write(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_STOP_REQ);
+
+	smn_read(adata->smn_dev, CLK5_SPLL_FIELD_2_N0, &data);
+	if (data & PLL_FRANCE_EN)
+		smn_write(adata->smn_dev, CLK5_SPLL_FIELD_2_N0, data | PLL_FRANCE_EN);
+
+	smn_write(adata->smn_dev, CLK5_CLK_PLL_REQ_N0, clk5_pll.clk5_pll_req_no_reg);
+
+	smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, &data);
+	smn_write(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_START_REQ);
+
+	smn_read(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, &data);
+	smn_write(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_0);
+	smn_write(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_1);
+
+	smn_write(adata->smn_dev, CLK5_CLK_DFS_CNTL_N0, CLK0_DIVIDER);
 }
 
 static void init_dma_descriptor(struct acp_dev_data *adata)
@@ -533,7 +587,7 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	sdev->debug_box.size = BOX_SIZE_1024;
 
 	acp_memory_init(sdev);
-
+	master_clock_generate(adata);
 	acp_dsp_stream_init(sdev);
 
 	return 0;
