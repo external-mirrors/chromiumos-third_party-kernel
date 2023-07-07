@@ -42,6 +42,13 @@ const struct dmi_system_id acp_quirk_table[] = {
 		},
 		.driver_data = (void *)TDM_MODE_ENABLE,
 	},
+	{
+		/* Google Myst */
+		.matches = {
+			DMI_EXACT_MATCH(DMI_PRODUCT_FAMILY, "Google_Myst"),
+		},
+		.driver_data = (void *)TDM_MODE_ENABLE,
+	},
 	{}
 };
 EXPORT_SYMBOL_GPL(acp_quirk_table);
