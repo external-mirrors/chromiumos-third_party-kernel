@@ -81,7 +81,6 @@ struct cam_obj_event;
 struct cam_obj_buffer;
 struct ipu_psys {
 	struct ipu_psys_capability caps;
-	struct device dev;
 	unsigned int id;
 
 	struct mutex mutex;	/* Psys various */

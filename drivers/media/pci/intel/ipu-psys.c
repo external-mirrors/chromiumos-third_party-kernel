@@ -66,10 +66,6 @@ static struct fw_init_task {
 
 static void ipu_psys_remove(struct ipu_bus_device *adev);
 
-static struct bus_type ipu_psys_bus = {
-	.name = IPU_PSYS_NAME,
-};
-
 struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size)
 {
 	struct ipu_psys_pg *kpg;
@@ -151,10 +147,6 @@ long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ipu_get_manifest);
-
-static void ipu_psys_dev_release(struct device *dev)
-{
-}
 
 #ifdef CONFIG_PM
 static int psys_runtime_pm_resume(struct device *dev)
@@ -631,7 +623,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	rval = ipu_psys_resource_pool_init(&psys->resource_pool_running);
 	if (rval < 0) {
-		dev_err(&psys->dev,
+		dev_err(&psys->adev->dev,
 			"unable to alloc process group resources\n");
 		goto out_mutex_destroy;
 	}
@@ -676,16 +668,6 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 		goto out_free_pgs;
 	}
 
-	psys->dev.parent = &adev->dev;
-	psys->dev.bus = &ipu_psys_bus;
-	psys->dev.release = ipu_psys_dev_release;
-	dev_set_name(&psys->dev, "ipu-psys%d", id);
-	rval = device_register(&psys->dev);
-	if (rval < 0) {
-		dev_err(&psys->dev, "psys device_register failed\n");
-		goto out_release_fw_com;
-	}
-
 	/* Add the hw stepping information to caps */
 	strlcpy(psys->caps.dev_model, IPU_MEDIA_DEV_MODEL_NAME,
 		sizeof(psys->caps.dev_model));
@@ -696,6 +678,12 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 	pm_runtime_mark_last_busy(&psys->adev->dev);
 
 	set_bit(id, ipu_psys_devices);
+
+	rval = ipu_kcam_init(adev, id);
+	if (rval < 0) {
+		dev_err(&adev->dev, "kcam initialization failed\n");
+		goto out_release;
+	}
 
 	mutex_unlock(&ipu_psys_mutex);
 
@@ -710,16 +698,10 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	ipu_mmu_hw_cleanup(adev->mmu);
 
-	rval = ipu_kcam_init(adev, id);
-	if (rval < 0) {
-		dev_err(&adev->dev, "kcam initialization failed\n");
-		put_device(&psys->dev);
-		return rval;
-	}
-
 	return 0;
 
-out_release_fw_com:
+out_release:
+	clear_bit(psys->id, ipu_psys_devices);
 	ipu_fw_com_release(psys->fwcom, 1);
 out_free_pgs:
 	list_for_each_entry_safe(kpg, kpg0, &psys->pgs, list) {
@@ -783,8 +765,6 @@ static void ipu_psys_remove(struct ipu_bus_device *adev)
 
 	ipu_psys_resource_pool_cleanup(&psys->resource_pool_running);
 
-	device_unregister(&psys->dev);
-
 	clear_bit(psys->id, ipu_psys_devices);
 
 	mutex_unlock(&ipu_psys_mutex);
@@ -825,7 +805,7 @@ static irqreturn_t psys_isr_threaded(struct ipu_bus_device *adev)
 	return status ? IRQ_HANDLED : IRQ_NONE;
 }
 
-static struct ipu_bus_driver ipu_psys_driver = {
+static struct ipu_bus_driver psys_driver = {
 	.probe = ipu_psys_probe,
 	.remove = ipu_psys_remove,
 	.isr_threaded = psys_isr_threaded,
@@ -838,24 +818,7 @@ static struct ipu_bus_driver ipu_psys_driver = {
 	},
 };
 
-static int __init ipu_psys_init(void)
-{
-	int rval = bus_register(&ipu_psys_bus);
-	if (rval) {
-		pr_warn("can't register psys bus (%d)\n", rval);
-		return rval;
-	}
-
-	ipu_bus_register_driver(&ipu_psys_driver);
-
-	return rval;
-}
-
-static void __exit ipu_psys_exit(void)
-{
-	ipu_bus_unregister_driver(&ipu_psys_driver);
-	bus_unregister(&ipu_psys_bus);
-}
+module_ipu_bus_driver(psys_driver);
 
 static const struct pci_device_id ipu_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6_PCI_ID)},
@@ -867,9 +830,6 @@ static const struct pci_device_id ipu_pci_tbl[] = {
 	{0,}
 };
 MODULE_DEVICE_TABLE(pci, ipu_pci_tbl);
-
-module_init(ipu_psys_init);
-module_exit(ipu_psys_exit);
 
 MODULE_AUTHOR("Antti Laakso <antti.laakso@intel.com>");
 MODULE_AUTHOR("Bin Han <bin.b.han@intel.com>");

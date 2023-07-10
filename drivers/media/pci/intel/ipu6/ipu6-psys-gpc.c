@@ -160,7 +160,8 @@ int ipu_psys_gpc_init_debugfs(struct ipu_psys *psys)
 	char gpcname[10];
 	struct ipu_psys_gpcs *psys_gpcs;
 
-	psys_gpcs = devm_kzalloc(&psys->dev, sizeof(*psys_gpcs), GFP_KERNEL);
+	psys_gpcs = devm_kzalloc(&psys->adev->dev, sizeof(*psys_gpcs),
+				 GFP_KERNEL);
 	if (!psys_gpcs)
 		return -ENOMEM;
 
