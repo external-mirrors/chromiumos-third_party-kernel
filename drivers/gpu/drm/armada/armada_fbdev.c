@@ -143,6 +143,8 @@ int armada_fbdev_init(struct drm_device *dev)
 		goto err_fb_setup;
 	}
 
+	drm_client_register(&fbh->client);
+
 	return 0;
  err_fb_setup:
 	drm_fb_helper_fini(fbh);
