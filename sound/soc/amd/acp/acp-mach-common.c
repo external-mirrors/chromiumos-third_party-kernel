@@ -32,7 +32,7 @@
 #define DUAL_CHANNEL	2
 #define FOUR_CHANNEL	4
 
-#define TDM_MODE_ENABLE 1
+#define TDM_MODE_ENABLE 0
 
 const struct dmi_system_id acp_quirk_table[] = {
 	{
@@ -405,6 +405,20 @@ static int acp_card_rt5682s_hw_params(struct snd_pcm_substream *substream,
 		dev_err(rtd->dev, "Failed to set codec SYSCLK: %d\n", ret);
 		return ret;
 	}
+	ret = snd_soc_dai_set_pll(codec_dai, RT5682S_PLL1, RT5682S_PLL_S_BCLK1,
+				  1536000, RT5682_PLL_FREQ);
+	if (ret < 0) {
+		dev_err(rtd->dev, "Failed to set codec PLL: %d\n", ret);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_sysclk(codec_dai, RT5682S_SCLK_S_PLL1,
+				      RT5682_PLL_FREQ, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(rtd->dev, "Failed to set codec SYSCLK: %d\n", ret);
+		return ret;
+	}
+
 
 	/* Set tdm/i2s1 master bclk ratio */
 	ret = snd_soc_dai_set_bclk_ratio(codec_dai, ch * format);
@@ -828,6 +842,12 @@ static struct snd_soc_dai_link_component platform_rmb_component[] = {
 	}
 };
 
+static struct snd_soc_dai_link_component platform_phx_component[] = {
+	{
+		.name = "acp_asoc_phoenix.0",
+	}
+};
+
 static struct snd_soc_dai_link_component sof_component[] = {
 	{
 		 .name = "0000:04:00.5",
@@ -1113,7 +1133,10 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		links[i].id = HEADSET_BE_ID;
 		links[i].cpus = i2s_hs;
 		links[i].num_cpus = ARRAY_SIZE(i2s_hs);
-		if (drv_data->platform == REMBRANDT) {
+		if (drv_data->platform == PHOENIX) {
+			links[i].platforms = platform_phx_component;
+			links[i].num_platforms = ARRAY_SIZE(platform_phx_component);
+		} else if (drv_data->platform == REMBRANDT) {
 			links[i].platforms = platform_rmb_component;
 			links[i].num_platforms = ARRAY_SIZE(platform_rmb_component);
 		} else {
@@ -1177,7 +1200,10 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		links[i].id = AMP_BE_ID;
 		links[i].cpus = i2s_hs;
 		links[i].num_cpus = ARRAY_SIZE(i2s_hs);
-		if (drv_data->platform == REMBRANDT) {
+		if (drv_data->platform == PHOENIX) {
+			links[i].platforms = platform_phx_component;
+			links[i].num_platforms = ARRAY_SIZE(platform_phx_component);
+		} else if (drv_data->platform == REMBRANDT) {
 			links[i].platforms = platform_rmb_component;
 			links[i].num_platforms = ARRAY_SIZE(platform_rmb_component);
 		} else {
@@ -1220,7 +1246,10 @@ int acp_legacy_dai_links_create(struct snd_soc_card *card)
 		}
 		links[i].cpus = pdm_dmic;
 		links[i].num_cpus = ARRAY_SIZE(pdm_dmic);
-		if (drv_data->platform == REMBRANDT) {
+		if (drv_data->platform == PHOENIX) {
+			links[i].platforms = platform_phx_component;
+			links[i].num_platforms = ARRAY_SIZE(platform_phx_component);
+		} else if (drv_data->platform == REMBRANDT) {
 			links[i].platforms = platform_rmb_component;
 			links[i].num_platforms = ARRAY_SIZE(platform_rmb_component);
 		} else {
