@@ -1,0 +1,459 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
+//
+// This file is provided under a dual BSD/GPLv2 license. When using or
+// redistributing this file, you may do so under either license.
+//
+// Copyright(c) 2022 Advanced Micro Devices, Inc.
+//
+// Authors: Ajit Kumar Pandey <AjitKumar.Pandey@amd.com>
+//          V sujith kumar Reddy <Vsujithkumar.Reddy@amd.com>
+/*
+ * Hardware interface for Phoenix ACP block
+ */
+
+#include <linux/platform_device.h>
+#include <linux/module.h>
+#include <linux/err.h>
+#include <linux/io.h>
+#include <sound/pcm_params.h>
+#include <sound/soc.h>
+#include <sound/soc-dai.h>
+#include <linux/dma-mapping.h>
+#include <linux/pci.h>
+
+#include "amd.h"
+
+#define DRV_NAME "acp_asoc_phoenix"
+
+#define ACP6X_PGFSM_CONTROL			0x1024
+#define ACP6X_PGFSM_STATUS			0x1028
+
+#define ACP_SOFT_RESET_SOFTRESET_AUDDONE_MASK	0x00010001
+
+#define ACP_PGFSM_CNTL_POWER_ON_MASK		0x01
+#define ACP_PGFSM_CNTL_POWER_OFF_MASK		0x00
+#define ACP_PGFSM_STATUS_MASK			0x03
+#define ACP_POWERED_ON				0x00
+#define ACP_POWER_ON_IN_PROGRESS		0x01
+#define ACP_POWERED_OFF				0x02
+#define ACP_POWER_OFF_IN_PROGRESS		0x03
+
+#define ACP_ERROR_MASK				0x20000000
+#define ACP_EXT_INTR_STAT_CLEAR_MASK		0xFFFFFFFF
+
+#define CLK5_CLK_PLL_PWR_REQ_N0         0X0006C2C0
+#define CLK5_SPLL_FIELD_2_N0            0X0006C114
+#define CLK5_CLK_PLL_REQ_N0             0X0006C0DC
+#define CLK5_CLK_DFSBYPASS_CONTR        0X0006C2C8
+#define CLK5_CLK_DFS_CNTL_N0            0X0006C1A4
+
+#define PLL_AUTO_STOP_REQ               BIT(4)
+#define PLL_AUTO_START_REQ              BIT(0)
+#define PLL_FRANCE_EN                   BIT(4)
+#define EXIT_DPF_BYPASS_0               BIT(16)
+#define EXIT_DPF_BYPASS_1               BIT(17)
+#define CLK0_DIVIDER                    0X30
+
+union clk5_pll_req_no {
+        struct {
+                u32 fb_mult_int : 9;
+                u32 reserved : 3;
+                u32 pll_spine_div : 4;
+                u32 gb_mult_frac : 16;
+        } bitfields, bits;
+u32 clk5_pll_req_no_reg;
+};
+
+
+static int phx_acp_init(void __iomem *base);
+static int phx_acp_deinit(void __iomem *base);
+
+static struct acp_resource rsrc = {
+	.offset = 0,
+	.no_of_ctrls = 2,
+	.irqp_used = 1,
+	.soc_mclk = true,
+	.irq_reg_offset = 0x1a00,
+	.i2s_pin_cfg_offset = 0x1440,
+	.i2s_mode = 0x0a,
+	.scratch_reg_offset = 0x12800,
+	.sram_pte_offset = 0x03802800,
+};
+
+static struct snd_soc_acpi_codecs amp_rt1019 = {
+	.num_codecs = 1,
+	.codecs = {"10EC1019"}
+};
+
+static struct snd_soc_acpi_mach snd_soc_acpi_amd_phx_acp_machines[] = {
+	{
+		.id = "AMDI0007",
+		.drv_name = "phoenix-acp",
+	},
+	{
+		.id = "RTL5682",
+		.drv_name = "phx-rt5682s-rt1019",
+		.machine_quirk = snd_soc_acpi_codec_list,
+		.quirk_data = &amp_rt1019,
+	},
+	{},
+};
+
+static struct snd_soc_dai_driver acp_phx_dai[] = {
+{
+	.name = "acp-i2s-sp",
+	.id = I2S_SP_INSTANCE,
+	.playback = {
+		.stream_name = "I2S SP Playback",
+		.rates = SNDRV_PCM_RATE_8000_96000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8 |
+			   SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 8,
+		.rate_min = 8000,
+		.rate_max = 96000,
+	},
+	.capture = {
+		.stream_name = "I2S SP Capture",
+		.rates = SNDRV_PCM_RATE_8000_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8 |
+			   SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 2,
+		.rate_min = 8000,
+		.rate_max = 48000,
+	},
+	.ops = &asoc_acp_cpu_dai_ops,
+	.probe = &asoc_acp_i2s_probe,
+},
+{
+	.name = "acp-i2s-bt",
+	.id = I2S_BT_INSTANCE,
+	.playback = {
+		.stream_name = "I2S BT Playback",
+		.rates = SNDRV_PCM_RATE_8000_96000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8 |
+			   SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 8,
+		.rate_min = 8000,
+		.rate_max = 96000,
+	},
+	.capture = {
+		.stream_name = "I2S BT Capture",
+		.rates = SNDRV_PCM_RATE_8000_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8 |
+			   SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 2,
+		.rate_min = 8000,
+		.rate_max = 48000,
+	},
+	.ops = &asoc_acp_cpu_dai_ops,
+	.probe = &asoc_acp_i2s_probe,
+},
+{
+	.name = "acp-i2s-hs",
+	.id = I2S_HS_INSTANCE,
+	.playback = {
+		.stream_name = "I2S HS Playback",
+		.rates = SNDRV_PCM_RATE_8000_96000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8 |
+			   SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 8,
+		.rate_min = 8000,
+		.rate_max = 96000,
+	},
+	.capture = {
+		.stream_name = "I2S HS Capture",
+		.rates = SNDRV_PCM_RATE_8000_48000,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S8 |
+			   SNDRV_PCM_FMTBIT_U8 | SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 8,
+		.rate_min = 8000,
+		.rate_max = 48000,
+	},
+	.ops = &asoc_acp_cpu_dai_ops,
+	.probe = &asoc_acp_i2s_probe,
+},
+{
+	.name = "acp-pdm-dmic",
+	.id = DMIC_INSTANCE,
+	.capture = {
+		.rates = SNDRV_PCM_RATE_8000_48000,
+		.formats = SNDRV_PCM_FMTBIT_S32_LE,
+		.channels_min = 2,
+		.channels_max = 2,
+		.rate_min = 8000,
+		.rate_max = 48000,
+	},
+	.ops = &acp_dmic_dai_ops,
+},
+};
+
+static int acp6x_power_on(void __iomem *base)
+{
+	u32 val;
+	int timeout;
+
+	val = readl(base + ACP6X_PGFSM_STATUS);
+
+	if (val == ACP_POWERED_ON)
+		return 0;
+
+	if ((val & ACP_PGFSM_STATUS_MASK) !=
+				ACP_POWER_ON_IN_PROGRESS)
+		writel(ACP_PGFSM_CNTL_POWER_ON_MASK,
+		       base + ACP6X_PGFSM_CONTROL);
+	timeout = 0;
+	while (++timeout < 500) {
+		val = readl(base + ACP6X_PGFSM_STATUS);
+		if (!val)
+			return 0;
+		udelay(1);
+	}
+	return -ETIMEDOUT;
+}
+
+static int acp6x_power_off(void __iomem *base)
+{
+	u32 val;
+	int timeout;
+
+	writel(ACP_PGFSM_CNTL_POWER_OFF_MASK,
+	       base + ACP6X_PGFSM_CONTROL);
+	timeout = 0;
+	while (++timeout < 500) {
+		val = readl(base + ACP6X_PGFSM_STATUS);
+		if ((val & ACP_PGFSM_STATUS_MASK) == ACP_POWERED_OFF)
+			return 0;
+		udelay(1);
+	}
+	return -ETIMEDOUT;
+}
+
+static int acp6x_reset(void __iomem *base)
+{
+	u32 val;
+	int timeout;
+
+	writel(1, base + ACP_SOFT_RESET);
+	timeout = 0;
+	while (++timeout < 500) {
+		val = readl(base + ACP_SOFT_RESET);
+		if (val & ACP_SOFT_RESET_SOFTRESET_AUDDONE_MASK)
+			break;
+		cpu_relax();
+	}
+	writel(0, base + ACP_SOFT_RESET);
+	timeout = 0;
+	while (++timeout < 500) {
+		val = readl(base + ACP_SOFT_RESET);
+		if (!val)
+			return 0;
+		cpu_relax();
+	}
+	return -ETIMEDOUT;
+}
+static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
+{
+	pci_write_config_dword(dev, 0x60, smn_addr);
+	pci_write_config_dword(dev, 0x64, data);
+
+	return 0;
+}
+
+static int smn_read(struct pci_dev *dev, u32 smn_addr)
+{
+	u32 data;
+	pci_write_config_dword(dev, 0x60, smn_addr);
+	pci_read_config_dword(dev, 0x64, &data);
+
+	return data;
+}
+
+void acp63_master_clock_generate(struct acp_dev_data *adata)
+{
+        u32 data;
+        union clk5_pll_req_no clk5_pll;
+        struct pci_dev *smn_dev;
+
+        smn_dev = pci_get_device(PCI_VENDOR_ID_AMD, 0x14E8, NULL);
+        if (!smn_dev) {
+                pr_err("sujith Failed to get host bridge device\n");
+                return;
+        }
+        /* Clk5 pll register values to get mclk as 196.6MHz*/
+        clk5_pll.bits.fb_mult_int = 0x31;
+        clk5_pll.bits.pll_spine_div = 0;
+        clk5_pll.bits.gb_mult_frac = 0x26E9;
+
+        data = smn_read(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0);
+        smn_write(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_STOP_REQ);
+
+        data = smn_read(smn_dev, CLK5_SPLL_FIELD_2_N0);
+        if (data & PLL_FRANCE_EN)
+                smn_write(smn_dev, CLK5_SPLL_FIELD_2_N0, data | PLL_FRANCE_EN);
+
+        smn_write(smn_dev, CLK5_CLK_PLL_REQ_N0, clk5_pll.clk5_pll_req_no_reg);
+
+        data = smn_read(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0);
+        smn_write(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_START_REQ);
+
+        data = smn_read(smn_dev, CLK5_CLK_DFSBYPASS_CONTR);
+        smn_write(smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_0);
+        smn_write(smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_1);
+
+        smn_write(smn_dev, CLK5_CLK_DFS_CNTL_N0, CLK0_DIVIDER);
+}
+
+static void acp6x_enable_interrupts(struct acp_dev_data *adata)
+{
+	struct acp_resource *rsrc = adata->rsrc;
+	u32 ext_intr_ctrl;
+
+	writel(0x01, ACP_EXTERNAL_INTR_ENB(adata));
+	ext_intr_ctrl = readl(ACP_EXTERNAL_INTR_CNTL(adata, rsrc->irqp_used));
+	ext_intr_ctrl |= ACP_ERROR_MASK;
+	writel(ext_intr_ctrl, ACP_EXTERNAL_INTR_CNTL(adata, rsrc->irqp_used));
+	writel(0x01, adata->acp_base + 0x105C);
+}
+
+static void acp6x_disable_interrupts(struct acp_dev_data *adata)
+{
+	struct acp_resource *rsrc = adata->rsrc;
+
+	writel(ACP_EXT_INTR_STAT_CLEAR_MASK,
+	       ACP_EXTERNAL_INTR_STAT(adata, rsrc->irqp_used));
+	writel(0x00, ACP_EXTERNAL_INTR_ENB(adata));
+}
+
+static int phx_acp_init(void __iomem *base)
+{
+	int ret;
+
+	/* power on */
+	ret = acp6x_power_on(base);
+	if (ret) {
+		pr_err("ACP power on failed\n");
+		return ret;
+	}
+	writel(0x01, base + ACP_CONTROL);
+
+	/* Reset */
+	ret = acp6x_reset(base);
+	if (ret) {
+		pr_err("ACP reset failed\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int phx_acp_deinit(void __iomem *base)
+{
+	int ret = 0;
+
+	/* Reset */
+	ret = acp6x_reset(base);
+	if (ret) {
+		pr_err("ACP reset failed\n");
+		return ret;
+	}
+
+	writel(0x00, base + ACP_CONTROL);
+
+	/* power off */
+	ret = acp6x_power_off(base);
+	if (ret) {
+		pr_err("ACP power off failed\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int phoenix_audio_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct acp_chip_info *chip;
+	struct acp_dev_data *adata;
+	struct resource *res;
+
+	chip = dev_get_platdata(&pdev->dev);
+	if (!chip || !chip->base) {
+		dev_err(&pdev->dev, "ACP chip data is NULL\n");
+		return -ENODEV;
+	}
+
+	if (chip->acp_rev != ACP63X_DEV) {
+		dev_err(&pdev->dev, "Un-supported ACP Revision %d\n", chip->acp_rev);
+		return -ENODEV;
+	}
+
+	phx_acp_init(chip->base);
+
+	adata = devm_kzalloc(dev, sizeof(struct acp_dev_data), GFP_KERNEL);
+	if (!adata)
+		return -ENOMEM;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "acp_mem");
+	if (!res) {
+		dev_err(&pdev->dev, "IORESOURCE_MEM FAILED\n");
+		return -ENODEV;
+	}
+
+	adata->acp_base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (!adata->acp_base)
+		return -ENOMEM;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ, "acp_dai_irq");
+	if (!res) {
+		dev_err(&pdev->dev, "IORESOURCE_IRQ FAILED\n");
+		return -ENODEV;
+	}
+
+	adata->i2s_irq = res->start;
+	adata->dev = dev;
+	adata->dai_driver = acp_phx_dai;
+	adata->num_dai = ARRAY_SIZE(acp_phx_dai);
+	adata->rsrc = &rsrc;
+
+	adata->machines = snd_soc_acpi_amd_phx_acp_machines;
+	acp_machine_select(adata);
+
+	dev_set_drvdata(dev, adata);
+	acp6x_enable_interrupts(adata);
+	acp_platform_register(dev);
+
+	return 0;
+}
+
+static void phoenix_audio_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct acp_dev_data *adata = dev_get_drvdata(dev);
+	struct acp_chip_info *chip = dev_get_platdata(dev);
+
+	phx_acp_deinit(chip->base);
+
+	acp6x_disable_interrupts(adata);
+	acp_platform_unregister(dev);
+}
+
+static struct platform_driver phoenix_driver = {
+	.probe = phoenix_audio_probe,
+	.remove_new = phoenix_audio_remove,
+	.driver = {
+		.name = "acp_asoc_phoenix",
+	},
+};
+
+module_platform_driver(phoenix_driver);
+
+MODULE_DESCRIPTION("AMD ACP Phoenix Driver");
+MODULE_IMPORT_NS(SND_SOC_ACP_COMMON);
+MODULE_LICENSE("Dual BSD/GPL");
+MODULE_ALIAS("platform:" DRV_NAME);
