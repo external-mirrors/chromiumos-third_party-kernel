@@ -2145,7 +2145,7 @@ regular_page:
 
 static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned long nr_to_try)
 {
-	struct vm_area_struct *start, *next, *vma;
+	struct vm_area_struct *start, *vma;
 	struct mm_walk_ops reclaim_walk = {
 		.pmd_entry = reclaim_pte_range,
 	};
@@ -2167,40 +2167,35 @@ static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned lo
 		start_idx = get_random_u32() % mm->map_count;
 		for (; start_idx && start; start_idx--)
 			start = find_vma(mm, start->vm_end);
-		BUG_ON(!start);
 	}
+	BUG_ON(!start);
 
-	for (vma = start, next = find_vma(mm, vma->vm_end); vma && next != start;
-	    (vma = next ? next :
-	    /* Only loop around if we didn't start at mm->mmap. */
-	    (start != find_vma(mm, 0) ? find_vma(mm, 0) : NULL)),
-	    (next = vma ? find_vma(mm, vma->vm_end) : NULL)) {
-		if (!reclaim_data.nr_to_try)
-			break;
+	vma = start;
+	while (reclaim_data.nr_to_try) {
 		if (is_vm_hugetlb_page(vma))
-			continue;
+			goto next;
 
 		if (vma->vm_flags & VM_LOCKED)
-			continue;
+			goto next;
 
 		if (type == RECLAIM_ANON && !vma_is_anonymous(vma))
-			continue;
+			goto next;
 		if ((type == RECLAIM_FILE || type == RECLAIM_SHMEM)
 				&& vma_is_anonymous(vma)) {
-			continue;
+			goto next;
 		}
 
 		if (vma_is_anonymous(vma) || shmem_file(vma->vm_file)) {
 			if (get_nr_swap_pages() <= 0 ||
 				get_mm_counter(mm, MM_ANONPAGES) == 0) {
 				if (type == RECLAIM_ALL)
-					continue;
+					goto next;
 				else
 					break;
 			}
 
 			if (shmem_file(vma->vm_file) && type != RECLAIM_SHMEM)
-				continue;
+				goto next;
 
 			reclaim_walk.pmd_entry = reclaim_pte_range;
 		} else {
@@ -2229,6 +2224,15 @@ static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned lo
 			walk_page_range(mm, vma->vm_start, vma->vm_end,
 			    &reclaim_walk, (void *)&reclaim_data);
 		}
+
+next:
+		vma = find_vma(mm, vma->vm_end);
+		if (!vma)
+			vma = find_vma(mm, 0);
+
+		/* Already walked through all of them. */
+		if (vma == start)
+			break;
 	}
 
 	flush_tlb_mm(mm);
