@@ -376,7 +376,7 @@ int evdi_fbdev_init(struct drm_device *dev)
 		return -ENOMEM;
 
 	evdi->fbdev = efbdev;
-	drm_fb_helper_prepare(dev, &efbdev->helper, &evdi_fb_helper_funcs);
+	drm_fb_helper_prepare(dev, &efbdev->helper, 32, &evdi_fb_helper_funcs);
 
 	ret = drm_fb_helper_init(dev, &efbdev->helper);
 	if (ret) {
@@ -385,7 +385,7 @@ int evdi_fbdev_init(struct drm_device *dev)
 	}
 
 
-	ret = drm_fb_helper_initial_config(&efbdev->helper, 32);
+	ret = drm_fb_helper_initial_config(&efbdev->helper);
 
 	if (ret) {
 		drm_fb_helper_fini(&efbdev->helper);
