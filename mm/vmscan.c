@@ -5907,15 +5907,6 @@ unlock:
  *                          sysfs interface
  ******************************************************************************/
 
-static int run_aging(struct lruvec *lruvec, unsigned long seq, struct scan_control *sc,
-		     bool can_swap, bool force_scan);
-
-static int run_eviction(struct lruvec *lruvec, unsigned long seq, struct scan_control *sc,
-			int swappiness, unsigned long nr_to_reclaim);
-
-static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
-		   struct scan_control *sc, int swappiness, unsigned long opt);
-
 static ssize_t min_ttl_ms_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	return sysfs_emit(buf, "%u\n", jiffies_to_msecs(READ_ONCE(lru_gen_min_ttl)));
@@ -6076,6 +6067,9 @@ static ssize_t show_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *a
 
 	return buf_len;
 }
+
+static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
+		   struct scan_control *sc, int swappiness, unsigned long opt);
 
 static ssize_t store_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *attr,
 				const char *src, size_t len)
