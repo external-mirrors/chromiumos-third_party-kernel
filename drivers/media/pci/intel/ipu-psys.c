@@ -661,11 +661,10 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 		schedule_delayed_work((struct delayed_work *)&fw_init_task, 0);
 	} else {
 		rval = ipu_psys_fw_init(psys);
-	}
-
-	if (rval) {
-		dev_err(&adev->dev, "FW init failed(%d)\n", rval);
-		goto out_free_pgs;
+		if (rval) {
+			dev_err(&adev->dev, "FW init failed(%d)\n", rval);
+			goto out_free_pgs;
+		}
 	}
 
 	/* Add the hw stepping information to caps */
