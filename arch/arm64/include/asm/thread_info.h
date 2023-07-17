@@ -55,13 +55,16 @@ struct thread_info {
 };
 
 #ifdef CONFIG_ALT_SYSCALL
+typedef long (*syscall_fn_t)(const struct pt_regs *regs);
 #ifdef CONFIG_COMPAT
+extern const syscall_fn_t compat_sys_call_table[];
 #define INIT_THREAD_INFO_SYSCALL_COMPAT				\
 	.compat_nr_syscalls	= __NR_compat_syscalls,		\
 	.compat_sys_call_table	= &compat_sys_call_table,
 #else
 #define INIT_THREAD_INFO_SYSCALL_COMPAT
 #endif
+extern const syscall_fn_t sys_call_table[];
 #define INIT_THREAD_INFO_SYSCALL				\
 	.nr_syscalls		= __NR_syscalls,		\
 	.sys_call_table		= &sys_call_table,		\
