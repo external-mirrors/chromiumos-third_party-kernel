@@ -64,7 +64,7 @@ static struct fw_init_task {
 	struct ipu_psys *psys;
 } fw_init_task;
 
-static void ipu_psys_remove(struct ipu_bus_device *adev);
+static void ipu_psys_remove(struct auxiliary_device *auxdev);
 
 struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size)
 {
@@ -85,7 +85,7 @@ struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size)
 	if (!kpg)
 		return NULL;
 
-	kpg->pg = dma_alloc_attrs(&psys->adev->dev, pg_size,
+	kpg->pg = dma_alloc_attrs(psys_to_device(psys), pg_size,
 				  &kpg->pg_dma_addr, GFP_KERNEL, 0);
 	if (!kpg->pg) {
 		kfree(kpg);
@@ -116,14 +116,14 @@ long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 
 	entries = ipu_cpd_pkg_dir_get_num_entries(psys->pkg_dir);
 	if (!manifest || manifest->index > entries - 1) {
-		dev_err(&psys->adev->dev, "invalid argument\n");
+		dev_err(psys_to_device(psys), "invalid argument\n");
 		return -EINVAL;
 	}
 
 	if (!ipu_cpd_pkg_dir_get_size(psys->pkg_dir, manifest->index) ||
 	    ipu_cpd_pkg_dir_get_type(psys->pkg_dir, manifest->index) <
 	    IPU_CPD_PKG_DIR_CLIENT_PG_TYPE) {
-		dev_dbg(&psys->adev->dev, "invalid pkg dir entry\n");
+		dev_dbg(psys_to_device(psys), "invalid pkg dir entry\n");
 		return -ENOENT;
 	}
 
@@ -140,7 +140,7 @@ long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 	if (copy_to_user(manifest->manifest,
 			 (uint8_t *)client_pkg + client_pkg->pg_manifest_offs,
 			 manifest->size)) {
-		dev_err(&psys->adev->dev, "copy_to_user error");
+		dev_err(psys_to_device(psys), "copy_to_user error");
 		return -EFAULT;
 	}
 
@@ -159,6 +159,10 @@ static int psys_runtime_pm_resume(struct device *dev)
 	if (!psys)
 		return 0;
 
+	retval  = ipu_buttress_power(dev, adev->ctrl, true);
+	if (retval)
+		goto out_back_to_suspend;
+
 	/*
 	 * In runtime autosuspend mode, if the psys is in power on state, no
 	 * need to resume again.
@@ -172,7 +176,7 @@ static int psys_runtime_pm_resume(struct device *dev)
 
 	retval = ipu_mmu_hw_init(adev->mmu);
 	if (retval)
-		return retval;
+		goto out_back_to_suspend;
 
 	if (async_fw_init && !psys->fwcom) {
 		dev_err(dev,
@@ -189,7 +193,7 @@ static int psys_runtime_pm_resume(struct device *dev)
 	ipu_psys_setup_hw(psys);
 
 	ipu_psys_subdomains_power(psys, 1);
-	ipu_trace_restore(&psys->adev->dev);
+	ipu_trace_restore(psys_to_device(psys));
 
 	ipu_configure_spc(adev->isp,
 			  &psys->pdata->ipdata->hw_variant,
@@ -199,8 +203,8 @@ static int psys_runtime_pm_resume(struct device *dev)
 
 	retval = ipu_fw_psys_open(psys);
 	if (retval) {
-		dev_err(&psys->adev->dev, "Failed to open abi.\n");
-		return retval;
+		dev_err(psys_to_device(psys), "Failed to open abi.\n");
+		goto out_back_to_suspend;
 	}
 
 	spin_lock_irqsave(&psys->ready_lock, flags);
@@ -208,6 +212,11 @@ static int psys_runtime_pm_resume(struct device *dev)
 	spin_unlock_irqrestore(&psys->ready_lock, flags);
 
 	return 0;
+
+out_back_to_suspend:
+	ipu_buttress_power(dev, adev->ctrl, false);
+
+	return retval;
 }
 
 static int psys_runtime_pm_suspend(struct device *dev)
@@ -239,6 +248,12 @@ static int psys_runtime_pm_suspend(struct device *dev)
 	ipu_psys_subdomains_power(psys, 0);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
+
+	rval = ipu_buttress_power(dev, adev->ctrl, false);
+	if (rval) {
+		psys_runtime_pm_resume(dev);
+		return rval;
+	}
 
 	return 0;
 }
@@ -514,7 +529,7 @@ static int ipu_psys_fw_init(struct ipu_psys *psys)
 	if (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP || ipu_ver == IPU_VER_6EP_MTL)
 		size = IPU6_FW_PSYS_N_PSYS_CMD_QUEUE_ID;
 
-	queue_cfg = devm_kzalloc(&psys->adev->dev, sizeof(*queue_cfg) * size,
+	queue_cfg = devm_kzalloc(psys_to_device(psys), sizeof(*queue_cfg) * size,
 				 GFP_KERNEL);
 	if (!queue_cfg)
 		return -ENOMEM;
@@ -530,7 +545,7 @@ static int ipu_psys_fw_init(struct ipu_psys *psys)
 
 	psys->fwcom = ipu_fw_com_prepare(&fwcom, psys->adev, psys->pdata->base);
 	if (!psys->fwcom) {
-		dev_err(&psys->adev->dev, "psys fw com prepare failed\n");
+		dev_err(psys_to_device(psys), "psys fw com prepare failed\n");
 		return -EIO;
 	}
 
@@ -546,38 +561,40 @@ static void run_fw_init_work(struct work_struct *work)
 	rval = ipu_psys_fw_init(psys);
 
 	if (rval) {
-		dev_err(&psys->adev->dev, "FW init failed(%d)\n", rval);
-		ipu_psys_remove(psys->adev);
+		dev_err(psys_to_device(psys), "FW init failed(%d)\n", rval);
+		ipu_psys_remove(&psys->adev->auxdev);
 	} else {
-		dev_info(&psys->adev->dev, "FW init done\n");
+		dev_info(psys_to_device(psys), "FW init done\n");
 	}
 }
 
-static int ipu_psys_probe(struct ipu_bus_device *adev)
+static int ipu_psys_probe(struct auxiliary_device *auxdev,
+			  const struct auxiliary_device_id *auxid)
 {
+	struct ipu_bus_device *adev = container_of(auxdev, struct ipu_bus_device, auxdev);
 	struct ipu_device *isp = adev->isp;
 	struct ipu_psys_pg *kpg, *kpg0;
 	struct ipu_psys *psys;
 	unsigned int id;
 	int i, rval = -E2BIG;
 
-	/* firmware is not ready, so defer the probe */
-	if (!isp->pkg_dir)
-		return -EPROBE_DEFER;
+	rval = ipu_buttress_power(&auxdev->dev, adev->ctrl, true);
+	if (rval)
+		return rval;
 
 	rval = ipu_mmu_hw_init(adev->mmu);
 	if (rval)
-		return rval;
+		goto out_power_off;
 
 	mutex_lock(&ipu_psys_mutex);
 
 	id = find_next_zero_bit(ipu_psys_devices, IPU_PSYS_NUM_DEVICES, 0);
 	if (id == IPU_PSYS_NUM_DEVICES) {
-		dev_err(&adev->dev, "too many devices\n");
+		dev_err(&auxdev->dev, "too many devices\n");
 		goto out_unlock;
 	}
 
-	psys = devm_kzalloc(&adev->dev, sizeof(*psys), GFP_KERNEL);
+	psys = devm_kzalloc(&auxdev->dev, sizeof(*psys), GFP_KERNEL);
 	if (!psys) {
 		rval = -ENOMEM;
 		goto out_unlock;
@@ -590,7 +607,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	psys->power_gating = 0;
 
-	ipu_trace_init(adev->isp, psys->pdata->base, &adev->dev,
+	ipu_trace_init(adev->isp, psys->pdata->base, &auxdev->dev,
 		       psys_trace_blocks);
 
 	spin_lock_init(&psys->ready_lock);
@@ -623,9 +640,34 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	rval = ipu_psys_resource_pool_init(&psys->resource_pool_running);
 	if (rval < 0) {
-		dev_err(&psys->adev->dev,
+		dev_err(&auxdev->dev,
 			"unable to alloc process group resources\n");
 		goto out_mutex_destroy;
+	}
+
+	rval = ipu_buttress_map_fw_image(isp->psys, isp->cpd_fw,
+					 &isp->fw_sgt);
+	if (rval) {
+		dev_err(&auxdev->dev, "failed to map fw image\n");
+		goto out_pool_cleanup;
+	}
+
+	isp->pkg_dir = ipu_cpd_create_pkg_dir(isp->psys,
+					      isp->cpd_fw->data,
+					      sg_dma_address(isp->fw_sgt.sgl),
+					      &isp->pkg_dir_dma_addr,
+					      &isp->pkg_dir_size);
+	if (!isp->pkg_dir) {
+		rval = -ENOMEM;
+		dev_err(&auxdev->dev, "failed to create pkg dir\n");
+		goto out_fw_unmap;
+	}
+
+	rval = ipu_buttress_authenticate(isp);
+	if (rval) {
+		dev_err(&auxdev->dev, "FW authentication failed(%d)\n",
+			rval);
+		goto out_fw_unmap;
 	}
 
 	ipu6_psys_hw_res_variant_init();
@@ -639,7 +681,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 		kpg = kzalloc(sizeof(*kpg), GFP_KERNEL);
 		if (!kpg)
 			goto out_free_pgs;
-		kpg->pg = dma_alloc_attrs(&adev->dev,
+		kpg->pg = dma_alloc_attrs(&auxdev->dev,
 					  IPU_PSYS_PG_MAX_SIZE,
 					  &kpg->pg_dma_addr,
 					  GFP_KERNEL, 0);
@@ -653,7 +695,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	psys->caps.pg_count = ipu_cpd_pkg_dir_get_num_entries(psys->pkg_dir);
 
-	dev_info(&adev->dev, "pkg_dir entry count:%d\n", psys->caps.pg_count);
+	dev_info(&auxdev->dev, "pkg_dir entry count:%d\n", psys->caps.pg_count);
 	if (async_fw_init) {
 		INIT_DELAYED_WORK((struct delayed_work *)&fw_init_task,
 				  run_fw_init_work);
@@ -662,7 +704,7 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 	} else {
 		rval = ipu_psys_fw_init(psys);
 		if (rval) {
-			dev_err(&adev->dev, "FW init failed(%d)\n", rval);
+			dev_err(&auxdev->dev, "FW init failed(%d)\n", rval);
 			goto out_free_pgs;
 		}
 	}
@@ -671,16 +713,11 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 	strlcpy(psys->caps.dev_model, IPU_MEDIA_DEV_MODEL_NAME,
 		sizeof(psys->caps.dev_model));
 
-	pm_runtime_set_autosuspend_delay(&psys->adev->dev,
-					 IPU_PSYS_AUTOSUSPEND_DELAY);
-	pm_runtime_use_autosuspend(&psys->adev->dev);
-	pm_runtime_mark_last_busy(&psys->adev->dev);
-
 	set_bit(id, ipu_psys_devices);
 
 	rval = ipu_kcam_init(adev, id);
 	if (rval < 0) {
-		dev_err(&adev->dev, "kcam initialization failed\n");
+		dev_err(&auxdev->dev, "kcam initialization failed\n");
 		goto out_release;
 	}
 
@@ -693,23 +730,40 @@ static int ipu_psys_probe(struct ipu_bus_device *adev)
 
 	adev->isp->cpd_fw_reload = &cpd_fw_reload;
 
-	dev_info(&adev->dev, "psys probe id: %d\n", id);
+	dev_info(&auxdev->dev, "psys probe id: %d\n", id);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
+
+	rval = ipu_buttress_power(&auxdev->dev, adev->ctrl, false);
+	if (rval)
+		return rval;
+
+	pm_runtime_enable(&auxdev->dev);
+	pm_runtime_set_autosuspend_delay(&auxdev->dev,
+					 IPU_PSYS_AUTOSUSPEND_DELAY);
+	pm_runtime_use_autosuspend(&auxdev->dev);
+	pm_runtime_mark_last_busy(&auxdev->dev);
 
 	return 0;
 
 out_release:
 	clear_bit(psys->id, ipu_psys_devices);
-	ipu_fw_com_release(psys->fwcom, 1);
+	if (!async_fw_init)
+		ipu_fw_com_release(psys->fwcom, 1);
+
 out_free_pgs:
 	list_for_each_entry_safe(kpg, kpg0, &psys->pgs, list) {
-		dma_free_attrs(&adev->dev, kpg->size, kpg->pg,
+		dma_free_attrs(&auxdev->dev, kpg->size, kpg->pg,
 			       kpg->pg_dma_addr, 0);
 		kfree(kpg);
 	}
 
+out_fw_unmap:
+	ipu_buttress_unmap_fw_image(isp->psys, &isp->fw_sgt);
+
+out_pool_cleanup:
 	ipu_psys_resource_pool_cleanup(&psys->resource_pool_running);
+
 out_mutex_destroy:
 	mutex_destroy(&psys->mutex);
 	if (psys->sched_cmd_thread) {
@@ -718,16 +772,20 @@ out_mutex_destroy:
 	}
 out_unlock:
 	/* Safe to call even if the init is not called */
-	ipu_trace_uninit(&adev->dev);
+	ipu_trace_uninit(&auxdev->dev);
 	mutex_unlock(&ipu_psys_mutex);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
 
+out_power_off:
+	ipu_buttress_power(&auxdev->dev, adev->ctrl, false);
+
 	return rval;
 }
 
-static void ipu_psys_remove(struct ipu_bus_device *adev)
+static void ipu_psys_remove(struct auxiliary_device *auxdev)
 {
+	struct ipu_bus_device *adev = container_of(auxdev, struct ipu_bus_device, auxdev);
 	struct ipu_device *isp = adev->isp;
 	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
 	struct ipu_psys_pg *kpg, *kpg0;
@@ -744,23 +802,33 @@ static void ipu_psys_remove(struct ipu_bus_device *adev)
 		psys->sched_cmd_thread = NULL;
 	}
 
-	pm_runtime_dont_use_autosuspend(&psys->adev->dev);
+	pm_runtime_dont_use_autosuspend(&auxdev->dev);
+	pm_runtime_disable(&auxdev->dev);
 
 	mutex_lock(&ipu_psys_mutex);
 
 	list_for_each_entry_safe(kpg, kpg0, &psys->pgs, list) {
-		dma_free_attrs(&adev->dev, kpg->size, kpg->pg,
+		dma_free_attrs(&auxdev->dev, kpg->size, kpg->pg,
 			       kpg->pg_dma_addr, 0);
 		kfree(kpg);
 	}
 
 	if (psys->fwcom && ipu_fw_com_release(psys->fwcom, 1))
-		dev_err(&adev->dev, "fw com release failed.\n");
+		dev_err(&auxdev->dev, "fw com release failed.\n");
 
 	kfree(psys->server_init);
 	kfree(psys->syscom_config);
 
-	ipu_trace_uninit(&adev->dev);
+	ipu_trace_uninit(&auxdev->dev);
+
+	ipu_cpd_free_pkg_dir(isp->psys, isp->pkg_dir, isp->pkg_dir_dma_addr,
+			     isp->pkg_dir_size);
+
+	ipu_buttress_unmap_fw_image(isp->psys, &isp->fw_sgt);
+
+	isp->pkg_dir = NULL;
+	isp->pkg_dir_dma_addr = 0;
+	isp->pkg_dir_size = 0;
 
 	ipu_psys_resource_pool_cleanup(&psys->resource_pool_running);
 
@@ -770,7 +838,7 @@ static void ipu_psys_remove(struct ipu_bus_device *adev)
 
 	mutex_destroy(&psys->mutex);
 
-	dev_info(&adev->dev, "removed\n");
+	dev_info(&auxdev->dev, "removed\n");
 }
 
 static irqreturn_t psys_isr_threaded(struct ipu_bus_device *adev)
@@ -782,7 +850,7 @@ static irqreturn_t psys_isr_threaded(struct ipu_bus_device *adev)
 
 	mutex_lock(&psys->mutex);
 #ifdef CONFIG_PM
-	r = pm_runtime_get_if_in_use(&psys->adev->dev);
+	r = pm_runtime_get_if_in_use(&adev->auxdev.dev);
 	if (!r || WARN_ON_ONCE(r < 0)) {
 		mutex_unlock(&psys->mutex);
 		return IRQ_NONE;
@@ -797,38 +865,43 @@ static irqreturn_t psys_isr_threaded(struct ipu_bus_device *adev)
 		ipu_psys_handle_events(psys);
 	}
 
-	pm_runtime_mark_last_busy(&psys->adev->dev);
-	pm_runtime_put_autosuspend(&psys->adev->dev);
+	pm_runtime_mark_last_busy(&adev->auxdev.dev);
+	pm_runtime_put_autosuspend(&adev->auxdev.dev);
 	mutex_unlock(&psys->mutex);
 
 	return status ? IRQ_HANDLED : IRQ_NONE;
 }
 
+const struct auxiliary_device_id psys_id_table[] = {
+	{ .name = KBUILD_MODNAME ".psys", },
+	{ },
+};
+
 static struct ipu_bus_driver psys_driver = {
-	.probe = ipu_psys_probe,
-	.remove = ipu_psys_remove,
 	.isr_threaded = psys_isr_threaded,
-	.wanted = IPU_PSYS_NAME,
-	.drv = {
-		.name = IPU_PSYS_NAME,
-		.owner = THIS_MODULE,
-		.pm = PSYS_PM_OPS,
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+	.auxdrv = {
+		.name = "psys",
+		.id_table = psys_id_table,
+		.probe = ipu_psys_probe,
+		.remove = ipu_psys_remove,
+		.driver = {
+			.pm = PSYS_PM_OPS,
+			.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		},
 	},
 };
 
-module_ipu_bus_driver(psys_driver);
+int register_psys_driver(void)
+{
+	return auxiliary_driver_register(&psys_driver.auxdrv);
+}
+EXPORT_SYMBOL(register_psys_driver);
 
-static const struct pci_device_id ipu_pci_tbl[] = {
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6SE_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_P_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_N_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_RPL_P_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_MTL_PCI_ID)},
-	{0,}
-};
-MODULE_DEVICE_TABLE(pci, ipu_pci_tbl);
+void unregister_psys_driver(void)
+{
+	return auxiliary_driver_unregister(&psys_driver.auxdrv);
+}
+EXPORT_SYMBOL(unregister_psys_driver);
 
 MODULE_AUTHOR("Antti Laakso <antti.laakso@intel.com>");
 MODULE_AUTHOR("Bin Han <bin.b.han@intel.com>");

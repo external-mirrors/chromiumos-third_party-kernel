@@ -63,9 +63,9 @@ static int ipu6_psys_gpc_global_enable_set(void *data, u64 val)
 
 	base = psys->pdata->base + IPU_GPC_BASE;
 
-	res = pm_runtime_get_sync(&psys->adev->dev);
+	res = pm_runtime_get_sync(psys_to_device(psys));
 	if (res < 0) {
-		pm_runtime_put(&psys->adev->dev);
+		pm_runtime_put(psys_to_device(psys));
 		mutex_unlock(&psys->mutex);
 		return res;
 	}
@@ -81,8 +81,8 @@ static int ipu6_psys_gpc_global_enable_set(void *data, u64 val)
 			psys_gpcs->gpc[idx].route = 0;
 			psys_gpcs->gpc[idx].source = 0;
 		}
-		pm_runtime_mark_last_busy(&psys->adev->dev);
-		pm_runtime_put_autosuspend(&psys->adev->dev);
+		pm_runtime_mark_last_busy(psys_to_device(psys));
+		pm_runtime_put_autosuspend(psys_to_device(psys));
 	} else {
 		/* Set gpc reg and start all gpc here.
 		 * RST free running local timer.
@@ -134,9 +134,9 @@ static int ipu6_psys_gpc_count_get(void *data, u64 *val)
 
 	base = psys->pdata->base + IPU_GPC_BASE;
 
-	res = pm_runtime_get_sync(&psys->adev->dev);
+	res = pm_runtime_get_sync(psys_to_device(psys));
 	if (res < 0) {
-		pm_runtime_put(&psys->adev->dev);
+		pm_runtime_put(psys_to_device(psys));
 		mutex_unlock(&psys->mutex);
 		return res;
 	}
@@ -160,7 +160,7 @@ int ipu_psys_gpc_init_debugfs(struct ipu_psys *psys)
 	char gpcname[10];
 	struct ipu_psys_gpcs *psys_gpcs;
 
-	psys_gpcs = devm_kzalloc(&psys->adev->dev, sizeof(*psys_gpcs),
+	psys_gpcs = devm_kzalloc(psys_to_device(psys), sizeof(*psys_gpcs),
 				 GFP_KERNEL);
 	if (!psys_gpcs)
 		return -ENOMEM;

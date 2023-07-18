@@ -23,7 +23,7 @@ int ipu_fw_psys_pg_disown(struct ipu_psys_pg *pg, struct ipu_psys *psys)
 
 	psys_cmd = ipu_send_get_token(psys->fwcom, 0);
 	if (!psys_cmd) {
-		dev_err(&psys->adev->dev,
+		dev_err(psys_to_device(psys),
 			"%s failed to get token!\n", __func__);
 		ret = -ENODATA;
 		goto out;
@@ -45,7 +45,7 @@ int ipu_fw_psys_ppg_suspend(struct ipu_psys_ppg *ppg, struct ipu_psys *psys)
 	/* ppg suspend cmd uses QUEUE_DEVICE_ID instead of QUEUE_COMMAND_ID */
 	psys_cmd = ipu_send_get_token(psys->fwcom, 1);
 	if (!psys_cmd) {
-		dev_err(&psys->adev->dev,
+		dev_err(psys_to_device(psys),
 			"%s failed to get token!\n", __func__);
 		ret = -ENODATA;
 		goto out;
@@ -66,7 +66,7 @@ int ipu_fw_psys_ppg_resume(struct ipu_psys_ppg *ppg, struct ipu_psys *psys)
 
 	psys_cmd = ipu_send_get_token(psys->fwcom, 0);
 	if (!psys_cmd) {
-		dev_err(&psys->adev->dev,
+		dev_err(psys_to_device(psys),
 			"%s failed to get token!\n", __func__);
 		ret = -ENODATA;
 		goto out;
@@ -87,7 +87,7 @@ int ipu_fw_psys_pg_abort(struct ipu_psys_pg *pg, struct ipu_psys *psys)
 
 	psys_cmd = ipu_send_get_token(psys->fwcom, 0);
 	if (!psys_cmd) {
-		dev_err(&psys->adev->dev,
+		dev_err(psys_to_device(psys),
 			"%s failed to get token!\n", __func__);
 		ret = -ENODATA;
 		goto out;
@@ -154,7 +154,7 @@ int ipu_fw_psys_terminal_set(struct ipu_fw_psys_terminal *terminal,
 		buffer_state = IPU_FW_PSYS_BUFFER_EMPTY;
 		break;
 	default:
-		dev_err(&instance->psys->adev->dev,
+		dev_err(psys_to_device(instance->psys),
 			"unknown terminal type: 0x%x\n", type);
 		return -EAGAIN;
 	}
@@ -271,7 +271,7 @@ int ipu_fw_psys_ppg_set_buffer_set(struct ipu_psys_kcmd *kcmd,
 		buffer_state = IPU_FW_PSYS_BUFFER_EMPTY;
 		break;
 	default:
-		dev_err(&instance->psys->adev->dev,
+		dev_err(psys_to_device(instance->psys),
 			"unknown terminal type: 0x%x\n", type);
 		return -EAGAIN;
 	}
@@ -365,7 +365,7 @@ int ipu_fw_psys_ppg_enqueue_bufs(struct ipu_psys_kcmd *kcmd)
 	instance = cam_instance_driver_data(kcmd->kcam_instance);
 	psys_cmd = ipu_send_get_token(instance->psys->fwcom, queue_id);
 	if (!psys_cmd) {
-		dev_err(&instance->psys->adev->dev,
+		dev_err(psys_to_device(instance->psys),
 			"%s failed to get token!\n", __func__);
 		kcmd->pg_user = NULL;
 		return -ENODATA;
@@ -396,7 +396,7 @@ int ipu_fw_psys_open(struct ipu_psys *psys)
 
 	retval = ipu_fw_com_open(psys->fwcom);
 	if (retval) {
-		dev_err(&psys->adev->dev, "fw com open failed.\n");
+		dev_err(psys_to_device(psys), "fw com open failed.\n");
 		return retval;
 	}
 
@@ -405,13 +405,13 @@ int ipu_fw_psys_open(struct ipu_psys *psys)
 			     IPU_PSYS_OPEN_TIMEOUT_US + 10);
 		retval = ipu_fw_com_ready(psys->fwcom);
 		if (!retval) {
-			dev_dbg(&psys->adev->dev, "psys port open ready!\n");
+			dev_dbg(psys_to_device(psys), "psys port open ready!\n");
 			break;
 		}
 	} while (retry-- > 0);
 
 	if (!retry && retval) {
-		dev_err(&psys->adev->dev, "psys port open ready failed %d\n",
+		dev_err(psys_to_device(psys), "psys port open ready failed %d\n",
 			retval);
 		ipu_fw_com_close(psys->fwcom);
 		return retval;
@@ -425,7 +425,7 @@ int ipu_fw_psys_close(struct ipu_psys *psys)
 
 	retval = ipu_fw_com_close(psys->fwcom);
 	if (retval) {
-		dev_err(&psys->adev->dev, "fw com close failed.\n");
+		dev_err(psys_to_device(psys), "fw com close failed.\n");
 		return retval;
 	}
 	return retval;

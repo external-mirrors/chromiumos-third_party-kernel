@@ -436,7 +436,7 @@ int ipu6_isys_phy_powerup_ack(struct ipu_isys *isys, unsigned int phy_id)
 		usleep_range(100, 200);
 	}
 
-	dev_warn(&isys->adev->dev, "PHY%d powerup ack timeout", phy_id);
+	dev_warn(isys_to_device(isys), "PHY%d powerup ack timeout", phy_id);
 
 	return -ETIMEDOUT;
 }
@@ -455,7 +455,7 @@ int ipu6_isys_phy_powerdown_ack(struct ipu_isys *isys, unsigned int phy_id)
 			return 0;
 	}
 
-	dev_warn(&isys->adev->dev, "PHY %d poweroff ack timeout.\n", phy_id);
+	dev_warn(isys_to_device(isys), "PHY %d poweroff ack timeout.\n", phy_id);
 
 	return -ETIMEDOUT;
 }
@@ -485,14 +485,14 @@ int ipu6_isys_phy_ready(struct ipu_isys *isys, unsigned int phy_id)
 
 	for (i = 0; i < LOOP; i++) {
 		val = readl(isys_base + CSI_REG_HUB_GPREG_PHY_STATUS(phy_id));
-		dev_dbg(&isys->adev->dev, "PHY%d ready status 0x%x\n",
+		dev_dbg(isys_to_device(isys), "PHY%d ready status 0x%x\n",
 			phy_id, val);
 		if (val & CSI_REG_HUB_GPREG_PHY_STATUS_PHY_READY)
 			return 0;
 		usleep_range(10, 20);
 	}
 
-	dev_warn(&isys->adev->dev, "PHY%d ready timeout\n", phy_id);
+	dev_warn(isys_to_device(isys), "PHY%d ready timeout\n", phy_id);
 
 	return -ETIMEDOUT;
 }
@@ -501,7 +501,7 @@ int ipu6_isys_phy_common_init(struct ipu_isys *isys)
 {
 	unsigned int phy_id;
 	void __iomem *phy_base;
-	struct ipu_bus_device *adev = to_ipu_bus_device(&isys->adev->dev);
+	struct ipu_bus_device *adev = to_ipu_bus_device(isys_to_device(isys));
 	struct ipu_device *isp = adev->isp;
 	void __iomem *isp_base = isp->base;
 	struct v4l2_async_subdev *asd;
@@ -558,7 +558,7 @@ int ipu6_isys_phy_config(struct ipu_isys *isys)
 	int phy_port;
 	unsigned int phy_id;
 	void __iomem *phy_base;
-	struct ipu_bus_device *adev = to_ipu_bus_device(&isys->adev->dev);
+	struct ipu_bus_device *adev = to_ipu_bus_device(isys_to_device(isys));
 	struct ipu_device *isp = adev->isp;
 	void __iomem *isp_base = isp->base;
 	const struct phy_reg **phy_config_regs;
@@ -573,14 +573,14 @@ int ipu6_isys_phy_config(struct ipu_isys *isys)
 		cfg.nlanes = s_asd->csi2.nlanes;
 		phy_port = ipu6_isys_driver_port_to_phy_port(&cfg);
 		if (phy_port < 0) {
-			dev_err(&isys->adev->dev, "invalid port %d for lane %d",
+			dev_err(isys_to_device(isys), "invalid port %d for lane %d",
 				cfg.port, cfg.nlanes);
 			return -ENXIO;
 		}
 
 		phy_id = cfg.port / 4;
 		phy_base = isp_base + IPU6_ISYS_PHY_BASE(phy_id);
-		dev_dbg(&isys->adev->dev, "port%d PHY%u lanes %u\n",
+		dev_dbg(isys_to_device(isys), "port%d PHY%u lanes %u\n",
 			cfg.port, phy_id, cfg.nlanes);
 
 		phy_config_regs = config_regs[cfg.nlanes/2];

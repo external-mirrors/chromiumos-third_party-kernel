@@ -6,8 +6,10 @@
 
 #include <linux/workqueue.h>
 #include <linux/kref.h>
+#include <linux/auxiliary_bus.h>
 
 #include "ipu.h"
+#include "ipu-bus.h"
 #include "ipu-pdata.h"
 #include "ipu-fw-psys.h"
 #include "ipu-platform-psys.h"
@@ -223,4 +225,7 @@ long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 
 int ipu_psys_instance_init(struct ipu_kcam_psys_instance *instance);
 int ipu_psys_instance_deinit(struct ipu_kcam_psys_instance *instance);
+
+int register_psys_driver(void);
+void unregister_psys_driver(void);
 #endif /* IPU_PSYS_H */

@@ -206,7 +206,7 @@ static void csi2_be_set_ffmt(struct v4l2_subdev *sd,
 		return;
 	}
 	default:
-		dev_err(&csi2->isys->adev->dev, "Unknown pad type\n");
+		dev_err(isys_to_device(csi2->isys), "Unknown pad type\n");
 		WARN_ON(1);
 	}
 }
@@ -274,7 +274,7 @@ int ipu_isys_csi2_be_init(struct ipu_isys_csi2_be *csi2_be,
 	v4l2_set_subdevdata(&csi2_be->asd.sd, &csi2_be->asd);
 	rval = v4l2_device_register_subdev(&isys->v4l2_dev, &csi2_be->asd.sd);
 	if (rval) {
-		dev_info(&isys->adev->dev, "can't register v4l2 subdev\n");
+		dev_info(isys_to_device(isys), "can't register v4l2 subdev\n");
 		goto fail;
 	}
 
@@ -294,7 +294,7 @@ int ipu_isys_csi2_be_init(struct ipu_isys_csi2_be *csi2_be,
 	/* create v4l2 ctrl for csi-be video node */
 	rval = v4l2_ctrl_handler_init(&csi2_be->av.ctrl_handler, 0);
 	if (rval) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"failed to init v4l2 ctrl handler for csi2_be\n");
 		goto fail;
 	}
@@ -303,7 +303,7 @@ int ipu_isys_csi2_be_init(struct ipu_isys_csi2_be *csi2_be,
 		v4l2_ctrl_new_custom(&csi2_be->av.ctrl_handler,
 				     &compression_ctrl_cfg, NULL);
 	if (!csi2_be->av.compression_ctrl) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"failed to create CSI-BE cmprs ctrl\n");
 		goto fail;
 	}
@@ -313,7 +313,7 @@ int ipu_isys_csi2_be_init(struct ipu_isys_csi2_be *csi2_be,
 	rval = ipu_isys_video_init(&csi2_be->av, &csi2_be->asd.sd.entity,
 				   CSI2_BE_PAD_SOURCE, MEDIA_PAD_FL_SINK, 0);
 	if (rval) {
-		dev_info(&isys->adev->dev, "can't init video node\n");
+		dev_info(isys_to_device(isys), "can't init video node\n");
 		goto fail;
 	}
 

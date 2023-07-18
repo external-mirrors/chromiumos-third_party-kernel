@@ -260,12 +260,12 @@ void *ipu_fw_com_prepare(struct ipu_fw_com_cfg *cfg,
 
 	sizeall += sizeinput + sizeoutput;
 
-	ctx->dma_buffer = dma_alloc_attrs(&ctx->adev->dev, sizeall,
+	ctx->dma_buffer = dma_alloc_attrs(&ctx->adev->auxdev.dev, sizeall,
 					  &ctx->dma_addr, GFP_KERNEL,
 					  attrs);
 	ctx->attrs = attrs;
 	if (!ctx->dma_buffer) {
-		dev_err(&ctx->adev->dev, "failed to allocate dma memory\n");
+		dev_err(&ctx->adev->auxdev.dev, "failed to allocate dma memory\n");
 		kfree(ctx);
 		return NULL;
 	}
@@ -389,7 +389,7 @@ int ipu_fw_com_release(struct ipu_fw_com_context *ctx, unsigned int force)
 	if (!force && !ctx->cell_ready(ctx->adev))
 		return -EBUSY;
 
-	dma_free_attrs(&ctx->adev->dev, ctx->dma_size,
+	dma_free_attrs(&ctx->adev->auxdev.dev, ctx->dma_size,
 		       ctx->dma_buffer, ctx->dma_addr,
 		       ctx->attrs);
 	kfree(ctx);

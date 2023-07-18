@@ -528,14 +528,14 @@ int ipu_isys_subdev_link_validate(struct v4l2_subdev *sd,
 		 */
 		ip->external = link->source;
 		ip->source = to_ipu_isys_subdev(sd)->source;
-		dev_dbg(&asd->isys->adev->dev, "%s: using source %d\n",
+		dev_dbg(isys_to_device(asd->isys), "%s: using source %d\n",
 			sd->entity.name, ip->source);
 	} else if (source_sd->entity.num_pads == 1) {
 		/* All internal sources have a single pad. */
 		ip->external = link->source;
 		ip->source = to_ipu_isys_subdev(source_sd)->source;
 
-		dev_dbg(&asd->isys->adev->dev, "%s: using source %d\n",
+		dev_dbg(isys_to_device(asd->isys), "%s: using source %d\n",
 			sd->entity.name, ip->source);
 	}
 
@@ -597,19 +597,19 @@ int ipu_isys_subdev_init(struct ipu_isys_subdev *asd,
 	asd->nsources = num_source;
 	asd->nsinks = num_sink;
 
-	asd->pad = devm_kcalloc(&asd->isys->adev->dev, num_pads,
+	asd->pad = devm_kcalloc(isys_to_device(asd->isys), num_pads,
 				sizeof(*asd->pad), GFP_KERNEL);
 
-	asd->ffmt = devm_kcalloc(&asd->isys->adev->dev, num_pads,
+	asd->ffmt = devm_kcalloc(isys_to_device(asd->isys), num_pads,
 				 sizeof(*asd->ffmt), GFP_KERNEL);
 
-	asd->crop = devm_kcalloc(&asd->isys->adev->dev, num_pads,
+	asd->crop = devm_kcalloc(isys_to_device(asd->isys), num_pads,
 				 sizeof(*asd->crop), GFP_KERNEL);
 
-	asd->compose = devm_kcalloc(&asd->isys->adev->dev, num_pads,
+	asd->compose = devm_kcalloc(isys_to_device(asd->isys), num_pads,
 				    sizeof(*asd->compose), GFP_KERNEL);
 
-	asd->valid_tgts = devm_kcalloc(&asd->isys->adev->dev, num_pads,
+	asd->valid_tgts = devm_kcalloc(isys_to_device(asd->isys), num_pads,
 				       sizeof(*asd->valid_tgts), GFP_KERNEL);
 	if (!asd->pad || !asd->ffmt || !asd->crop || !asd->compose ||
 	    !asd->valid_tgts)

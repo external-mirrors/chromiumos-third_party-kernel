@@ -90,7 +90,7 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on)
 	u32 val;
 
 	/* power domain req */
-	dev_dbg(&psys->adev->dev, "power %s psys sub-domains",
+	dev_dbg(psys_to_device(psys), "power %s psys sub-domains",
 		on ? "UP" : "DOWN");
 	if (on)
 		writel(IPU_PSYS_SUBDOMAINS_POWER_MASK,
@@ -105,7 +105,7 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on)
 		val = readl(psys->adev->isp->base +
 			    IPU_PSYS_SUBDOMAINS_POWER_STATUS);
 		if (!(val & BIT(31))) {
-			dev_dbg(&psys->adev->dev,
+			dev_dbg(psys_to_device(psys),
 				"PS sub-domains req done with status 0x%x",
 				val);
 			break;
@@ -114,7 +114,7 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on)
 	} while (i < PSYS_SUBDOMAINS_STATUS_WAIT_COUNT);
 
 	if (i == PSYS_SUBDOMAINS_STATUS_WAIT_COUNT)
-		dev_warn(&psys->adev->dev, "Psys sub-domains %s req timeout!",
+		dev_warn(psys_to_device(psys), "Psys sub-domains %s req timeout!",
 			 on ? "UP" : "DOWN");
 }
 
@@ -357,7 +357,7 @@ ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 		if (kcmd->buffers[i].flags & IPU_BUFFER_FLAG_NO_FLUSH)
 			continue;
 
-		dma_sync_sg_for_device(&psys->adev->dev,
+		dma_sync_sg_for_device(psys_to_device(psys),
 				       psys_buf->dma_sgt->sgl,
 				       psys_buf->dma_sgt->orig_nents,
 				       DMA_BIDIRECTIONAL);
@@ -369,7 +369,7 @@ ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 
 error:
 	if (psys)
-		dev_err(&psys->adev->dev, "failed to copy cmd\n");
+		dev_err(psys_to_device(psys), "failed to copy cmd\n");
 
 	ipu_psys_kcmd_free(kcmd);
 
@@ -482,7 +482,7 @@ int ipu_psys_kcmd_start(struct ipu_psys *psys, struct ipu_psys_kcmd *kcmd)
 
 	ret = ipu_fw_psys_pg_start(kcmd->kpg);
 	if (ret) {
-		dev_err(&psys->adev->dev, "failed to start kcmd!\n");
+		dev_err(psys_to_device(psys), "failed to start kcmd!\n");
 		return ret;
 	}
 
@@ -492,7 +492,7 @@ int ipu_psys_kcmd_start(struct ipu_psys *psys, struct ipu_psys_kcmd *kcmd)
 	if (ret) {
 		if (ret == -ENODATA)
 			kcmd->pg_user = NULL;
-		dev_err(&psys->adev->dev, "failed to start kcmd!\n");
+		dev_err(psys_to_device(psys), "failed to start kcmd!\n");
 		return ret;
 	}
 
@@ -542,7 +542,7 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 
 	queue_id = ipu_psys_allocate_cmd_queue_resource(rpr);
 	if (queue_id == -ENOSPC) {
-		dev_err(&psys->adev->dev, "no available queue\n");
+		dev_err(psys_to_device(psys), "no available queue\n");
 		kfree(kppg->manifest);
 		kfree(kppg);
 		return -ENOMEM;
@@ -573,7 +573,7 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 	list_add(&kcmd->list, &kppg->kcmds_new_list);
 	mutex_unlock(&kppg->mutex);
 
-	dev_dbg(&psys->adev->dev,
+	dev_dbg(psys_to_device(psys),
 		"START ppg(%d, 0x%p) kcmd 0x%p, queue %d\n",
 		ipu_fw_psys_pg_get_id(kcmd->kpg), kppg, kcmd, queue_id);
 
@@ -606,13 +606,13 @@ static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 	kcmd->kpg->pg_size = 0;
 	spin_unlock_irqrestore(&psys->pgs_lock, flags);
 	if (!kppg) {
-		dev_err(&psys->adev->dev, "token not match\n");
+		dev_err(psys_to_device(psys), "token not match\n");
 		return -EINVAL;
 	}
 
 	kcmd->kpg = kppg->kpg;
 
-	dev_dbg(&psys->adev->dev, "%s ppg(%d, 0x%p) kcmd %p\n",
+	dev_dbg(psys_to_device(psys), "%s ppg(%d, 0x%p) kcmd %p\n",
 		(kcmd->state == KCMD_STATE_PPG_STOP) ?
 		"STOP" : "ENQUEUE",
 		ipu_fw_psys_pg_get_id(kcmd->kpg), kppg, kcmd);
@@ -620,12 +620,12 @@ static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 	if (kcmd->state == KCMD_STATE_PPG_STOP) {
 		mutex_lock(&kppg->mutex);
 		if (kppg->state == PPG_STATE_STOPPED) {
-			dev_dbg(&psys->adev->dev,
+			dev_dbg(psys_to_device(psys),
 				"kppg 0x%p  stopped!\n", kppg);
 			id = ipu_fw_psys_ppg_get_base_queue_id(kppg);
 			ipu_psys_free_cmd_queue_resource(rpr, id);
 			ipu_psys_kcmd_complete(kppg, kcmd, 0);
-			pm_runtime_put(&psys->adev->dev);
+			pm_runtime_put(psys_to_device(psys));
 			resche = false;
 		} else {
 			list_add(&kcmd->list, &kppg->kcmds_new_list);
@@ -671,7 +671,7 @@ int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
 
 	pg_size = ipu_fw_psys_pg_get_size(kcmd->kpg);
 	if (pg_size > kcmd->kpg->pg_size) {
-		dev_dbg(&adev->dev, "pg size mismatch %lu %lu\n",
+		dev_dbg(&adev->auxdev.dev, "pg size mismatch %lu %lu\n",
 			pg_size, kcmd->kpg->pg_size);
 		ret = -EINVAL;
 		goto error;
@@ -679,7 +679,7 @@ int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
 
 	if (ipu_fw_psys_pg_get_protocol(kcmd->kpg) !=
 			IPU_FW_PSYS_PROCESS_GROUP_PROTOCOL_PPG) {
-		dev_err(&adev->dev, "No support legacy pg now\n");
+		dev_err(&adev->auxdev.dev, "No support legacy pg now\n");
 		ret = -EINVAL;
 		goto error;
 	}
@@ -694,7 +694,7 @@ int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
 	if (ret)
 		goto error;
 
-	dev_dbg(&adev->dev,
+	dev_dbg(&adev->auxdev.dev,
 		"IOC_QCMD: user_token:%llx issue_id:0x%llx pri:%d\n",
 		cmd->user_token, cmd->issue_id, cmd->priority);
 
@@ -758,7 +758,8 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 		if (!event.context_handle)
 			break;
 
-		dev_dbg(&psys->adev->dev, "ppg event: 0x%x, %d, status %d\n",
+		dev_dbg(psys_to_device(psys),
+			"ppg event: 0x%x, %d, status %d\n",
 			event.context_handle, event.command, event.status);
 
 		error = false;
@@ -806,17 +807,17 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 				mutex_unlock(&kppg->mutex);
 			}
 		} else {
-			dev_err(&psys->adev->dev, "invalid event\n");
+			dev_err(psys_to_device(psys), "invalid event\n");
 			continue;
 		}
 
 		if (error || !kppg) {
-			dev_err(&psys->adev->dev, "event error, command %d\n",
+			dev_err(psys_to_device(psys), "event error, command %d\n",
 				cmd);
 			break;
 		}
 
-		dev_dbg(&psys->adev->dev, "event to kppg 0x%p, kcmd 0x%p\n",
+		dev_dbg(psys_to_device(psys), "event to kppg 0x%p, kcmd 0x%p\n",
 			kppg, kcmd);
 
 		ipu_psys_ppg_complete(psys, kppg);
@@ -842,13 +843,13 @@ int ipu_psys_instance_init(struct ipu_kcam_psys_instance *instance)
 	mutex_init(&sched->bs_mutex);
 	INIT_LIST_HEAD(&sched->buf_sets);
 	INIT_LIST_HEAD(&sched->ppgs);
-	pm_runtime_dont_use_autosuspend(&psys->adev->dev);
+	pm_runtime_dont_use_autosuspend(psys_to_device(psys));
 	/* allocate and map memory for buf_sets */
 	for (i = 0; i < IPU_PSYS_BUF_SET_POOL_SIZE; i++) {
 		kbuf_set = kzalloc(sizeof(*kbuf_set), GFP_KERNEL);
 		if (!kbuf_set)
 			goto out_free_buf_sets;
-		kbuf_set->kaddr = dma_alloc_attrs(&psys->adev->dev,
+		kbuf_set->kaddr = dma_alloc_attrs(psys_to_device(psys),
 						  IPU_PSYS_BUF_SET_MAX_SIZE,
 						  &kbuf_set->dma_addr,
 						  GFP_KERNEL,
@@ -866,7 +867,7 @@ int ipu_psys_instance_init(struct ipu_kcam_psys_instance *instance)
 out_free_buf_sets:
 	list_for_each_entry_safe(kbuf_set, kbuf_set_tmp,
 				 &sched->buf_sets, list) {
-		dma_free_attrs(&psys->adev->dev,
+		dma_free_attrs(psys_to_device(psys),
 			       kbuf_set->size, kbuf_set->kaddr,
 			       kbuf_set->dma_addr, 0);
 		list_del(&kbuf_set->list);
@@ -904,12 +905,12 @@ int ipu_psys_instance_deinit(struct ipu_kcam_psys_instance *instance)
 				ipu_psys_ppg_stop(kppg);
 				ipu_psys_free_resources(alloc, rpr);
 				ipu_psys_free_cmd_queue_resource(rpr, id);
-				dev_dbg(&psys->adev->dev,
-				    "s_change:%s %p %d -> %d\n", __func__,
-				    kppg, kppg->state, PPG_STATE_STOPPED);
+				dev_dbg(psys_to_device(psys),
+					"s_change:%s %p %d -> %d\n", __func__,
+					kppg, kppg->state, PPG_STATE_STOPPED);
 				kppg->state = PPG_STATE_STOPPED;
 				if (psys->power_gating != PSYS_POWER_GATED)
-					pm_runtime_put(&psys->adev->dev);
+					pm_runtime_put(psys_to_device(psys));
 			}
 			list_del(&kppg->list);
 			mutex_unlock(&kppg->mutex);
@@ -953,7 +954,7 @@ int ipu_psys_instance_deinit(struct ipu_kcam_psys_instance *instance)
 
 	mutex_lock(&sched->bs_mutex);
 	list_for_each_entry_safe(kbuf_set, kbuf_set0, &sched->buf_sets, list) {
-		dma_free_attrs(&psys->adev->dev,
+		dma_free_attrs(psys_to_device(psys),
 			       kbuf_set->size, kbuf_set->kaddr,
 			       kbuf_set->dma_addr, 0);
 		list_del(&kbuf_set->list);
@@ -990,7 +991,7 @@ ipu_get_completed_kcmd(struct ipu_kcam_psys_instance *instance)
 					struct ipu_psys_kcmd, list);
 		mutex_unlock(&kppg->mutex);
 		mutex_unlock(&instance->mutex);
-		dev_dbg(&instance->psys->adev->dev,
+		dev_dbg(psys_to_device(instance->psys),
 			"get completed kcmd 0x%p\n", kcmd);
 		return kcmd;
 	}
@@ -1005,7 +1006,7 @@ long ipu_ioctl_dqevent(struct ipu_psys_event *event,
 	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_kcmd *kcmd = NULL;
 
-	dev_dbg(&psys->adev->dev, "IOC_DQEVENT\n");
+	dev_dbg(psys_to_device(psys), "IOC_DQEVENT\n");
 
 	kcmd = ipu_get_completed_kcmd(instance);
 	if (!kcmd)

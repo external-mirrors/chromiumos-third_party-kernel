@@ -80,7 +80,7 @@ static void *ipu_kcam_instance_create(void *dev)
 
 	instance = kcam_psys_instance_open(psys);
 	if (IS_ERR(instance)) {
-		dev_err(&adev->dev, "kcam_psys_instance_open failed\n");
+		dev_err(&adev->auxdev.dev, "kcam_psys_instance_open failed\n");
 		return NULL;
 	}
 
@@ -212,7 +212,7 @@ static void *ipu_kcam_dmabuf_add(void *dev, struct dma_buf *dma_buf)
 			goto put_dma_buf;
 
 		buffer->dma_buf = dma_buf;
-		if (buffer_map(&adev->dev, buffer) < 0)
+		if (buffer_map(&adev->auxdev.dev, buffer) < 0)
 			goto put_dma_buf;
 
 		kref_init(&buffer->kref);
@@ -257,15 +257,13 @@ static int ipu_kcam_instance_read(void *dev,
 
 	switch (cmd) {
 	case IPU_IOC_QUERYCAP:
-		// dev_info(&adev->dev, "querycap\n");
 		karg.caps = psys_instance->psys->caps;
 		break;
 	case IPU_IOC_DQEVENT:
-		// dev_info(&adev->dev, "dqevent\n");
 		err = ipu_ioctl_dqevent(&karg.ev, psys_instance);
 		break;
 	default:
-		dev_err(&adev->dev, "unsupported reg for read %x\n", cmd);
+		dev_err(&adev->auxdev.dev, "unsupported reg for read %x\n", cmd);
 		err = -ENOTTY;
 	}
 
@@ -294,32 +292,30 @@ static int ipu_kcam_instance_write(void *dev,
 	int err = 0;
 
 	if (_IOC_SIZE(cmd) > sizeof(karg)) {
-		dev_err(&adev->dev, "instance_write: wrong argument size\n");
+		dev_err(&adev->auxdev.dev, "instance_write: wrong argument size\n");
 		return -ENOTTY;
 	}
 
 	if (_IOC_DIR(cmd) & _IOC_WRITE) {
 		err = copy_from_user(&karg, up, _IOC_SIZE(cmd));
 		if (err) {
-			dev_err(&adev->dev, "instance_write: copy from user error\n");
+			dev_err(&adev->auxdev.dev, "instance_write: copy from user error\n");
 			return -EFAULT;
 		}
 	}
 
 	switch (cmd) {
 	case IPU_IOC_QCMD:
-		// dev_info(&adev->dev, "qcmd\n");
 		err = ipu_psys_kcmd_new(&karg.cmd,
 					adev,
 					instance,
 					(struct cam_obj_buffer **)inst->buffers_list);
 		break;
 	case IPU_IOC_GET_MANIFEST:
-		// dev_info(&adev->dev, "getmanifest\n");
 		err = ipu_get_manifest(&karg.m, psys);
 		break;
 	default:
-		dev_err(&adev->dev, "unsupported reg for write\n");
+		dev_err(&adev->auxdev.dev, "unsupported reg for write\n");
 		err = -ENOTTY;
 	}
 
@@ -350,10 +346,10 @@ int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int id)
 	struct ipu_psys *psys;
 	int ret;
 
-	dev_info(&adev->dev, "adding kcam entity");
 	kcam = cam_device_get();
 	if (!kcam) {
-		dev_err(&adev->dev, "%s: kcam device initialization failed\n",
+		dev_err(&adev->auxdev.dev,
+			"%s: kcam device initialization failed\n",
 			__func__);
 		return -ENOMEM;
 	}
@@ -398,7 +394,6 @@ out_kcam_unregister_entity:
 out_kcam_put:
 	cam_ns_enumeration_permit(kcam);
 	cam_device_put(kcam);
-	dev_info(&adev->dev, "failure");
 	return ret;
 }
 

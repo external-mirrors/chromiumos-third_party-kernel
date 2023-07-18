@@ -69,7 +69,7 @@ static int ipu6_csi2_phy_power_set(struct ipu_isys *isys,
 	port = cfg->port;
 	phy_id = port / 4;
 	ref = &phy_power_ref_count[phy_id];
-	dev_dbg(&isys->adev->dev, "for phy %d port %d, lanes: %d\n",
+	dev_dbg(isys_to_device(isys), "for phy %d port %d, lanes: %d\n",
 		phy_id, port, cfg->nlanes);
 
 	nr = (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
@@ -77,14 +77,14 @@ static int ipu6_csi2_phy_power_set(struct ipu_isys *isys,
 		IPU6_ISYS_CSI_PORT_NUM : IPU6SE_ISYS_CSI_PORT_NUM;
 
 	if (!isys_base || port >= nr) {
-		dev_warn(&isys->adev->dev, "invalid port ID %d\n", port);
+		dev_warn(isys_to_device(isys), "invalid port ID %d\n", port);
 		return -EINVAL;
 	}
 
 	if (on) {
 		if (refcount_read(ref)) {
 			/* already up */
-			dev_warn(&isys->adev->dev, "for phy %d is already UP",
+			dev_warn(isys_to_device(isys), "for phy %d is already UP",
 				 phy_id);
 			refcount_inc(ref);
 			return 0;
@@ -114,7 +114,7 @@ static int ipu6_csi2_phy_power_set(struct ipu_isys *isys,
 	if (refcount_dec_and_test(ref))
 		ret = ipu6_isys_phy_powerdown_ack(isys, phy_id);
 	if (ret)
-		dev_err(&isys->adev->dev, "phy poweroff failed!");
+		dev_err(isys_to_device(isys), "phy poweroff failed!");
 
 	return ret;
 }
@@ -138,21 +138,21 @@ static int ipu6_csi2_dwc_phy_power_set(struct ipu_isys *isys,
 		IPU6_ISYS_CSI_PORT_NUM : IPU6SE_ISYS_CSI_PORT_NUM;
 
 	if (!isys_base || port >= nr) {
-		dev_warn(&isys->adev->dev, "invalid port ID %d\n", port);
+		dev_warn(isys_to_device(isys), "invalid port ID %d\n", port);
 		return -EINVAL;
 	}
 
 	nlanes = cfg->nlanes;
 	/* only port a/c/e support 4 lanes */
 	if (nlanes == 4 && port % 2) {
-		dev_err(&isys->adev->dev, "invalid csi-port %u with %u lanes\n",
+		dev_err(isys_to_device(isys), "invalid csi-port %u with %u lanes\n",
 			port, nlanes);
 		return -EINVAL;
 	}
 
 	ret = ipu_isys_csi2_get_link_freq(&isys->csi2[port], &link_freq);
 	if (ret) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"get link freq failed(%d).\n", ret);
 		return ret;
 	}
@@ -165,7 +165,7 @@ static int ipu6_csi2_dwc_phy_power_set(struct ipu_isys *isys,
 	secondary = primary + 1;
 	if (on) {
 		if (nlanes == 4) {
-			dev_dbg(&isys->adev->dev,
+			dev_dbg(isys_to_device(isys),
 				"config phy %u and %u in aggregation mode",
 				primary, secondary);
 
@@ -191,7 +191,7 @@ static int ipu6_csi2_dwc_phy_power_set(struct ipu_isys *isys,
 			return 0;
 		}
 
-		dev_dbg(&isys->adev->dev,
+		dev_dbg(isys_to_device(isys),
 			"config phy %u with %u lanes in non-aggr mode",
 			phy_id, nlanes);
 
@@ -208,7 +208,7 @@ static int ipu6_csi2_dwc_phy_power_set(struct ipu_isys *isys,
 	}
 
 	if (nlanes == 4) {
-		dev_dbg(&isys->adev->dev,
+		dev_dbg(isys_to_device(isys),
 			"Powerdown phy %u and phy %u for port %u",
 			primary, secondary, port);
 		ipu6_isys_dwc_phy_reset(isys, secondary);
@@ -217,7 +217,7 @@ static int ipu6_csi2_dwc_phy_power_set(struct ipu_isys *isys,
 		return 0;
 	}
 
-	dev_dbg(&isys->adev->dev,
+	dev_dbg(isys_to_device(isys),
 		"Powerdown phy %u with %u lanes", phy_id, nlanes);
 
 	ipu6_isys_dwc_phy_reset(isys, phy_id);
@@ -255,7 +255,7 @@ void ipu_isys_csi2_error(struct ipu_isys_csi2 *csi2)
 
 	for (i = 0; i < CSI_RX_NUM_ERRORS_IN_IRQ; i++) {
 		if (status & BIT(i))
-			dev_err_ratelimited(&csi2->isys->adev->dev,
+			dev_err_ratelimited(isys_to_device(csi2->isys),
 					    "csi2-%i error: %s\n",
 					    csi2->index,
 					    errors[i].error_string);
@@ -295,7 +295,7 @@ static int ipu_isys_csi2_phy_config_by_port(struct ipu_isys *isys,
 	u32 val, reg, i;
 	unsigned int bbnum;
 
-	dev_dbg(&isys->adev->dev, "%s port %u with %u lanes", __func__,
+	dev_dbg(isys_to_device(isys), "%s port %u with %u lanes", __func__,
 		port, nlanes);
 
 	/* hard code for x2x2 + x2x2 with <1.5Gbps */
@@ -390,12 +390,12 @@ static int ipu_isys_csi2_set_port_cfg(struct v4l2_subdev *sd, unsigned int port,
 		index = 1;
 		break;
 	default:
-		dev_err(&isys->adev->dev, "lanes nr %u is unsupported\n",
+		dev_err(isys_to_device(isys), "lanes nr %u is unsupported\n",
 			nlanes);
 		return -EINVAL;
 	}
 
-	dev_dbg(&isys->adev->dev, "port config for port %u with %u lanes\n",
+	dev_dbg(isys_to_device(isys), "port config for port %u with %u lanes\n",
 		port, nlanes);
 	writel(csi2_port_cfg[index][2],
 	       isys->pdata->base + CSI2_HUB_GPREG_SIP_FB_PORT_CFG(sip));
@@ -417,7 +417,7 @@ static void ipu_isys_csi2_set_timing(struct v4l2_subdev *sd,
 	port_base = (port % 2) ? CSI2_SIP_TOP_CSI_RX_PORT_BASE_1(port) :
 		CSI2_SIP_TOP_CSI_RX_PORT_BASE_0(port);
 
-	dev_dbg(&isys->adev->dev,
+	dev_dbg(isys_to_device(isys),
 		"set timing for port %u base 0x%x with %u lanes\n",
 		port, port_base, nlanes);
 
@@ -460,7 +460,7 @@ int ipu_isys_csi2_set_stream(struct v4l2_subdev *sd,
 	unsigned int i;
 
 	port = cfg->port;
-	dev_dbg(&isys->adev->dev, "for port %u with %u lanes\n", port, nlanes);
+	dev_dbg(isys_to_device(isys), "for port %u with %u lanes\n", port, nlanes);
 
 	mask = (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
 		ipu_ver == IPU_VER_6EP_MTL) ?
@@ -567,7 +567,7 @@ int ipu_isys_csi2_set_stream(struct v4l2_subdev *sd,
 		/* Enable DPHY power */
 		ret = ipu6_csi2_phy_power_set(isys, cfg, true);
 		if (ret) {
-			dev_err(&isys->adev->dev,
+			dev_err(isys_to_device(isys),
 				"CSI-%d PHY power up failed %d\n",
 				cfg->port, ret);
 			return ret;
@@ -576,7 +576,7 @@ int ipu_isys_csi2_set_stream(struct v4l2_subdev *sd,
 		/* Enable DWC DPHY power */
 		ret = ipu6_csi2_dwc_phy_power_set(isys, cfg, true);
 		if (ret) {
-			dev_err(&isys->adev->dev,
+			dev_err(isys_to_device(isys),
 				"CSI-%d DWC-PHY power up failed %d\n",
 				cfg->port, ret);
 			return ret;
@@ -636,9 +636,9 @@ unsigned int ipu_isys_csi2_get_current_field(struct ipu_isys_pipeline *ip,
 
 	/* Check if the first SOF packet is received. */
 	if ((ph->dtype & IPU_ISYS_SHORT_PACKET_DTYPE_MASK) != 0)
-		dev_warn(&isys->adev->dev, "First short packet is not SOF.\n");
+		dev_warn(isys_to_device(isys), "First short packet is not SOF.\n");
 	field = (ph->word_count % 2) ? V4L2_FIELD_TOP : V4L2_FIELD_BOTTOM;
-	dev_dbg(&isys->adev->dev,
+	dev_dbg(isys_to_device(isys),
 		"Interlaced field ready. frame_num = %d field = %d\n",
 		ph->word_count, field);
 

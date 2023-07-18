@@ -122,7 +122,7 @@ isys_complete_ext_device_registration(struct ipu_isys *isys,
 	}
 
 	if (i == sd->entity.num_pads) {
-		dev_warn(&isys->adev->dev,
+		dev_warn(isys_to_device(isys),
 			 "no source pad in external entity\n");
 		rval = -ENOENT;
 		goto skip_unregister_subdev;
@@ -132,7 +132,7 @@ isys_complete_ext_device_registration(struct ipu_isys *isys,
 				     &isys->csi2[csi2->port].asd.sd.entity,
 				     0, 0);
 	if (rval) {
-		dev_warn(&isys->adev->dev, "can't create link\n");
+		dev_warn(isys_to_device(isys), "can't create link\n");
 		goto skip_unregister_subdev;
 	}
 
@@ -179,7 +179,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 	unsigned int i, k;
 	int rval;
 
-	isys->csi2 = devm_kcalloc(&isys->adev->dev, csi2->nports,
+	isys->csi2 = devm_kcalloc(isys_to_device(isys), csi2->nports,
 				  sizeof(*isys->csi2), GFP_KERNEL);
 	if (!isys->csi2) {
 		rval = -ENOMEM;
@@ -197,7 +197,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 	}
 
 #ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	isys->tpg = devm_kcalloc(&isys->adev->dev, tpg->ntpgs,
+	isys->tpg = devm_kcalloc(isys_to_device(isys), tpg->ntpgs,
 				 sizeof(*isys->tpg), GFP_KERNEL);
 	if (!isys->tpg) {
 		rval = -ENOMEM;
@@ -219,7 +219,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 		rval = ipu_isys_csi2_be_soc_init(&isys->csi2_be_soc[k],
 						 isys, k);
 		if (rval) {
-			dev_info(&isys->adev->dev,
+			dev_info(isys_to_device(isys),
 				 "can't register csi2 soc be device %d\n", k);
 			goto fail;
 		}
@@ -227,7 +227,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 
 	rval = ipu_isys_csi2_be_init(&isys->csi2_be, isys);
 	if (rval) {
-		dev_info(&isys->adev->dev,
+		dev_info(isys_to_device(isys),
 			 "can't register raw csi2 be device\n");
 		goto fail;
 	}
@@ -238,7 +238,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 					     &isys->csi2_be.asd.sd.entity,
 					     CSI2_BE_PAD_SINK, 0);
 		if (rval) {
-			dev_info(&isys->adev->dev,
+			dev_info(isys_to_device(isys),
 				 "can't create link csi2 <=> csi2_be\n");
 			goto fail;
 		}
@@ -250,7 +250,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 						  &csi2_be_soc->asd.sd.entity,
 						  CSI2_BE_SOC_PAD_SINK, 0);
 			if (rval) {
-				dev_info(&isys->adev->dev,
+				dev_info(isys_to_device(isys),
 					 "can't create link csi2->be_soc\n");
 				goto fail;
 			}
@@ -264,7 +264,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 					     &isys->csi2_be.asd.sd.entity,
 					     CSI2_BE_PAD_SINK, 0);
 		if (rval) {
-			dev_info(&isys->adev->dev,
+			dev_info(isys_to_device(isys),
 				 "can't create link between tpg and csi2_be\n");
 			goto fail;
 		}
@@ -277,7 +277,7 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 						  &csi2_be_soc->asd.sd.entity,
 						  CSI2_BE_SOC_PAD_SINK, 0);
 			if (rval) {
-				dev_info(&isys->adev->dev,
+				dev_info(isys_to_device(isys),
 					 "can't create link tpg->be_soc\n");
 				goto fail;
 			}
@@ -316,7 +316,7 @@ static int set_iwake_register(struct ipu_isys *isys, u32 index, u32 value)
 
 	ret = ipu_fw_isys_send_proxy_token(isys, req_id, index, offset, value);
 	if (ret)
-		dev_err(&isys->adev->dev, "write %d failed %d", index, ret);
+		dev_err(isys_to_device(isys), "write %d failed %d", index, ret);
 
 	return ret;
 }
@@ -388,7 +388,7 @@ static void set_iwake_ltrdid(struct ipu_isys *isys,
 	fc.bits.ltr_scale = ltr_scale;
 	fc.bits.did_val = did_val;
 	fc.bits.did_scale = did_scale;
-	dev_dbg(&isys->adev->dev,
+	dev_dbg(isys_to_device(isys),
 		"%s ltr: %d  did: %d", __func__, ltr_val, did_val);
 	writel(fc.value, isp->base + IPU_BUTTRESS_FABIC_CONTROL);
 }
@@ -516,7 +516,7 @@ void update_watermark_setting(struct ipu_isys *isys)
 		mem_open_threshold = max_t(u32, MINIMUM_MEM_OPEN_THRESHOLD,
 					   page_num);
 
-		dev_dbg(&isys->adev->dev, "%s mem_open_threshold: %u\n",
+		dev_dbg(isys_to_device(isys), "%s mem_open_threshold: %u\n",
 			__func__, mem_open_threshold);
 		set_iwake_register(isys, GDA_MEMOPEN_THRESHOLD_INDEX,
 				   mem_open_threshold);
@@ -528,7 +528,7 @@ void update_watermark_setting(struct ipu_isys *isys)
 	iwake_critical_threshold = iwake_threshold +
 		(IS_PIXEL_BUFFER_PAGES - iwake_threshold) / 2;
 
-	dev_dbg(&isys->adev->dev, "%s threshold: %u  critical: %u",
+	dev_dbg(isys_to_device(isys), "%s threshold: %u  critical: %u",
 		__func__, iwake_threshold, iwake_critical_threshold);
 
 	set_iwake_register(isys, GDA_IRQ_CRITICAL_THRESHOLD_INDEX,
@@ -548,7 +548,7 @@ static int isys_iwake_watermark_init(struct ipu_isys *isys)
 	if (isys->iwake_watermark)
 		return 0;
 
-	iwake_watermark = devm_kzalloc(&isys->adev->dev,
+	iwake_watermark = devm_kzalloc(isys_to_device(isys),
 				       sizeof(*iwake_watermark), GFP_KERNEL);
 	if (!iwake_watermark)
 		return -ENOMEM;
@@ -587,7 +587,7 @@ static int isys_notifier_bound(struct v4l2_async_notifier *notifier,
 	struct sensor_async_subdev *s_asd = container_of(asd,
 					struct sensor_async_subdev, asd);
 
-	dev_info(&isys->adev->dev, "bind %s nlanes is %d port is %d\n",
+	dev_info(isys_to_device(isys), "bind %s nlanes is %d port is %d\n",
 		 sd->name, s_asd->csi2.nlanes, s_asd->csi2.port);
 	isys_complete_ext_device_registration(isys, sd, &s_asd->csi2);
 
@@ -601,7 +601,7 @@ static void isys_notifier_unbind(struct v4l2_async_notifier *notifier,
 	struct ipu_isys *isys = container_of(notifier,
 					struct ipu_isys, notifier);
 
-	dev_info(&isys->adev->dev, "unbind %s\n", sd->name);
+	dev_info(isys_to_device(isys), "unbind %s\n", sd->name);
 }
 
 static int isys_notifier_complete(struct v4l2_async_notifier *notifier)
@@ -609,7 +609,7 @@ static int isys_notifier_complete(struct v4l2_async_notifier *notifier)
 	struct ipu_isys *isys = container_of(notifier,
 					struct ipu_isys, notifier);
 
-	dev_info(&isys->adev->dev, "All sensor registration completed.\n");
+	dev_info(isys_to_device(isys), "All sensor registration completed.\n");
 
 	return v4l2_device_register_subdev_nodes(&isys->v4l2_dev);
 }
@@ -641,26 +641,26 @@ static int isys_notifier_init(struct ipu_isys *isys)
 
 	v4l2_async_nf_init(&isys->notifier);
 	ret = v4l2_async_nf_parse_fwnode_endpoints(&isp->pdev->dev,
-							 &isys->notifier,
-							 asd_struct_size,
-							 isys_fwnode_parse);
+						   &isys->notifier,
+						   asd_struct_size,
+						   isys_fwnode_parse);
 
 	if (ret < 0) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"v4l2 parse_fwnode_endpoints() failed: %d\n", ret);
 		return ret;
 	}
 
 	if (list_empty(&isys->notifier.asd_list)) {
 		/* isys probe could continue with async subdevs missing */
-		dev_warn(&isys->adev->dev, "no subdev found in graph\n");
+		dev_warn(isys_to_device(isys), "no subdev found in graph\n");
 		return 0;
 	}
 
 	isys->notifier.ops = &isys_async_ops;
 	ret = v4l2_async_nf_register(&isys->v4l2_dev, &isys->notifier);
 	if (ret) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"failed to register async notifier : %d\n", ret);
 		v4l2_async_nf_cleanup(&isys->notifier);
 	}
@@ -682,12 +682,15 @@ static int isys_register_devices(struct ipu_isys *isys)
 {
 	int rval;
 
-	isys->media_dev.dev = &isys->adev->dev;
+	isys->media_dev.dev = isys_to_device(isys);
+	/* The old name is expected in the HAL */
+	strscpy(isys->media_dev.driver_name, "intel-ipu6-isys",
+		sizeof(isys->media_dev.driver_name));
 	isys->media_dev.ops = &isys_mdev_ops;
 	strlcpy(isys->media_dev.model,
 		IPU_MEDIA_DEV_MODEL_NAME, sizeof(isys->media_dev.model));
 	snprintf(isys->media_dev.bus_info, sizeof(isys->media_dev.bus_info),
-		 "pci:%s", dev_name(isys->adev->dev.parent->parent));
+		 "pci:%s", dev_name(isys_to_device(isys)->parent->parent));
 	strlcpy(isys->v4l2_dev.name, isys->media_dev.model,
 		sizeof(isys->v4l2_dev.name));
 
@@ -695,15 +698,15 @@ static int isys_register_devices(struct ipu_isys *isys)
 
 	rval = media_device_register(&isys->media_dev);
 	if (rval < 0) {
-		dev_info(&isys->adev->dev, "can't register media device\n");
+		dev_info(isys_to_device(isys), "can't register media device\n");
 		goto out_media_device_unregister;
 	}
 
 	isys->v4l2_dev.mdev = &isys->media_dev;
 
-	rval = v4l2_device_register(&isys->adev->dev, &isys->v4l2_dev);
+	rval = v4l2_device_register(isys_to_device(isys), &isys->v4l2_dev);
 	if (rval < 0) {
-		dev_info(&isys->adev->dev, "can't register v4l2 device\n");
+		dev_info(isys_to_device(isys), "can't register v4l2 device\n");
 		goto out_media_device_unregister;
 	}
 
@@ -757,9 +760,13 @@ static int isys_runtime_pm_resume(struct device *dev)
 	if (!isys)
 		return 0;
 
+	ret  = ipu_buttress_power(dev, adev->ctrl, true);
+	if (ret)
+		goto out_back_to_suspend;
+
 	ret = ipu_mmu_hw_init(adev->mmu);
 	if (ret)
-		return ret;
+		goto out_back_to_suspend;
 
 	ipu_trace_restore(dev);
 
@@ -767,7 +774,7 @@ static int isys_runtime_pm_resume(struct device *dev)
 
 	ret = ipu_buttress_start_tsc_sync(isp);
 	if (ret)
-		return ret;
+		goto out_back_to_suspend;
 
 	spin_lock_irqsave(&isys->power_lock, flags);
 	isys->power = 1;
@@ -782,6 +789,11 @@ static int isys_runtime_pm_resume(struct device *dev)
 
 	set_iwake_ltrdid(isys, 0, 0, LTR_ISYS_ON);
 	return 0;
+
+out_back_to_suspend:
+	ipu_buttress_power(dev, adev->ctrl, false);
+
+	return ret;
 }
 
 static int isys_runtime_pm_suspend(struct device *dev)
@@ -789,6 +801,7 @@ static int isys_runtime_pm_suspend(struct device *dev)
 	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
 	struct ipu_isys *isys = ipu_bus_get_drvdata(adev);
 	unsigned long flags;
+	int ret;
 
 	if (!isys)
 		return 0;
@@ -808,6 +821,13 @@ static int isys_runtime_pm_suspend(struct device *dev)
 	ipu_mmu_hw_cleanup(adev->mmu);
 
 	set_iwake_ltrdid(isys, 0, 0, LTR_ISYS_OFF);
+
+	ret = ipu_buttress_power(dev, adev->ctrl, false);
+	if (ret) {
+		isys_runtime_pm_resume(dev);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -840,26 +860,27 @@ static const struct dev_pm_ops isys_pm_ops = {
 #define ISYS_PM_OPS NULL
 #endif
 
-static void isys_remove(struct ipu_bus_device *adev)
+static void isys_remove(struct auxiliary_device *auxdev)
 {
+	struct ipu_bus_device *adev = container_of(auxdev, struct ipu_bus_device, auxdev);
 	struct ipu_isys *isys = ipu_bus_get_drvdata(adev);
 	struct ipu_device *isp = adev->isp;
 	struct isys_fw_msgs *fwmsg, *safe;
 
-	dev_info(&adev->dev, "removed\n");
+	dev_info(&auxdev->dev, "removed\n");
 #ifdef CONFIG_DEBUG_FS
 	if (isp->ipu_dir)
 		debugfs_remove_recursive(isys->debugfsdir);
 #endif
 
 	list_for_each_entry_safe(fwmsg, safe, &isys->framebuflist, head) {
-		dma_free_attrs(&adev->dev, sizeof(struct isys_fw_msgs),
+		dma_free_attrs(&auxdev->dev, sizeof(struct isys_fw_msgs),
 			       fwmsg, fwmsg->dma_addr,
 			       0);
 	}
 
 	list_for_each_entry_safe(fwmsg, safe, &isys->framebuflist_fw, head) {
-		dma_free_attrs(&adev->dev, sizeof(struct isys_fw_msgs),
+		dma_free_attrs(&auxdev->dev, sizeof(struct isys_fw_msgs),
 			       fwmsg, fwmsg->dma_addr,
 			       0
 		    );
@@ -867,7 +888,7 @@ static void isys_remove(struct ipu_bus_device *adev)
 
 	isys_iwake_watermark_cleanup(isys);
 
-	ipu_trace_uninit(&adev->dev);
+	ipu_trace_uninit(&auxdev->dev);
 	isys_notifier_cleanup(isys);
 	isys_unregister_devices(isys);
 
@@ -887,7 +908,7 @@ static void isys_remove(struct ipu_bus_device *adev)
 	if (isys->short_packet_source == IPU_ISYS_SHORT_PACKET_FROM_TUNIT) {
 		u32 trace_size = IPU_ISYS_SHORT_PACKET_TRACE_BUFFER_SIZE;
 
-		dma_free_coherent(&adev->dev, trace_size,
+		dma_free_coherent(&auxdev->dev, trace_size,
 				  isys->short_packet_trace_buffer,
 				  isys->short_packet_trace_buffer_dma_addr);
 	}
@@ -996,7 +1017,7 @@ static int alloc_fw_msg_bufs(struct ipu_isys *isys, int amount)
 	unsigned long flags;
 
 	for (i = 0; i < amount; i++) {
-		addr = dma_alloc_attrs(&isys->adev->dev,
+		addr = dma_alloc_attrs(isys_to_device(isys),
 				       sizeof(struct isys_fw_msgs),
 				       &dma_addr, GFP_KERNEL,
 				       0);
@@ -1016,7 +1037,7 @@ static int alloc_fw_msg_bufs(struct ipu_isys *isys, int amount)
 					struct isys_fw_msgs, head);
 		list_del(&addr->head);
 		spin_unlock_irqrestore(&isys->listlock, flags);
-		dma_free_attrs(&isys->adev->dev,
+		dma_free_attrs(isys_to_device(isys),
 			       sizeof(struct isys_fw_msgs),
 			       addr, addr->dma_addr,
 			       0);
@@ -1039,14 +1060,14 @@ struct isys_fw_msgs *ipu_get_fw_msg_buf(struct ipu_isys_pipeline *ip)
 	spin_lock_irqsave(&isys->listlock, flags);
 	if (list_empty(&isys->framebuflist)) {
 		spin_unlock_irqrestore(&isys->listlock, flags);
-		dev_dbg(&isys->adev->dev, "Frame list empty - Allocate more");
+		dev_dbg(isys_to_device(isys), "Frame list empty - Allocate more");
 
 		alloc_fw_msg_bufs(isys, 5);
 
 		spin_lock_irqsave(&isys->listlock, flags);
 		if (list_empty(&isys->framebuflist)) {
 			spin_unlock_irqrestore(&isys->listlock, flags);
-			dev_err(&isys->adev->dev, "Frame list empty");
+			dev_err(isys_to_device(isys), "Frame list empty");
 			return NULL;
 		}
 	}
@@ -1084,16 +1105,22 @@ void ipu_put_fw_mgs_buf(struct ipu_isys *isys, u64 data)
 	spin_unlock_irqrestore(&isys->listlock, flags);
 }
 
-static int isys_probe(struct ipu_bus_device *adev)
+static int isys_probe(struct auxiliary_device *auxdev,
+		      const struct auxiliary_device_id *auxid)
 {
+	struct ipu_bus_device *adev = container_of(auxdev, struct ipu_bus_device, auxdev);
 	struct ipu_isys *isys;
 	struct ipu_device *isp = adev->isp;
 	const struct firmware *fw;
 	int rval = 0;
 
-	isys = devm_kzalloc(&adev->dev, sizeof(*isys), GFP_KERNEL);
+	isys = devm_kzalloc(&auxdev->dev, sizeof(*isys), GFP_KERNEL);
 	if (!isys)
 		return -ENOMEM;
+
+	rval = ipu_buttress_power(&auxdev->dev, adev->ctrl, true);
+	if (rval)
+		return rval;
 
 	rval = ipu_mmu_hw_init(adev->mmu);
 	if (rval)
@@ -1167,7 +1194,7 @@ static int isys_probe(struct ipu_bus_device *adev)
 	INIT_LIST_HEAD(&isys->framebuflist);
 	INIT_LIST_HEAD(&isys->framebuflist_fw);
 
-	dev_dbg(&adev->dev, "isys probe %p %p\n", adev, &adev->dev);
+	dev_dbg(&auxdev->dev, "isys probe %p %p\n", adev, &auxdev->dev);
 	ipu_bus_set_drvdata(adev, isys);
 
 	isys->line_align = IPU_ISYS_2600_MEM_LINE_ALIGN;
@@ -1199,7 +1226,7 @@ static int isys_probe(struct ipu_bus_device *adev)
 	ipu_isys_init_debugfs(isys);
 #endif
 
-	ipu_trace_init(adev->isp, isys->pdata->base, &adev->dev,
+	ipu_trace_init(adev->isp, isys->pdata->base, &auxdev->dev,
 		       isys_trace_blocks);
 
 	cpu_latency_qos_add_request(&isys->pm_qos, PM_QOS_DEFAULT_VALUE);
@@ -1213,6 +1240,12 @@ static int isys_probe(struct ipu_bus_device *adev)
 		goto out_unregister_devices;
 
 	ipu_mmu_hw_cleanup(adev->mmu);
+
+	rval = ipu_buttress_power(&auxdev->dev, adev->ctrl, false);
+	if (rval)
+		return rval;
+
+	pm_runtime_enable(&auxdev->dev);
 
 	return 0;
 
@@ -1230,7 +1263,7 @@ remove_shared_buffer:
 release_firmware:
 	if (!isp->secure_mode)
 		release_firmware(isys->fw);
-	ipu_trace_uninit(&adev->dev);
+	ipu_trace_uninit(&auxdev->dev);
 
 	mutex_destroy(&isys->mutex);
 	mutex_destroy(&isys->stream_mutex);
@@ -1239,6 +1272,8 @@ release_firmware:
 		mutex_destroy(&isys->short_packet_tracing_mutex);
 
 	ipu_mmu_hw_cleanup(adev->mmu);
+
+	ipu_buttress_power(&auxdev->dev, adev->ctrl, false);
 
 	return rval;
 }
@@ -1300,7 +1335,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 
 	if (resp->error_info.error == IPU_FW_ISYS_ERROR_STREAM_IN_SUSPENSION)
 		/* Suspension is kind of special case: not enough buffers */
-		dev_dbg(&adev->dev,
+		dev_dbg(&adev->auxdev.dev,
 			"hostlib: error resp %02d %s, stream %u, error SUSPENSION, details %d, timestamp 0x%16.16llx, pin %d\n",
 			resp->type,
 			fw_msg[resp_type_to_index(resp->type)].msg,
@@ -1309,7 +1344,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 			fw_msg[resp_type_to_index(resp->type)].valid_ts ?
 			ts : 0, resp->pin_id);
 	else if (resp->error_info.error)
-		dev_dbg(&adev->dev,
+		dev_dbg(&adev->auxdev.dev,
 			"hostlib: error resp %02d %s, stream %u, error %d, details %d, timestamp 0x%16.16llx, pin %d\n",
 			resp->type,
 			fw_msg[resp_type_to_index(resp->type)].msg,
@@ -1318,7 +1353,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 			fw_msg[resp_type_to_index(resp->type)].valid_ts ?
 			ts : 0, resp->pin_id);
 	else
-		dev_dbg(&adev->dev,
+		dev_dbg(&adev->auxdev.dev,
 			"hostlib: resp %02d %s, stream %u, timestamp 0x%16.16llx, pin %d\n",
 			resp->type,
 			fw_msg[resp_type_to_index(resp->type)].msg,
@@ -1327,14 +1362,14 @@ int isys_isr_one(struct ipu_bus_device *adev)
 			ts : 0, resp->pin_id);
 
 	if (resp->stream_handle >= IPU_ISYS_MAX_STREAMS) {
-		dev_err(&adev->dev, "bad stream handle %u\n",
+		dev_err(&adev->auxdev.dev, "bad stream handle %u\n",
 			resp->stream_handle);
 		goto leave;
 	}
 
 	pipe = isys->pipes[resp->stream_handle];
 	if (!pipe) {
-		dev_err(&adev->dev, "no pipeline for stream %u\n",
+		dev_err(&adev->auxdev.dev, "no pipeline for stream %u\n",
 			resp->stream_handle);
 		goto leave;
 	}
@@ -1369,7 +1404,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 		    pipe->output_pins[resp->pin_id].pin_ready)
 			pipe->output_pins[resp->pin_id].pin_ready(pipe, resp);
 		else
-			dev_err(&adev->dev,
+			dev_err(&adev->auxdev.dev,
 				"%d:No data pin ready handler for pin id %d\n",
 				resp->stream_handle, resp->pin_id);
 		if (pipe->csi2)
@@ -1432,7 +1467,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 		pipe->seq[pipe->seq_index].sequence =
 		    atomic_read(&pipe->sequence) - 1;
 		pipe->seq[pipe->seq_index].timestamp = ts;
-		dev_dbg(&adev->dev,
+		dev_dbg(&adev->auxdev.dev,
 			"sof: handle %d: (index %u), timestamp 0x%16.16llx\n",
 			resp->stream_handle,
 			pipe->seq[pipe->seq_index].sequence, ts);
@@ -1450,7 +1485,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 #endif
 #endif
 
-		dev_dbg(&adev->dev,
+		dev_dbg(&adev->auxdev.dev,
 			"eof: handle %d: (index %u), timestamp 0x%16.16llx\n",
 			resp->stream_handle,
 			pipe->seq[pipe->seq_index].sequence, ts);
@@ -1458,7 +1493,7 @@ int isys_isr_one(struct ipu_bus_device *adev)
 	case IPU_FW_ISYS_RESP_TYPE_STATS_DATA_READY:
 		break;
 	default:
-		dev_err(&adev->dev, "%d:unknown response type %u\n",
+		dev_err(&adev->auxdev.dev, "%d:unknown response type %u\n",
 			resp->stream_handle, resp->type);
 		break;
 	}
@@ -1468,30 +1503,35 @@ leave:
 	return 0;
 }
 
+const struct auxiliary_device_id isys_id_table[] = {
+	{ .name = KBUILD_MODNAME ".isys", },
+	{ },
+};
+
 static struct ipu_bus_driver isys_driver = {
-	.probe = isys_probe,
-	.remove = isys_remove,
 	.isr = isys_isr,
-	.wanted = IPU_ISYS_NAME,
-	.drv = {
-		.name = IPU_ISYS_NAME,
-		.owner = THIS_MODULE,
-		.pm = ISYS_PM_OPS,
+	.auxdrv = {
+		.name = "isys",
+		.id_table = isys_id_table,
+		.probe = isys_probe,
+		.remove = isys_remove,
+		.driver = {
+			.pm = ISYS_PM_OPS,
+		},
 	},
 };
 
-module_ipu_bus_driver(isys_driver);
+int register_isys_driver(void)
+{
+	return auxiliary_driver_register(&isys_driver.auxdrv);
+}
+EXPORT_SYMBOL(register_isys_driver);
 
-static const struct pci_device_id ipu_pci_tbl[] = {
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6SE_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_P_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_ADL_N_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_RPL_P_PCI_ID)},
-	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, IPU6EP_MTL_PCI_ID)},
-	{0,}
-};
-MODULE_DEVICE_TABLE(pci, ipu_pci_tbl);
+void unregister_isys_driver(void)
+{
+	return auxiliary_driver_unregister(&isys_driver.auxdrv);
+}
+EXPORT_SYMBOL(unregister_isys_driver);
 
 MODULE_AUTHOR("Sakari Ailus <sakari.ailus@linux.intel.com>");
 MODULE_AUTHOR("Samu Onkalo <samu.onkalo@intel.com>");

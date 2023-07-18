@@ -340,18 +340,23 @@ ipu_buttress_ipc_send(struct ipu_device *isp,
 
 static irqreturn_t ipu_buttress_call_isr(struct ipu_bus_device *adev)
 {
+	struct ipu_bus_driver *adrv;
 	irqreturn_t ret = IRQ_WAKE_THREAD;
 
-	if (!adev || !adev->adrv)
+	if (!adev)
 		return IRQ_NONE;
 
-	if (adev->adrv->isr)
-		ret = adev->adrv->isr(adev);
+	adrv = to_ipu_bus_driver(adev->auxdev.dev.driver);
+	if (!adrv)
+		return IRQ_NONE;
 
-	if (ret == IRQ_WAKE_THREAD && !adev->adrv->isr_threaded)
+	if (adrv->isr)
+		ret = adrv->isr(adev);
+
+	if (ret == IRQ_WAKE_THREAD && !adrv->isr_threaded)
 		ret = IRQ_NONE;
 
-	adev->adrv->wake_isr_thread = (ret == IRQ_WAKE_THREAD);
+	adrv->wake_isr_thread = (ret == IRQ_WAKE_THREAD);
 
 	return ret;
 }
@@ -456,15 +461,20 @@ irqreturn_t ipu_buttress_isr_threaded(int irq, void *isp_ptr)
 {
 	struct ipu_device *isp = isp_ptr;
 	struct ipu_bus_device *adev[] = { isp->isys, isp->psys };
+	struct ipu_bus_driver *adrv;
 	irqreturn_t ret = IRQ_NONE;
 	unsigned int i;
 
 	dev_dbg(&isp->pdev->dev, "isr: Buttress threaded interrupt handler\n");
 
 	for (i = 0; i < ARRAY_SIZE(ipu_adev_irq_mask); i++) {
-		if (adev[i] && adev[i]->adrv &&
-		    adev[i]->adrv->wake_isr_thread &&
-		    adev[i]->adrv->isr_threaded(adev[i]) == IRQ_HANDLED)
+		if (!adev[i])
+			continue;
+
+		adrv = to_ipu_bus_driver(adev[i]->auxdev.dev.driver);
+		if (adrv &&
+		    adrv->wake_isr_thread &&
+		    adrv->isr_threaded(adev[i]) == IRQ_HANDLED)
 			ret = IRQ_HANDLED;
 	}
 
@@ -516,6 +526,7 @@ int ipu_buttress_power(struct device *dev,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(ipu_buttress_power);
 
 static bool secure_mode_enable = 1;
 module_param(secure_mode_enable, bool, 0660);
@@ -753,14 +764,14 @@ int ipu_buttress_map_fw_image(struct ipu_bus_device *sys,
 		goto out;
 	}
 
-	rval = dma_map_sgtable(&sys->dev, sgt, DMA_TO_DEVICE, 0);
+	rval = dma_map_sgtable(&sys->auxdev.dev, sgt, DMA_TO_DEVICE, 0);
 	if (rval < 0) {
 		rval = -ENOMEM;
 		sg_free_table(sgt);
 		goto out;
 	}
 
-	dma_sync_sgtable_for_device(&sys->dev, sgt, DMA_TO_DEVICE);
+	dma_sync_sgtable_for_device(&sys->auxdev.dev, sgt, DMA_TO_DEVICE);
 
 out:
 	kfree(pages);
@@ -772,7 +783,7 @@ EXPORT_SYMBOL_GPL(ipu_buttress_map_fw_image);
 int ipu_buttress_unmap_fw_image(struct ipu_bus_device *sys,
 				struct sg_table *sgt)
 {
-	dma_unmap_sg(&sys->dev, sgt->sgl, sgt->nents, DMA_TO_DEVICE);
+	dma_unmap_sg(&sys->auxdev.dev, sgt->sgl, sgt->nents, DMA_TO_DEVICE);
 	sg_free_table(sgt);
 
 	return 0;
@@ -993,10 +1004,10 @@ int ipu_buttress_isys_freq_set(void *data, u64 val)
 	    val > BUTTRESS_MAX_FORCE_IS_FREQ)
 		return -EINVAL;
 
-	rval = pm_runtime_get_sync(&isp->isys->dev);
+	rval = pm_runtime_get_sync(&isp->isys->auxdev.dev);
 	if (rval < 0) {
-		pm_runtime_put(&isp->isys->dev);
-		dev_err(&isp->pdev->dev, "Runtime PM failed (%d)\n", rval);
+		pm_runtime_put(&isp->isys->auxdev.dev);
+		dev_err(&isp->isys->auxdev.dev, "Runtime PM failed (%d)\n", rval);
 		return rval;
 	}
 
@@ -1004,7 +1015,7 @@ int ipu_buttress_isys_freq_set(void *data, u64 val)
 	if (val)
 		ipu_buttress_set_isys_ratio(isp, val);
 
-	pm_runtime_put(&isp->isys->dev);
+	pm_runtime_put(&isp->isys->auxdev.dev);
 
 	return 0;
 }
@@ -1118,16 +1129,16 @@ static int ipu_buttress_isys_freq_get(void *data, u64 *val)
 	u32 reg_val;
 	int rval;
 
-	rval = pm_runtime_get_sync(&isp->isys->dev);
+	rval = pm_runtime_get_sync(&isp->isys->auxdev.dev);
 	if (rval < 0) {
-		pm_runtime_put(&isp->isys->dev);
+		pm_runtime_put(&isp->isys->auxdev.dev);
 		dev_err(&isp->pdev->dev, "Runtime PM failed (%d)\n", rval);
 		return rval;
 	}
 
 	reg_val = readl(isp->base + BUTTRESS_REG_IS_FREQ_CTL);
 
-	pm_runtime_put(&isp->isys->dev);
+	pm_runtime_put(&isp->isys->auxdev.dev);
 
 	*val = IPU_IS_FREQ_RATIO_BASE *
 	    (reg_val & IPU_BUTTRESS_IS_FREQ_CTL_DIVISOR_MASK);

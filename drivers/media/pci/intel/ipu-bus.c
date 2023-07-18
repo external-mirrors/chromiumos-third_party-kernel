@@ -15,133 +15,6 @@
 #include "ipu-platform.h"
 #include "ipu-dma.h"
 
-#ifdef CONFIG_PM
-static struct bus_type ipu_bus;
-
-static int bus_pm_runtime_suspend(struct device *dev)
-{
-	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
-	int rval;
-
-	rval = pm_generic_runtime_suspend(dev);
-	if (rval)
-		return rval;
-
-	rval = ipu_buttress_power(dev, adev->ctrl, false);
-	dev_dbg(dev, "%s: buttress power down %d\n", __func__, rval);
-	if (!rval)
-		return 0;
-
-	dev_err(dev, "power down failed!\n");
-
-	/* Powering down failed, attempt to resume device now */
-	rval = pm_generic_runtime_resume(dev);
-	if (!rval)
-		return -EBUSY;
-
-	return -EIO;
-}
-
-static int bus_pm_runtime_resume(struct device *dev)
-{
-	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
-	int rval;
-
-	rval = ipu_buttress_power(dev, adev->ctrl, true);
-	dev_dbg(dev, "%s: buttress power up %d\n", __func__, rval);
-	if (rval)
-		return rval;
-
-	rval = pm_generic_runtime_resume(dev);
-	dev_dbg(dev, "%s: resume %d\n", __func__, rval);
-	if (rval)
-		goto out_err;
-
-	return 0;
-
-out_err:
-	ipu_buttress_power(dev, adev->ctrl, false);
-
-	return -EBUSY;
-}
-
-static const struct dev_pm_ops ipu_bus_pm_ops = {
-	.runtime_suspend = bus_pm_runtime_suspend,
-	.runtime_resume = bus_pm_runtime_resume,
-};
-
-#define IPU_BUS_PM_OPS	(&ipu_bus_pm_ops)
-#else
-#define IPU_BUS_PM_OPS	NULL
-#endif
-
-static int ipu_bus_match(struct device *dev, struct device_driver *drv)
-{
-	struct ipu_bus_driver *adrv = to_ipu_bus_driver(drv);
-
-	dev_dbg(dev, "bus match: \"%s\" --- \"%s\"\n", dev_name(dev),
-		adrv->wanted);
-
-	return !strncmp(dev_name(dev), adrv->wanted, strlen(adrv->wanted));
-}
-
-static int ipu_bus_probe(struct device *dev)
-{
-	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
-	struct ipu_bus_driver *adrv = to_ipu_bus_driver(dev->driver);
-	int rval;
-
-	if (!adev->isp->ipu_bus_ready_to_probe)
-		return -EPROBE_DEFER;
-
-	dev_dbg(dev, "bus probe dev %s\n", dev_name(dev));
-
-	adev->adrv = adrv;
-	if (!adrv->probe) {
-		rval = -ENODEV;
-		goto out_err;
-	}
-
-	rval = pm_runtime_resume_and_get(&adev->dev);
-	if (rval < 0) {
-		dev_err(&adev->dev, "Failed to get runtime PM\n");
-		goto out_err;
-	}
-
-	rval = adrv->probe(adev);
-	pm_runtime_put(&adev->dev);
-
-	if (rval)
-		goto out_err;
-
-	return 0;
-
-out_err:
-	ipu_bus_set_drvdata(adev, NULL);
-	adev->adrv = NULL;
-
-	return rval;
-}
-
-static void ipu_bus_remove(struct device *dev)
-{
-	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
-	struct ipu_bus_driver *adrv = to_ipu_bus_driver(dev->driver);
-
-	if (adrv->remove)
-		adrv->remove(adev);
-}
-
-static struct bus_type ipu_bus = {
-	.name = IPU_BUS_NAME,
-	.match = ipu_bus_match,
-	.probe = ipu_bus_probe,
-	.remove = ipu_bus_remove,
-	.pm = IPU_BUS_PM_OPS,
-};
-
-static struct mutex ipu_bus_mutex;
-
 static void ipu_bus_release(struct device *dev)
 {
 	struct ipu_bus_device *adev = to_ipu_bus_device(dev);
@@ -157,51 +30,67 @@ struct ipu_bus_device *ipu_bus_initialize_device(struct pci_dev *pdev,
 						 char *name, unsigned int nr)
 {
 	struct ipu_bus_device *adev;
+	struct auxiliary_device *auxdev;
 	struct ipu_device *isp = pci_get_drvdata(pdev);
+	int rval;
 
 	adev = kzalloc(sizeof(*adev), GFP_KERNEL);
 	if (!adev)
 		return ERR_PTR(-ENOMEM);
 
-	adev->dev.parent = parent;
-	adev->dev.bus = &ipu_bus;
-	adev->dev.release = ipu_bus_release;
-	adev->dev.dma_ops = &ipu_dma_ops;
-	adev->dma_mask = DMA_BIT_MASK(isp->secure_mode ?
-				      IPU_MMU_ADDRESS_BITS :
-				      IPU_MMU_ADDRESS_BITS_NON_SECURE);
-	adev->dev.dma_mask = &adev->dma_mask;
-	adev->dev.dma_parms = pdev->dev.dma_parms;
-	adev->dev.coherent_dma_mask = adev->dma_mask;
 	adev->ctrl = ctrl;
 	adev->pdata = pdata;
 	adev->isp = isp;
-	mutex_init(&adev->resume_lock);
-	dev_set_name(&adev->dev, "%s%d", name, nr);
 
-	device_initialize(&adev->dev);
-	pm_runtime_forbid(&adev->dev);
-	pm_runtime_enable(&adev->dev);
+	auxdev = &adev->auxdev;
+	auxdev->name = name;
+	auxdev->id = nr;
+
+	auxdev->dev.parent = parent;
+	auxdev->dev.release = ipu_bus_release;
+
+	rval = auxiliary_device_init(auxdev);
+	if (rval) {
+		kfree(adev);
+		return ERR_PTR(rval);
+	}
+
+	adev->dma_mask = DMA_BIT_MASK(isp->secure_mode ?
+				      IPU_MMU_ADDRESS_BITS :
+				      IPU_MMU_ADDRESS_BITS_NON_SECURE);
+	auxdev->dev.dma_mask = &adev->dma_mask;
+	rval = dma_set_coherent_mask(&auxdev->dev, adev->dma_mask);
+	if (rval) {
+		auxiliary_device_uninit(auxdev);
+		return ERR_PTR(rval);
+	}
+	auxdev->dev.dma_parms = pdev->dev.dma_parms;
+	auxdev->dev.dma_ops = &ipu_dma_ops;
+
+	mutex_lock(&isp->mutex);
+	list_add(&adev->list, &isp->devices);
+	mutex_unlock(&isp->mutex);
 
 	return adev;
 }
 
 int ipu_bus_add_device(struct ipu_bus_device *adev)
 {
+	struct auxiliary_device *auxdev = &adev->auxdev;
 	int rval;
 
-	rval = device_add(&adev->dev);
+	rval = auxiliary_device_add(auxdev);
 	if (rval) {
-		put_device(&adev->dev);
+		auxiliary_device_uninit(auxdev);
 		return rval;
 	}
 
-	mutex_lock(&ipu_bus_mutex);
-	list_add(&adev->list, &adev->isp->devices);
-	mutex_unlock(&ipu_bus_mutex);
-
-	pm_runtime_allow(&adev->dev);
 	return 0;
+}
+
+void ipu_bus_put_device(struct ipu_bus_device *adev)
+{
+	auxiliary_device_uninit(&adev->auxdev);
 }
 
 void ipu_bus_del_devices(struct pci_dev *pdev)
@@ -209,44 +98,18 @@ void ipu_bus_del_devices(struct pci_dev *pdev)
 	struct ipu_device *isp = pci_get_drvdata(pdev);
 	struct ipu_bus_device *adev, *save;
 
-	mutex_lock(&ipu_bus_mutex);
+	mutex_lock(&isp->mutex);
 
 	list_for_each_entry_safe(adev, save, &isp->devices, list) {
-		pm_runtime_disable(&adev->dev);
 		list_del(&adev->list);
-		device_unregister(&adev->dev);
+		auxiliary_device_delete(&adev->auxdev);
+		auxiliary_device_uninit(&adev->auxdev);
 	}
 
-	mutex_unlock(&ipu_bus_mutex);
+	mutex_unlock(&isp->mutex);
 }
 
-int ipu_bus_register_driver(struct ipu_bus_driver *adrv)
-{
-	adrv->drv.bus = &ipu_bus;
-	return driver_register(&adrv->drv);
-}
-EXPORT_SYMBOL(ipu_bus_register_driver);
-
-int ipu_bus_unregister_driver(struct ipu_bus_driver *adrv)
-{
-	driver_unregister(&adrv->drv);
-	return 0;
-}
-EXPORT_SYMBOL(ipu_bus_unregister_driver);
-
-int ipu_bus_register(void)
-{
-	mutex_init(&ipu_bus_mutex);
-	return bus_register(&ipu_bus);
-}
-
-void ipu_bus_unregister(void)
-{
-	mutex_destroy(&ipu_bus_mutex);
-	return bus_unregister(&ipu_bus);
-}
-
-static int flr_rpm_recovery(struct device *dev, void *p)
+static int flr_rpm_recovery(struct device *dev)
 {
 	dev_dbg(dev, "FLR recovery call\n");
 	/*
@@ -264,8 +127,17 @@ static int flr_rpm_recovery(struct device *dev, void *p)
 	return 0;
 }
 
-int ipu_bus_flr_recovery(void)
+int ipu_bus_flr_recovery(struct pci_dev *pdev)
 {
-	bus_for_each_dev(&ipu_bus, NULL, NULL, flr_rpm_recovery);
+	struct ipu_device *isp = pci_get_drvdata(pdev);
+	struct ipu_bus_device *adev;
+
+	mutex_lock(&isp->mutex);
+
+	list_for_each_entry(adev, &isp->devices, list)
+		flr_rpm_recovery(&adev->auxdev.dev);
+
+	mutex_unlock(&isp->mutex);
+
 	return 0;
 }

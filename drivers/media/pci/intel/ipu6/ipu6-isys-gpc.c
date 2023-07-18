@@ -60,9 +60,9 @@ static int ipu6_isys_gpc_global_enable_set(void *data, u64 val)
 
 	base = isys->pdata->base + IPU_ISYS_GPC_BASE;
 
-	ret = pm_runtime_get_sync(&isys->adev->dev);
+	ret = pm_runtime_get_sync(isys_to_device(isys));
 	if (ret < 0) {
-		pm_runtime_put(&isys->adev->dev);
+		pm_runtime_put(isys_to_device(isys));
 		mutex_unlock(&isys->mutex);
 		return ret;
 	}
@@ -78,8 +78,8 @@ static int ipu6_isys_gpc_global_enable_set(void *data, u64 val)
 			isys_gpcs->gpc[i].route = 0;
 			isys_gpcs->gpc[i].source = 0;
 		}
-		pm_runtime_mark_last_busy(&isys->adev->dev);
-		pm_runtime_put_autosuspend(&isys->adev->dev);
+		pm_runtime_mark_last_busy(isys_to_device(isys));
+		pm_runtime_put_autosuspend(isys_to_device(isys));
 	} else {
 		/*
 		 * Set gpc reg and start all gpc here.
@@ -152,7 +152,7 @@ int ipu_isys_gpc_init_debugfs(struct ipu_isys *isys)
 	char gpcname[10];
 	struct ipu_isys_gpcs *isys_gpcs;
 
-	isys_gpcs = devm_kzalloc(&isys->adev->dev, sizeof(*isys_gpcs),
+	isys_gpcs = devm_kzalloc(isys_to_device(isys), sizeof(*isys_gpcs),
 				 GFP_KERNEL);
 	if (!isys_gpcs)
 		return -ENOMEM;

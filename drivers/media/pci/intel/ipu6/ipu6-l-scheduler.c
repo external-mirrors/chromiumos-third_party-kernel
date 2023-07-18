@@ -54,10 +54,10 @@ void ipu_psys_scheduler_remove_kppg(struct ipu_psys_ppg *kppg,
 	mutex_lock(&sc_list->lock);
 	list_for_each_entry_safe(tmp0, tmp1, &sc_list->list, sched_list) {
 		if (tmp0 == kppg) {
-			dev_dbg(&psys->adev->dev,
-				 "remove from %s list, kppg(%d 0x%p) state %d\n",
-				 type == SCHED_START_LIST ? "start" : "stop",
-				 kppg->kpg->pg->ID, kppg, kppg->state);
+			dev_dbg(psys_to_device(psys),
+				"remove from %s list, kppg(%d 0x%p) state %d\n",
+				type == SCHED_START_LIST ? "start" : "stop",
+				kppg->kpg->pg->ID, kppg, kppg->state);
 			list_del_init(&kppg->sched_list);
 		}
 	}
@@ -71,7 +71,7 @@ void ipu_psys_scheduler_add_kppg(struct ipu_psys_ppg *kppg, enum SCHED_LIST type
 	struct ipu_psys *psys = kppg->psys;
 	struct ipu_psys_ppg *tmp0, *tmp1;
 
-	dev_dbg(&psys->adev->dev,
+	dev_dbg(psys_to_device(psys),
 		"add to %s list, kppg(%d 0x%p) state %d prio(%d %d)\n",
 		type == SCHED_START_LIST ? "start" : "stop",
 		kppg->kpg->pg->ID, kppg, kppg->state,
@@ -84,14 +84,14 @@ void ipu_psys_scheduler_add_kppg(struct ipu_psys_ppg *kppg, enum SCHED_LIST type
 	}
 
 	if (is_kppg_in_list(kppg, &sc_list->list)) {
-		dev_dbg(&psys->adev->dev, "kppg already in list\n");
+		dev_dbg(psys_to_device(psys), "kppg already in list\n");
 		goto out;
 	}
 
 	list_for_each_entry_safe(tmp0, tmp1, &sc_list->list, sched_list) {
 		int tmp_pri = tmp0->pri_base + tmp0->pri_dynamic;
 
-		dev_dbg(&psys->adev->dev,
+		dev_dbg(psys_to_device(psys),
 			"found kppg(%d 0x%p), state %d pri(%d %d)\n",
 			tmp0->kpg->pg->ID, tmp0, tmp0->state,
 			tmp0->pri_base, tmp0->pri_dynamic);
@@ -130,13 +130,13 @@ static int ipu_psys_detect_resource_contention(struct ipu_psys_ppg *kppg)
 
 	ret = ipu_psys_resource_pool_init(try_res_pool);
 	if (ret < 0) {
-		dev_err(&psys->adev->dev, "unable to alloc pg resources\n");
+		dev_err(psys_to_device(psys), "unable to alloc pg resources\n");
 		WARN_ON(1);
 		goto exit;
 	}
 
 	ipu_psys_resource_copy(&psys->resource_pool_running, try_res_pool);
-	ret = ipu_psys_try_allocate_resources(&psys->adev->dev,
+	ret = ipu_psys_try_allocate_resources(psys_to_device(psys),
 					      kppg->kpg->pg,
 					      kppg->manifest,
 					      try_res_pool);
@@ -207,7 +207,7 @@ static bool ipu_psys_scheduler_switch_ppg(struct ipu_psys *psys)
 	mutex_lock(&sc_list->lock);
 	if (list_empty(&sc_list->list)) {
 		/* some ppgs are RESUMING/STARTING */
-		dev_dbg(&psys->adev->dev, "no candidated stop ppg\n");
+		dev_dbg(psys_to_device(psys), "no candidated stop ppg\n");
 		mutex_unlock(&sc_list->lock);
 		return false;
 	}
@@ -217,7 +217,7 @@ static bool ipu_psys_scheduler_switch_ppg(struct ipu_psys *psys)
 
 	mutex_lock(&kppg->mutex);
 	if (!(kppg->state & PPG_STATE_STOP)) {
-		dev_dbg(&psys->adev->dev, "s_change:%s: %p %d -> %d\n",
+		dev_dbg(psys_to_device(psys), "s_change:%s: %p %d -> %d\n",
 			__func__, kppg, kppg->state, PPG_STATE_SUSPEND);
 		kppg->state = PPG_STATE_SUSPEND;
 		resched = true;
@@ -244,7 +244,7 @@ static bool ipu_psys_scheduler_ppg_start(struct ipu_psys *psys)
 
 	mutex_lock(&sc_list->lock);
 	if (list_empty(&sc_list->list)) {
-		dev_dbg(&psys->adev->dev, "no ppg to start\n");
+		dev_dbg(psys_to_device(psys), "no ppg to start\n");
 		mutex_unlock(&sc_list->lock);
 		return false;
 	}
@@ -255,7 +255,7 @@ static bool ipu_psys_scheduler_ppg_start(struct ipu_psys *psys)
 
 		ret = ipu_psys_detect_resource_contention(kppg);
 		if (ret < 0) {
-			dev_dbg(&psys->adev->dev,
+			dev_dbg(psys_to_device(psys),
 				"ppg %d resource detect failed(%d)\n",
 				kppg->kpg->pg->ID, ret);
 			/*
@@ -268,10 +268,10 @@ static bool ipu_psys_scheduler_ppg_start(struct ipu_psys *psys)
 				    ipu_psys_scheduler_switch_ppg(psys)) {
 					return true;
 				}
-				dev_dbg(&psys->adev->dev,
+				dev_dbg(psys_to_device(psys),
 					"ppg is suspending/stopping\n");
 			} else {
-				dev_err(&psys->adev->dev,
+				dev_err(psys_to_device(psys),
 					"detect resource error %d\n", ret);
 			}
 		} else {
@@ -396,13 +396,13 @@ static void ipu_psys_update_ppg_state_by_kcmd(struct ipu_psys *psys,
 		else if (kcmd->state == KCMD_STATE_PPG_STOP)
 			ipu_psys_kcmd_complete(kppg, kcmd, 0);
 		else if (kcmd->state == KCMD_STATE_PPG_ENQUEUE) {
-			dev_err(&psys->adev->dev, "ppg %p stopped!\n", kppg);
+			dev_err(psys_to_device(psys), "ppg %p stopped!\n", kppg);
 			ipu_psys_kcmd_complete(kppg, kcmd, -EIO);
 		}
 	}
 
 	if (old_ppg_state != kppg->state)
-		dev_dbg(&psys->adev->dev, "s_change:%s: %p %d -> %d\n",
+		dev_dbg(psys_to_device(psys), "s_change:%s: %p %d -> %d\n",
 			__func__, kppg, old_ppg_state, kppg->state);
 }
 
@@ -508,7 +508,7 @@ static bool ipu_psys_scheduler_exit_power_gating(struct ipu_psys *psys)
 {
 	/* Assume power gating process can be aborted directly during START */
 	if (psys->power_gating == PSYS_POWER_GATED) {
-		dev_dbg(&psys->adev->dev, "powergating: exit ---\n");
+		dev_dbg(psys_to_device(psys), "powergating: exit ---\n");
 		ipu_psys_exit_power_gating(psys);
 	}
 	psys->power_gating = PSYS_POWER_NORMAL;
@@ -527,7 +527,7 @@ static bool ipu_psys_scheduler_enter_power_gating(struct ipu_psys *psys)
 	if (psys->power_gating == PSYS_POWER_NORMAL &&
 	    is_ready_to_enter_power_gating(psys)) {
 		/* Enter power gating */
-		dev_dbg(&psys->adev->dev, "powergating: enter +++\n");
+		dev_dbg(psys_to_device(psys), "powergating: enter +++\n");
 		psys->power_gating = PSYS_POWER_GATING;
 	}
 
@@ -607,7 +607,7 @@ void ipu_psys_run_next(struct ipu_psys *psys)
 	}
 
 	if (need_trigger && !wait_fw_finish) {
-		dev_dbg(&psys->adev->dev, "scheduler: wake up\n");
+		dev_dbg(psys_to_device(psys), "scheduler: wake up\n");
 		atomic_set(&psys->wakeup_count, 1);
 		wake_up_interruptible(&psys->sched_cmd_wq);
 	}

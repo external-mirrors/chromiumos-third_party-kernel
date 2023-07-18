@@ -20,7 +20,7 @@ intel-ipu6-objs				+= ../ipu.o \
 
 obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6.o
 
-intel-ipu6-isys-objs			+= ../ipu-isys.o \
+intel-ipu6-objs			+= ../ipu-isys.o \
 					   ../ipu-isys-csi2.o \
 					   ipu6-isys.o \
 					   ipu6-isys-phy.o \
@@ -32,30 +32,26 @@ intel-ipu6-isys-objs			+= ../ipu-isys.o \
 					   ../ipu-isys-video.o \
 					   ../ipu-isys-queue.o \
 					   ../ipu-isys-subdev.o
-intel-ipu6-isys-objs			+= ../ipu-isys-csi2-be.o
+intel-ipu6-objs			+= ../ipu-isys-csi2-be.o
 
 ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-intel-ipu6-isys-objs                    += ../ipu-isys-tpg.o
+intel-ipu6-objs                    += ../ipu-isys-tpg.o
 endif
 
-obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6-isys.o
-
-intel-ipu6-psys-objs			+= ../ipu-psys.o \
+intel-ipu6-objs			+= ../ipu-psys.o \
 					   ipu6-psys.o \
 					   ipu-resources.o \
 					   ipu6-psys-gpc.o \
 					   ipu6-l-scheduler.o \
 					   ipu6-ppg.o
 
-intel-ipu6-psys-objs			+= ipu-fw-resources.o \
+intel-ipu6-objs			+= ipu-fw-resources.o \
 					   ipu6-fw-resources.o \
 					   ipu6se-fw-resources.o \
 					   ipu6ep-fw-resources.o \
 					   ../ipu-fw-psys.o
 
-intel-ipu6-psys-objs			+= ../ipu-kcam.o
-
-obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6-psys.o
+intel-ipu6-objs			+= ../ipu-kcam.o
 
 ccflags-y += -I$(srcpath)/$(src)/../../../../../include/
 ccflags-y += -I$(srcpath)/$(src)/../

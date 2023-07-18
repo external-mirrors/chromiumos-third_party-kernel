@@ -69,7 +69,7 @@ __get_buf_set(struct ipu_kcam_psys_instance *instance, size_t buf_set_size)
 	if (!kbuf_set)
 		return NULL;
 
-	kbuf_set->kaddr = dma_alloc_attrs(&instance->psys->adev->dev,
+	kbuf_set->kaddr = dma_alloc_attrs(psys_to_device(instance->psys),
 					  buf_set_size, &kbuf_set->dma_addr,
 					  GFP_KERNEL, 0);
 	if (!kbuf_set->kaddr) {
@@ -102,7 +102,7 @@ ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd)
 
 	kbuf_set = __get_buf_set(instance, buf_set_size);
 	if (!kbuf_set) {
-		dev_err(&psys->adev->dev, "failed to create buffer set\n");
+		dev_err(psys_to_device(psys), "failed to create buffer set\n");
 		return NULL;
 	}
 
@@ -152,7 +152,7 @@ int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd)
 
 		ret = ipu_fw_psys_ppg_set_buffer_set(kcmd, terminal, i, buffer);
 		if (ret) {
-			dev_err(&psys->adev->dev, "Unable to set bufset\n");
+			dev_err(psys_to_device(psys), "Unable to set bufset\n");
 			goto error;
 		}
 	}
@@ -160,7 +160,7 @@ int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd)
 	return 0;
 
 error:
-	dev_err(&psys->adev->dev, "failed to get buffer set\n");
+	dev_err(psys_to_device(psys), "failed to get buffer set\n");
 	return ret;
 }
 
@@ -181,7 +181,7 @@ void ipu_psys_ppg_complete(struct ipu_psys *psys, struct ipu_psys_ppg *kppg)
 		queue_id = ipu_fw_psys_ppg_get_base_queue_id(kppg);
 		ipu_psys_free_cmd_queue_resource(&psys->resource_pool_running,
 						 queue_id);
-		pm_runtime_put(&psys->adev->dev);
+		pm_runtime_put(psys_to_device(psys));
 	} else {
 		if (kppg->state == PPG_STATE_SUSPENDING) {
 			kppg->state = PPG_STATE_SUSPENDED;
@@ -199,7 +199,7 @@ void ipu_psys_ppg_complete(struct ipu_psys *psys, struct ipu_psys_ppg *kppg)
 		wake_up_interruptible(&psys->sched_cmd_wq);
 	}
 	if (old_ppg_state != kppg->state)
-		dev_dbg(&psys->adev->dev, "s_change:%s: %p %d -> %d\n",
+		dev_dbg(psys_to_device(psys), "s_change:%s: %p %d -> %d\n",
 			__func__, kppg, old_ppg_state, kppg->state);
 
 	mutex_unlock(&kppg->mutex);
@@ -214,11 +214,11 @@ int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 	int ret;
 
 	if (!kcmd) {
-		dev_err(&psys->adev->dev, "failed to find start kcmd!\n");
+		dev_err(psys_to_device(psys), "failed to find start kcmd!\n");
 		return -EINVAL;
 	}
 
-	dev_dbg(&psys->adev->dev, "start ppg id %d, addr 0x%p\n",
+	dev_dbg(psys_to_device(psys), "start ppg id %d, addr 0x%p\n",
 		ipu_fw_psys_pg_get_id(kcmd->kpg), kppg);
 
 	kppg->state = PPG_STATE_STARTING;
@@ -232,30 +232,30 @@ int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 		ret = ipu_fw_psys_terminal_set(terminal, i, kcmd, 0,
 					       kcmd->buffers[i].len);
 		if (ret) {
-			dev_err(&psys->adev->dev, "Unable to set terminal\n");
+			dev_err(psys_to_device(psys), "Unable to set terminal\n");
 			return ret;
 		}
 	}
 
 	ret = ipu_fw_psys_pg_submit(kcmd->kpg);
 	if (ret) {
-		dev_err(&psys->adev->dev, "failed to submit kcmd!\n");
+		dev_err(psys_to_device(psys), "failed to submit kcmd!\n");
 		return ret;
 	}
 
-	ret = ipu_psys_allocate_resources(&psys->adev->dev,
+	ret = ipu_psys_allocate_resources(psys_to_device(psys),
 					  kcmd->kpg->pg,
 					  kcmd->pg_manifest,
 					  &kcmd->kpg->resource_alloc,
 					  &psys->resource_pool_running);
 	if (ret) {
-		dev_err(&psys->adev->dev, "alloc resources failed!\n");
+		dev_err(psys_to_device(psys), "alloc resources failed!\n");
 		return ret;
 	}
 
-	ret = pm_runtime_get_sync(&psys->adev->dev);
+	ret = pm_runtime_get_sync(psys_to_device(psys));
 	if (ret < 0) {
-		dev_err(&psys->adev->dev, "failed to power on psys\n");
+		dev_err(psys_to_device(psys), "failed to power on psys\n");
 		goto error;
 	}
 
@@ -265,7 +265,7 @@ int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 		goto error;
 	}
 
-	dev_dbg(&psys->adev->dev, "s_change:%s: %p %d -> %d\n",
+	dev_dbg(psys_to_device(psys), "s_change:%s: %p %d -> %d\n",
 		__func__, kppg, kppg->state, PPG_STATE_STARTED);
 	kppg->state = PPG_STATE_STARTED;
 	ipu_psys_kcmd_complete(kppg, kcmd, 0);
@@ -273,15 +273,15 @@ int ipu_psys_ppg_start(struct ipu_psys_ppg *kppg)
 	return 0;
 
 error:
-	pm_runtime_put_noidle(&psys->adev->dev);
-	ipu_psys_reset_process_cell(&psys->adev->dev,
+	pm_runtime_put_noidle(psys_to_device(psys));
+	ipu_psys_reset_process_cell(psys_to_device(psys),
 				    kcmd->kpg->pg,
 				    kcmd->pg_manifest,
 				    kcmd->kpg->pg->process_count);
 	ipu_psys_free_resources(&kppg->kpg->resource_alloc,
 				&psys->resource_pool_running);
 
-	dev_err(&psys->adev->dev, "failed to start ppg\n");
+	dev_err(psys_to_device(psys), "failed to start ppg\n");
 	return ret;
 }
 
@@ -293,58 +293,58 @@ int ipu_psys_ppg_resume(struct ipu_psys_ppg *kppg)
 	};
 	int ret;
 
-	dev_dbg(&psys->adev->dev, "resume ppg id %d, addr 0x%p\n",
+	dev_dbg(psys_to_device(psys), "resume ppg id %d, addr 0x%p\n",
 		ipu_fw_psys_pg_get_id(kppg->kpg), kppg);
 
 	kppg->state = PPG_STATE_RESUMING;
 	if (enable_suspend_resume) {
-		ret = ipu_psys_allocate_resources(&psys->adev->dev,
+		ret = ipu_psys_allocate_resources(psys_to_device(psys),
 						  kppg->kpg->pg,
 						  kppg->manifest,
 						  &kppg->kpg->resource_alloc,
 						  &psys->resource_pool_running);
 		if (ret) {
-			dev_err(&psys->adev->dev, "failed to allocate res\n");
+			dev_err(psys_to_device(psys), "failed to allocate res\n");
 			return -EIO;
 		}
 
 		ret = ipu_fw_psys_ppg_resume(kppg, psys);
 		if (ret) {
-			dev_err(&psys->adev->dev, "failed to resume ppg\n");
+			dev_err(psys_to_device(psys), "failed to resume ppg\n");
 			goto error;
 		}
 	} else {
 		kppg->kpg->pg->state = IPU_FW_PSYS_PROCESS_GROUP_READY;
 		ret = ipu_fw_psys_pg_submit(kppg->kpg);
 		if (ret) {
-			dev_err(&psys->adev->dev, "failed to submit kcmd!\n");
+			dev_err(psys_to_device(psys), "failed to submit kcmd!\n");
 			return ret;
 		}
 
-		ret = ipu_psys_allocate_resources(&psys->adev->dev,
+		ret = ipu_psys_allocate_resources(psys_to_device(psys),
 						  kppg->kpg->pg,
 						  kppg->manifest,
 						  &kppg->kpg->resource_alloc,
 						  &psys->resource_pool_running);
 		if (ret) {
-			dev_err(&psys->adev->dev, "failed to allocate res\n");
+			dev_err(psys_to_device(psys), "failed to allocate res\n");
 			return ret;
 		}
 
 		ret = ipu_psys_kcmd_start(psys, &tmp_kcmd);
 		if (ret) {
-			dev_err(&psys->adev->dev, "failed to start kcmd!\n");
+			dev_err(psys_to_device(psys), "failed to start kcmd!\n");
 			goto error;
 		}
 	}
-	dev_dbg(&psys->adev->dev, "s_change:%s: %p %d -> %d\n",
+	dev_dbg(psys_to_device(psys), "s_change:%s: %p %d -> %d\n",
 		__func__, kppg, kppg->state, PPG_STATE_RESUMED);
 	kppg->state = PPG_STATE_RESUMED;
 
 	return 0;
 
 error:
-	ipu_psys_reset_process_cell(&psys->adev->dev,
+	ipu_psys_reset_process_cell(psys_to_device(psys),
 				    kppg->kpg->pg,
 				    kppg->manifest,
 				    kppg->kpg->pg->process_count);
@@ -366,45 +366,45 @@ int ipu_psys_ppg_stop(struct ipu_psys_ppg *kppg)
 		list_move_tail(&kcmd->list, &kppg->kcmds_processing_list);
 		kpg = kcmd->kpg;
 	} else {
-		dev_dbg(&psys->adev->dev, "Exceptional stop happened!\n");
+		dev_dbg(psys_to_device(psys), "Exceptional stop happened!\n");
 		/* delete kppg in stop list to avoid this ppg resuming */
 		ipu_psys_scheduler_remove_kppg(kppg, SCHED_STOP_LIST);
 		kpg = kppg->kpg;
 	}
 
 	ppg_id = ipu_fw_psys_pg_get_id(kppg->kpg);
-	dev_dbg(&psys->adev->dev, "stop ppg(%d, addr 0x%p)\n", ppg_id, kppg);
+	dev_dbg(psys_to_device(psys), "stop ppg(%d, addr 0x%p)\n", ppg_id, kppg);
 
 	if (kppg->state & PPG_STATE_SUSPENDED) {
 		if (enable_suspend_resume) {
-			dev_dbg(&psys->adev->dev, "need resume before stop!\n");
+			dev_dbg(psys_to_device(psys), "need resume before stop!\n");
 			ret = ipu_fw_psys_ppg_resume(kppg, psys);
 			if (ret)
-				dev_err(&psys->adev->dev,
+				dev_err(psys_to_device(psys),
 					"ppg(%d) failed to resume\n", ppg_id);
 		} else if (kcmd) {
 			ipu_psys_free_cmd_queue_resource(
 				&psys->resource_pool_running,
 				ipu_fw_psys_ppg_get_base_queue_id(kppg));
 			ipu_psys_kcmd_complete(kppg, kcmd, 0);
-			dev_dbg(&psys->adev->dev,
+			dev_dbg(psys_to_device(psys),
 				"s_change:%s %p %d -> %d\n", __func__,
 				kppg, kppg->state, PPG_STATE_STOPPED);
-			pm_runtime_put(&psys->adev->dev);
+			pm_runtime_put(psys_to_device(psys));
 			kppg->state = PPG_STATE_STOPPED;
 			return 0;
 		} else {
 			return 0;
 		}
 	}
-	dev_dbg(&psys->adev->dev, "s_change:%s %p %d -> %d\n",
+	dev_dbg(psys_to_device(psys), "s_change:%s %p %d -> %d\n",
 		__func__, kppg, kppg->state, PPG_STATE_STOPPING);
 	kppg->state = PPG_STATE_STOPPING;
 	ret = ipu_fw_psys_pg_abort(kppg->kpg, psys);
 	if (ret) {
 		if (ret == -ENODATA)
 			kcmd->pg_user = NULL;
-		dev_err(&psys->adev->dev, "ppg(%d) failed to abort\n", ppg_id);
+		dev_err(psys_to_device(psys), "ppg(%d) failed to abort\n", ppg_id);
 	}
 
 	return ret;
@@ -416,8 +416,8 @@ int ipu_psys_ppg_suspend(struct ipu_psys_ppg *kppg)
 	int ppg_id = ipu_fw_psys_pg_get_id(kppg->kpg);
 	int ret = 0;
 
-	dev_dbg(&psys->adev->dev, "suspend ppg(%d, addr 0x%p)\n", ppg_id, kppg);
-	dev_dbg(&psys->adev->dev, "s_change:%s %p %d -> %d\n",
+	dev_dbg(psys_to_device(psys), "suspend ppg(%d, addr 0x%p)\n", ppg_id, kppg);
+	dev_dbg(psys_to_device(psys), "s_change:%s %p %d -> %d\n",
 		__func__, kppg, kppg->state, PPG_STATE_SUSPENDING);
 	kppg->state = PPG_STATE_SUSPENDING;
 	if (enable_suspend_resume)
@@ -425,7 +425,7 @@ int ipu_psys_ppg_suspend(struct ipu_psys_ppg *kppg)
 	else
 		ret = ipu_fw_psys_pg_abort(kppg->kpg, psys);
 	if (ret)
-		dev_err(&psys->adev->dev, "failed to %s ppg(%d)\n",
+		dev_err(psys_to_device(psys), "failed to %s ppg(%d)\n",
 			enable_suspend_resume ? "suspend" : "stop", ret);
 
 	return ret;
@@ -464,14 +464,14 @@ bool ipu_psys_ppg_enqueue_bufsets(struct ipu_psys_ppg *kppg)
 
 				ret = ipu_fw_psys_ppg_enqueue_bufs(kcmd);
 				if (ret) {
-					dev_err(&psys->adev->dev,
+					dev_err(psys_to_device(psys),
 						"kppg 0x%p fail to qbufset %d",
 						kppg, ret);
 					break;
 				}
 				list_move_tail(&kcmd->list,
 					       &kppg->kcmds_processing_list);
-				dev_dbg(&psys->adev->dev,
+				dev_dbg(psys_to_device(psys),
 					"kppg %d %p queue kcmd 0x%p\n",
 					ipu_fw_psys_pg_get_id(kcmd->kpg),
 					kppg, kcmd);
@@ -509,11 +509,11 @@ void ipu_psys_enter_power_gating(struct ipu_psys *psys)
 				continue;
 			}
 
-			ret = pm_runtime_put_autosuspend(&psys->adev->dev);
+			ret = pm_runtime_put_autosuspend(psys_to_device(psys));
 			if (ret < 0) {
-				dev_err(&psys->adev->dev,
+				dev_err(psys_to_device(psys),
 					"failed to power gating off\n");
-				pm_runtime_get_sync(&psys->adev->dev);
+				pm_runtime_get_sync(psys_to_device(psys));
 
 			}
 			mutex_unlock(&kppg->mutex);
@@ -545,11 +545,11 @@ void ipu_psys_exit_power_gating(struct ipu_psys *psys)
 				continue;
 			}
 
-			ret = pm_runtime_get_sync(&psys->adev->dev);
+			ret = pm_runtime_get_sync(psys_to_device(psys));
 			if (ret < 0) {
-				dev_err(&psys->adev->dev,
+				dev_err(psys_to_device(psys),
 					"failed to power gating\n");
-				pm_runtime_put_noidle(&psys->adev->dev);
+				pm_runtime_put_noidle(psys_to_device(psys));
 			}
 			mutex_unlock(&kppg->mutex);
 		}

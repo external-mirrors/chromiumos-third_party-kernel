@@ -6,13 +6,14 @@
 
 #include <linux/pm_qos.h>
 #include <linux/spinlock.h>
+#include <linux/auxiliary_bus.h>
 
 #include <media/v4l2-device.h>
 #include <media/media-device.h>
 
 #include <uapi/linux/ipu-isys.h>
 
-#include "ipu.h"
+#include "ipu-bus.h"
 #include "ipu-isys-media.h"
 #include "ipu-isys-csi2.h"
 #include "ipu-isys-csi2-be.h"
@@ -222,6 +223,11 @@ struct isys_fw_msgs {
 #define to_stream_cfg_msg_buf(a) (&(a)->fw_msg.stream)
 #define to_dma_addr(a) ((a)->dma_addr)
 
+static inline struct device *isys_to_device(struct ipu_isys *isys)
+{
+	return &isys->adev->auxdev.dev;
+}
+
 struct isys_fw_msgs *ipu_get_fw_msg_buf(struct ipu_isys_pipeline *ip);
 void ipu_put_fw_mgs_buf(struct ipu_isys *isys, u64 data);
 void ipu_cleanup_fw_msg_bufs(struct ipu_isys *isys);
@@ -235,4 +241,6 @@ irqreturn_t isys_isr(struct ipu_bus_device *adev);
 int ipu_isys_gpc_init_debugfs(struct ipu_isys *isys);
 #endif
 
+int register_isys_driver(void);
+void unregister_isys_driver(void);
 #endif /* IPU_ISYS_H */

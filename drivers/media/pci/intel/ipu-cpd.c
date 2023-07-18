@@ -239,7 +239,7 @@ void *ipu_cpd_create_pkg_dir(struct ipu_bus_device *adev,
 	met_sz = met_ent->len;
 
 	*pkg_dir_size = PKG_DIR_SIZE + man_sz + met_sz;
-	pkg_dir = dma_alloc_attrs(&adev->dev, *pkg_dir_size, dma_addr,
+	pkg_dir = dma_alloc_attrs(&adev->auxdev.dev, *pkg_dir_size, dma_addr,
 				  GFP_KERNEL,
 				  0);
 	if (!pkg_dir)
@@ -265,7 +265,7 @@ void *ipu_cpd_create_pkg_dir(struct ipu_bus_device *adev,
 	if (ret) {
 		dev_err(&isp->pdev->dev,
 			"Unable to parse module data section!\n");
-		dma_free_attrs(&adev->dev, *pkg_dir_size, pkg_dir,
+		dma_free_attrs(&adev->auxdev.dev, *pkg_dir_size, pkg_dir,
 			       *dma_addr,
 			       0);
 		return NULL;
@@ -279,7 +279,7 @@ void *ipu_cpd_create_pkg_dir(struct ipu_bus_device *adev,
 	pkg_dir_pos += man_sz;
 	memcpy(pkg_dir_pos, src + met_ent->offset, met_sz);
 
-	dma_sync_single_range_for_device(&adev->dev, *dma_addr,
+	dma_sync_single_range_for_device(&adev->auxdev.dev, *dma_addr,
 					 0, *pkg_dir_size, DMA_TO_DEVICE);
 
 	return pkg_dir;
@@ -290,7 +290,7 @@ void ipu_cpd_free_pkg_dir(struct ipu_bus_device *adev,
 			  u64 *pkg_dir,
 			  dma_addr_t dma_addr, unsigned int pkg_dir_size)
 {
-	dma_free_attrs(&adev->dev, pkg_dir_size, pkg_dir, dma_addr, 0);
+	dma_free_attrs(&adev->auxdev.dev, pkg_dir_size, pkg_dir, dma_addr, 0);
 }
 EXPORT_SYMBOL_GPL(ipu_cpd_free_pkg_dir);
 
