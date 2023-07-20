@@ -50,6 +50,7 @@ struct ipu_mmu {
 
 	struct ipu_dma_mapping *dmap;
 	struct list_head vma_list;
+	spinlock_t list_lock;	/* protects vma_list */
 
 	struct page *trash_page;
 	dma_addr_t pci_trash_page; /* IOVA from PCI DMA services (parent) */

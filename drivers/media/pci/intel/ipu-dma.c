@@ -29,15 +29,19 @@ struct vm_info {
 
 static struct vm_info *get_vm_info(struct ipu_mmu *mmu, dma_addr_t iova)
 {
-	struct vm_info *info, *save;
+	struct vm_info *info, *found = NULL;
 
-	list_for_each_entry_safe(info, save, &mmu->vma_list, list) {
+	spin_lock(&mmu->list_lock);
+	list_for_each_entry(info, &mmu->vma_list, list) {
 		if (iova >= info->ipu_iova &&
-		    iova < (info->ipu_iova + info->size))
-			return info;
+		    iova < (info->ipu_iova + info->size)) {
+			found = info;
+			break;
+		}
 	}
+	spin_unlock(&mmu->list_lock);
 
-	return NULL;
+	return found;
 }
 
 /* Begin of things adapted from arch/arm/mm/dma-mapping.c */
@@ -217,7 +221,9 @@ static void *ipu_dma_alloc(struct device *dev, size_t size,
 	info->pages = pages;
 	info->ipu_iova = *dma_handle;
 	info->size = size;
+	spin_lock(&mmu->list_lock);
 	list_add(&info->list, &mmu->vma_list);
+	spin_unlock(&mmu->list_lock);
 
 	return info->vaddr;
 
@@ -268,7 +274,9 @@ static void ipu_dma_free(struct device *dev, size_t size, void *vaddr,
 	if (WARN_ON(!info->pages))
 		return;
 
+	spin_lock(&mmu->list_lock);
 	list_del(&info->list);
+	spin_unlock(&mmu->list_lock);
 
 	size = PAGE_ALIGN(size);
 
