@@ -94,7 +94,7 @@ static dev_t get_boot_dev(void)
 	const char partuuid[] = "PARTUUID=";
 	char uuid[sizeof(partuuid) + 36];
 	char *uuid_str;
-	dev_t devt = 0;
+	dev_t devt;
 
 	if (!strlen(kern_guid)) {
 		DMERR("Couldn't get uuid, try root dev");
@@ -109,14 +109,12 @@ static dev_t get_boot_dev(void)
 	} else {
 		uuid_str = kern_guid;
 	}
-	devt = name_to_dev_t(uuid_str);
-	if (!devt)
-		goto found_nothing;
+	if (early_lookup_bdev(uuid_str, &devt)) {
+		DMDEBUG("No matching partition for GUID: %s", uuid_str);
+		return 0;
+	}
 	return devt;
 
-found_nothing:
-	DMDEBUG("No matching partition for GUID: %s", uuid_str);
-	return 0;
 }
 
 /*
@@ -138,7 +136,7 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 	struct bio *bio;
 	struct page *page;
 	dev_t devt;
-	fmode_t dev_mode;
+	blk_mode_t dev_mode;
 
 	devt = get_boot_dev();
 	if (!devt) {
@@ -148,9 +146,9 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 	}
 
 	/* First we open the device for reading. */
-	dev_mode = FMODE_READ | FMODE_EXCL;
-	bdev = blkdev_get_by_dev(devt, dev_mode,
-				 chromeos_invalidate_kernel_bio);
+	dev_mode = BLK_OPEN_READ | BLK_OPEN_EXCL;
+	bdev = blkdev_get_by_dev(devt, dev_mode ,
+				 chromeos_invalidate_kernel_bio, NULL);
 	if (IS_ERR(bdev)) {
 		DMERR("invalidate_kernel: could not open device for reading");
 		dev_mode = 0;
@@ -197,9 +195,9 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 
 	/* The block dev was being changed on read. Let's reopen here. */
 	blkdev_put(bdev, dev_mode);
-	dev_mode = FMODE_WRITE | FMODE_EXCL;
+	dev_mode = BLK_OPEN_WRITE | BLK_OPEN_EXCL;
 	bdev = blkdev_get_by_dev(devt, dev_mode,
-				 chromeos_invalidate_kernel_bio);
+				 chromeos_invalidate_kernel_bio, NULL);
 	if (IS_ERR(bdev)) {
 		DMERR("invalidate_kernel: could not open device for writing");
 		dev_mode = 0;
