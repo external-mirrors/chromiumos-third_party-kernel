@@ -257,57 +257,6 @@ static int acp6x_reset(void __iomem *base)
 	}
 	return -ETIMEDOUT;
 }
-static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
-{
-	pci_write_config_dword(dev, 0x60, smn_addr);
-	pci_write_config_dword(dev, 0x64, data);
-
-	return 0;
-}
-
-static int smn_read(struct pci_dev *dev, u32 smn_addr)
-{
-	u32 data;
-	pci_write_config_dword(dev, 0x60, smn_addr);
-	pci_read_config_dword(dev, 0x64, &data);
-
-	return data;
-}
-
-void acp63_master_clock_generate(struct acp_dev_data *adata)
-{
-        u32 data;
-        union clk5_pll_req_no clk5_pll;
-        struct pci_dev *smn_dev;
-
-        smn_dev = pci_get_device(PCI_VENDOR_ID_AMD, 0x14E8, NULL);
-        if (!smn_dev) {
-                pr_err("sujith Failed to get host bridge device\n");
-                return;
-        }
-        /* Clk5 pll register values to get mclk as 196.6MHz*/
-        clk5_pll.bits.fb_mult_int = 0x31;
-        clk5_pll.bits.pll_spine_div = 0;
-        clk5_pll.bits.gb_mult_frac = 0x26E9;
-
-        data = smn_read(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0);
-        smn_write(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_STOP_REQ);
-
-        data = smn_read(smn_dev, CLK5_SPLL_FIELD_2_N0);
-        if (data & PLL_FRANCE_EN)
-                smn_write(smn_dev, CLK5_SPLL_FIELD_2_N0, data | PLL_FRANCE_EN);
-
-        smn_write(smn_dev, CLK5_CLK_PLL_REQ_N0, clk5_pll.clk5_pll_req_no_reg);
-
-        data = smn_read(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0);
-        smn_write(smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_START_REQ);
-
-        data = smn_read(smn_dev, CLK5_CLK_DFSBYPASS_CONTR);
-        smn_write(smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_0);
-        smn_write(smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_1);
-
-        smn_write(smn_dev, CLK5_CLK_DFS_CNTL_N0, CLK0_DIVIDER);
-}
 
 static void acp6x_enable_interrupts(struct acp_dev_data *adata)
 {

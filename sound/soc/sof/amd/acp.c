@@ -59,7 +59,7 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
 	return 0;
 }
 
-void master_clock_generate(struct acp_dev_data *adata)
+static void master_clock_generate(struct acp_dev_data *adata)
 {
 	struct snd_sof_dev *sdev = adata->dev;
 	union clk5_pll_req_no clk5_pll;
