@@ -906,6 +906,9 @@ void init_spectral_chicken(struct cpuinfo_x86 *c)
 		}
 	}
 #endif
+
+	if (cpu_has(c, X86_FEATURE_AMD_STIBP))	/* Zen 2 */
+		msr_set_bit(MSR_AMD64_DE_CFG, 9);
 }
 
 static void init_amd_zn(struct cpuinfo_x86 *c)
