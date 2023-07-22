@@ -143,38 +143,6 @@ out:
 }
 
 /**
- * pipeline_walk_cb_dequeue() - Pipeline walk dequeue callback
- * @nsobj: pointer to CAM object that represents a CAM operation
- * @ctl: auxiliary data
- *
- * This callback marks its associated operation as DELETED.
- *
- * Return: True on success or false otherwise.
- */
-static bool pipeline_walk_cb_dequeue(struct cam_obj *nsobj,
-				     struct cam_graph_walk *ctl)
-{
-	struct cam_obj_op *op;
-
-	op = nsobj_to_cam_op(nsobj);
-	if (!op)
-		return false;
-
-	/*
-	 * NOTE:
-	 *
-	 * DELETE_OP doesn't do anything at this point but simply walks the
-	 * graph of objects and marks them as DELETED (if objects can be
-	 * marked as DELETED).
-	 *
-	 * But we, in general, want to drop object reference counter and to
-	 * delete it from the namespace. This will race with the delayed
-	 * object execution.
-	 */
-	return cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
-}
-
-/**
  * pipeline_walk() - Walk through the dependency graph
  * @nsobj: pointer to CAM object that represents the operation to start with
  * @ctl: auxiliary data
@@ -1078,7 +1046,6 @@ static int cam_pipeline_io_worker(void *data)
 int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 			 struct cam_operation_remove *req)
 {
-	struct cam_graph_walk ctl;
 	struct cam_obj_op *op;
 	int ret;
 
@@ -1089,18 +1056,23 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 	if (!op)
 		return -EINVAL;
 
-	if (req->mode == CAM_REMOVE_UNIQUE)
-		ctl.flags = CAM_GRAPH_WALK_ONESHOT;
-
-	if (req->mode == CAM_REMOVE_RECURSIVE)
-		ctl.flags = CAM_GRAPH_WALK_RECURSIVE;
-
-	ctl.data = NULL;
-	ctl.cb = pipeline_walk_cb_dequeue;
-
-	ret = pipeline_walk(&op->nsobj, &ctl);
+	/*
+	 * FIXME@
+	 *
+	 * DELETE_OP doesn't do anything at this point but simply walks the
+	 * graph of objects and marks them as DELETED (if objects can be
+	 * marked as DELETED).
+	 *
+	 * But we, in general, want to drop object reference counter and to
+	 * delete it from the namespace. This will race with the delayed
+	 * object execution.
+	 */
+	ret = cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
 	cam_op_put(op);
-	return ret;
+
+	if (ret)
+		return 0;
+	return -EINVAL;
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
 

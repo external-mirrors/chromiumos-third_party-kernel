@@ -1466,7 +1466,7 @@ out:
 	return ret;
 }
 
-static int test_remove_operations(struct libkc *cam)
+static int test_remove_operations(struct libkc *cam, u32 num_operations)
 {
 	struct libkc_operation *lco;
 	struct libkc_iterator iter;
@@ -1476,14 +1476,13 @@ static int test_remove_operations(struct libkc *cam)
 
 	pr_info("Test test_remove_operations()\n");
 
-	lco = libkc_operation_get(1);
+	lco = libkc_operation_get(num_operations);
 	if (!lco)
 		return -EINVAL;
 
 	for_each_cam_operation(lco, i, op) {
 		op->operation_type		= CAM_OPERATION_TYPE_REMOVE;
 		op->operation_remove.id		= i;
-		op->operation_remove.mode	= CAM_REMOVE_RECURSIVE;
 	}
 
 	ret = libkc_operation_ioctl(cam, lco);
@@ -1626,7 +1625,7 @@ static int test_operations(struct libkc *cam)
 		return ret;
 	}
 
-	ret = test_remove_operations(cam);
+	ret = test_remove_operations(cam, TEST_NUM_OPERATIONS);
 	if (ret) {
 		pr_err("FATAL: failure test_remove_operations()\n");
 		return ret;
@@ -2986,7 +2985,7 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_remove_operations(cam);
+	ret = test_remove_operations(cam, TEST_NUM_OPERATIONS);
 	if (ret) {
 		pr_err("FATAL: failure test_remove_operations()\n");
 		goto out;

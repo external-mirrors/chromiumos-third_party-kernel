@@ -470,27 +470,13 @@ struct cam_operation_add {
 } __attribute__((packed));
 
 /**
- * enum cam_operation_remove_mode - CAM operation remove mode
- *
- * CAM_REMOVE_UNIQUE:		Remove a specific operation
- * CAM_REMOVE_RECURSIVE:	Remove operation and its child (dependent)
- *				operations
- */
-enum cam_operation_remove_mode {
-	CAM_REMOVE_UNIQUE,
-	CAM_REMOVE_RECURSIVE,
-};
-
-/**
  * struct cam_operation_remove - Remove one operation from the list
  *
  * @id:			id of the operation. Must be present in the current
  *			queue
- * @mode:		CAM_REMOVE_RECURSIVE or CAM_REMOVE_UNIQUE
  */
 struct cam_operation_remove {
 	__u32		id;
-	__u32		mode;
 } __attribute__((packed));
 
 /**
