@@ -426,6 +426,7 @@ static int phoenix_audio_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, adata);
 	acp6x_enable_interrupts(adata);
+	acp63_master_clock_generate(adata);
 	acp_platform_register(dev);
 
 	return 0;
