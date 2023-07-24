@@ -1,11 +1,61 @@
 // SPDX-License-Identifier: MIT
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::io::{BufRead, Result, Write};
+use std::io;
+use std::num;
+use std::str::FromStr;
 
-pub type PipelineID = i32;
-pub type OpID = i32;
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct ObjID(pub i32);
 
+impl FromStr for ObjID {
+    type Err = num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = i32::from_str_radix(s, 16)?;
+        Ok(ObjID(id))
+    }
+}
+
+impl fmt::Display for ObjID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct PipelineID(pub i32);
+impl FromStr for PipelineID {
+    type Err = num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = i32::from_str_radix(s, 16)?;
+        Ok(PipelineID(id))
+    }
+}
+
+impl fmt::Display for PipelineID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+pub struct OpID(pub i32);
+impl FromStr for OpID {
+    type Err = num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = i32::from_str_radix(s, 16)?;
+        Ok(OpID(id))
+    }
+}
+
+impl fmt::Display for OpID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 #[derive(PartialEq, Debug)]
 struct OpEvent {
@@ -58,7 +108,7 @@ impl OpEvent {
 struct SignalEvent {
     event_type: SignalEventType,
     ts: f32,
-    source_id: i32,
+    source_id: ObjID,
     source_type: String,
     target_id: OpID,
     pipeline_id: PipelineID,
@@ -82,7 +132,7 @@ impl SignalEvent {
             source_id: tokens[6]
                 .strip_suffix(',')
                 .unwrap()
-                .parse::<OpID>()
+                .parse::<ObjID>()
                 .unwrap(),
             source_type: tokens[9].strip_suffix(',').unwrap().to_string(),
             target_id: tokens[12]
@@ -90,7 +140,7 @@ impl SignalEvent {
                 .unwrap()
                 .parse::<OpID>()
                 .unwrap(),
-            pipeline_id: tokens[15].parse::<i32>().unwrap(),
+            pipeline_id: tokens[15].parse::<PipelineID>().unwrap(),
         }
     }
 }
@@ -152,7 +202,7 @@ struct EventList {
 }
 
 impl EventList {
-    fn parse_op_log<R: BufRead>(reader: R) -> Self {
+    fn parse_op_log<R: io::BufRead>(reader: R) -> Self {
         EventList {
             list: reader
                 .lines()
@@ -204,7 +254,7 @@ impl OpList {
         list
     }
 
-    pub fn output_summary<W: Write>(&self, mut writer: W) -> Result<()> {
+    pub fn output_summary<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         let indent = "    ";
 
         writeln!(writer, "{indent}# of pipelines: {}", self.map.len())?;
@@ -234,33 +284,33 @@ impl OpList {
         Ok(())
     }
 
-    pub fn output_pipeline_numbers<W: Write>(&self, mut writer: W) -> Result<()> {
+    pub fn output_pipeline_numbers<W: io::Write>(&self, mut writer: W) -> io::Result<()> {
         for pipeline in self.map.keys() {
             write!(writer, " {}", pipeline)?;
         }
         writeln!(writer)
     }
 
-    pub fn output_operation_numbers<W: Write>(
+    pub fn output_operation_numbers<W: io::Write>(
         &self,
         mut writer: W,
         pipeline_id: PipelineID,
-    ) -> Result<()> {
+    ) -> io::Result<()> {
         if let Some(ops) = self.map.get(&pipeline_id) {
             writeln!(writer, "# of operations = {}", ops.keys().len())?;
 
-            let mut s = -1;
-            let mut e = -1;
+            let mut s = OpID(-1);
+            let mut e = OpID(-1);
 
             for op in ops.keys() {
-                if s == -1 {
+                if s == OpID(-1) {
                     s = *op;
                     e = *op;
                     continue;
                 }
 
-                if *op == e + 1 {
-                    e += 1;
+                if *op == OpID(e.0 + 1) {
+                    e = *op;
                     continue;
                 }
 
@@ -273,7 +323,7 @@ impl OpList {
                 e = *op;
             }
 
-            if s != -1 {
+            if s != OpID(-1) {
                 if s == e {
                     write!(writer, " {}", s)?;
                 } else {
@@ -285,12 +335,12 @@ impl OpList {
         Ok(())
     }
 
-    pub fn output_operation<W: Write>(
+    pub fn output_operation<W: io::Write>(
         &self,
         mut writer: W,
         pipeline_id: PipelineID,
-        op_id: i32,
-    ) -> Result<()> {
+        op_id: OpID,
+    ) -> io::Result<()> {
         if let Some(pipeline) = self.map.get(&pipeline_id) {
             if let Some(ops) = pipeline.get(&op_id) {
                 for op in ops.iter() {
@@ -372,18 +422,13 @@ impl<'a> OpRefList<'a> {
         stats
     }
 
-    fn output_timings<W: Write>(&self, writer: &mut W) -> Result<()> {
+    fn output_timings<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         let stats = self.get_timings();
         for ((old_s, new_s), e) in stats.map {
             write!(
                 writer,
                 "    {:8} -> {:8}: min {:.6}, max {:.6}, avg {:.6}, count {}",
-                old_s,
-                new_s,
-                e.min,
-                e.max,
-                e.avg,
-                e.count
+                old_s, new_s, e.min, e.max, e.avg, e.count
             )?;
             writeln!(writer)?;
         }
@@ -391,7 +436,7 @@ impl<'a> OpRefList<'a> {
         Ok(())
     }
 
-    fn output_states<W: Write>(&self, writer: &mut W) -> Result<()> {
+    fn output_states<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         let mut sh = StateHistogram::new();
 
         for op in &self.list {
@@ -468,17 +513,12 @@ impl<'a> StateHistogram<'a> {
         *c_e += 1;
     }
 
-    fn output_histogram<W: Write>(&self, writer: &mut W) -> Result<()> {
+    fn output_histogram<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         let indent = "    ";
         for (pipeline, stat) in self.map.iter() {
             writeln!(writer, "{indent}[pipeline {}]", pipeline)?;
             for (state, count) in stat.iter() {
-                writeln!(
-                    writer,
-                    "{indent} # of ops in {}: {}",
-                    state,
-                    count
-                )?;
+                writeln!(writer, "{indent} # of ops in {}: {}", state, count)?;
             }
         }
 
@@ -488,18 +528,18 @@ impl<'a> StateHistogram<'a> {
 
 #[derive(PartialEq, Debug)]
 pub struct Op {
-    id: i32,
+    id: OpID,
     delay_ns: i32,
-    pipeline_id: i32,
+    pipeline_id: PipelineID,
     state_history: Vec<OpState>,
 }
 
 impl Op {
     fn unknown() -> Self {
         Op {
-            id: -1,
+            id: OpID(-1),
             delay_ns: 0,
-            pipeline_id: -1,
+            pipeline_id: PipelineID(-1),
             state_history: Vec::new(),
         }
     }
@@ -541,7 +581,7 @@ impl Op {
         last_state == "EXECUTED" || last_state == "DELETED"
     }
 
-    fn output_details<W: Write>(&self, writer: &mut W) -> Result<()> {
+    fn output_details<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         writeln!(
             writer,
             "    id {}, delay_ns {}, pipeline_id {}, state_history: ",
@@ -556,11 +596,7 @@ impl Op {
                     writeln!(
                         writer,
                         "      [ts {:.6}, state {}, added {}, num_blockers {}, blockers {:?}]",
-                        s.ts,
-                        s.state,
-                        s.added,
-                        s.num_blockers,
-                        s.blockers
+                        s.ts, s.state, s.added, s.num_blockers, s.blockers
                     )?;
                 }
                 Some(prev_state) => {
@@ -654,7 +690,7 @@ impl OpState {
 #[derive(Eq, Ord, PartialOrd, PartialEq, Clone)]
 struct BlockerInfo {
     obj_type: String,
-    id: i32,
+    id: ObjID,
 }
 
 impl BlockerInfo {
@@ -673,7 +709,7 @@ impl fmt::Debug for BlockerInfo {
 }
 
 /* parse + extract */
-pub fn get_op_list<R: BufRead>(reader: R) -> Result<OpList> {
+pub fn get_op_list<R: io::BufRead>(reader: R) -> io::Result<OpList> {
     let event_list = EventList::parse_op_log(reader);
     let op_list = OpList::from_event_list(&event_list);
     Ok(op_list)
@@ -688,7 +724,7 @@ mod tests {
         fn test_new(obj_type: &str, id: &i32) -> Self {
             BlockerInfo {
                 obj_type: obj_type.to_string(),
-                id: *id,
+                id: ObjID(*id),
             }
         }
     }
@@ -703,11 +739,11 @@ mod tests {
         let expected = EventEntry::OpEntry(OpEvent {
             event_type: OpEventType::SetState,
             ts: 995.744359,
-            id: 79605,
+            id: OpID(0x79605),
             state: "SLEEP".to_string(),
             delay_ns: 2,
             num_blockers: 4,
-            pipeline_id: 3,
+            pipeline_id: PipelineID(3),
         });
         assert_eq!(entry, Some(expected));
     }
@@ -722,11 +758,11 @@ mod tests {
         let expected = EventEntry::OpEntry(OpEvent {
             event_type: OpEventType::Add,
             ts: 17.088879,
-            id: 0,
+            id: OpID(0),
             state: "SLEEP".to_string(),
             delay_ns: 0,
             num_blockers: 1,
-            pipeline_id: 2,
+            pipeline_id: PipelineID(2),
         });
         assert_eq!(entry, Some(expected));
     }
@@ -741,10 +777,10 @@ mod tests {
         let expected = EventEntry::SignalEntry(SignalEvent {
             event_type: SignalEventType::AddPending,
             ts: 34.317839,
-            source_id: 8,
+            source_id: ObjID(8),
             source_type: "EVENT".to_string(),
-            target_id: 0,
-            pipeline_id: 2,
+            target_id: OpID(0),
+            pipeline_id: PipelineID(2),
         });
         assert_eq!(entry, Some(expected));
     }
@@ -772,11 +808,11 @@ mod tests {
             list: vec![EventEntry::OpEntry(OpEvent {
                 event_type: OpEventType::SetState,
                 ts: 1.234,
-                id: 5,
+                id: OpID(5),
                 state: "QUEUED".to_string(),
                 delay_ns: 3,
                 num_blockers: 4,
-                pipeline_id: 5,
+                pipeline_id: PipelineID(5),
             })],
         };
 
@@ -791,27 +827,27 @@ mod tests {
                 EventEntry::OpEntry(OpEvent {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
-                    id: 5,
+                    id: OpID(5),
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
-                    pipeline_id: 5,
+                    pipeline_id: PipelineID(5),
                 }),
                 EventEntry::OpEntry(OpEvent {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
-                    id: 6,
+                    id: OpID(6),
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
-                    pipeline_id: 5,
+                    pipeline_id: PipelineID(5),
                 }),
             ],
         };
 
         let op_list = OpList::from_event_list(&events);
         assert_eq!(op_list.map.len(), 1);
-        assert_eq!(op_list.map[&5].len(), 2);
+        assert_eq!(op_list.map[&PipelineID(5)].len(), 2);
     }
 
     #[test]
@@ -821,28 +857,28 @@ mod tests {
                 EventEntry::OpEntry(OpEvent {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
-                    id: 5,
+                    id: OpID(5),
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
-                    pipeline_id: 5,
+                    pipeline_id: PipelineID(5),
                 }),
                 EventEntry::OpEntry(OpEvent {
                     event_type: OpEventType::SetState,
                     ts: 1.234,
-                    id: 5,
+                    id: OpID(5),
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
-                    pipeline_id: 7,
+                    pipeline_id: PipelineID(7),
                 }),
             ],
         };
 
         let op_list = OpList::from_event_list(&events);
         assert_eq!(op_list.map.len(), 2);
-        assert_eq!(op_list.map[&5].len(), 1);
-        assert_eq!(op_list.map[&7].len(), 1);
+        assert_eq!(op_list.map[&PipelineID(5)].len(), 1);
+        assert_eq!(op_list.map[&PipelineID(7)].len(), 1);
     }
 
     #[test]
@@ -851,10 +887,10 @@ mod tests {
             list: vec![EventEntry::SignalEntry(SignalEvent {
                 event_type: SignalEventType::AddPending,
                 ts: 34.317839,
-                source_id: 8,
+                source_id: ObjID(8),
                 source_type: "EVENT".to_string(),
-                target_id: 0,
-                pipeline_id: 2,
+                target_id: OpID(0),
+                pipeline_id: PipelineID(2),
             })],
         };
 
@@ -869,25 +905,25 @@ mod tests {
                 EventEntry::SignalEntry(SignalEvent {
                     event_type: SignalEventType::AddPending,
                     ts: 34.317839,
-                    source_id: 8,
+                    source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
-                    target_id: 0,
-                    pipeline_id: 2,
+                    target_id: OpID(0),
+                    pipeline_id: PipelineID(2),
                 }),
                 EventEntry::SignalEntry(SignalEvent {
                     event_type: SignalEventType::AddPending,
                     ts: 34.317839,
-                    source_id: 8,
+                    source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
-                    target_id: 1,
-                    pipeline_id: 2,
+                    target_id: OpID(1),
+                    pipeline_id: PipelineID(2),
                 }),
             ],
         };
 
         let op_list = OpList::from_event_list(&events);
         assert_eq!(op_list.map.len(), 1);
-        assert_eq!(op_list.map[&2].len(), 2);
+        assert_eq!(op_list.map[&PipelineID(2)].len(), 2);
     }
 
     #[test]
@@ -897,26 +933,26 @@ mod tests {
                 EventEntry::SignalEntry(SignalEvent {
                     event_type: SignalEventType::AddPending,
                     ts: 34.317839,
-                    source_id: 8,
+                    source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
-                    target_id: 0,
-                    pipeline_id: 1,
+                    target_id: OpID(0),
+                    pipeline_id: PipelineID(1),
                 }),
                 EventEntry::SignalEntry(SignalEvent {
                     event_type: SignalEventType::FireActive,
                     ts: 34.317839,
-                    source_id: 8,
+                    source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
-                    target_id: 1,
-                    pipeline_id: 2,
+                    target_id: OpID(1),
+                    pipeline_id: PipelineID(2),
                 }),
             ],
         };
 
         let op_list = OpList::from_event_list(&events);
         assert_eq!(op_list.map.len(), 2);
-        assert_eq!(op_list.map[&1].len(), 1);
-        assert_eq!(op_list.map[&2].len(), 1);
+        assert_eq!(op_list.map[&PipelineID(1)].len(), 1);
+        assert_eq!(op_list.map[&PipelineID(2)].len(), 1);
     }
 
     #[test]
@@ -924,18 +960,18 @@ mod tests {
         let event = EventEntry::OpEntry(OpEvent {
             event_type: OpEventType::SetState,
             ts: 1.234,
-            id: 5,
+            id: OpID(5),
             state: "QUEUED".to_string(),
             delay_ns: 3,
             num_blockers: 4,
-            pipeline_id: 5,
+            pipeline_id: PipelineID(5),
         });
 
         let op = Op::from_event(&event);
         let expected = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: 5,
+            pipeline_id: PipelineID(5),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -950,9 +986,9 @@ mod tests {
     #[test]
     fn update_op_with_signal_event() {
         let mut op = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: 5,
+            pipeline_id: PipelineID(5),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -965,28 +1001,28 @@ mod tests {
         let se_1 = SignalEvent {
             event_type: SignalEventType::AddPending,
             ts: 34.317839,
-            source_id: 8,
+            source_id: ObjID(8),
             source_type: "EVENT".to_string(),
-            target_id: 0,
-            pipeline_id: 1,
+            target_id: OpID(0),
+            pipeline_id: PipelineID(1),
         };
 
         let se_2 = SignalEvent {
             event_type: SignalEventType::FireActive,
             ts: 35.317839,
-            source_id: 8,
+            source_id: ObjID(8),
             source_type: "EVENT".to_string(),
-            target_id: 0,
-            pipeline_id: 1,
+            target_id: OpID(0),
+            pipeline_id: PipelineID(1),
         };
 
         op.add_signal_event(&se_1);
         op.add_signal_event(&se_2);
 
         let expected = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: 5,
+            pipeline_id: PipelineID(5),
             state_history: vec![
                 OpState {
                     ts: 1.234,
@@ -1022,9 +1058,9 @@ mod tests {
         let pipeline2_id = 2;
 
         let pipeline1_op1 = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1034,9 +1070,9 @@ mod tests {
             }],
         };
         let pipeline1_op2 = Op {
-            id: 6,
+            id: OpID(6),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![
                 OpState {
                     ts: 1.234,
@@ -1070,9 +1106,9 @@ mod tests {
         };
 
         let pipeline2_op1 = Op {
-            id: 7,
+            id: OpID(7),
             delay_ns: 3,
-            pipeline_id: pipeline2_id,
+            pipeline_id: PipelineID(pipeline2_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "DELETED".to_string(),
@@ -1089,12 +1125,14 @@ mod tests {
 
         let pipeline2_ops = vec![(pipeline2_op1.id, vec![pipeline2_op1])];
 
-        op_list
-            .map
-            .insert(pipeline1_id, BTreeMap::from_iter(pipeline1_ops.into_iter()));
-        op_list
-            .map
-            .insert(pipeline2_id, BTreeMap::from_iter(pipeline2_ops.into_iter()));
+        op_list.map.insert(
+            PipelineID(pipeline1_id),
+            BTreeMap::from_iter(pipeline1_ops.into_iter()),
+        );
+        op_list.map.insert(
+            PipelineID(pipeline2_id),
+            BTreeMap::from_iter(pipeline2_ops.into_iter()),
+        );
 
         let completed = OpRefList::ops_completed(&op_list);
         assert_eq!(completed.list.len(), 2);
@@ -1109,9 +1147,9 @@ mod tests {
         let pipeline1_id = 1;
 
         let pipeline1_op1 = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1123,9 +1161,10 @@ mod tests {
 
         let pipeline1_ops = vec![(pipeline1_op1.id, vec![pipeline1_op1])];
 
-        op_list
-            .map
-            .insert(pipeline1_id, BTreeMap::from_iter(pipeline1_ops.into_iter()));
+        op_list.map.insert(
+            PipelineID(pipeline1_id),
+            BTreeMap::from_iter(pipeline1_ops.into_iter()),
+        );
 
         let mut expected = String::new();
         writeln!(expected, "# of operations = 1").unwrap();
@@ -1133,7 +1172,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, pipeline1_id)
+            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1146,9 +1185,9 @@ mod tests {
         let pipeline1_id = 1;
 
         let pipeline1_op1 = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1159,9 +1198,9 @@ mod tests {
         };
 
         let pipeline1_op2 = Op {
-            id: 6,
+            id: OpID(6),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1176,9 +1215,10 @@ mod tests {
             (pipeline1_op2.id, vec![pipeline1_op2]),
         ];
 
-        op_list
-            .map
-            .insert(pipeline1_id, BTreeMap::from_iter(pipeline1_ops.into_iter()));
+        op_list.map.insert(
+            PipelineID(pipeline1_id),
+            BTreeMap::from_iter(pipeline1_ops.into_iter()),
+        );
 
         let mut expected = String::new();
         writeln!(expected, "# of operations = 2").unwrap();
@@ -1186,7 +1226,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, pipeline1_id)
+            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1199,9 +1239,9 @@ mod tests {
         let pipeline1_id = 1;
 
         let pipeline1_op1 = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1212,9 +1252,9 @@ mod tests {
         };
 
         let pipeline1_op2 = Op {
-            id: 6,
+            id: OpID(6),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1225,9 +1265,9 @@ mod tests {
         };
 
         let pipeline1_op3 = Op {
-            id: 8,
+            id: OpID(8),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1243,9 +1283,10 @@ mod tests {
             (pipeline1_op3.id, vec![pipeline1_op3]),
         ];
 
-        op_list
-            .map
-            .insert(pipeline1_id, BTreeMap::from_iter(pipeline1_ops.into_iter()));
+        op_list.map.insert(
+            PipelineID(pipeline1_id),
+            BTreeMap::from_iter(pipeline1_ops.into_iter()),
+        );
 
         let mut expected = String::new();
         writeln!(expected, "# of operations = 3").unwrap();
@@ -1253,7 +1294,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, pipeline1_id)
+            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1266,9 +1307,9 @@ mod tests {
         let pipeline1_id = 1;
 
         let pipeline1_op1 = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1279,9 +1320,9 @@ mod tests {
         };
 
         let pipeline1_op2 = Op {
-            id: 6,
+            id: OpID(6),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1292,9 +1333,9 @@ mod tests {
         };
 
         let pipeline1_op3 = Op {
-            id: 8,
+            id: OpID(8),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1305,9 +1346,9 @@ mod tests {
         };
 
         let pipeline1_op4 = Op {
-            id: 10,
+            id: OpID(10),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1318,9 +1359,9 @@ mod tests {
         };
 
         let pipeline1_op5 = Op {
-            id: 11,
+            id: OpID(11),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1331,9 +1372,9 @@ mod tests {
         };
 
         let pipeline1_op6 = Op {
-            id: 12,
+            id: OpID(12),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1352,9 +1393,10 @@ mod tests {
             (pipeline1_op6.id, vec![pipeline1_op6]),
         ];
 
-        op_list
-            .map
-            .insert(pipeline1_id, BTreeMap::from_iter(pipeline1_ops.into_iter()));
+        op_list.map.insert(
+            PipelineID(pipeline1_id),
+            BTreeMap::from_iter(pipeline1_ops.into_iter()),
+        );
 
         let mut expected = String::new();
         writeln!(expected, "# of operations = 6").unwrap();
@@ -1362,7 +1404,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, pipeline1_id)
+            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1452,9 +1494,9 @@ mod tests {
         let mut sh = StateHistogram::new();
 
         let pipeline1_op1 = Op {
-            id: 5,
+            id: OpID(5),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "QUEUED".to_string(),
@@ -1464,9 +1506,9 @@ mod tests {
             }],
         };
         let pipeline1_op2 = Op {
-            id: 6,
+            id: OpID(6),
             delay_ns: 3,
-            pipeline_id: pipeline1_id,
+            pipeline_id: PipelineID(pipeline1_id),
             state_history: vec![
                 OpState {
                     ts: 1.234,
@@ -1500,9 +1542,9 @@ mod tests {
         };
 
         let pipeline2_op1 = Op {
-            id: 7,
+            id: OpID(7),
             delay_ns: 3,
-            pipeline_id: pipeline2_id,
+            pipeline_id: PipelineID(pipeline2_id),
             state_history: vec![OpState {
                 ts: 1.234,
                 state: "DELETED".to_string(),
@@ -1516,16 +1558,55 @@ mod tests {
         sh.append(&pipeline1_op2);
         sh.append(&pipeline2_op1);
 
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("SLEEP"), None);
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("QUEUED"), Some(&1));
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("RUNNING"), None);
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("EXECUTED"), Some(&1));
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("DELETED"), None);
+        assert_eq!(
+            sh.map.get(&PipelineID(pipeline1_id)).unwrap().get("SLEEP"),
+            None
+        );
+        assert_eq!(
+            sh.map.get(&PipelineID(pipeline1_id)).unwrap().get("QUEUED"),
+            Some(&1)
+        );
+        assert_eq!(
+            sh.map
+                .get(&PipelineID(pipeline1_id))
+                .unwrap()
+                .get("RUNNING"),
+            None
+        );
+        assert_eq!(
+            sh.map
+                .get(&PipelineID(pipeline1_id))
+                .unwrap()
+                .get("EXECUTED"),
+            Some(&1)
+        );
+        assert_eq!(
+            sh.map
+                .get(&PipelineID(pipeline1_id))
+                .unwrap()
+                .get("DELETED"),
+            None
+        );
 
-        assert_eq!(sh.map.get(&pipeline2_id).unwrap().get("DELETED"), Some(&1));
+        assert_eq!(
+            sh.map
+                .get(&PipelineID(pipeline2_id))
+                .unwrap()
+                .get("DELETED"),
+            Some(&1)
+        );
 
         /* illegal states */
-        assert_eq!(sh.map.get(&pipeline1_id).unwrap().get("SLEPT"), None);
-        assert_eq!(sh.map.get(&pipeline2_id).unwrap().get("ABORTED"), None);
+        assert_eq!(
+            sh.map.get(&PipelineID(pipeline1_id)).unwrap().get("SLEPT"),
+            None
+        );
+        assert_eq!(
+            sh.map
+                .get(&PipelineID(pipeline2_id))
+                .unwrap()
+                .get("ABORTED"),
+            None
+        );
     }
 }
