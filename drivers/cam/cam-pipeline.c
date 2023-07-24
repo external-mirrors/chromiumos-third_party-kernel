@@ -1549,6 +1549,32 @@ int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_prepare, ERRNO);
 
+int cam_pipeline_enqueue_activate(struct cam_pipeline *pipeline,
+				  struct cam_operation_add *req)
+{
+	struct cam_obj_op *op;
+
+	/* Check pipeline status as late as possible */
+	if (!cam_pipeline_is_active(pipeline))
+		return -EINVAL;
+
+	op = cam_op_lookup(&pipeline->ops, req->id);
+	if (!op)
+		return -EINVAL;
+
+	/*
+	 * Based on the dependency mode this will attempt to activate required
+	 * number of pending signals.
+	 */
+	if (req->mode == CAM_DEPENDENCY_STRICT_ORDER)
+		cam_activate_strict_dependency_mode(op);
+	else
+		cam_activate_weak_dependency_mode(op);
+
+	cam_op_put(op);
+	return 0;
+}
+
 /**
  * cam_pipeline_enqueue_submit() - Submit an operation
  * @pipeline: pointer to CAM pipeline
@@ -1563,7 +1589,6 @@ int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 				struct cam_operation_add *req)
 {
 	struct cam_obj_op *op;
-	bool execute = false;
 
 	/* Check pipeline status as late as possible */
 	if (!cam_pipeline_is_active(pipeline))
@@ -1573,24 +1598,7 @@ int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 	if (!op)
 		return -EINVAL;
 
-	/*
-	 * Based on the dependency mode this will attempt to activate required
-	 * number of pending signals. If nothing is activated then we convert
-	 * this operation into immediate and queue it for execution.
-	 */
-	if (req->mode == CAM_DEPENDENCY_STRICT_ORDER) {
-		if (!cam_activate_strict_dependency_mode(op))
-			execute = true;
-	} else {
-		if (!cam_activate_weak_dependency_mode(op))
-			execute = true;
-	}
-
-	/*
-	 * Not blocked on any signals. Note, the object may already be in
-	 * CAM_OPERATION_STATE_DELETED at this point.
-	 */
-	if (execute)
+	if (atomic_read(&op->num_blockers) == 0)
 		cam_op_enqueue(op);
 
 	cam_op_put(op);

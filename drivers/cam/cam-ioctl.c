@@ -262,6 +262,42 @@ static int cam_ioctl_operation_prepare(struct cam_fh *fh,
 	return 0;
 }
 
+static int cam_ioctl_operation_activate(struct cam_fh *fh,
+					struct cam_header *hdr,
+					struct cam_operation __user *payload)
+{
+	u32 num_op;
+	int ret;
+
+	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
+		struct cam_operation op;
+
+		if (copy_from_user(&op, payload, sizeof(op)))
+			return -EFAULT;
+
+		switch (op.operation_type) {
+		case CAM_OPERATION_TYPE_ADD:
+			ret = cam_pipeline_enqueue_activate(&fh->pipeline,
+							    &op.operation_add);
+			break;
+		case CAM_OPERATION_TYPE_REMOVE:
+			ret = 0;
+			break;
+		default:
+			ret = -EINVAL;
+		}
+
+		if (ret) {
+			hdr->error = num_op;
+			return ret;
+		}
+
+		payload++;
+	}
+
+	return ret;
+}
+
 static int cam_ioctl_operation_submit(struct cam_fh *fh,
 				      struct cam_header *hdr,
 				      struct cam_operation __user *payload)
@@ -314,6 +350,17 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 		 * We failed at prepare() stage. All OPs in this IOCTL
 		 * can be cancelled as none of them have been submitted
 		 * yet.
+		 */
+		payload = uarg + sizeof(struct cam_header);
+		cam_ioctl_operation_cancel(fh, hdr, payload, 0);
+		return ret;
+	}
+
+	ret = cam_ioctl_operation_activate(fh, hdr, payload);
+	if (ret) {
+		/*
+		 * @FIXME we need to de-activate activated operations'
+		 * dependencies
 		 */
 		payload = uarg + sizeof(struct cam_header);
 		cam_ioctl_operation_cancel(fh, hdr, payload, 0);
