@@ -306,6 +306,7 @@ static int cam_op_activate_pending_signal(struct cam_obj_op *op)
 		atomic_dec(&op->num_blockers);
 		return CAM_OP_PENDING_SIGNAL_FAILURE;
 	}
+	trace_cam_signal_add_active(sig);
 	return CAM_OP_PENDING_SIGNAL_ACTIVATED;
 }
 

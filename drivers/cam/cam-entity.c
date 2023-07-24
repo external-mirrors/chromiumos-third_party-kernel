@@ -625,7 +625,7 @@ void cam_event_trigger_signals(struct cam_obj_entity *entity,
 	if (entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE)
 		return;
 
-	trace_cam_event_trigger(entity, event);
+	trace_cam_event_trigger(entity, NULL, event);
 	write_lock_irqsave(&event->notify_lock, flags);
 	cam_fire_active_signals(&event->notify_active_chain);
 	write_unlock_irqrestore(&event->notify_lock, flags);
@@ -648,7 +648,7 @@ void cam_instance_event_trigger_signals(struct cam_obj_entity *entity,
 	if (!(entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE))
 		return;
 
-	trace_cam_event_trigger(entity, event);
+	trace_cam_event_trigger(entity, instance, event);
 	write_lock_irqsave(&event->notify_lock, flags);
 	cam_instance_fire_active_signals(instance, &event->notify_active_chain);
 	write_unlock_irqrestore(&event->notify_lock, flags);

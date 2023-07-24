@@ -61,6 +61,7 @@ DECLARE_EVENT_CLASS(cam_operation_class,
 		__field(u64, delay_ns)
 		__field(int, num_blockers)
 		__field(int, pipeline_id)
+		__field(unsigned long, instance_id)
 	),
 
 	TP_fast_assign(
@@ -69,13 +70,18 @@ DECLARE_EVENT_CLASS(cam_operation_class,
 		__entry->delay_ns = op->delay_ns;
 		__entry->num_blockers = atomic_read(&op->num_blockers);
 		__entry->pipeline_id = op->pipeline->id;
+		if (op->exec_instance)
+			__entry->instance_id = op->exec_instance->nsobj.id;
+		else
+			__entry->instance_id = -1;
 	),
 
-	TP_printk("id = %lu, state = %s, delay_ns = %llu, num_blockers = %d, pipeline_id = %d",
+	TP_printk("id = 0x%lx, state = %s, delay_ns = %llu, num_blockers = %d, instance_id = 0x%lx, pipeline_id = 0x%x",
 		  __entry->id,
 		  show_state_name(__entry->state),
 		  __entry->delay_ns,
 		  __entry->num_blockers,
+		  __entry->instance_id,
 		  __entry->pipeline_id
 	)
 )
@@ -91,11 +97,14 @@ DEFINE_EVENT(cam_operation_class, cam_operation_set_state,
 );
 
 DECLARE_EVENT_CLASS(cam_event_class,
-	TP_PROTO(struct cam_obj_entity *entity, struct cam_obj_event *event),
-	TP_ARGS(entity, event),
+	TP_PROTO(struct cam_obj_entity *entity,
+		 struct cam_obj_instance *instance,
+		 struct cam_obj_event *event),
+	TP_ARGS(entity, instance, event),
 
 	TP_STRUCT__entry(
 		__field(unsigned long, entity_id)
+		__field(unsigned long, instance_id)
 		__array(char, entity_name, CAM_ENTITY_NAME_SZ)
 		__field(unsigned long, event_id)
 		__array(char, event_name, CAM_EVENT_NAME_SZ)
@@ -103,14 +112,19 @@ DECLARE_EVENT_CLASS(cam_event_class,
 
 	TP_fast_assign(
 		__entry->entity_id = entity->nsobj.id;
+		if (instance)
+			__entry->instance_id = instance->nsobj.id;
+		else
+			__entry->instance_id = -1;
 		memcpy(__entry->entity_name, entity->name, CAM_ENTITY_NAME_SZ);
 		__entry->event_id = event->nsobj.id;
 		memcpy(__entry->event_name, event->name, CAM_EVENT_NAME_SZ);
 	),
 
 	TP_printk(
-		  "entity_id = %lu, entity_name = %s, event_id = %lu, event_name = %s",
+		  "entity_id = 0x%lx, instance_id = 0x%lx, entity_name = %s, event_id = 0x%lx, event_name = %s",
 		  __entry->entity_id,
+		  __entry->instance_id,
 		  __entry->entity_name,
 		  __entry->event_id,
 		  __entry->event_name
@@ -118,8 +132,10 @@ DECLARE_EVENT_CLASS(cam_event_class,
 )
 
 DEFINE_EVENT(cam_event_class, cam_event_trigger,
-	TP_PROTO(struct cam_obj_entity *entity, struct cam_obj_event *event),
-	TP_ARGS(entity, event)
+	TP_PROTO(struct cam_obj_entity *entity,
+		 struct cam_obj_instance *instance,
+		 struct cam_obj_event *event),
+	TP_ARGS(entity, instance, event)
 );
 
 #define KCAM_OP(obj)	(container_of(obj, struct cam_obj_op, nsobj))
@@ -132,6 +148,7 @@ DECLARE_EVENT_CLASS(cam_signal_class,
 		__field(unsigned long, source_id)
 		__field(enum cam_obj_type, source_type)
 		__field(unsigned long, target_id)
+		__field(unsigned long, instance_id)
 		__field(int, pipeline_id)
 	),
 
@@ -140,19 +157,26 @@ DECLARE_EVENT_CLASS(cam_signal_class,
 		__entry->source_id = signal->source->id;
 		__entry->source_type = signal->source->type;
 		__entry->target_id = signal->target->id;
+		__entry->instance_id = signal->instance;
 		__entry->pipeline_id = KCAM_OP(signal->target)->pipeline->id;
 	),
 
 	TP_printk(
-		  "source_id = %lu, source_type = %s, target_id = %lu, pipeline_id = %d",
+		  "source_id = 0x%lx, source_type = %s, target_id = 0x%lx, instance_id = 0x%lx, pipeline_id = 0x%x",
 		  __entry->source_id,
 		  show_type_name(__entry->source_type),
 		  __entry->target_id,
+		  __entry->instance_id,
 		  __entry->pipeline_id
 	)
 )
 
 DEFINE_EVENT(cam_signal_class, cam_signal_add_pending,
+	TP_PROTO(struct cam_op_signal *signal),
+	TP_ARGS(signal)
+);
+
+DEFINE_EVENT(cam_signal_class, cam_signal_add_active,
 	TP_PROTO(struct cam_op_signal *signal),
 	TP_ARGS(signal)
 );
@@ -174,7 +198,7 @@ DECLARE_EVENT_CLASS(cam_io_worker_class,
 		__entry->pipeline_id = pipeline->id;
 	),
 
-	TP_printk("pipeline_id = %d", __entry->pipeline_id)
+	TP_printk("pipeline_id = 0x%x", __entry->pipeline_id)
 )
 
 DEFINE_EVENT(cam_io_worker_class, cam_io_worker_sleep,
