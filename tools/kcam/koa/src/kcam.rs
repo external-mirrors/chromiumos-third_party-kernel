@@ -392,14 +392,14 @@ impl<'a> OpRefList<'a> {
     }
 
     fn output_states<W: Write>(&self, writer: &mut W) -> Result<()> {
-        let mut sh = StateHistgram::new();
+        let mut sh = StateHistogram::new();
 
         for op in &self.list {
             sh.append(op);
             op.output_details(writer)?;
         }
 
-        sh.output_histgram(writer)?;
+        sh.output_histogram(writer)?;
 
         Ok(())
     }
@@ -450,13 +450,13 @@ impl Default for TimeStatsEntry {
     }
 }
 
-struct StateHistgram<'a> {
+struct StateHistogram<'a> {
     map: BTreeMap<PipelineID, BTreeMap<&'a str, usize>>,
 }
 
-impl<'a> StateHistgram<'a> {
+impl<'a> StateHistogram<'a> {
     fn new() -> Self {
-        StateHistgram {
+        StateHistogram {
             map: BTreeMap::new(),
         }
     }
@@ -468,7 +468,7 @@ impl<'a> StateHistgram<'a> {
         *c_e += 1;
     }
 
-    fn output_histgram<W: Write>(&self, writer: &mut W) -> Result<()> {
+    fn output_histogram<W: Write>(&self, writer: &mut W) -> Result<()> {
         let indent = "    ";
         for (pipeline, stat) in self.map.iter() {
             writeln!(writer, "{indent}[pipeline {}]", pipeline)?;
@@ -1445,11 +1445,11 @@ mod tests {
     }
 
     #[test]
-    fn calc_state_histgram() {
+    fn calc_state_histogram() {
         let pipeline1_id = 1;
         let pipeline2_id = 2;
 
-        let mut sh = StateHistgram::new();
+        let mut sh = StateHistogram::new();
 
         let pipeline1_op1 = Op {
             id: 5,
