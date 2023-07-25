@@ -187,20 +187,27 @@ bool cam_in_syncfile_activate_signal(struct cam_op_signal *sig)
 	return true;
 }
 
-void cam_drain_in_syncfile(struct cam_obj *nsobj)
+void cam_in_syncfile_deactivate_signal(struct cam_op_signal *sig)
 {
+	struct cam_op_signal *active;
 	struct cam_obj_syncfile *sf;
 	unsigned long flags;
 
-	sf = nsobj_to_cam_in_syncfile(nsobj);
+	sf = nsobj_to_cam_in_syncfile(sig->source);
 	if (WARN_ON(!sf))
 		return;
 
-	/* Make sure we don't get signals */
-	dma_fence_remove_callback(sf->in.fence, &sf->in.cb);
-
+	/*
+	 * notify_active_chain is accessed from the IRQ context,
+	 * so we need to disable local IRQs.
+	 */
 	write_lock_irqsave(&sf->in.notify_lock, flags);
-	cam_drain_active_signals(&sf->in.notify_active_chain, NULL);
+	list_for_each_entry(active, &sf->in.notify_active_chain, entry) {
+		if (active == sig) {
+			list_del_init(&sig->entry);
+			break;
+		}
+	}
 	write_unlock_irqrestore(&sf->in.notify_lock, flags);
 }
 

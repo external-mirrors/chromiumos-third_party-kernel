@@ -81,17 +81,25 @@ struct cam_op_signal {
 	struct cam_obj			*source;
 	/** @target: Namespace object of the signal target */
 	struct cam_obj			*target;
-	/** @entry: List entry in the pending/active lists */
-	struct list_head		entry;
-	/** @instance: ID of entity instance */
-	u32				instance;
 	/** @activate: Function that activates pending signal */
 	bool (*activate)(struct cam_op_signal *sig);
 	/** @fire: Function that raises the signal */
 	bool (*fire)(struct cam_op_signal *sig);
+	/**
+	 * @deactivate: Function that removes the signal from the active
+	 * chain without raising it
+	 */
+	void (*deactivate)(struct cam_op_signal *sig);
+	/**
+	 * @entry: List entry in the pending/active lists of either a
+	 * targer or source object, depending on the signal state
+	 */
+	struct list_head		entry;
+	/** @notifiers_entry: List entry in the owner object list */
+	struct list_head		notifiers_entry;
+	/** @instance: ID of entity instance */
+	u32				instance;
 };
-
-struct cam_obj_syncfile;
 
 /**
  * cam_obj_op - CAM operations
@@ -124,13 +132,21 @@ struct cam_obj_op {
 	rwlock_t			notify_lock;
 	/** @state: State of the operation */
 	enum cam_operation_state	state;
-	/** @notify_active_chain: List of operations that are blocked on us */
+	/**
+	 * @notify_active_chain: List of operations that are blocked on us.
+	 * This is a list of imported signals.
+	 */
 	struct list_head		notify_active_chain;
 	/**
 	 * @notify_pending_chain: List of signals that we will be blocked on.
+	 * This is a list of signals that will be exported.
 	 * See comment in cam_pipeline_enqueue().
 	 */
 	struct list_head		notify_pending_chain;
+	/**
+	 * @notifiers: List of all signals this OP owns.
+	 */
+	struct list_head		notifiers;
 };
 
 struct cam_device;
@@ -158,8 +174,6 @@ int cam_enum_operations(struct cam_pipeline *pipeline,
 void cam_fire_active_signals(struct list_head *notify_active_chain);
 void cam_instance_fire_active_signals(struct cam_obj_instance *instance,
 				      struct list_head *notify_active_chain);
-void cam_drain_active_signals(struct list_head *notify_active_chain,
-			      struct cam_pipeline *pipeline);
 
 int cam_pipeline_io_setup(struct cam_pipeline *pipeline);
 int cam_pipeline_io_release(struct cam_pipeline *pipeline);

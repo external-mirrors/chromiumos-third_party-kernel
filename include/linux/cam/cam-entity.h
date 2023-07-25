@@ -160,6 +160,7 @@ void cam_event_unregister(struct cam_obj_event *ce);
 u32 cam_event_id(struct cam_obj_event *ce);
 
 bool cam_event_activate_signal(struct cam_op_signal *sig);
+void cam_event_deactivate_signal(struct cam_op_signal *sig);
 
 void cam_event_trigger_signals(struct cam_obj_entity *entity,
 			       struct cam_obj_event *event);
@@ -191,7 +192,6 @@ void *cam_instance_driver_data(struct cam_obj_instance *instance);
 
 struct cam_pipeline;
 
-int cam_drain_events(struct cam_pipeline *pipeline);
 int cam_drain_instances(struct cam_pipeline *pipeline);
 
 #endif /* __LINUX_CAM_ENTITY_H__ */

@@ -587,6 +587,30 @@ bool cam_event_activate_signal(struct cam_op_signal *sig)
 	return true;
 }
 
+void cam_event_deactivate_signal(struct cam_op_signal *sig)
+{
+	struct cam_op_signal *active;
+	struct cam_obj_event *event;
+	unsigned long flags;
+
+	event = nsobj_to_cam_event(sig->source);
+	if (WARN_ON(!event))
+		return;
+
+	/*
+	 * notify_active_chain is accessed from the IRQ context,
+	 * so we need to disable local IRQs.
+	 */
+	write_lock_irqsave(&event->notify_lock, flags);
+	list_for_each_entry(active, &event->notify_active_chain, entry) {
+		if (active == sig) {
+			list_del_init(&sig->entry);
+			break;
+		}
+	}
+	write_unlock_irqrestore(&event->notify_lock, flags);
+}
+
 /**
  * cam_event_trigger_signals() - Trigger and notify all active signals
  * depending on the provided event
@@ -897,48 +921,6 @@ int cam_enum_events(struct cam_device *cam,
 	if (ctl.match_id != CAM_QUERY_ALL_OBJECTS && !output->num_entries)
 		ret = -ENOENT;
 	return ret;
-}
-
-/**
- * cam_drain_event_callback() - Callback to exhaust all the active event signals
- * @nsobj: pointer to CAM object that represents a CAM event
- * @ctl: auxiliary data
- *
- * Return: true if namespace walk should terminate and false otherwise.
- */
-static bool cam_drain_event_callback(struct cam_obj *nsobj,
-				     struct cam_ns_walk_control *ctl)
-{
-	struct cam_obj_event *event;
-	unsigned long flags;
-
-	if (!(nsobj->type & CAM_OBJ_TYPE_EVENT))
-		return false;
-
-	event = nsobj_to_cam_event(nsobj);
-	if (WARN_ON(!event))
-		return true;
-
-	write_lock_irqsave(&event->notify_lock, flags);
-	cam_drain_active_signals(&event->notify_active_chain, ctl->data);
-	write_unlock_irqrestore(&event->notify_lock, flags);
-	return false;
-}
-
-/**
- * cam_drain_events() - Exhaust all active event signals under a CAM device.
- * @pipeline: pointer to CAM pipeline
- *
- * Return: 0 on success.
- */
-int cam_drain_events(struct cam_pipeline *pipeline)
-{
-	struct cam_ns_walk_control ctl = {};
-
-	ctl.data	= pipeline;
-	ctl.cb		= cam_drain_event_callback;
-	cam_ns_for_each(&pipeline->cam->ns, &ctl);
-	return 0;
 }
 
 /**

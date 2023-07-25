@@ -79,6 +79,22 @@ static void cam_op_put(struct cam_obj_op *op)
 }
 
 /**
+ * release_signal() - Release the signal
+ * @sig: pointer to CAM signal
+ */
+static void release_signal(struct cam_op_signal *sig)
+{
+	/*
+	 * NOTE that for both source and target a signal is considered to
+	 * be consumed and, hence, target and source ref-counters can be
+	 * dropped. Note that this can be the final put for source.
+	 */
+	cam_obj_put(sig->source);
+	cam_obj_put(sig->target);
+	kfree(sig);
+}
+
+/**
  * cam_op_release() - Release CAM operation
  * @nsobj: pointer to CAM object that represents a CAM operation
  *
@@ -92,6 +108,7 @@ static void cam_op_release(struct cam_obj *nsobj)
 
 	WARN_ON(!list_empty(&op->notify_active_chain));
 	WARN_ON(!list_empty(&op->notify_pending_chain));
+	WARN_ON(!list_empty(&op->notifiers));
 
 	if (op->exec_entity)
 		cam_entity_put(op->exec_entity);
@@ -241,22 +258,6 @@ static void cam_op_enqueue(struct cam_obj_op *op)
 		wake_up(&pipeline->io_queue_wait);
 }
 
-/**
- * release_signal() - Release the signal
- * @sig: pointer to CAM signal
- */
-static void release_signal(struct cam_op_signal *sig)
-{
-	/*
-	 * NOTE that for both source and target a signal is considered to
-	 * be consumed and, hence, target and source ref-counters can be
-	 * dropped. Note that this can be the final put for source.
-	 */
-	cam_obj_put(sig->source);
-	cam_obj_put(sig->target);
-	kfree(sig);
-}
-
 enum {
 	CAM_OP_PENDING_SIGNAL_NONE,
 	CAM_OP_PENDING_SIGNAL_ACTIVATED,
@@ -293,12 +294,6 @@ static int cam_op_activate_pending_signal(struct cam_obj_op *op)
 
 	ret = sig->activate(sig);
 	if (!ret) {
-		/*
-		 * The signal was not activated, it will never be raised so
-		 * release it now. Note that this can be the final put for
-		 * the source.
-		 */
-		release_signal(sig);
 		/*
 		 * We failed to activate pending signal, something is not
 		 * right with the signal source: e.g. source OP is in
@@ -373,7 +368,6 @@ void cam_fire_active_signals(struct list_head *notify_active_chain)
 
 		list_del_init(&sig->entry);
 		sig->fire(sig);
-		release_signal(sig);
 	}
 }
 
@@ -396,57 +390,6 @@ void cam_instance_fire_active_signals(struct cam_obj_instance *instance,
 
 		list_del_init(&sig->entry);
 		sig->fire(sig);
-		release_signal(sig);
-	}
-}
-
-static void drain_notify_chain(struct list_head *notify_chain)
-{
-	struct cam_op_signal *sig;
-
-	while (!list_empty(notify_chain)) {
-		sig = list_first_entry(notify_chain,
-				       struct cam_op_signal,
-				       entry);
-
-		list_del_init(&sig->entry);
-		release_signal(sig);
-	}
-}
-
-/**
- * cam_drain_active_signals() - Drain all signals from an active notify chain
- * @notify_active_chain: operation notify chain with signals
- * @pipeline: pipeline that is being destroyed
- *
- * Unlike cam_fire_active_signals(), this simply removes and releases the
- * signals without running their callbacks. We also need to release signals
- * only to operations that belong to a pipeline that we are currently
- * destroying. Events are global and can contain signals to operations from
- * different pipelines.
- */
-void cam_drain_active_signals(struct list_head *notify_active_chain,
-			      struct cam_pipeline *pipeline)
-{
-	struct cam_op_signal *sig;
-	struct cam_op_signal *save;
-
-	if (list_empty(notify_active_chain))
-		return;
-
-	list_for_each_entry_safe(sig, save, notify_active_chain, entry) {
-		struct cam_obj_op *op;
-
-		/* Target should be operation */
-		op = nsobj_to_cam_op(sig->target);
-		if (WARN_ON(!op))
-			continue;
-
-		if (pipeline && op->pipeline != pipeline)
-			continue;
-
-		list_del_init(&sig->entry);
-		release_signal(sig);
 	}
 }
 
@@ -458,7 +401,6 @@ static void cam_drain_op_syncfiles(struct cam_obj_op *op)
 	cam_obj_for_each_link_safe(link, save, &op->nsobj) {
 		switch (cam_obj_type(link)) {
 		case CAM_OBJ_TYPE_IN_SYNCFILE:
-			cam_drain_in_syncfile(link);
 			cam_in_syncfile_unregister(link);
 			break;
 		case CAM_OBJ_TYPE_OUT_SYNCFILE:
@@ -470,6 +412,36 @@ static void cam_drain_op_syncfiles(struct cam_obj_op *op)
 			       cam_obj_type(link));
 		}
 	}
+}
+
+static void cam_op_destroy_signals(struct cam_obj_op *op)
+{
+	struct cam_op_signal *sig, *safe;
+
+	list_for_each_entry_safe(sig, safe, &op->notifiers, notifiers_entry) {
+		list_del_init(&sig->notifiers_entry);
+		release_signal(sig);
+	}
+}
+
+static void cam_drain_op_signals(struct cam_obj_op *op)
+{
+	struct cam_op_signal *sig, *safe;
+	unsigned long flags;
+
+	write_lock_irqsave(&op->notify_lock, flags);
+	/* First, remove all pending signals, so nothing gets activated */
+	list_for_each_entry_safe(sig, safe, &op->notify_pending_chain, entry) {
+		list_del_init(&sig->entry);
+	}
+	write_unlock_irqrestore(&op->notify_lock, flags);
+
+	/* Second, deactivate all already activated signals */
+	list_for_each_entry_safe(sig, safe, &op->notifiers, notifiers_entry) {
+		sig->deactivate(sig);
+	}
+
+	cam_op_destroy_signals(op);
 }
 
 /**
@@ -494,8 +466,7 @@ static void cam_drain_ops(struct cam_pipeline *pipeline)
 		 * OPs have pending and active signals chains, all of which
 		 * need to be drained because they hold refcounts.
 		 */
-		drain_notify_chain(&op->notify_active_chain);
-		drain_notify_chain(&op->notify_pending_chain);
+		cam_drain_op_signals(op);
 		cam_drain_op_syncfiles(op);
 		cam_obj_remove(&op->nsobj);
 		/*
@@ -524,6 +495,7 @@ static void cam_op_fire_signals(struct cam_obj_op *op)
 	 * Famous last words.
 	 */
 	cam_fire_active_signals(&op->notify_active_chain);
+	cam_op_destroy_signals(op);
 	cam_drain_op_syncfiles(op);
 }
 
@@ -563,6 +535,26 @@ static bool cam_op_activate_signal(struct cam_op_signal *sig)
 
 out:
 	return ret;
+}
+
+static void cam_op_deactivate_signal(struct cam_op_signal *sig)
+{
+	struct cam_op_signal *active;
+	struct cam_obj_op *source;
+	unsigned long flags;
+
+	source = nsobj_to_cam_op(sig->source);
+	if (WARN_ON(!source))
+		return;
+
+	write_lock_irqsave(&source->notify_lock, flags);
+	list_for_each_entry(active, &source->notify_active_chain, entry) {
+		if (active == sig) {
+			list_del_init(&sig->entry);
+			break;
+		}
+	}
+	write_unlock_irqrestore(&source->notify_lock, flags);
 }
 
 /**
@@ -1013,14 +1005,6 @@ static int cam_pipeline_io_worker(void *data)
 		}
 	}
 
-	/*
-	 * We don't have execution IO thread running anymore, but we still
-	 * have driver's entities and DMA fences, which can signal OPs. Drain
-	 * events' and fences' signals first then drain signals (pending
-	 * and active ones) of all the OPs. Then destroy all pipeline-owned
-	 * objects: DMA buffers, entity instances, operations.
-	 */
-	cam_drain_events(pipeline);
 	cam_drain_instances(pipeline);
 	cam_drain_buffers(pipeline);
 	cam_drain_ops(pipeline);
@@ -1082,6 +1066,7 @@ ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
  * @target: pointer to CAM operation that depends on @source
  * @instance: ID of entity instance
  * @activate: the callback called to activate the pending signal
+ * @deactivate: the callback called to deactivate the active signal
  *
  * This allocate a pending CAM signal and append it to target's notify chain.
  * Note that the fire callback is always cam_op_notify() in the current design.
@@ -1091,7 +1076,8 @@ ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
 static int cam_op_add_pending_signal(struct cam_obj *source,
 				     struct cam_obj_op *target,
 				     u32 instance,
-				     bool (*activate)(struct cam_op_signal *))
+				     bool (*activate)(struct cam_op_signal *),
+				     void (*deactivate)(struct cam_op_signal *))
 {
 	struct cam_op_signal *sig;
 
@@ -1102,7 +1088,10 @@ static int cam_op_add_pending_signal(struct cam_obj *source,
 	sig->instance	= instance;
 	sig->activate	= activate;
 	sig->fire	= cam_op_notify;
+	sig->deactivate	= deactivate;
+
 	INIT_LIST_HEAD(&sig->entry);
+	INIT_LIST_HEAD(&sig->notifiers_entry);
 
 	/* Signal should keep both objects alive until it triggers */
 	if (!cam_obj_get(source))
@@ -1114,6 +1103,7 @@ static int cam_op_add_pending_signal(struct cam_obj *source,
 	sig->target	= &target->nsobj;
 
 	list_add_tail(&sig->entry, &target->notify_pending_chain);
+	list_add_tail(&sig->notifiers_entry, &target->notifiers);
 	atomic_inc(&target->num_blockers);
 	trace_cam_signal_add_pending(sig);
 	return 0;
@@ -1151,7 +1141,8 @@ static int cam_op_dependency_add(struct cam_pipeline *pipeline,
 
 	ret = cam_op_add_pending_signal(&dep_op->nsobj, op,
 					CAM_OP_NO_INSTANCE,
-					cam_op_activate_signal);
+					cam_op_activate_signal,
+					cam_op_deactivate_signal);
 	cam_op_put(dep_op);
 	return ret;
 }
@@ -1182,7 +1173,8 @@ static int cam_event_dependency_add(struct cam_pipeline *pipeline,
 
 	ret = cam_op_add_pending_signal(&dep_event->nsobj, op,
 					instance,
-					cam_event_activate_signal);
+					cam_event_activate_signal,
+					cam_event_deactivate_signal);
 	cam_event_put(dep_event);
 	return ret;
 }
@@ -1213,7 +1205,8 @@ static int cam_fence_in_dependency_add(struct cam_pipeline *pipeline,
 
 	ret = cam_op_add_pending_signal(&sf->nsobj, op,
 					CAM_OP_NO_INSTANCE,
-					cam_in_syncfile_activate_signal);
+					cam_in_syncfile_activate_signal,
+					cam_in_syncfile_deactivate_signal);
 	return ret;
 }
 
@@ -1322,15 +1315,6 @@ static bool cam_activate_weak_dependency_mode(struct cam_obj_op *op)
 	if (!activated)
 		WARN_ON(atomic_read(&op->num_blockers) != 0);
 	return activated;
-}
-
-/**
- * cam_drain_op_dependencies() - Drain operation dependencies
- * @op: pointer to CAM operation
- */
-static void cam_drain_op_dependencies(struct cam_obj_op *op)
-{
-	drain_notify_chain(&op->notify_pending_chain);
 }
 
 /**
@@ -1486,6 +1470,7 @@ int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
 	atomic_set(&op->num_blockers, 0);
 	INIT_LIST_HEAD(&op->notify_active_chain);
 	INIT_LIST_HEAD(&op->notify_pending_chain);
+	INIT_LIST_HEAD(&op->notifiers);
 	INIT_LIST_HEAD(&op->io_queue_entry);
 	rwlock_init(&op->notify_lock);
 	op->pipeline = pipeline;
@@ -1686,7 +1671,7 @@ int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,
 
 	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
 	cam_op_cancel_rw_instruction(op);
-	cam_drain_op_dependencies(op);
+	cam_drain_op_signals(op);
 	cam_drain_op_syncfiles(op);
 	/* drop lookup ref-count */
 	cam_op_put(op);

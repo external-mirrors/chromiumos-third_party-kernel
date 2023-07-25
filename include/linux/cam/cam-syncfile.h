@@ -75,9 +75,8 @@ void cam_out_syncfile_unregister(struct cam_obj *nsobj);
 void cam_syncfile_put(struct cam_obj_syncfile *sf);
 
 bool cam_in_syncfile_activate_signal(struct cam_op_signal *sig);
+void cam_in_syncfile_deactivate_signal(struct cam_op_signal *sig);
 
 int cam_fire_out_syncfile_signal(struct cam_obj *nsobj);
-void cam_drain_in_syncfile(struct cam_obj *nsobj);
-int cam_drain_out_syncfile(struct cam_obj *nsobj);
 
 #endif /* __LINUX_CAM_SYNCFILE_H__ */
