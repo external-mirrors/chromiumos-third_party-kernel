@@ -444,6 +444,24 @@ static void cam_drain_op_signals(struct cam_obj_op *op)
 	cam_op_destroy_signals(op);
 }
 
+static void cam_drain_op(struct cam_obj_op *op)
+{
+	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
+	/*
+	 * OPs have pending and active signals chains, all of which
+	 * need to be drained because they hold refcounts.
+	 */
+	cam_drain_op_signals(op);
+	cam_drain_op_syncfiles(op);
+	cam_obj_remove(&op->nsobj);
+	/*
+	 * We cannot deinit OP nsobj at this point, as we still
+	 * may have other operations in the objs_list that hold
+	 * reference to this OP (dependency, etc.)
+	 */
+	cam_op_put(op);
+}
+
 /**
  * cam_drain_ops() - Drains operations from the pipeline. This must be used
  * only from the pipeline (emergency) termination path.
@@ -461,20 +479,7 @@ static void cam_drain_ops(struct cam_pipeline *pipeline)
 		if (WARN_ON(!op))
 			return;
 
-		cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
-		/*
-		 * OPs have pending and active signals chains, all of which
-		 * need to be drained because they hold refcounts.
-		 */
-		cam_drain_op_signals(op);
-		cam_drain_op_syncfiles(op);
-		cam_obj_remove(&op->nsobj);
-		/*
-		 * We cannot deinit OP nsobj at this point, as we still
-		 * may have other operations in the objs_list that hold
-		 * reference to this OP (dependency, etc.)
-		 */
-		cam_op_put(op);
+		cam_drain_op(op);
 	}
 }
 
@@ -1031,7 +1036,6 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 			 struct cam_operation_remove *req)
 {
 	struct cam_obj_op *op;
-	int ret;
 
 	if (!cam_pipeline_is_active(pipeline))
 		return -EINVAL;
@@ -1040,23 +1044,13 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 	if (!op)
 		return -EINVAL;
 
-	/*
-	 * FIXME@
-	 *
-	 * DELETE_OP doesn't do anything at this point but simply walks the
-	 * graph of objects and marks them as DELETED (if objects can be
-	 * marked as DELETED).
-	 *
-	 * But we, in general, want to drop object reference counter and to
-	 * delete it from the namespace. This will race with the delayed
-	 * object execution.
-	 */
-	ret = cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
+	cam_drain_op(op);
+	/* Let user-space know that we deleted the OP */
+	cam_op_completion_event(pipeline, op);
+	/* Put lookup ref-count */
 	cam_op_put(op);
 
-	if (ret)
-		return 0;
-	return -EINVAL;
+	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
 
