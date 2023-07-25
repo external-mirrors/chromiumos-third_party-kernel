@@ -144,7 +144,8 @@ static bool cam_op_set_state(struct cam_obj_op *op,
 	if (op->state == CAM_OPERATION_STATE_EXECUTED)
 		goto out;
 	/* This ship has sailed. Too late to delete this object. */
-	if (op->state == CAM_OPERATION_STATE_RUNNING &&
+	if ((op->state == CAM_OPERATION_STATE_RUNNING ||
+	     op->state == CAM_OPERATION_STATE_QUEUED) &&
 	    new_state == CAM_OPERATION_STATE_DELETED)
 		goto out;
 	/* Do not go backwards */
@@ -248,8 +249,10 @@ static void cam_op_enqueue(struct cam_obj_op *op)
 	struct cam_pipeline *pipeline;
 	unsigned long flags;
 
+	if (!cam_op_set_state(op, CAM_OPERATION_STATE_QUEUED))
+		return;
+
 	pipeline = op->pipeline;
-	cam_op_set_state(op, CAM_OPERATION_STATE_QUEUED);
 	spin_lock_irqsave(&pipeline->io_queue_lock, flags);
 	list_add_tail(&op->io_queue_entry, &pipeline->io_queue);
 	spin_unlock_irqrestore(&pipeline->io_queue_lock, flags);
@@ -444,9 +447,11 @@ static void cam_drain_op_signals(struct cam_obj_op *op)
 	cam_op_destroy_signals(op);
 }
 
-static void cam_drain_op(struct cam_obj_op *op)
+static bool cam_drain_op(struct cam_obj_op *op)
 {
-	cam_op_set_state(op, CAM_OPERATION_STATE_DELETED);
+	if (!cam_op_set_state(op, CAM_OPERATION_STATE_DELETED))
+		return false;
+
 	/*
 	 * OPs have pending and active signals chains, all of which
 	 * need to be drained because they hold refcounts.
@@ -460,6 +465,7 @@ static void cam_drain_op(struct cam_obj_op *op)
 	 * reference to this OP (dependency, etc.)
 	 */
 	cam_op_put(op);
+	return true;
 }
 
 /**
@@ -896,14 +902,7 @@ static void cam_op_run(struct cam_obj_op *op)
 {
 	struct cam_pipeline *pipeline = op->pipeline;
 
-	/*
-	 * After this the only valid next state is CAM_OPERATION_STATE_EXECUTED.
-	 * But first... we need to successfully set object to RUNNING, which
-	 * is not guaranteed. For instance, while object was queued and awaited
-	 * to be executed or while it was blocked on signal(-s), it might have
-	 * been marked as CAM_OPERATION_STATE_DELETED by the user-space.
-	 */
-	if (!cam_op_set_state(op, CAM_OPERATION_STATE_RUNNING))
+	if (WARN_ON(!cam_op_set_state(op, CAM_OPERATION_STATE_RUNNING)))
 		goto done;
 
 	/*
@@ -917,29 +916,21 @@ static void cam_op_run(struct cam_obj_op *op)
 
 done:
 	/* New signals cannot be registered after this line */
-	cam_op_set_state(op, CAM_OPERATION_STATE_EXECUTED);
+	WARN_ON(!cam_op_set_state(op, CAM_OPERATION_STATE_EXECUTED));
 
 	/*
-	 * First, remove operation from the namespace, so that ID can
-	 * be reused from now on (in case if user-space attempts to do
-	 * something like this immediately after it reads completion
-	 * event)
+	 * Remove operation from the namespace, so that its ID can be reused
+	 * from now on.
 	 */
 	cam_obj_remove(&op->nsobj);
-	/* Second, notify user-space that we are done with this OP */
+
+	/* Notify user-space that we are done with this OP */
 	cam_op_completion_event(pipeline, op);
-	/*
-	 * Third, trigger all registered signals. Even if the operation was in
-	 * DELETED state
-	 */
 	cam_op_fire_signals(op);
 	/*
 	 * Lastly, put operation's refcount. Note that we cannot reliably
-	 * cam_obj_deinit() here, because some other OP that is still pending
-	 * other signals may at the end depend on this OP (e.g. in STRICT
-	 * mode). So this OP's refcounter is not guaranteed to be 1 here,
-	 * it is supposed to get to zero once signal that is holding this
-	 * OP is raised.
+	 * cam_obj_deinit() here, because some other OP that is still blocked
+	 * on some signals may be holding ref-count of this OP.
 	 */
 	cam_op_put(op);
 }
@@ -1044,12 +1035,18 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 	if (!op)
 		return -EINVAL;
 
-	cam_drain_op(op);
-	/* Let user-space know that we deleted the OP */
-	cam_op_completion_event(pipeline, op);
+	/*
+	 * OP removal is not guaranteed to succeed. For instance if at this
+	 * point OP is already QUEUED or EXECUTING then we won't be able
+	 * to remove it, it's going to get executed.
+	 */
+	if (cam_drain_op(op)) {
+		/* Let user-space know that we deleted the OP */
+		cam_op_completion_event(pipeline, op);
+	}
+
 	/* Put lookup ref-count */
 	cam_op_put(op);
-
 	return 0;
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_dequeue, ERRNO);
