@@ -7,10 +7,16 @@ use koa::kcam;
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
+    let ret = handle_command(&args);
+    if !ret.is_ok() {
+        println!("please read README");
+    }
+    ret
+}
 
-    assert!(args.len() == 2 || args.len() == 3);
-
-    let trace_file = &args[1];
+fn handle_command(args: &[String]) -> io::Result<()> {
+    let default_trace_file = "trace.txt".to_owned();
+    let trace_file = &args.get(1).unwrap_or(&default_trace_file);
     let f = File::open(trace_file)?;
     let f = BufReader::new(f);
 
