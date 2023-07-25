@@ -120,11 +120,15 @@ long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 		return -EINVAL;
 	}
 
+	/*
+	 * Instead of returning an error, set size to 0 to inform the user space
+	 * that we have no valid manifest entry for this index
+	 */
 	if (!ipu_cpd_pkg_dir_get_size(psys->pkg_dir, manifest->index) ||
 	    ipu_cpd_pkg_dir_get_type(psys->pkg_dir, manifest->index) <
 	    IPU_CPD_PKG_DIR_CLIENT_PG_TYPE) {
-		dev_dbg(psys_to_device(psys), "invalid pkg dir entry\n");
-		return -ENOENT;
+		manifest->size = 0;
+		return 0;
 	}
 
 	client_pkg_offset = ipu_cpd_pkg_dir_get_address(psys->pkg_dir,
