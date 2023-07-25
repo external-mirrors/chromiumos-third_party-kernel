@@ -8,6 +8,8 @@ use std::str::FromStr;
 pub type IdType = u64;
 const NO_ID: u64 = u64::MAX;
 
+type TimestampType = f64;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 struct ObjID(pub IdType);
 
@@ -80,7 +82,7 @@ impl fmt::Display for InstanceID {
 #[derive(PartialEq, Debug)]
 struct OpEvent {
     event_type: OpEventType,
-    ts: f32,
+    ts: TimestampType,
     id: OpID,
     state: String,
     delay_ns: i32,
@@ -103,7 +105,11 @@ impl OpEvent {
                 "cam_operation_add:" => OpEventType::Add,
                 &_ => unimplemented!("unknown operation event type: {}", tokens[3]),
             },
-            ts: tokens[2].strip_suffix(':').unwrap().parse::<f32>().unwrap(),
+            ts: tokens[2]
+                .strip_suffix(':')
+                .unwrap()
+                .parse::<TimestampType>()
+                .unwrap(),
             id: tokens[6]
                 .strip_suffix(',')
                 .unwrap()
@@ -133,7 +139,7 @@ impl OpEvent {
 #[derive(PartialEq, Debug)]
 struct SignalEvent {
     event_type: SignalEventType,
-    ts: f32,
+    ts: TimestampType,
     source_id: ObjID,
     source_type: String,
     target_id: OpID,
@@ -157,7 +163,11 @@ impl SignalEvent {
                 "cam_signal_fire_active:" => SignalEventType::FireActive,
                 &_ => unimplemented!("unknown signal event type: {}", tokens[3]),
             },
-            ts: tokens[2].strip_suffix(':').unwrap().parse::<f32>().unwrap(),
+            ts: tokens[2]
+                .strip_suffix(':')
+                .unwrap()
+                .parse::<TimestampType>()
+                .unwrap(),
             source_id: tokens[6]
                 .strip_suffix(',')
                 .unwrap()
@@ -269,8 +279,8 @@ impl OpList {
                 .entry(e.op_id())
                 .or_default();
 
-            /* signal event may be generated after the target operation was deleted,
-             * so we always associate a signal event to the latest existing operation */
+            /* A signal event may be generated after the target operation was finished,
+             * so we always associate a signal event to the latest operation */
             match v.last_mut() {
                 None => v.push(Op::from_event(e)),
                 Some(latest) => match e {
@@ -451,7 +461,7 @@ impl<'a> OpRefList<'a> {
                     continue;
                 }
 
-                stats.append(prev_state, &h.state, h.ts - prev_ts);
+                stats.append(prev_state, &h.state, (h.ts - prev_ts) as f32);
                 prev_state = &h.state;
                 prev_ts = h.ts;
             }
@@ -583,12 +593,16 @@ impl Op {
 
     fn from_event(e: &EventEntry) -> Self {
         match e {
-            EventEntry::OpEntry(oe) => Op {
-                id: oe.id,
-                delay_ns: oe.delay_ns,
-                pipeline_id: oe.pipeline_id,
-                state_history: vec![OpState::from_op_event(oe, None)],
-            },
+            EventEntry::OpEntry(oe) => {
+                let mut op = Op {
+                    id: oe.id,
+                    delay_ns: oe.delay_ns,
+                    pipeline_id: oe.pipeline_id,
+                    state_history: Vec::new(),
+                };
+                op.add_op_event(oe);
+                op
+            }
             EventEntry::SignalEntry(se) => {
                 let mut op = Op::unknown();
                 op.add_signal_event(se);
@@ -599,8 +613,9 @@ impl Op {
 
     fn add_op_event(&mut self, oe: &OpEvent) {
         let maybe_prev = self.state_history.last();
-        self.state_history
-            .push(OpState::from_op_event(oe, maybe_prev))
+        if let Some(state) = OpState::from_op_event(oe, maybe_prev) {
+            self.state_history.push(state);
+        }
     }
 
     fn add_signal_event(&mut self, se: &SignalEvent) {
@@ -609,8 +624,9 @@ impl Op {
         }
 
         let prev = self.state_history.last().unwrap();
-        self.state_history
-            .push(OpState::from_signal_event(se, prev))
+        if let Some(state) = OpState::from_signal_event(se, prev) {
+            self.state_history.push(state);
+        }
     }
 
     fn is_finished(&self) -> bool {
@@ -664,7 +680,7 @@ impl Op {
 
 #[derive(PartialEq, Debug)]
 pub struct OpState {
-    ts: f32,
+    ts: TimestampType,
     state: String,
     added: bool,
     num_blockers: i32,
@@ -682,8 +698,8 @@ impl OpState {
         }
     }
 
-    fn from_op_event(oe: &OpEvent, maybe_prev: Option<&OpState>) -> Self {
-        OpState {
+    fn from_op_event(oe: &OpEvent, maybe_prev: Option<&OpState>) -> Option<Self> {
+        Some(OpState {
             ts: oe.ts,
             state: oe.state.clone(),
             added: match oe.event_type {
@@ -698,10 +714,10 @@ impl OpState {
             },
             num_blockers: oe.num_blockers,
             blockers: BTreeSet::new(),
-        }
+        })
     }
 
-    fn from_signal_event(se: &SignalEvent, prev: &OpState) -> Self {
+    fn from_signal_event(se: &SignalEvent, prev: &OpState) -> Option<Self> {
         let mut blockers = prev.blockers.clone();
 
         let num_blockers = match se.event_type {
@@ -716,13 +732,25 @@ impl OpState {
             }
         };
 
-        OpState {
+        let op_state = OpState {
             ts: se.ts,
             state: prev.state.clone(),
             added: prev.added,
             num_blockers,
             blockers,
+        };
+        if !op_state.is_in_same(prev) {
+            Some(op_state)
+        } else {
+            None
         }
+    }
+
+    fn is_in_same(&self, other: &OpState) -> bool {
+        self.state == other.state
+            && self.added == other.added
+            && self.num_blockers == other.num_blockers
+            && self.blockers == other.blockers
     }
 }
 
