@@ -5,14 +5,17 @@ use std::io;
 use std::num;
 use std::str::FromStr;
 
+pub type IdType = u64;
+const NO_ID: u64 = u64::MAX;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct ObjID(pub i32);
+struct ObjID(pub IdType);
 
 impl FromStr for ObjID {
     type Err = num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = i32::from_str_radix(s, 16)?;
+        let id = IdType::from_str_radix(s.trim_start_matches("0x"), 16)?;
         Ok(ObjID(id))
     }
 }
@@ -24,12 +27,12 @@ impl fmt::Display for ObjID {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct PipelineID(pub i32);
+struct PipelineID(pub IdType);
 impl FromStr for PipelineID {
     type Err = num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = i32::from_str_radix(s, 16)?;
+        let id = IdType::from_str_radix(s.trim_start_matches("0x"), 16)?;
         Ok(PipelineID(id))
     }
 }
@@ -41,17 +44,34 @@ impl fmt::Display for PipelineID {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct OpID(pub i32);
+struct OpID(pub IdType);
 impl FromStr for OpID {
     type Err = num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = i32::from_str_radix(s, 16)?;
+        let id = IdType::from_str_radix(s.trim_start_matches("0x"), 16)?;
         Ok(OpID(id))
     }
 }
 
 impl fmt::Display for OpID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+struct InstanceID(pub IdType);
+impl FromStr for InstanceID {
+    type Err = num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = IdType::from_str_radix(s.trim_start_matches("0x"), 16)?;
+        Ok(InstanceID(id))
+    }
+}
+
+impl fmt::Display for InstanceID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
@@ -65,6 +85,7 @@ struct OpEvent {
     state: String,
     delay_ns: i32,
     num_blockers: i32,
+    instance_id: InstanceID,
     pipeline_id: PipelineID,
 }
 
@@ -99,7 +120,12 @@ impl OpEvent {
                 .unwrap()
                 .parse::<i32>()
                 .unwrap(),
-            pipeline_id: tokens[18].parse::<PipelineID>().unwrap(),
+            instance_id: tokens[18]
+                .strip_suffix(',')
+                .unwrap()
+                .parse::<InstanceID>()
+                .unwrap(),
+            pipeline_id: tokens[21].parse::<PipelineID>().unwrap(),
         }
     }
 }
@@ -111,12 +137,14 @@ struct SignalEvent {
     source_id: ObjID,
     source_type: String,
     target_id: OpID,
+    instance_id: InstanceID,
     pipeline_id: PipelineID,
 }
 
 #[derive(PartialEq, Debug)]
 enum SignalEventType {
     AddPending,
+    AddActive,
     FireActive,
 }
 
@@ -125,6 +153,7 @@ impl SignalEvent {
         SignalEvent {
             event_type: match tokens[3] {
                 "cam_signal_add_pending:" => SignalEventType::AddPending,
+                "cam_signal_add_active:" => SignalEventType::AddActive,
                 "cam_signal_fire_active:" => SignalEventType::FireActive,
                 &_ => unimplemented!("unknown signal event type: {}", tokens[3]),
             },
@@ -140,7 +169,12 @@ impl SignalEvent {
                 .unwrap()
                 .parse::<OpID>()
                 .unwrap(),
-            pipeline_id: tokens[15].parse::<PipelineID>().unwrap(),
+            instance_id: tokens[15]
+                .strip_suffix(',')
+                .unwrap()
+                .parse::<InstanceID>()
+                .unwrap(),
+            pipeline_id: tokens[18].parse::<PipelineID>().unwrap(),
         }
     }
 }
@@ -170,13 +204,13 @@ impl EventEntry {
 impl EventEntry {
     /*
      * example for operation class logs:
-     * ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 79605, state = SLEEP, delay_ns = 0, num_blockers = 0, pipeline_id = 3
+     * CameraDeviceOps-6415  [005]    46.236774: cam_operation_set_state: id = 0x1, state = SLEEP, delay_ns = 0, num_blockers = 0, instance_id = 0xffffffffffffffff, pipeline_id = 0x2
      *
      * example for signal class logs:
-     * vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 8, source_type = EVENT, target_id = 0, pipeline_id = 2
+     * ipu6_lb_video-6547  [000]    47.605062: cam_signal_add_pending: source_id = 0x2, source_type = EVENT, target_id = 0x29, instance_id = 0x20001, pipeline_id = 0x2
      *
      * example for event class logs (ignored):
-     * irq/16-intel-ip-2807  [010]   995.813770: cam_event_trigger:    entity_id = 1, entity_name = PSYS, event_id = 2, event_name = event-189
+     * psys_sched_cmd-3457  [006]    47.605625: cam_event_trigger:    entity_id = 0x1, instance_id = 0x20001, entity_name = PSYS0, event_id = 0x2, event_name = PSYS0
      *
      */
     fn parse_line(line: &str) -> Option<EventEntry> {
@@ -294,40 +328,41 @@ impl OpList {
     pub fn output_operation_numbers<W: io::Write>(
         &self,
         mut writer: W,
-        pipeline_id: PipelineID,
+        pipeline_id: IdType,
     ) -> io::Result<()> {
-        if let Some(ops) = self.map.get(&pipeline_id) {
+        let pipeline = PipelineID(pipeline_id);
+        if let Some(ops) = self.map.get(&pipeline) {
             writeln!(writer, "# of operations = {}", ops.keys().len())?;
 
-            let mut s = OpID(-1);
-            let mut e = OpID(-1);
+            let mut s = None;
+            let mut e = None;
 
             for op in ops.keys() {
-                if s == OpID(-1) {
-                    s = *op;
-                    e = *op;
+                if s.is_none() && e.is_none() {
+                    s = Some(*op);
+                    e = Some(*op);
                     continue;
                 }
 
-                if *op == OpID(e.0 + 1) {
-                    e = *op;
+                if *op == OpID(e.unwrap().0 + 1) {
+                    e = Some(*op);
                     continue;
                 }
 
                 if s == e {
-                    write!(writer, " {}", s)?;
+                    write!(writer, " {}", s.unwrap())?;
                 } else {
-                    write!(writer, " {}-{}", s, e)?;
+                    write!(writer, " {}-{}", s.unwrap(), e.unwrap())?;
                 }
-                s = *op;
-                e = *op;
+                s = Some(*op);
+                e = Some(*op);
             }
 
-            if s != OpID(-1) {
+            if s.is_some() {
                 if s == e {
-                    write!(writer, " {}", s)?;
+                    write!(writer, " {}", s.unwrap())?;
                 } else {
-                    write!(writer, " {}-{}", s, e)?;
+                    write!(writer, " {}-{}", s.unwrap(), e.unwrap())?;
                 }
             }
             writeln!(writer)?
@@ -338,11 +373,13 @@ impl OpList {
     pub fn output_operation<W: io::Write>(
         &self,
         mut writer: W,
-        pipeline_id: PipelineID,
-        op_id: OpID,
+        pipeline_id: IdType,
+        op_id: IdType,
     ) -> io::Result<()> {
-        if let Some(pipeline) = self.map.get(&pipeline_id) {
-            if let Some(ops) = pipeline.get(&op_id) {
+        let pipeline = PipelineID(pipeline_id);
+        let operation = OpID(op_id);
+        if let Some(pipeline) = self.map.get(&pipeline) {
+            if let Some(ops) = pipeline.get(&operation) {
                 for op in ops.iter() {
                     op.output_details(&mut writer)?;
                 }
@@ -537,9 +574,9 @@ pub struct Op {
 impl Op {
     fn unknown() -> Self {
         Op {
-            id: OpID(-1),
+            id: OpID(NO_ID),
             delay_ns: 0,
-            pipeline_id: PipelineID(-1),
+            pipeline_id: PipelineID(NO_ID),
             state_history: Vec::new(),
         }
     }
@@ -584,12 +621,13 @@ impl Op {
     fn output_details<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         writeln!(
             writer,
-            "    id {}, delay_ns {}, pipeline_id {}, state_history: ",
+            "    id {}, delay_ns {}, pipeline_id {}",
             self.id, self.delay_ns, self.pipeline_id
         )?;
 
         let mut prev: Option<&OpState> = None;
 
+        writeln!(writer, "    state_history:")?;
         for s in &self.state_history {
             match prev {
                 None => {
@@ -671,6 +709,7 @@ impl OpState {
                 blockers.insert(BlockerInfo::from_signal_event(se));
                 prev.num_blockers + 1
             }
+            SignalEventType::AddActive => prev.num_blockers,
             SignalEventType::FireActive => {
                 blockers.remove(&BlockerInfo::from_signal_event(se));
                 prev.num_blockers - 1
@@ -691,6 +730,7 @@ impl OpState {
 struct BlockerInfo {
     obj_type: String,
     id: ObjID,
+    instance_id: InstanceID,
 }
 
 impl BlockerInfo {
@@ -698,13 +738,14 @@ impl BlockerInfo {
         BlockerInfo {
             obj_type: se.source_type.clone(),
             id: se.source_id,
+            instance_id: se.instance_id,
         }
     }
 }
 
 impl fmt::Debug for BlockerInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.obj_type, self.id)
+        write!(f, "{} {} {}", self.obj_type, self.id, self.instance_id)
     }
 }
 
@@ -721,17 +762,18 @@ mod tests {
     use std::fmt::Write;
 
     impl BlockerInfo {
-        fn test_new(obj_type: &str, id: &i32) -> Self {
+        fn test_new(obj_type: &str, id: u64, instance_id: u64) -> Self {
             BlockerInfo {
                 obj_type: obj_type.to_string(),
-                id: ObjID(*id),
+                id: ObjID(id),
+                instance_id: InstanceID(instance_id),
             }
         }
     }
 
     #[test]
     fn parse_line_for_state_event() {
-        let log = "ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 79605, state = SLEEP, delay_ns = 2, num_blockers = 4, pipeline_id = 3";
+        let log = "ipu6_bb_video-7908  [010]   995.744359: cam_operation_set_state: id = 0x79605, state = SLEEP, delay_ns = 2, num_blockers = 4, instance_id = 0x70, pipeline_id = 0x30";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_some());
@@ -743,14 +785,15 @@ mod tests {
             state: "SLEEP".to_string(),
             delay_ns: 2,
             num_blockers: 4,
-            pipeline_id: PipelineID(3),
+            instance_id: InstanceID(0x70),
+            pipeline_id: PipelineID(0x30),
         });
         assert_eq!(entry, Some(expected));
     }
 
     #[test]
     fn parse_line_for_state_add() {
-        let log = "vcamtest-265   [001]    17.088879: cam_operation_add:    id = 0, state = SLEEP, delay_ns = 0, num_blockers = 1, pipeline_id = 2";
+        let log = "vcamtest-265   [001]    17.088879: cam_operation_add:    id = 0, state = SLEEP, delay_ns = 0, num_blockers = 1, instance_id = 0x30, pipeline_id = 0x20";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_some());
@@ -762,14 +805,15 @@ mod tests {
             state: "SLEEP".to_string(),
             delay_ns: 0,
             num_blockers: 1,
-            pipeline_id: PipelineID(2),
+            instance_id: InstanceID(0x30),
+            pipeline_id: PipelineID(0x20),
         });
         assert_eq!(entry, Some(expected));
     }
 
     #[test]
     fn parse_line_for_signal_event() {
-        let log = "vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 8, source_type = EVENT, target_id = 0, pipeline_id = 2";
+        let log = "vcamtest-270   [000]    34.317839: cam_signal_add_pending: source_id = 0x80, source_type = EVENT, target_id = 0x50, instance_id = 0x30, pipeline_id = 0x20";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_some());
@@ -777,17 +821,18 @@ mod tests {
         let expected = EventEntry::SignalEntry(SignalEvent {
             event_type: SignalEventType::AddPending,
             ts: 34.317839,
-            source_id: ObjID(8),
+            source_id: ObjID(0x80),
             source_type: "EVENT".to_string(),
-            target_id: OpID(0),
-            pipeline_id: PipelineID(2),
+            target_id: OpID(0x50),
+            instance_id: InstanceID(0x30),
+            pipeline_id: PipelineID(0x20),
         });
         assert_eq!(entry, Some(expected));
     }
 
     #[test]
     fn parse_line_for_event_trigger() {
-        let log = "irq/16-intel-ip-2807  [010]   995.813770: cam_event_trigger:    entity_id = 1, entity_name = PSYS, event_id = 2, event_name = event-189";
+        let log = "irq/16-intel-ip-2807  [010]   995.813770: cam_event_trigger:    entity_id = 0x100, instance_id = 0x100, entity_name = PSYS, event_id = 0x200, event_name = event-189";
 
         let entry = EventEntry::parse_line(&log);
         assert!(entry.is_none());
@@ -812,6 +857,7 @@ mod tests {
                 state: "QUEUED".to_string(),
                 delay_ns: 3,
                 num_blockers: 4,
+                instance_id: InstanceID(1),
                 pipeline_id: PipelineID(5),
             })],
         };
@@ -831,6 +877,7 @@ mod tests {
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(5),
                 }),
                 EventEntry::OpEntry(OpEvent {
@@ -840,6 +887,7 @@ mod tests {
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(5),
                 }),
             ],
@@ -861,6 +909,7 @@ mod tests {
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(5),
                 }),
                 EventEntry::OpEntry(OpEvent {
@@ -870,6 +919,7 @@ mod tests {
                     state: "QUEUED".to_string(),
                     delay_ns: 3,
                     num_blockers: 4,
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(7),
                 }),
             ],
@@ -890,6 +940,7 @@ mod tests {
                 source_id: ObjID(8),
                 source_type: "EVENT".to_string(),
                 target_id: OpID(0),
+                instance_id: InstanceID(1),
                 pipeline_id: PipelineID(2),
             })],
         };
@@ -908,6 +959,7 @@ mod tests {
                     source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
                     target_id: OpID(0),
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(2),
                 }),
                 EventEntry::SignalEntry(SignalEvent {
@@ -916,6 +968,7 @@ mod tests {
                     source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
                     target_id: OpID(1),
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(2),
                 }),
             ],
@@ -936,6 +989,7 @@ mod tests {
                     source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
                     target_id: OpID(0),
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(1),
                 }),
                 EventEntry::SignalEntry(SignalEvent {
@@ -944,6 +998,7 @@ mod tests {
                     source_id: ObjID(8),
                     source_type: "EVENT".to_string(),
                     target_id: OpID(1),
+                    instance_id: InstanceID(1),
                     pipeline_id: PipelineID(2),
                 }),
             ],
@@ -964,6 +1019,7 @@ mod tests {
             state: "QUEUED".to_string(),
             delay_ns: 3,
             num_blockers: 4,
+            instance_id: InstanceID(1),
             pipeline_id: PipelineID(5),
         });
 
@@ -1003,7 +1059,8 @@ mod tests {
             ts: 34.317839,
             source_id: ObjID(8),
             source_type: "EVENT".to_string(),
-            target_id: OpID(0),
+            target_id: OpID(5),
+            instance_id: InstanceID(1),
             pipeline_id: PipelineID(1),
         };
 
@@ -1012,7 +1069,8 @@ mod tests {
             ts: 35.317839,
             source_id: ObjID(8),
             source_type: "EVENT".to_string(),
-            target_id: OpID(0),
+            target_id: OpID(5),
+            instance_id: InstanceID(1),
             pipeline_id: PipelineID(1),
         };
 
@@ -1036,7 +1094,7 @@ mod tests {
                     state: "QUEUED".to_string(),
                     added: false,
                     num_blockers: 1,
-                    blockers: BTreeSet::from([BlockerInfo::test_new("EVENT", &8)]),
+                    blockers: BTreeSet::from([BlockerInfo::test_new("EVENT", 8, 1)]),
                 },
                 OpState {
                     ts: 35.317839,
@@ -1172,7 +1230,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
+            .output_operation_numbers(&mut buf, pipeline1_id)
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1226,7 +1284,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
+            .output_operation_numbers(&mut buf, pipeline1_id)
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1294,7 +1352,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
+            .output_operation_numbers(&mut buf, pipeline1_id)
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 
@@ -1404,7 +1462,7 @@ mod tests {
 
         let mut buf = Vec::new();
         op_list
-            .output_operation_numbers(&mut buf, PipelineID(pipeline1_id))
+            .output_operation_numbers(&mut buf, pipeline1_id)
             .unwrap();
         let s = std::str::from_utf8(&buf).unwrap();
 

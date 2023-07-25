@@ -8,7 +8,7 @@ use koa::kcam;
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let ret = handle_command(&args);
-    if !ret.is_ok() {
+    if ret.is_err() {
         println!("please read README");
     }
     ret
@@ -101,12 +101,12 @@ fn print_pipeline(ops: &kcam::OpList, _command: &Command) -> io::Result<()> {
 
 fn print_operation(ops: &kcam::OpList, command: &Command) -> io::Result<()> {
     if command.len() > 1 {
-        let pipeline_id = command.token[1].parse::<kcam::PipelineID>().unwrap();
+        let pipeline_id = command.token[1].parse::<kcam::IdType>().unwrap();
         if command.len() == 2 {
             ops.output_operation_numbers(io::stdout().lock(), pipeline_id)?;
         }
         if command.len() == 3 {
-            let op_id = command.token[2].parse::<kcam::OpID>().unwrap();
+            let op_id = command.token[2].parse::<kcam::IdType>().unwrap();
             ops.output_operation(io::stdout().lock(), pipeline_id, op_id)?;
         }
     }
