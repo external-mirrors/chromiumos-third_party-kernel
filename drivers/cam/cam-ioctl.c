@@ -344,17 +344,7 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 	}
 
 	payload = uarg + sizeof(struct cam_header);
-	ret = cam_ioctl_operation_submit(fh, hdr, payload);
-	if (ret) {
-		/*
-		 * We failed at submit() stage. Only not-yet-submitted OPs
-		 * can be cancelled as it may be too late to cancel
-		 * the submitted ones.
-		 */
-		payload = uarg + sizeof(struct cam_header);
-		cam_ioctl_operation_cancel(fh, hdr, payload, hdr->error);
-	}
-	return ret;
+	return cam_ioctl_operation_submit(fh, hdr, payload);
 }
 ALLOW_ERROR_INJECTION(cam_ioctl_parse_operation, ERRNO);
 
