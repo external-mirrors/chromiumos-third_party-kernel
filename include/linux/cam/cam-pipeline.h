@@ -160,8 +160,6 @@ int cam_pipeline_dequeue(struct cam_pipeline *pipeline,
 
 int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
 				 struct cam_operation_add *op);
-int cam_pipeline_enqueue_activate(struct cam_pipeline *pipeline,
-				  struct cam_operation_add *req);
 int cam_pipeline_enqueue_submit(struct cam_pipeline *pipeline,
 				struct cam_operation_add *op);
 int cam_pipeline_enqueue_cancel(struct cam_pipeline *pipeline,

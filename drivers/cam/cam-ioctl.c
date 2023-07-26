@@ -232,6 +232,16 @@ static int cam_ioctl_operation_prepare(struct cam_fh *fh,
 	u32 num_op;
 	int ret;
 
+	if (hdr->num_queries == 0)
+		return 0;
+
+	/*
+	 * Prepare stage iterates over operations in direct mode (the
+	 * way they appear in the batch), because at this stage we setup
+	 * execution context for the entire operations batch, and later
+	 * operations may depend on entity instances or DMA buffers that
+	 * earlier operations create/import.
+	 */
 	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
 		struct cam_operation op;
 
@@ -262,42 +272,6 @@ static int cam_ioctl_operation_prepare(struct cam_fh *fh,
 	return 0;
 }
 
-static int cam_ioctl_operation_activate(struct cam_fh *fh,
-					struct cam_header *hdr,
-					struct cam_operation __user *payload)
-{
-	u32 num_op;
-	int ret;
-
-	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
-		struct cam_operation op;
-
-		if (copy_from_user(&op, payload, sizeof(op)))
-			return -EFAULT;
-
-		switch (op.operation_type) {
-		case CAM_OPERATION_TYPE_ADD:
-			ret = cam_pipeline_enqueue_activate(&fh->pipeline,
-							    &op.operation_add);
-			break;
-		case CAM_OPERATION_TYPE_REMOVE:
-			ret = 0;
-			break;
-		default:
-			ret = -EINVAL;
-		}
-
-		if (ret) {
-			hdr->error = num_op;
-			return ret;
-		}
-
-		payload++;
-	}
-
-	return ret;
-}
-
 static int cam_ioctl_operation_submit(struct cam_fh *fh,
 				      struct cam_header *hdr,
 				      struct cam_operation __user *payload)
@@ -305,7 +279,20 @@ static int cam_ioctl_operation_submit(struct cam_fh *fh,
 	u32 num_op;
 	int ret;
 
-	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
+	if (hdr->num_queries == 0)
+		return 0;
+
+	/*
+	 * Submit stage, on the contrary, iterates over operations in
+	 * reverse order. Operations that come later in the batch can
+	 * depend on one-time events that are triggered by already
+	 * submitted and probably executed operations. Since operation
+	 * execution is asynchronous, by the time we submit later batch
+	 * operations it may be already too late to activate dependencies
+	 * on earlier operations.
+	 */
+	payload += hdr->num_queries - 1;
+	for (num_op = hdr->num_queries; num_op > 0; num_op--) {
 		struct cam_operation op;
 
 		if (copy_from_user(&op, payload, sizeof(op)))
@@ -324,11 +311,11 @@ static int cam_ioctl_operation_submit(struct cam_fh *fh,
 		}
 
 		if (ret) {
-			hdr->error = num_op;
+			hdr->error = num_op - 1;
 			return ret;
 		}
 
-		payload++;
+		payload--;
 	}
 
 	return ret;
@@ -350,17 +337,6 @@ static int cam_ioctl_parse_operation(struct cam_fh *fh, unsigned int cmd,
 		 * We failed at prepare() stage. All OPs in this IOCTL
 		 * can be cancelled as none of them have been submitted
 		 * yet.
-		 */
-		payload = uarg + sizeof(struct cam_header);
-		cam_ioctl_operation_cancel(fh, hdr, payload, 0);
-		return ret;
-	}
-
-	ret = cam_ioctl_operation_activate(fh, hdr, payload);
-	if (ret) {
-		/*
-		 * @FIXME we need to de-activate activated operations'
-		 * dependencies
 		 */
 		payload = uarg + sizeof(struct cam_header);
 		cam_ioctl_operation_cancel(fh, hdr, payload, 0);
