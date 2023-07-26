@@ -249,6 +249,14 @@ static void cam_op_enqueue(struct cam_obj_op *op)
 	struct cam_pipeline *pipeline;
 	unsigned long flags;
 
+	/*
+	 * This is where operation enqueuing (and execution) is synchronized
+	 * with operation removal. If we are not able to set operation state
+	 * to QUEUED then we lost the race against operation removal.
+	 *
+	 * Consequentially if we successfully set operation to QUEUED then
+	 * operation removal should never succeed.
+	 */
 	if (!cam_op_set_state(op, CAM_OPERATION_STATE_QUEUED))
 		return;
 
@@ -418,6 +426,10 @@ static void cam_drain_op_syncfiles(struct cam_obj_op *op)
 	}
 }
 
+/**
+ * cam_op_destroy_signals() - Release all signals that operation owns
+ * @op: operation to drain
+ */
 static void cam_op_destroy_signals(struct cam_obj_op *op)
 {
 	struct cam_op_signal *sig, *safe;
@@ -428,6 +440,11 @@ static void cam_op_destroy_signals(struct cam_obj_op *op)
 	}
 }
 
+/**
+ * cam_drain_op_signals() - Drains operation signals. This also includes
+ * deactivation of already activated signals (without raising them).
+ * @op: operation to drain
+ */
 static void cam_drain_op_signals(struct cam_obj_op *op)
 {
 	struct cam_op_signal *sig, *safe;
@@ -440,23 +457,34 @@ static void cam_drain_op_signals(struct cam_obj_op *op)
 	}
 	write_unlock_irqrestore(&op->notify_lock, flags);
 
-	/* Second, deactivate all already activated signals */
+	/* Second, deactivate all already activated (yet not raised) signals */
 	list_for_each_entry_safe(sig, safe, &op->notifiers, notifiers_entry) {
 		sig->deactivate(sig);
 	}
 
+	/* Now, release all signals owned by the operation */
 	cam_op_destroy_signals(op);
 }
 
+/**
+ * cam_drain_op() - Drains a single operation.
+ * @op: operation to drain
+ *
+ * Return: true on success or false otherwise.
+ */
 static bool cam_drain_op(struct cam_obj_op *op)
 {
+	/*
+	 * This is where operation removal is synchronized with operation
+	 * enqueuing and execution. If we are not able to set operation state
+	 * to DELETED then we lost the race against enqueue path and should
+	 * let operation to execute. Consequentially if we successfully set
+	 * operation to DELETE then operation enqueuing/execution should never
+	 * occur.
+	 */
 	if (!cam_op_set_state(op, CAM_OPERATION_STATE_DELETED))
 		return false;
 
-	/*
-	 * OPs have pending and active signals chains, all of which
-	 * need to be drained because they hold refcounts.
-	 */
 	cam_drain_op_signals(op);
 	cam_drain_op_syncfiles(op);
 	cam_obj_remove(&op->nsobj);
@@ -903,19 +931,13 @@ static void cam_op_run(struct cam_obj_op *op)
 {
 	struct cam_pipeline *pipeline = op->pipeline;
 
-	if (WARN_ON(!cam_op_set_state(op, CAM_OPERATION_STATE_RUNNING)))
-		goto done;
+	WARN_ON(!cam_op_set_state(op, CAM_OPERATION_STATE_RUNNING));
 
-	/*
-	 * We don't expect pipeline notify_lock to be locked often (if
-	 * ever).
-	 */
 	if (op->delay_ns)
 		ndelay(op->delay_ns);
 
 	cam_op_run_rw_instructions(op);
 
-done:
 	/* New signals cannot be registered after this line */
 	WARN_ON(!cam_op_set_state(op, CAM_OPERATION_STATE_EXECUTED));
 
@@ -1443,6 +1465,11 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
  * user-space request. The operation is not enqueued at this point as
  * this is only a preparation step.
  *
+ * This is performed for all operations in the batch, because we want to
+ * setup execution context for the batch: create/request entity instances,
+ * import DMA buffers, etc. If we fail at any point then entire operations
+ * batch is discarded.
+ *
  * Return: 0 on success or a negative error code otherwise.
  */
 int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
@@ -1526,6 +1553,9 @@ int cam_pipeline_enqueue_prepare(struct cam_pipeline *pipeline,
 }
 ALLOW_ERROR_INJECTION(cam_pipeline_enqueue_prepare, ERRNO);
 
+/**
+ * @FIME: temp workaround.
+ */
 int cam_pipeline_enqueue_activate(struct cam_pipeline *pipeline,
 				  struct cam_operation_add *req)
 {
@@ -1557,8 +1587,7 @@ int cam_pipeline_enqueue_activate(struct cam_pipeline *pipeline,
  * @pipeline: pointer to CAM pipeline
  * @req: add request from user-space
  *
- * This activates operation dependencies and enqueues operation for execution
- * if it has no blockers.
+ * This enqueues operation for execution if it has no blockers.
  *
  * Return: 0 on success or a negative error code otherwise.
  */
