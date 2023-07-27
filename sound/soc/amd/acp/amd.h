@@ -20,6 +20,7 @@
 
 #define ACP3X_DEV			3
 #define ACP6X_DEV			6
+#define ACP63X_DEV			63
 
 #define DMIC_INSTANCE			0x00
 #define I2S_SP_INSTANCE			0x01
@@ -152,9 +153,9 @@ union acp_i2stdm_mstrclkgen {
 	struct {
 		u32 i2stdm_master_mode : 1;
 		u32 i2stdm_format_mode : 1;
-		u32 i2stdm_lrclk_div_val : 9;
+		u32 i2stdm_lrclk_div_val : 11;
 		u32 i2stdm_bclk_div_val : 11;
-		u32:10;
+		u32:8;
 	} bitfields, bits;
 	u32  u32_all;
 };

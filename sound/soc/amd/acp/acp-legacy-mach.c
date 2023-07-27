@@ -75,6 +75,18 @@ static struct acp_card_drvdata rt5682s_rt1019_rmb_data = {
 	.tdm_mode = false,
 };
 
+static struct acp_card_drvdata rt5682s_rt1019_phx_data = {
+	.hs_cpu_id = I2S_HS,
+	.amp_cpu_id = I2S_HS,
+	.dmic_cpu_id = DMIC,
+	.hs_codec_id = RT5682S,
+	.amp_codec_id = RT1019,
+	.dmic_codec_id = DMIC,
+	.soc_mclk = true,
+	.platform = PHOENIX,
+	.tdm_mode = false,
+};
+
 static const struct snd_kcontrol_new acp_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Headphone Jack"),
 	SOC_DAPM_PIN_SWITCH("Headset Mic"),
@@ -155,6 +167,10 @@ static const struct platform_device_id board_ids[] = {
 		.name = "rmb-rt5682s-rt1019",
 		.driver_data = (kernel_ulong_t)&rt5682s_rt1019_rmb_data,
 	},
+	{
+		.name = "phx-rt5682s-rt1019",
+		.driver_data = (kernel_ulong_t)&rt5682s_rt1019_phx_data,
+	},
 	{ }
 };
 static struct platform_driver acp_asoc_audio = {
@@ -175,4 +191,5 @@ MODULE_ALIAS("platform:acp3xalc5682sm98360");
 MODULE_ALIAS("platform:acp3xalc5682s1019");
 MODULE_ALIAS("platform:rmb-nau8825-max");
 MODULE_ALIAS("platform:rmb-rt5682s-rt1019");
+MODULE_ALIAS("platform:phx-rt5682s-rt1019");
 MODULE_LICENSE("GPL v2");

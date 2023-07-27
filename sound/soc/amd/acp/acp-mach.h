@@ -46,6 +46,7 @@ enum codec_endpoints {
 enum platform_end_point {
 	RENOIR = 0,
 	REMBRANDT,
+	PHOENIX,
 };
 
 struct acp_card_drvdata {
