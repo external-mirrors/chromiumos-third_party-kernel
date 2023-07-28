@@ -26,11 +26,11 @@
 	/delete-property/ sram-supply;
 };
 
-&opp1_14 {
+&cluster1_opp_14 {
 	opp-hz = /bits/ 64 <1986000000>;
 	opp-microvolt = <1093750>;
 };
 
-&opp1_15 {
+&cluster1_opp_15 {
 	opp-hz = /bits/ 64 <2050000000>;
 };

@@ -28,11 +28,11 @@
 	mediatek,dmic-mode = <0>; /* two-wire */
 };
 
-&opp1_14 {
+&cluster1_opp_14 {
 	opp-hz = /bits/ 64 <2050000000>;
 	opp-microvolt = <1118750>;
 };
 
-&opp1_15 {
+&cluster1_opp_15 {
 	opp-hz = /bits/ 64 <2200000000>;
 };
