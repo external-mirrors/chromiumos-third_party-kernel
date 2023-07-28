@@ -23,18 +23,14 @@
 
 #define EVENT_TRIGGER_MS		1010
 
-#define ENTITY_INST			0
-#define ENTITY_INST_EVENT		0
+#define ENTITY_FAST_IRQ			0
+#define ENTITY_FAST_IRQ_EVENT		0
 
-#define ENTITY_FAST_IRQ			1
-#define ENTITY_FAST_IRQ_EVENT		1
-
-#define ENTITY_SLOW_IRQ			2
-#define ENTITY_SLOW_IRQ_EVENT		2
+#define ENTITY_SLOW_IRQ			1
+#define ENTITY_SLOW_IRQ_EVENT		1
 
 static const char *entity_names[] = {
 	VCAM_ROOT_ENTITY_NAME,
-	VCAM_INSTANCES_ENTITY_NAME,
 	VCAM_FAST_IRQ_ENTITY_NAME,
 	VCAM_SLOW_IRQ_ENTITY_NAME,
 };
@@ -44,8 +40,8 @@ struct vcam_device {
 	struct cam_device		*cam;
 
 	struct cam_obj_entity		*root_entity;
-	struct cam_obj_entity		*entities[3];
-	struct cam_obj_event		*events[3];
+	struct cam_obj_entity		*entities[2];
+	struct cam_obj_event		*events[2];
 
 	spinlock_t			instances_lock;
 	struct list_head		instances;
@@ -316,7 +312,6 @@ static void cam_objects_release(struct vcam_device *vcam)
 {
 	int obj;
 
-	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
 	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
 

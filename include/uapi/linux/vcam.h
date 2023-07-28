@@ -23,7 +23,5 @@
  */
 #define VCAM_FAST_IRQ_ENTITY_NAME	"Fast IRQ"
 #define VCAM_SLOW_IRQ_ENTITY_NAME	"Slow IRQ"
-#define VCAM_INSTANCES_ENTITY_NAME	"Instances"
-
 
 #endif /* __UAPI_LINUX_VCAM_H__ */
