@@ -456,6 +456,21 @@ struct cam_obj_instance *cam_instance_lookup(struct cam_ns *ns, u32 id)
 ALLOW_ERROR_INJECTION(cam_instance_lookup, NULL);
 
 /**
+ * cam_instance_verify() - Test that provided instance is in fact instance of
+ * the given entity.
+ * @entity: pointer to CAM entity
+ * @instance: pointer to CAM instance
+ *
+ * Return: true if so, false otherwise.
+ */
+bool cam_instance_verify(struct cam_obj_entity *entity,
+			 struct cam_obj_instance *instance)
+{
+	/* Instance is linked to its entity */
+	return cam_obj_id(&entity->nsobj) == cam_obj_link_id(&instance->nsobj);
+}
+
+/**
  * cam_instance_put() - Decrements ref-counter of the CAM instance
  * @instance: pointer to CAM instance
  */

@@ -1388,6 +1388,9 @@ static int cam_op_instruction_add(struct cam_pipeline *pipeline,
 							req->instance);
 		if (!op->exec_instance)
 			goto error;
+
+		if (!cam_instance_verify(op->exec_entity, op->exec_instance))
+			goto error;
 	}
 
 	return 0;
