@@ -4154,7 +4154,7 @@ restart:
 		}
 
 		success = test_spte_young(args->vma->vm_mm, addr, end, bitmap, &last);
-		if (!success && !pte_young(ptent) {
+		if (!success && !pte_young(ptent)) {
 			skip_spte_young(args->vma->vm_mm, addr, bitmap, &last);
 			walk->mm_stats[MM_LEAF_OLD]++;
 			continue;
