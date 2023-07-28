@@ -371,12 +371,11 @@ static bool cam_op_notify(struct cam_op_signal *sig)
  */
 void cam_fire_active_signals(struct list_head *notify_active_chain)
 {
-	struct cam_op_signal *sig;
+	struct cam_op_signal *sig, *safe;
 
-	while (!list_empty(notify_active_chain)) {
-		sig = list_first_entry(notify_active_chain,
-				       struct cam_op_signal,
-				       entry);
+	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+		if (sig->instance != CAM_OP_NO_INSTANCE)
+			continue;
 
 		list_del_init(&sig->entry);
 		sig->fire(sig);
@@ -798,8 +797,7 @@ static int cam_read_instruction(struct cam_obj_op *op,
 	void *dev;
 	int ret;
 
-	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
-	    !op->exec_instance)
+	if (!op->exec_instance)
 		return -EINVAL;
 
 	if (insn->num_buffers) {
@@ -813,10 +811,7 @@ static int cam_read_instruction(struct cam_obj_op *op,
 	}
 
 	dev = cam_entity_driver_data(entity);
-	if (!op->exec_instance)
-		ret = entity->ops->read(dev, insn);
-	else
-		ret = entity->ops->instance_read(dev, op->exec_instance, insn);
+	ret = entity->ops->instance_read(dev, op->exec_instance, insn);
 
 	if (insn->num_buffers)
 		cam_buffers_list_put(insn->num_buffers, buffers_list);
@@ -832,8 +827,7 @@ static int cam_write_instruction(struct cam_obj_op *op,
 	void *dev;
 	int ret;
 
-	if ((op->exec_entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE) &&
-	    !op->exec_instance)
+	if (!op->exec_instance)
 		return -EINVAL;
 
 	if (insn->num_buffers) {
@@ -847,10 +841,7 @@ static int cam_write_instruction(struct cam_obj_op *op,
 	}
 
 	dev = cam_entity_driver_data(entity);
-	if (!op->exec_instance)
-		ret = entity->ops->write(dev, insn);
-	else
-		ret = entity->ops->instance_write(dev, op->exec_instance, insn);
+	ret = entity->ops->instance_write(dev, op->exec_instance, insn);
 
 	if (insn->num_buffers)
 		cam_buffers_list_put(insn->num_buffers, buffers_list);

@@ -60,6 +60,7 @@ struct vcam_exec_instance {
 	struct list_head		entry;
 };
 
+#define VCAM_NUM_INSTANCES		8
 #define VCAM_INSTANCE_DATA_BUF_SZ	64
 
 struct vcam_entity_instance_data {
@@ -99,74 +100,6 @@ static void entity_instance_destroy(void *dev, void *instance_data)
 	kfree(data);
 }
 
-static int entity_read(void *dev, struct cam_read_instruction *rw)
-{
-	char dummy_buffer[32] = {};
-	u64 len;
-
-	pr_info("VCAM: execute entity register %u read\n", rw->reg);
-
-	if (!rw->size)
-		return 0;
-
-	strcpy(dummy_buffer, "From VCAM driver");
-	len = strlen(dummy_buffer);
-	if (rw->size < len)
-		len = rw->size;
-	if (copy_to_user(u64_to_user_ptr(rw->ptr), dummy_buffer, len)) {
-		pr_err("VCAM: cannot copy to user\n");
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-static int entity_write(void *dev, struct cam_write_instruction *rw)
-{
-	char dummy_buffer[32] = {};
-
-	pr_info("VCAM: execute entity register %u write\n", rw->reg);
-
-	if (rw->size > sizeof(dummy_buffer)) {
-		pr_err("VCAM: write size is too large");
-		return -EINVAL;
-	}
-
-	if (copy_from_user(dummy_buffer, u64_to_user_ptr(rw->ptr), rw->size)) {
-		pr_err("VCAM: cannot copy from user\n");
-		return -EINVAL;
-	}
-
-	pr_info("VCAM: register write payload: %s\n", dummy_buffer);
-	return 0;
-}
-
-static void trigger_instance_event_on(struct vcam_device *vcam,
-				      u32 entity_id,
-				      u32 event_id)
-{
-	struct vcam_exec_instance *inst;
-	unsigned long flags;
-
-	if (!vcam->entities[entity_id] || !vcam->events[event_id])
-		return;
-
-	spin_lock_irqsave(&vcam->instances_lock, flags);
-	while (!list_empty(&vcam->instances)) {
-		inst = list_first_entry(&vcam->instances,
-					struct vcam_exec_instance,
-					entry);
-		list_del(&inst->entry);
-
-		cam_instance_event_trigger_signals(vcam->entities[entity_id],
-						   inst->instance,
-						   vcam->events[event_id]);
-		cam_instance_put(inst->instance);
-		kfree(inst);
-	}
-	spin_unlock_irqrestore(&vcam->instances_lock, flags);
-}
-
 static int record_event_instance(struct vcam_device *vcam,
 				 struct cam_obj_instance *instance)
 {
@@ -195,10 +128,24 @@ static int entity_instance_read(void *dev,
 				struct cam_obj_instance *instance,
 				struct cam_read_instruction *rw)
 {
-	struct vcam_device *vcam = dev;
+	char dummy_buffer[32] = {};
+	u64 len;
 
-	pr_info("VCAM: execute entity instance read\n");
-	return record_event_instance(vcam, instance);
+	pr_info("VCAM: execute entity register %u read\n", rw->reg);
+
+	if (!rw->size)
+		return 0;
+
+	strcpy(dummy_buffer, "From VCAM driver");
+	len = strlen(dummy_buffer);
+	if (rw->size < len)
+		len = rw->size;
+	if (copy_to_user(u64_to_user_ptr(rw->ptr), dummy_buffer, len)) {
+		pr_err("VCAM: cannot copy to user\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int entity_instance_write(void *dev,
@@ -206,8 +153,21 @@ static int entity_instance_write(void *dev,
 				 struct cam_write_instruction *rw)
 {
 	struct vcam_device *vcam = dev;
+	char dummy_buffer[32] = {};
 
-	pr_info("VCAM: execute entity instance write\n");
+	pr_info("VCAM: execute entity register %u write\n", rw->reg);
+
+	if (rw->size > sizeof(dummy_buffer)) {
+		pr_err("VCAM: write size is too large");
+		return -EINVAL;
+	}
+
+	if (copy_from_user(dummy_buffer, u64_to_user_ptr(rw->ptr), rw->size)) {
+		pr_err("VCAM: cannot copy from user\n");
+		return -EINVAL;
+	}
+
+	pr_info("VCAM: register write payload: %s\n", dummy_buffer);
 	return record_event_instance(vcam, instance);
 }
 
@@ -260,8 +220,6 @@ error:
 }
 
 static struct cam_entity_ops entity_ops = {
-	.read			= entity_read,
-	.write			= entity_write,
 	.instance_read		= entity_instance_read,
 	.instance_write		= entity_instance_write,
 	.instance_create	= entity_instance_create,
@@ -274,11 +232,29 @@ static void trigger_event_on(struct vcam_device *vcam,
 			     u32 entity_id,
 			     u32 event_id)
 {
+	struct vcam_exec_instance *inst;
+	unsigned long flags;
+
 	if (!vcam->entities[entity_id] || !vcam->events[event_id])
 		return;
 
 	cam_event_trigger_signals(vcam->entities[entity_id],
 				  vcam->events[event_id]);
+
+	spin_lock_irqsave(&vcam->instances_lock, flags);
+	while (!list_empty(&vcam->instances)) {
+		inst = list_first_entry(&vcam->instances,
+					struct vcam_exec_instance,
+					entry);
+		list_del(&inst->entry);
+
+		cam_instance_event_trigger_signals(vcam->entities[entity_id],
+						   inst->instance,
+						   vcam->events[event_id]);
+		cam_instance_put(inst->instance);
+		kfree(inst);
+	}
+	spin_unlock_irqrestore(&vcam->instances_lock, flags);
 }
 
 static enum hrtimer_restart vcam_event_timer(struct vcam_device *vcam)
@@ -298,9 +274,9 @@ static enum hrtimer_restart vcam_event_timer(struct vcam_device *vcam)
 
 	dev_info(vcam->dev, "events: trigger slow events\n");
 	/* We cancel HR timer, send spurious wakeup to all entities */
-	trigger_instance_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
-	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
+	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
+
 	vcam->timer_start_ts = jiffies;
 
 	return HRTIMER_RESTART;
@@ -340,7 +316,6 @@ static void cam_objects_release(struct vcam_device *vcam)
 {
 	int obj;
 
-	trigger_instance_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_INST, ENTITY_INST_EVENT);
 	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
 	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
@@ -400,7 +375,7 @@ static int vcam_probe(struct platform_device *pdev)
 						CAM_OBJ_ID_ROOT,
 						vcam,
 						&entity_ops,
-						CAM_ENTITY_NO_INSTANCES,
+						CAM_ENTITY_MIN_INSTANCES,
 						entity_names[idx]);
 	if (!vcam->root_entity) {
 		ret = -ENOMEM;
@@ -409,22 +384,14 @@ static int vcam_probe(struct platform_device *pdev)
 
 	idx = 1;
 	for (obj = 0; obj < ARRAY_SIZE(vcam->entities); obj++) {
-		u32 instances = CAM_ENTITY_NO_INSTANCES;
 		struct cam_obj_entity *entity;
-
-		/*
-		 * VCAM_INSTANCES_ENTITY_NAME supports instances unlike
-		 * the rest of entities
-		 */
-		if (obj == ENTITY_INST)
-			instances = 2;
 
 		parent_id = cam_entity_id(vcam->root_entity);
 		entity = cam_entity_register(vcam->cam,
 					     parent_id,
 					     vcam,
 					     &entity_ops,
-					     instances,
+					     VCAM_NUM_INSTANCES,
 					     entity_names[idx]);
 		vcam->entities[obj] = entity;
 		if (!vcam->entities[obj]) {

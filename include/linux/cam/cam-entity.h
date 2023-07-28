@@ -15,10 +15,8 @@
 
 struct cam_obj_entity;
 
-#define CAM_ENTITY_NO_INSTANCES		0
+#define CAM_ENTITY_MIN_INSTANCES	1
 #define CAM_ENTITY_UNLIMITED_INSTANCES	INT_MAX
-
-#define CAM_ENTITY_FLAG_REQUIRE_INSTANCE	(1 << 0)
 
 struct cam_obj_instance;
 
@@ -28,18 +26,6 @@ struct cam_obj_instance;
  * The available register read/write execution callback on an entity.
  */
 struct cam_entity_ops {
-	/**
-	 * read(): the register read callback
-	 *
-	 * Return: 0 on success, or negative error code on failure
-	 */
-	int (*read)(void *dev, struct cam_read_instruction *rw);
-	/**
-	 * write(): the register write callback
-	 *
-	 * Return: 0 on success, or negative error code on failure
-	 */
-	int (*write)(void *dev, struct cam_write_instruction *rw);
 	/**
 	 * instance_read(): entity instance register read callback
 	 *

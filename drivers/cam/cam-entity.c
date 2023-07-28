@@ -18,18 +18,6 @@
 
 #include <trace/events/cam.h>
 
-static int root_entity_read(void *dev, struct cam_read_instruction *rw)
-{
-	WARN_ON(1);
-	return -EINVAL;
-}
-
-static int root_entity_write(void *dev, struct cam_write_instruction *rw)
-{
-	WARN_ON(1);
-	return -EINVAL;
-}
-
 static int root_entity_instance_read(void *dev,
 				     struct cam_obj_instance *instance,
 				     struct cam_read_instruction *rw)
@@ -71,8 +59,6 @@ static void root_entity_dmabuf_remove(void *dev,
 }
 
 static struct cam_entity_ops root_entity_ops = {
-	.read			= root_entity_read,
-	.write			= root_entity_write,
 	.instance_read		= root_entity_instance_read,
 	.instance_write		= root_entity_instance_write,
 	.instance_create	= root_entity_instance_create,
@@ -209,14 +195,16 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	va_list args;
 
 	lockdep_assert_held_write(&cam->ns_enum_lock);
+	if (WARN_ON(num_instances < CAM_ENTITY_MIN_INSTANCES))
+		return NULL;
 
 	if (WARN_ON(!ops))
 		return NULL;
 
-	if (!ops->read)
-		ops->read = root_entity_read;
-	if (!ops->write)
-		ops->write = root_entity_write;
+	if (!ops->instance_read)
+		ops->instance_read = root_entity_instance_read;
+	if (!ops->instance_write)
+		ops->instance_write = root_entity_instance_write;
 	if (!ops->instance_create)
 		ops->instance_create = root_entity_instance_create;
 	if (!ops->instance_destroy)
@@ -239,8 +227,6 @@ struct cam_obj_entity *cam_entity_register(struct cam_device *cam,
 	va_end(args);
 
 	atomic_set(&entity->instances_avail, num_instances);
-	if (num_instances)
-		entity->flags |= CAM_ENTITY_FLAG_REQUIRE_INSTANCE;
 	entity->ops = ops;
 	entity->driver_data = driver_data;
 	strscpy(entity->name, name, CAM_ENTITY_NAME_SZ);
@@ -285,7 +271,7 @@ struct cam_obj_entity *cam_root_entity_register(struct cam_device *cam)
 	if (!entity)
 		return NULL;
 
-	atomic_set(&entity->instances_avail, CAM_ENTITY_NO_INSTANCES);
+	atomic_set(&entity->instances_avail, CAM_ENTITY_MIN_INSTANCES);
 	entity->ops = &root_entity_ops;
 	strscpy(entity->name, "CAM root entity", CAM_ENTITY_NAME_SZ);
 	cam_obj_init(&entity->nsobj, CAM_OBJ_TYPE_ENTITY, cam_entity_release,
@@ -402,9 +388,6 @@ struct cam_obj_instance *cam_instance_create(struct cam_ns *ns,
 {
 	struct cam_obj_instance *instance;
 	void *dev;
-
-	if (!(entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE))
-		return NULL;
 
 	if (!cam_valid_instance_id(id))
 		return NULL;
@@ -622,9 +605,6 @@ void cam_event_trigger_signals(struct cam_obj_entity *entity,
 {
 	unsigned long flags;
 
-	if (entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE)
-		return;
-
 	trace_cam_event_trigger(entity, NULL, event);
 	write_lock_irqsave(&event->notify_lock, flags);
 	cam_fire_active_signals(&event->notify_active_chain);
@@ -644,9 +624,6 @@ void cam_instance_event_trigger_signals(struct cam_obj_entity *entity,
 					struct cam_obj_event *event)
 {
 	unsigned long flags;
-
-	if (!(entity->flags & CAM_ENTITY_FLAG_REQUIRE_INSTANCE))
-		return;
 
 	trace_cam_event_trigger(entity, instance, event);
 	write_lock_irqsave(&event->notify_lock, flags);

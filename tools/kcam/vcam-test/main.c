@@ -20,6 +20,9 @@
 
 #define CAM_DEFAULT_OUT_SZ	4096
 
+#define VCAM_FAST_IRQ_INSTANCE_ID	1
+#define VCAM_SLOW_IRQ_INSTANCE_ID	100
+
 static char *exit_at_functions[] = {
 	"wait_for_slow_entity_timer",
 	"test_add_valid_operations",
@@ -1126,6 +1129,7 @@ static int test_add_valid_complex_operations(struct libkc *cam,
 
 static int test_add_valid_rw_operations(struct libkc *cam,
 					const char *entity_name,
+					u32 instance_id,
 					u32 num_ops)
 {
 	char write_buffer[] = "From vcamtest";
@@ -1171,36 +1175,34 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 		op->operation_add.id		= op_idx;
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.entity	= entity->id;
-		op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+		op->operation_add.instance	= instance_id;
 		op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
-
-		rw_list = libkc_rw_list_get(2);
-		if (!rw_list) {
-			ret = -ENOMEM;
-			goto out;
-		}
-
-		op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+		op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
 
 		/*
-		 * The first operation is blocked on entity event. The rest
-		 * of operations are blocked on the first one.
+		 * The first operation is instance write, the second
+		 * operation is blocked on instance event. The rest
+		 * of operations are blocked on previous operations.
 		 */
 		if (op_idx == 0) {
-			op->operation_add.deps[0].type	= CAM_DEPENDENCY_EVENT;
-			op->operation_add.deps[0].id	= event->id;
-			/*
-			 * RW 0 is register read
-			 */
-			for_each_rw_instruction(rw_list, rw_idx, rw) {
-				rw->type		= CAM_READ_INSTRUCTION;
-				rw->error		= 0;
-				rw->rd.reg		= 42;
-				rw->rd.size		= READ_BUFFER_SIZE;
-				rw->rd.num_buffers	= 0;
-				rw->rd.buffers_list	= 0x00;
-				rw->rd.ptr		= (uint64_t)read_buffer;
+			op->operation_add.instance	= instance_id;
+
+			rw_list = libkc_rw_list_get(1);
+			if (!rw_list) {
+				ret = -ENOMEM;
+				goto out;
 			}
+
+			op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+			rw = libkc_rw_instruction_at(rw_list, 0);
+
+			rw->type		= CAM_WRITE_INSTRUCTION;
+			rw->error		= 0;
+			rw->wr.reg		= 42;
+			rw->wr.size		= sizeof(write_buffer);
+			rw->wr.num_buffers	= 0;
+			rw->wr.buffers_list	= 0x00;
+			rw->wr.ptr		= (uint64_t)write_buffer;
 			continue;
 		}
 
@@ -1208,18 +1210,26 @@ static int test_add_valid_rw_operations(struct libkc *cam,
 		op->operation_add.deps[0].id	= op_idx - 1;
 
 		if (op_idx == 1) {
-			/*
-			 * RW 1 is register write
-			 */
-			for_each_rw_instruction(rw_list, rw_idx, rw) {
-				rw->type		= CAM_WRITE_INSTRUCTION;
-				rw->error		= 0;
-				rw->wr.reg		= 42;
-				rw->wr.size		= sizeof(write_buffer);
-				rw->wr.num_buffers	= 0;
-				rw->wr.buffers_list	= 0x00;
-				rw->wr.ptr		= (uint64_t)write_buffer;
+			op->operation_add.instance	= instance_id;
+			op->operation_add.deps[1].type	= CAM_DEPENDENCY_EVENT;
+			op->operation_add.deps[1].id	= event->id;
+
+			rw_list = libkc_rw_list_get(1);
+			if (!rw_list) {
+				ret = -ENOMEM;
+				goto out;
 			}
+
+			op->operation_add.rd_wr_list	= (uint64_t)rw_list;
+			rw = libkc_rw_instruction_at(rw_list, 0);
+
+			rw->type		= CAM_READ_INSTRUCTION;
+			rw->error		= 0;
+			rw->rd.reg		= 42;
+			rw->rd.size		= READ_BUFFER_SIZE;
+			rw->rd.num_buffers	= 0;
+			rw->rd.buffers_list	= 0x00;
+			rw->rd.ptr		= (uint64_t)read_buffer;
 			continue;
 		}
 	}
@@ -1263,7 +1273,8 @@ out:
 }
 
 static int test_add_invalid_rw_num_entries(struct libkc *cam,
-					   const char *entity_name)
+					   const char *entity_name,
+					   u32 instance_id)
 {
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
@@ -1328,7 +1339,8 @@ out:
 }
 
 static int test_add_too_many_rw_instructions(struct libkc *cam,
-					     const char *entity_name)
+					     const char *entity_name,
+					     u32 instance_id)
 {
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
@@ -1365,7 +1377,7 @@ static int test_add_too_many_rw_instructions(struct libkc *cam,
 	op->operation_add.id		= op_idx;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
-	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.instance	= instance_id;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
 	rw_list = libkc_rw_list_get(1);
@@ -1580,19 +1592,22 @@ static int test_operations(struct libkc *cam)
 		return -EINVAL;
 	}
 
-	ret = test_add_invalid_rw_num_entries(cam, VCAM_FAST_IRQ_ENTITY_NAME);
+	ret = test_add_invalid_rw_num_entries(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					      VCAM_FAST_IRQ_INSTANCE_ID);
 	if (ret) {
 		pr_err("FATAL: failure test_add_invalid_rw_num_entries()\n");
 		return ret;
 	}
 
-	ret = test_add_too_many_rw_instructions(cam, VCAM_FAST_IRQ_ENTITY_NAME);
+	ret = test_add_too_many_rw_instructions(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+						VCAM_FAST_IRQ_INSTANCE_ID);
 	if (ret) {
 		pr_err("FATAL: failure test_add_too_many_rw_instructions()\n");
 		return ret;
 	}
 
 	ret = test_add_valid_rw_operations(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					   VCAM_FAST_IRQ_INSTANCE_ID,
 					   TEST_NUM_RW_OPERATIONS);
 	if (ret) {
 		pr_err("FATAL: failure test_add_valid_rw_operations()\n");
@@ -1842,7 +1857,7 @@ static int test_compound_buffer_operations(struct libkc *cam)
 	op->operation_add.id		= 2;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
-	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
+	op->operation_add.instance	= VCAM_FAST_IRQ_INSTANCE_ID;
 	op->operation_add.mode		= CAM_DEPENDENCY_STRICT_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
 	op->operation_add.deps[0].id	= 1;
@@ -2156,73 +2171,6 @@ out:
 	return ret;
 }
 
-static int test_root_entity_instance(struct libkc *cam)
-{
-	struct libkc_operation *lco = NULL;
-	struct cam_rw_instruction *rw;
-	struct libkc_rw_list *rw_list;
-	struct obj_entity *entity;
-	struct cam_operation *op;
-	int ret, rw_idx;
-
-	pr_info("Test %s instance\n", VCAM_ROOT_ENTITY_NAME);
-
-	entity = libkc_entity_lookup_by_name(cam, VCAM_ROOT_ENTITY_NAME);
-	if (!entity) {
-		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_ROOT_ENTITY_NAME);
-		return -EINVAL;
-	}
-
-	lco = libkc_operation_get(1);
-	if (!lco) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	op = libkc_operation_at(lco, 0);
-
-	op->operation_type		= CAM_OPERATION_TYPE_ADD;
-	op->operation_add.id		= 1;
-	op->operation_add.delay_ns	= 0;
-	op->operation_add.entity	= entity->id;
-	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
-	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
-
-	rw_list = libkc_rw_list_get(1);
-	if (!rw_list) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
-	rw = libkc_rw_instruction_at(rw_list, 0);
-
-	rw->type	= CAM_INSTANCE_INSTRUCTION;
-	rw->error	= 0;
-	rw->in.op	= CAM_OP_INSTANCE_CREATE;
-	rw->in.id	= 1;
-
-	/*
-	 * ROOT entity doesn't support instances. This operation should fail.
-	 */
-	ret = libkc_operation_ioctl(cam, lco);
-	if (ret)
-		ret = 0;
-	else
-		ret = -EINVAL;
-
-	rw_idx = 0;
-	if (!libkc_failed_instruction(op, &rw_idx)) {
-		pr_err("Instruction error code is not set\n");
-		ret = -EINVAL;
-	}
-
-out:
-	libkc_operation_put(lco);
-	return ret;
-}
-
 static int test_entity_instance_avail_limit(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2234,7 +2182,7 @@ static int test_entity_instance_avail_limit(struct libkc *cam)
 
 	pr_info("Test entity instances_avail limit\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
 		       VCAM_FAST_IRQ_ENTITY_NAME);
@@ -2256,7 +2204,7 @@ static int test_entity_instance_avail_limit(struct libkc *cam)
 	op->operation_add.instance	= CAM_OP_NO_INSTANCE;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 
-	rw_list = libkc_rw_list_get(3);
+	rw_list = libkc_rw_list_get(101);
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
 	if (!rw_list) {
 		ret = -ENOMEM;
@@ -2287,7 +2235,9 @@ out:
 	return ret;
 }
 
-static int test_create_entity_instance(struct libkc *cam)
+static int test_create_entity_instance(struct libkc *cam,
+				       const char *entity_name,
+				       u32 instance_id)
 {
 	struct libkc_operation *lco = NULL;
 	struct cam_rw_instruction *rw;
@@ -2299,10 +2249,9 @@ static int test_create_entity_instance(struct libkc *cam)
 
 	pr_info("Test create entity instance\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, entity_name);
 	if (!entity) {
-		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_FAST_IRQ_ENTITY_NAME);
+		pr_err("Unable to lookup `%s` entity\n", entity_name);
 		return -EINVAL;
 	}
 
@@ -2339,7 +2288,7 @@ static int test_create_entity_instance(struct libkc *cam)
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
 	rw->in.op	= CAM_OP_INSTANCE_CREATE;
-	rw->in.id	= 1;
+	rw->in.id	= instance_id;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
@@ -2367,8 +2316,9 @@ out:
 	return ret;
 }
 
-static int test_entity_instance(struct libkc *cam)
+static int test_compound_instance_operations(struct libkc *cam)
 {
+	char write_buffer[] = "From vcamtest";
 	struct libkc_operation *lco = NULL;
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
@@ -2377,9 +2327,9 @@ static int test_entity_instance(struct libkc *cam)
 	struct cam_operation *op;
 	int ret, op_idx, rw_idx;
 
-	pr_info("Test entity instance\n");
+	pr_info("Test compound entity instance\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
 		       VCAM_FAST_IRQ_ENTITY_NAME);
@@ -2419,7 +2369,7 @@ static int test_entity_instance(struct libkc *cam)
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
 	rw->in.op	= CAM_OP_INSTANCE_CREATE;
-	rw->in.id	= 1;
+	rw->in.id	= 42;
 
 	op = libkc_operation_at(lco, 1);
 
@@ -2427,7 +2377,7 @@ static int test_entity_instance(struct libkc *cam)
 	op->operation_add.id		= 2;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
-	op->operation_add.instance	= 1;
+	op->operation_add.instance	= 42;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
 	op->operation_add.deps[0].id	= 1;
@@ -2441,13 +2391,13 @@ static int test_entity_instance(struct libkc *cam)
 
 	rw = libkc_rw_instruction_at(rw_list, 0);
 
-	rw->type		= CAM_READ_INSTRUCTION;
+	rw->type		= CAM_WRITE_INSTRUCTION;
 	rw->error		= 0;
 	rw->rd.reg		= 42;
-	rw->rd.size		= READ_BUFFER_SIZE;
+	rw->rd.size		= sizeof(write_buffer);
 	rw->rd.num_buffers	= 0;
 	rw->rd.buffers_list	= 0x00;
-	rw->rd.ptr		= 0x00;
+	rw->rd.ptr		= (uint64_t)write_buffer;
 
 	op = libkc_operation_at(lco, 2);
 
@@ -2455,7 +2405,7 @@ static int test_entity_instance(struct libkc *cam)
 	op->operation_add.id		= 3;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
-	op->operation_add.instance	= 1;
+	op->operation_add.instance	= 42;
 	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= CAM_DEPENDENCY_OP;
 	op->operation_add.deps[0].id	= 2;
@@ -2474,7 +2424,7 @@ static int test_entity_instance(struct libkc *cam)
 	rw->type	= CAM_INSTANCE_INSTRUCTION;
 	rw->error	= 0;
 	rw->in.op	= CAM_OP_INSTANCE_DESTROY;
-	rw->in.id	= 1;
+	rw->in.id	= 42;
 
 	ret = libkc_operation_ioctl(cam, lco);
 	if (ret)
@@ -2513,10 +2463,10 @@ static int test_destroy_unknown_instance(struct libkc *cam)
 
 	pr_info("Test destroy unknown instance\n");
 
-	entity = libkc_entity_lookup_by_name(cam, VCAM_INSTANCES_ENTITY_NAME);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n",
-		       VCAM_INSTANCES_ENTITY_NAME);
+		       VCAM_FAST_IRQ_ENTITY_NAME);
 		return -EINVAL;
 	}
 
@@ -2856,6 +2806,50 @@ out:
 	return ret;
 }
 
+static int cam_test_instances(struct libkc *cam)
+{
+	int ret;
+
+	ret = test_destroy_unknown_instance(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_destroy_unknown_instance()\n");
+		return ret;
+	}
+
+	ret = test_entity_instance_avail_limit(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_entity_instance_avail_limit()\n");
+		return ret;
+	}
+
+	ret = test_compound_instance_operations(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_compound_instance_operations()\n");
+		return ret;
+	}
+
+	/*
+	 * Note:
+	 * The following two will create instances that we use for other
+	 * tests as well as for pipeline emergency drain (instances drain).
+	 */
+	ret = test_create_entity_instance(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					  VCAM_FAST_IRQ_INSTANCE_ID);
+	if (ret) {
+		pr_err("FATAL: can't create instance\n");
+		return ret;
+	}
+
+	ret = test_create_entity_instance(cam, VCAM_SLOW_IRQ_ENTITY_NAME,
+					  VCAM_SLOW_IRQ_INSTANCE_ID);
+	if (ret) {
+		pr_err("FATAL: can't create instance\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static void *thread_fn(void *arg)
 {
 	struct obj_buffer *buf;
@@ -2878,6 +2872,12 @@ static void *thread_fn(void *arg)
 	ret = test_query_events(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_query_events()\n");
+		goto out;
+	}
+
+	ret = cam_test_instances(cam);
+	if (ret) {
+		pr_err("FATAL: failure cam_test_instances()\n");
 		goto out;
 	}
 
@@ -2953,6 +2953,7 @@ static void *thread_fn(void *arg)
 	}
 
 	ret = test_add_valid_rw_operations(cam, VCAM_FAST_IRQ_ENTITY_NAME,
+					   VCAM_FAST_IRQ_INSTANCE_ID,
 					   TEST_NUM_RW_OPERATIONS);
 	if (ret) {
 		pr_err("FATAL: failure test_add_valid_rw_operations()\n");
@@ -3151,6 +3152,12 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
+	ret = cam_test_instances(cam);
+	if (ret) {
+		pr_err("FATAL: failure cam_test_instances()\n");
+		return ret;
+	}
+
 	ret = test_operations(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_operations()\n");
@@ -3166,30 +3173,6 @@ int main(int argc, char *argv[])
 	ret = test_compound_buffer_operations(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_compound_buffer_operations()\n");
-		return ret;
-	}
-
-	ret = test_destroy_unknown_instance(cam);
-	if (ret) {
-		pr_err("FATAL: failure test_destroy_unknown_instance()\n");
-		return ret;
-	}
-
-	ret = test_root_entity_instance(cam);
-	if (ret) {
-		pr_err("FATAL: failure test_root_entity_instance()\n");
-		return ret;
-	}
-
-	ret = test_entity_instance_avail_limit(cam);
-	if (ret) {
-		pr_err("FATAL: failure test_entity_instance_avail_limit()\n");
-		return ret;
-	}
-
-	ret = test_entity_instance(cam);
-	if (ret) {
-		pr_err("FATAL: failure test_entity_instance()\n");
 		return ret;
 	}
 
@@ -3211,19 +3194,10 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	pr_info("Test emergency pipeline buffer/instance drain\n");
-
 	/* Add buffer for pipeline buffer-drain test */
 	ret = test_add_buffer(cam);
 	if (ret) {
 		pr_err("FATAL: can't add buffer\n");
-		return ret;
-	}
-
-	/* Create entity instance for pipeline instance-drain test */
-	ret = test_create_entity_instance(cam);
-	if (ret) {
-		pr_err("FATAL: can't create instance\n");
 		return ret;
 	}
 
