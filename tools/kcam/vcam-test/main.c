@@ -2171,6 +2171,50 @@ out:
 	return ret;
 }
 
+static int test_instance_verfication(struct libkc *cam)
+{
+	struct libkc_operation *lco = NULL;
+	struct obj_entity *entity;
+	struct cam_operation *op;
+	int ret;
+
+	pr_info("Test entity instance verification\n");
+
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Unable to lookup `%s` entity\n",
+		       VCAM_FAST_IRQ_ENTITY_NAME);
+		return -EINVAL;
+	}
+
+	lco = libkc_operation_get(1);
+	if (!lco) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libkc_operation_at(lco, 0);
+
+	/* FAST_IRQ entity and SLOW_IRQ instance ID */
+	op->operation_type		= CAM_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= VCAM_SLOW_IRQ_INSTANCE_ID;
+	op->operation_add.mode		= CAM_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.rd_wr_list	= CAM_OP_NO_RW_LIST;
+
+	ret = libkc_operation_ioctl(cam, lco);
+	if (ret)
+		ret = 0;
+	else
+		ret = -EINVAL;
+
+out:
+	libkc_operation_put(lco);
+	return ret;
+}
+
 static int test_entity_instance_avail_limit(struct libkc *cam)
 {
 	struct libkc_operation *lco = NULL;
@@ -2836,14 +2880,20 @@ static int cam_test_instances(struct libkc *cam)
 	ret = test_create_entity_instance(cam, VCAM_FAST_IRQ_ENTITY_NAME,
 					  VCAM_FAST_IRQ_INSTANCE_ID);
 	if (ret) {
-		pr_err("FATAL: can't create instance\n");
+		pr_err("FATAL: failure test_create_entity_instance()\n");
 		return ret;
 	}
 
 	ret = test_create_entity_instance(cam, VCAM_SLOW_IRQ_ENTITY_NAME,
 					  VCAM_SLOW_IRQ_INSTANCE_ID);
 	if (ret) {
-		pr_err("FATAL: can't create instance\n");
+		pr_err("FATAL: failure test_create_entity_instance()\n");
+		return ret;
+	}
+
+	ret = test_instance_verfication(cam);
+	if (ret) {
+		pr_err("FATAL: failure test_instance_verfication()\n");
 		return ret;
 	}
 
