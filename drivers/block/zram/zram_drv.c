@@ -2110,7 +2110,7 @@ static int zram_open(struct gendisk *disk, blk_mode_t mode)
 	 * the maximum number of opens to 2, we ensure there are no prior open
 	 * references before swap is enabled.
 	 */
-	if (atomic_read(&bdev->bd_openers) > 1)
+	if (disk_openers(disk) > 1)
 		return -EBUSY;
 
 	/* zram was claimed to reset so open request fails */
