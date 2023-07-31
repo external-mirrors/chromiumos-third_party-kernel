@@ -655,7 +655,7 @@ static int cam_prepare_dmabuf_instruction(struct cam_obj_op *op,
 		return 0;
 	}
 
-	pr_err("Unknown dmabuf instruction operation: %d\n", insn->op);
+	pr_devel("Unknown dmabuf instruction operation: %d\n", insn->op);
 	return -EINVAL;
 }
 
@@ -681,7 +681,7 @@ cam_prepare_instance_instruction(struct cam_obj_op *op,
 		return 0;
 	}
 
-	pr_err("Unknown instance instruction operation: %d\n", insn->op);
+	pr_devel("Unknown instance instruction operation: %d\n", insn->op);
 	return -EINVAL;
 }
 
@@ -895,7 +895,7 @@ static void cam_op_run_rw_instructions(struct cam_obj_op *op)
 		}
 
 		if (ret) {
-			pr_err("Operation execution error, aborting\n");
+			pr_devel("Operation execution error, aborting\n");
 			put_user(ret, &payload->error);
 			break;
 		}
@@ -1439,7 +1439,7 @@ static int cam_op_prepare_rw_instruction(struct cam_obj_op *op)
 		}
 
 		if (ret) {
-			pr_err("Failed instruction at prepare stage\n");
+			pr_devel("Failed instruction at prepare stage\n");
 			put_user(ret, &payload->error);
 			return ret;
 		}

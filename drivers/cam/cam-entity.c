@@ -295,7 +295,7 @@ error:
 static bool cam_valid_instance_id(u32 id)
 {
 	if (id + CAM_OBJS_NS_INSTANCE_ID_START > CAM_OBJS_NS_INSTANCE_ID_END) {
-		pr_err("Invalid instance ID: %u\n", id);
+		pr_devel("Invalid instance ID: %u\n", id);
 		return false;
 	}
 	return true;

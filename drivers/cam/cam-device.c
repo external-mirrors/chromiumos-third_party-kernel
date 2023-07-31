@@ -119,7 +119,7 @@ static int __must_check cam_device_register(struct cam_device *cam,
 
 	ret = cdev_device_add(&cam->cdev, &cam->devnode);
 	if (ret < 0) {
-		pr_err("Can't add " CAM_NAME "cdev\n");
+		pr_err("Can't add " CAM_NAME " cdev\n");
 		goto out_release;
 	}
 
@@ -278,7 +278,7 @@ static int __init cam_init(void)
 
 	ret = alloc_chrdev_region(&cam_dev_t, 0, CAM_DEVICE_COUNT, CAM_NAME);
 	if (ret < 0) {
-		pr_warn("can't allocate major for " CAM_NAME "\n");
+		pr_warn("Can't allocate major for " CAM_NAME "\n");
 		return ret;
 	}
 
@@ -290,14 +290,14 @@ static int __init cam_init(void)
 
 	ret = cam_device_init(cam);
 	if (ret) {
-		pr_warn("can't initialize cam_device\n");
+		pr_warn("Can't initialize cam_device\n");
 		kfree(cam);
 		goto err_unregister_chrdev_region;
 	}
 
 	ret = cam_device_register(cam, THIS_MODULE);
 	if (ret) {
-		pr_warn("can't register cam_device\n");
+		pr_warn("Can't register cam_device\n");
 		goto err_cam_put;
 	}
 

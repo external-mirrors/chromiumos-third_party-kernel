@@ -21,7 +21,7 @@
 static bool cam_valid_buffer_id(u32 id)
 {
 	if (id > CAM_OBJS_NS_BUFFER_ID_END) {
-		pr_err("Invalid buffer ID: %u\n", id);
+		pr_devel("Invalid buffer ID: %u\n", id);
 		return false;
 	}
 	return true;
