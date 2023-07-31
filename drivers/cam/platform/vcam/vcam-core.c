@@ -73,7 +73,7 @@ static void *entity_instance_create(void *dev)
 {
 	struct vcam_entity_instance_data *data;
 
-	pr_info("VCAM: instance create\n");
+	pr_devel("VCAM: instance create\n");
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -91,7 +91,7 @@ static void entity_instance_destroy(void *dev, void *instance_data)
 {
 	struct vcam_entity_instance_data *data = instance_data;
 
-	pr_info("VCAM: instance destroy\n");
+	pr_devel("VCAM: instance destroy\n");
 	kfree(data->buf);
 	kfree(data);
 }
@@ -127,7 +127,7 @@ static int entity_instance_read(void *dev,
 	char dummy_buffer[32] = {};
 	u64 len;
 
-	pr_info("VCAM: execute entity register %u read\n", rw->reg);
+	pr_devel("VCAM: execute entity register %u read\n", rw->reg);
 
 	if (!rw->size)
 		return 0;
@@ -151,7 +151,7 @@ static int entity_instance_write(void *dev,
 	struct vcam_device *vcam = dev;
 	char dummy_buffer[32] = {};
 
-	pr_info("VCAM: execute entity register %u write\n", rw->reg);
+	pr_devel("VCAM: execute entity register %u write\n", rw->reg);
 
 	if (rw->size > sizeof(dummy_buffer)) {
 		pr_err("VCAM: write size is too large");
@@ -163,7 +163,7 @@ static int entity_instance_write(void *dev,
 		return -EINVAL;
 	}
 
-	pr_info("VCAM: register write payload: %s\n", dummy_buffer);
+	pr_devel("VCAM: register write payload: %s\n", dummy_buffer);
 	return record_event_instance(vcam, instance);
 }
 
@@ -268,7 +268,6 @@ static enum hrtimer_restart vcam_event_timer(struct vcam_device *vcam)
 	if (!time_after(jiffies, vcam->timer_start_ts + 5 * HZ))
 		return HRTIMER_RESTART;
 
-	dev_info(vcam->dev, "events: trigger slow events\n");
 	/* We cancel HR timer, send spurious wakeup to all entities */
 	trigger_event_on(vcam, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
 	trigger_event_on(vcam, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
