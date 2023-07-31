@@ -246,6 +246,7 @@ static void obj_add_user(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 0, ret);
 	KUNIT_EXPECT_EQ(test, 1UL, id);
 
+	cam_obj_remove(obj);
 	cam_obj_deinit(obj);
 	cam_ns_release(&ns);
 }
