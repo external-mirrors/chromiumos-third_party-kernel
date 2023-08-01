@@ -2108,6 +2108,7 @@ static int test_buffer_enumeration(struct libkc *cam)
 	libkc_iterator_init(&lcq->hdr, &iter);
 	for_each_cam_query(lcq, op_idx, q) {
 		struct cam_query_dmabuf_entry *entry;
+		bool found = false;
 
 		if (q->query_type != CAM_QUERY_TYPE_DMABUF) {
 			pr_err("Unexpected query return type: %d\n",
@@ -2123,6 +2124,16 @@ static int test_buffer_enumeration(struct libkc *cam)
 				ret = -EINVAL;
 				goto out;
 			}
+			if (entry->id == 101) {
+				found = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			pr_err("Buffer enumeratiuon failed\n");
+			ret = -EINVAL;
+			goto out;
 		}
 	}
 
