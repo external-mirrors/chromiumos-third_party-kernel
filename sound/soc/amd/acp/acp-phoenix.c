@@ -274,7 +274,7 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr)
 	return data;
 }
 
-void acp63_master_clock_generate(struct acp_dev_data *adata)
+static void acp63_master_clock_generate(struct acp_dev_data *adata)
 {
         u32 data;
         union clk5_pll_req_no clk5_pll;
