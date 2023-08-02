@@ -6,6 +6,7 @@ config I2C_HID_ACPI
 	tristate "HID over I2C transport layer ACPI driver"
 	default n
 	depends on I2C && INPUT && ACPI
+	depends on DRM || !DRM
 	help
 	  Say Y here if you use a keyboard, a touchpad, a touchscreen, or any
 	  other HID based devices which is connected to your computer via I2C.
@@ -21,6 +22,7 @@ config I2C_HID_OF
 	tristate "HID over I2C transport layer Open Firmware driver"
 	default n
 	depends on I2C && INPUT && OF
+	depends on DRM || !DRM
 	help
 	  Say Y here if you use a keyboard, a touchpad, a touchscreen, or any
 	  other HID based devices which is connected to your computer via I2C.
@@ -36,6 +38,7 @@ config I2C_HID_OF_ELAN
 	tristate "Driver for Elan hid-i2c based devices on OF systems"
 	default n
 	depends on I2C && INPUT && OF
+	depends on DRM || !DRM
 	help
 	  Say Y here if you want support for Elan i2c devices that use
 	  the i2c-hid protocol on Open Firmware (Device Tree)-based
@@ -51,6 +54,7 @@ config I2C_HID_OF_GOODIX
 	tristate "Driver for Goodix hid-i2c based devices on OF systems"
 	default n
 	depends on I2C && INPUT && OF
+	depends on DRM || !DRM
 	help
 	  Say Y here if you want support for Goodix i2c devices that use
 	  the i2c-hid protocol on Open Firmware (Device Tree)-based
