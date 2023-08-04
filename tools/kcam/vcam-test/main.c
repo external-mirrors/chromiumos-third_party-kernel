@@ -1272,9 +1272,7 @@ out:
 	return ret;
 }
 
-static int test_add_invalid_rw_num_entries(struct libkc *cam,
-					   const char *entity_name,
-					   u32 instance_id)
+static int test_add_invalid_rw_num_entries(struct libkc *cam)
 {
 	struct cam_rw_instruction *rw;
 	struct libkc_rw_list *rw_list;
@@ -1287,9 +1285,9 @@ static int test_add_invalid_rw_num_entries(struct libkc *cam,
 	int ret;
 
 	pr_info("Test test_add_invalid_rw_num_entries() entity: %s\n",
-		entity_name);
+		VCAM_FAST_IRQ_ENTITY_NAME);
 
-	entity = libkc_entity_lookup_by_name(cam, entity_name);
+	entity = libkc_entity_lookup_by_name(cam, VCAM_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
 		return -EINVAL;
@@ -1592,8 +1590,7 @@ static int test_operations(struct libkc *cam)
 		return -EINVAL;
 	}
 
-	ret = test_add_invalid_rw_num_entries(cam, VCAM_FAST_IRQ_ENTITY_NAME,
-					      VCAM_FAST_IRQ_INSTANCE_ID);
+	ret = test_add_invalid_rw_num_entries(cam);
 	if (ret) {
 		pr_err("FATAL: failure test_add_invalid_rw_num_entries()\n");
 		return ret;
