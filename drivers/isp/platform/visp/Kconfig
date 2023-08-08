@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config ISP_VIRTUAL_DEVICE
+	tristate "Virtual ISP driver"
+	help
+	  Driver for a virtual ISP device.
+
+	  This driver creates a virtual ISP device that emulates an ISP device
+	  without depending on any particular hardware. It can be used to test
+	  both userspace code against the ISP API, and the ISP subsystem core.
+
+	  The module will be called visp.ko.

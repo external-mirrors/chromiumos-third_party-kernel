@@ -243,6 +243,6 @@ source "drivers/hte/Kconfig"
 
 source "drivers/pkglist/Kconfig"
 
-source "drivers/cam/Kconfig"
+source "drivers/isp/Kconfig"
 
 endmenu

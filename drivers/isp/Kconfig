@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menuconfig ISP
+	bool "ISP"
+	select DMA_SHARED_BUFFER
+	select SYNC_FILE
+	help
+	  The ISP UAPI and framework.
+
+	  Enable this if you have complex imaging related devices.
+
+	  NOTE THAT THE ISP API IS EXPERIMENTAL. IT MAY NOT BE CONSIDERED
+	  STABLE AT THE MOMENT.
+
+	  The module will be called isp.ko.
+
+config ISP_KUNIT_TESTS
+	tristate "KUnit tests for ISP" if !KUNIT_ALL_TESTS
+	depends on ISP && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the ISP KUnit tests.
+
+	  KUnit tests run during boot and output the results to the debug log
+	  in TAP format (https://testanything.org/). Only useful for kernel devs
+	  running KUnit test harness and are not for inclusion into a production
+	  build.
+
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
+if ISP
+
+source "drivers/isp/platform/Kconfig"
+
+endif # ISP
