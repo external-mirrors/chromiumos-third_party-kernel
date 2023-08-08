@@ -98,7 +98,6 @@ struct libkc_query *libkc_query_get(uint32_t num_queries,
 	}
 
 	lcq->hdr.num_queries	= num_queries;
-	lcq->hdr.length		= sz;
 
 	if (libkc_output_get(&lcq->hdr, output_sz)) {
 		free(lcq);

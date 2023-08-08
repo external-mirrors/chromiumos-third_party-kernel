@@ -61,7 +61,6 @@ struct libkc_operation *libkc_operation_get(uint32_t num_operations)
 	}
 
 	lco->hdr.num_queries	= num_operations;
-	lco->hdr.length		= sz;
 
 	return lco;
 }
