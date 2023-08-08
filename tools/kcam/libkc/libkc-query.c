@@ -54,12 +54,12 @@ u32 libkc_query_num_dmabufs(struct cam_query *q)
 
 struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx)
 {
-	if (lcq->hdr.num_queries == 0) {
+	if (lcq->hdr.num_requests == 0) {
 		LIBKC_BUG();
 		return NULL;
 	}
 
-	if (idx >= lcq->hdr.num_queries) {
+	if (idx >= lcq->hdr.num_requests) {
 		pr_err("BOOM\n");
 		LIBKC_BUG();
 		return NULL;
@@ -77,7 +77,7 @@ void libkc_query_put(struct libkc_query *lcq)
 	free(lcq);
 }
 
-struct libkc_query *libkc_query_get(uint32_t num_queries,
+struct libkc_query *libkc_query_get(uint32_t num_requests,
 				    uint32_t output_sz)
 {
 	struct libkc_query *lcq;
@@ -85,11 +85,11 @@ struct libkc_query *libkc_query_get(uint32_t num_queries,
 	size_t sz;
 	int i;
 
-	if (num_queries < 1)
+	if (num_requests < 1)
 		return NULL;
 
 	sz = sizeof(struct libkc_query) +
-		num_queries * sizeof(struct cam_query);
+		num_requests * sizeof(struct cam_query);
 	lcq = calloc(1, sz);
 
 	if (!lcq) {
@@ -97,7 +97,7 @@ struct libkc_query *libkc_query_get(uint32_t num_queries,
 		return NULL;
 	}
 
-	lcq->hdr.num_queries	= num_queries;
+	lcq->hdr.num_requests	= num_requests;
 
 	if (libkc_output_get(&lcq->hdr, output_sz)) {
 		free(lcq);
@@ -112,6 +112,6 @@ int libkc_query_ioctl(struct libkc *cam, struct libkc_query *lcq)
 	size_t sz;
 
 	sz = sizeof(struct cam_header) +
-		lcq->hdr.num_queries * sizeof(struct cam_query);
+		lcq->hdr.num_requests * sizeof(struct cam_query);
 	return libkc_ioctl(cam, CAM_IOC_QUERY(sz), lcq);
 }

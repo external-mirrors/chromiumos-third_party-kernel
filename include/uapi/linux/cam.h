@@ -29,12 +29,12 @@ struct cam_output {
 /**
  * struct cam_header - A set of CAM queries/operations
  *
- * @num_queries:	Number of queries/operations in this IOCTL call
+ * @num_requests:	Number of requests
  * @error:		Error index in case of an error
  * @output:		Query results
  */
 struct cam_header {
-	__u32		num_queries;
+	__u32		num_requests;
 	__u32		error;
 	struct cam_output output;
 } __attribute__((packed));

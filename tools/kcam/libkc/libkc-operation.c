@@ -9,12 +9,12 @@
 
 struct cam_operation *libkc_operation_at(struct libkc_operation *lco, u32 idx)
 {
-	if (lco->hdr.num_queries == 0) {
+	if (lco->hdr.num_requests == 0) {
 		LIBKC_BUG();
 		return NULL;
 	}
 
-	if (idx >= lco->hdr.num_queries) {
+	if (idx >= lco->hdr.num_requests) {
 		LIBKC_BUG();
 		return NULL;
 	}
@@ -60,7 +60,7 @@ struct libkc_operation *libkc_operation_get(uint32_t num_operations)
 		return NULL;
 	}
 
-	lco->hdr.num_queries	= num_operations;
+	lco->hdr.num_requests	= num_operations;
 
 	return lco;
 }
@@ -144,7 +144,7 @@ int libkc_operation_ioctl(struct libkc *cam, struct libkc_operation *lco)
 	size_t sz;
 
 	sz = sizeof(struct cam_header) +
-		lco->hdr.num_queries * sizeof(struct cam_operation);
+		lco->hdr.num_requests * sizeof(struct cam_operation);
 
 	if ((sz & _IOC_SIZEMASK) != sz)
 		pr_err("IOCTL payload size overflow: %u\n", sz);

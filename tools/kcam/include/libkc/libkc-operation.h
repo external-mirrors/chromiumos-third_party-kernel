@@ -34,7 +34,7 @@ struct cam_operation *libkc_operation_at(struct libkc_operation *lco,
 
 #define for_each_cam_operation(q,i,e)					\
 	for ((i) = 0, (e) = libkc_operation_at((q), (i));		\
-	     (i) < (q)->hdr.num_queries &&				\
+	     (i) < (q)->hdr.num_requests &&				\
 	     ((e) = libkc_operation_at((q), (i)));			\
 	     (i)++)
 

@@ -76,7 +76,7 @@ static bool is_valid_ioctlcmd_size(unsigned int cmd, struct cam_header *hdr,
 	if (length < sizeof(struct cam_header))
 		return false;
 
-	need_bytes = sizeof(struct cam_header) + hdr->num_queries * req_size;
+	need_bytes = sizeof(struct cam_header) + hdr->num_requests * req_size;
 	return length == need_bytes;
 }
 
@@ -120,7 +120,7 @@ static int cam_ioctl_parse_query(struct cam_fh *fh, unsigned int cmd,
 	if (cam_output_init(hdr, &output))
 		return -EFAULT;
 
-	for (num_query = 0; num_query < hdr->num_queries; num_query++) {
+	for (num_query = 0; num_query < hdr->num_requests; num_query++) {
 		struct cam_query query;
 
 		if (copy_from_user(&query, payload, sizeof(query))) {
@@ -199,8 +199,8 @@ static int cam_ioctl_operation_cancel(struct cam_fh *fh,
 	u32 num_op;
 
 	/* Move payload to point to the last OP */
-	payload += hdr->num_queries - 1;
-	num_op = hdr->num_queries - 1;
+	payload += hdr->num_requests - 1;
+	num_op = hdr->num_requests - 1;
 
 	while (1) {
 		struct cam_operation op;
@@ -232,7 +232,7 @@ static int cam_ioctl_operation_prepare(struct cam_fh *fh,
 	u32 num_op;
 	int ret;
 
-	if (hdr->num_queries == 0)
+	if (hdr->num_requests == 0)
 		return 0;
 
 	/*
@@ -242,7 +242,7 @@ static int cam_ioctl_operation_prepare(struct cam_fh *fh,
 	 * operations may depend on entity instances or DMA buffers that
 	 * earlier operations create/import.
 	 */
-	for (num_op = 0; num_op < hdr->num_queries; num_op++) {
+	for (num_op = 0; num_op < hdr->num_requests; num_op++) {
 		struct cam_operation op;
 
 		if (copy_from_user(&op, payload, sizeof(op)))
@@ -279,7 +279,7 @@ static int cam_ioctl_operation_submit(struct cam_fh *fh,
 	u32 num_op;
 	int ret;
 
-	if (hdr->num_queries == 0)
+	if (hdr->num_requests == 0)
 		return 0;
 
 	/*
@@ -291,8 +291,8 @@ static int cam_ioctl_operation_submit(struct cam_fh *fh,
 	 * operations it may be already too late to activate dependencies
 	 * on earlier operations.
 	 */
-	payload += hdr->num_queries - 1;
-	for (num_op = hdr->num_queries; num_op > 0; num_op--) {
+	payload += hdr->num_requests - 1;
+	for (num_op = hdr->num_requests; num_op > 0; num_op--) {
 		struct cam_operation op;
 
 		if (copy_from_user(&op, payload, sizeof(op)))

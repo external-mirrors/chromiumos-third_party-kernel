@@ -18,8 +18,8 @@ struct libkc_query {
 	struct cam_query	ents[];
 } __attribute__((packed));
 
-struct libkc_query *libkc_query_get(uint32_t num_queries,
-				      uint32_t output_sz);
+struct libkc_query *libkc_query_get(uint32_t num_requests,
+				    uint32_t output_sz);
 int libkc_query_ioctl(struct libkc *cam, struct libkc_query *lcq);
 void libkc_query_put(struct libkc_query *lcq);
 
@@ -27,7 +27,7 @@ struct cam_query *libkc_query_at(struct libkc_query *lcq, u32 idx);
 
 #define for_each_cam_query(q, i, e)					\
 	for ((i) = 0, (e) = libkc_query_at((q), (i));			\
-	     (i) < (q)->hdr.num_queries &&				\
+	     (i) < (q)->hdr.num_requests &&				\
 	     ((e) = libkc_query_at((q), (i)));				\
 	     (i)++)
 
