@@ -2,7 +2,7 @@
 // Copyright (C) 2016 - 2020 Intel Corporation
 
 #include <linux/delay.h>
-#include <linux/cam/cam-entity.h>
+#include <linux/isp/isp-entity.h>
 
 #include <uapi/linux/ipu-psys.h>
 
@@ -126,11 +126,11 @@ int ipu_fw_psys_terminal_set(struct ipu_fw_psys_terminal *terminal,
 			     struct ipu_psys_kcmd *kcmd,
 			     u32 buffer, unsigned int size)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	u32 type;
 	u32 buffer_state;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	type = terminal->terminal_type;
 
 	switch (type) {
@@ -241,13 +241,13 @@ int ipu_fw_psys_ppg_set_buffer_set(struct ipu_psys_kcmd *kcmd,
 				   struct ipu_fw_psys_terminal *terminal,
 				   int terminal_idx, u32 buffer)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	u32 type;
 	u32 buffer_state;
 	u32 *buffer_ptr;
 	struct ipu_fw_psys_buffer_set *buf_set = kcmd->kbuf_set->buf_set;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	type = terminal->terminal_type;
 
 	switch (type) {
@@ -347,7 +347,7 @@ ipu_fw_psys_ppg_create_buffer_set(struct ipu_psys_kcmd *kcmd,
 
 int ipu_fw_psys_ppg_enqueue_bufs(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_fw_psys_cmd *psys_cmd;
 	unsigned int queue_id;
 	int ret = 0;
@@ -362,7 +362,7 @@ int ipu_fw_psys_ppg_enqueue_bufs(struct ipu_psys_kcmd *kcmd)
 	if (queue_id >= size)
 		return -EINVAL;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	psys_cmd = ipu_send_get_token(instance->psys->fwcom, queue_id);
 	if (!psys_cmd) {
 		dev_err(psys_to_device(instance->psys),

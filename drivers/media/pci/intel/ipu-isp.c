@@ -5,14 +5,14 @@
  * Copyright (C) 2022 Google LLC
  */
 
-#include <linux/cam/cam-device.h>
-#include <linux/cam/cam-entity.h>
-#include <linux/cam/cam-buffer.h>
+#include <linux/isp/isp-device.h>
+#include <linux/isp/isp-entity.h>
+#include <linux/isp/isp-buffer.h>
 #include <linux/dma-buf.h>
 #include <linux/rhashtable.h>
 #include <linux/anon_inodes.h>
 
-#include <uapi/linux/cam.h>
+#include <uapi/linux/isp.h>
 #include <uapi/linux/ipu-psys.h>
 
 #include "ipu.h"
@@ -20,10 +20,10 @@
 #include "ipu-psys.h"
 #include "ipu-cpd.h"
 
-static struct ipu_kcam_psys_instance *
-kcam_psys_instance_open(struct ipu_psys *psys)
+static struct ipu_isp_psys_instance *
+isp_psys_instance_open(struct ipu_psys *psys)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	int rval;
 
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
@@ -51,8 +51,8 @@ instance_init_failed:
 	return ERR_PTR(rval);
 }
 
-static void kcam_psys_instance_release(struct ipu_psys *psys,
-				       struct ipu_kcam_psys_instance *instance)
+static void isp_psys_instance_release(struct ipu_psys *psys,
+				      struct ipu_isp_psys_instance *instance)
 {
 	mutex_lock(&psys->mutex);
 	list_del(&instance->list);
@@ -68,52 +68,52 @@ static void kcam_psys_instance_release(struct ipu_psys *psys,
 	kfree(instance);
 }
 
-static void *ipu_kcam_instance_create(void *dev)
+static void *ipu_isp_instance_create(void *dev)
 {
 	struct ipu_bus_device *adev = dev;
 	struct ipu_device *isp = adev->isp;
 	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 
 	if (isp->flr_done)
 		return NULL;
 
-	instance = kcam_psys_instance_open(psys);
+	instance = isp_psys_instance_open(psys);
 	if (IS_ERR(instance)) {
-		dev_err(&adev->auxdev.dev, "kcam_psys_instance_open failed\n");
+		dev_err(&adev->auxdev.dev, "isp_psys_instance_open failed\n");
 		return NULL;
 	}
 
 	return instance;
 }
 
-static void ipu_kcam_instance_destroy(void *dev, void *instance_data)
+static void ipu_isp_instance_destroy(void *dev, void *instance_data)
 {
 	struct ipu_bus_device *adev = dev;
 	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
-	struct ipu_kcam_psys_instance *instance = instance_data;
+	struct ipu_isp_psys_instance *instance = instance_data;
 
-	kcam_psys_instance_release(psys, instance);
+	isp_psys_instance_release(psys, instance);
 }
 
-static void ipu_kcam_buffer_register(struct ipu_psys *psys,
-				     struct ipu_kcam_psys_dbuf *buffer)
+static void ipu_isp_buffer_register(struct ipu_psys *psys,
+				    struct ipu_isp_psys_dbuf *buffer)
 {
 	mutex_lock(&psys->mutex);
 	list_add(&buffer->bufmap_list, &psys->bufmap);
 	mutex_unlock(&psys->mutex);
 }
 
-static void ipu_kcam_buffer_unregister(struct ipu_psys *psys,
-				       struct ipu_kcam_psys_dbuf *buffer)
+static void ipu_isp_buffer_unregister(struct ipu_psys *psys,
+				      struct ipu_isp_psys_dbuf *buffer)
 {
 	mutex_lock(&psys->mutex);
 	list_del(&buffer->bufmap_list);
 	mutex_unlock(&psys->mutex);
 }
 
-static void buffer_unmap(struct ipu_kcam_psys_dbuf *buffer);
-static int buffer_map(struct device *dev, struct ipu_kcam_psys_dbuf *buffer)
+static void buffer_unmap(struct ipu_isp_psys_dbuf *buffer);
+static int buffer_map(struct device *dev, struct ipu_isp_psys_dbuf *buffer)
 {
 	struct iosys_map dmap;
 	int err;
@@ -148,7 +148,7 @@ unmap_buffer:
 	return -1;
 }
 
-static void buffer_unmap(struct ipu_kcam_psys_dbuf *buffer)
+static void buffer_unmap(struct ipu_isp_psys_dbuf *buffer)
 {
 	if (!IS_ERR_OR_NULL(buffer->va)) {
 		struct iosys_map dmap;
@@ -167,11 +167,11 @@ static void buffer_unmap(struct ipu_kcam_psys_dbuf *buffer)
 			       buffer->dma_attach);
 }
 
-static struct ipu_kcam_psys_dbuf *
-ipu_kcam_buffer_lookup(struct ipu_psys *psys, struct dma_buf *dbuf)
+static struct ipu_isp_psys_dbuf *
+ipu_isp_buffer_lookup(struct ipu_psys *psys, struct dma_buf *dbuf)
 {
-	struct ipu_kcam_psys_dbuf *buf = NULL;
-	struct ipu_kcam_psys_dbuf *b;
+	struct ipu_isp_psys_dbuf *buf = NULL;
+	struct ipu_isp_psys_dbuf *b;
 
 	mutex_lock(&psys->mutex);
 	list_for_each_entry(b, &psys->bufmap, bufmap_list) {
@@ -188,23 +188,23 @@ ipu_kcam_buffer_lookup(struct ipu_psys *psys, struct dma_buf *dbuf)
 
 static void buffer_release(struct kref *ref)
 {
-	struct ipu_kcam_psys_dbuf *buffer;
+	struct ipu_isp_psys_dbuf *buffer;
 
-	buffer = container_of(ref, struct ipu_kcam_psys_dbuf, kref);
+	buffer = container_of(ref, struct ipu_isp_psys_dbuf, kref);
 
-	ipu_kcam_buffer_unregister(buffer->psys, buffer);
+	ipu_isp_buffer_unregister(buffer->psys, buffer);
 	buffer_unmap(buffer);
 
 	kfree(buffer);
 }
 
-static void *ipu_kcam_dmabuf_add(void *dev, struct dma_buf *dma_buf)
+static void *ipu_isp_dmabuf_add(void *dev, struct dma_buf *dma_buf)
 {
 	struct ipu_bus_device *adev = dev;
 	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
-	struct ipu_kcam_psys_dbuf *buffer;
+	struct ipu_isp_psys_dbuf *buffer;
 
-	buffer = ipu_kcam_buffer_lookup(psys, dma_buf);
+	buffer = ipu_isp_buffer_lookup(psys, dma_buf);
 
 	if (!buffer) {
 		buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
@@ -217,7 +217,7 @@ static void *ipu_kcam_dmabuf_add(void *dev, struct dma_buf *dma_buf)
 
 		kref_init(&buffer->kref);
 		buffer->psys = psys;
-		ipu_kcam_buffer_register(psys, buffer);
+		ipu_isp_buffer_register(psys, buffer);
 	}
 	return buffer;
 
@@ -227,25 +227,25 @@ put_dma_buf:
 	return NULL;
 }
 
-static void ipu_kcam_dmabuf_remove(void *dev,
-				   void *data,
-				   struct dma_buf *dma_buf)
+static void ipu_isp_dmabuf_remove(void *dev,
+				  void *data,
+				  struct dma_buf *dma_buf)
 {
-	struct ipu_kcam_psys_dbuf *buffer = data;
+	struct ipu_isp_psys_dbuf *buffer = data;
 
 	kref_put(&buffer->kref, buffer_release);
 }
 
-static int ipu_kcam_instance_read(void *dev,
-				  struct cam_obj_instance *instance,
-				  struct cam_read_instruction *inst)
+static int ipu_isp_instance_read(void *dev,
+				 struct isp_obj_instance *instance,
+				 struct isp_read_instruction *inst)
 {
 	struct ipu_bus_device *adev = dev;
 	union {
 		struct ipu_psys_capability caps;
 		struct ipu_psys_event ev;
 	} karg;
-	struct ipu_kcam_psys_instance *psys_instance;
+	struct ipu_isp_psys_instance *psys_instance;
 	void __user *up = (void __user *)inst->ptr;
 	unsigned int cmd = inst->reg;
 	int err = 0;
@@ -253,7 +253,7 @@ static int ipu_kcam_instance_read(void *dev,
 	if (_IOC_SIZE(cmd) > sizeof(karg))
 		return -ENOTTY;
 
-	psys_instance = cam_instance_driver_data(instance);
+	psys_instance = isp_instance_driver_data(instance);
 
 	switch (cmd) {
 	case IPU_IOC_QUERYCAP:
@@ -276,9 +276,9 @@ static int ipu_kcam_instance_read(void *dev,
 	return 0;
 }
 
-static int ipu_kcam_instance_write(void *dev,
-				   struct cam_obj_instance *instance,
-				   struct cam_write_instruction *inst)
+static int ipu_isp_instance_write(void *dev,
+				  struct isp_obj_instance *instance,
+				  struct isp_write_instruction *inst)
 {
 	struct ipu_bus_device *adev = dev;
 	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
@@ -309,7 +309,7 @@ static int ipu_kcam_instance_write(void *dev,
 		err = ipu_psys_kcmd_new(&karg.cmd,
 					adev,
 					instance,
-					(struct cam_obj_buffer **)inst->buffers_list);
+					(struct isp_obj_buffer **)inst->buffers_list);
 		break;
 	case IPU_IOC_GET_MANIFEST:
 		err = ipu_get_manifest(&karg.m, psys);
@@ -329,80 +329,80 @@ static int ipu_kcam_instance_write(void *dev,
 	return 0;
 }
 
-static struct cam_entity_ops kcam_entity_ops = {
-	.instance_read		= ipu_kcam_instance_read,
-	.instance_write		= ipu_kcam_instance_write,
-	.instance_create	= ipu_kcam_instance_create,
-	.instance_destroy	= ipu_kcam_instance_destroy,
-	.dmabuf_add		= ipu_kcam_dmabuf_add,
-	.dmabuf_remove		= ipu_kcam_dmabuf_remove,
+static struct isp_entity_ops isp_entity_ops = {
+	.instance_read		= ipu_isp_instance_read,
+	.instance_write		= ipu_isp_instance_write,
+	.instance_create	= ipu_isp_instance_create,
+	.instance_destroy	= ipu_isp_instance_destroy,
+	.dmabuf_add		= ipu_isp_dmabuf_add,
+	.dmabuf_remove		= ipu_isp_dmabuf_remove,
 };
 
-int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int id)
+int ipu_isp_init(struct ipu_bus_device *adev, unsigned int id)
 {
-	struct cam_device *kcam;
-	struct cam_obj_entity *kcam_entity;
-	struct cam_obj_event *kcam_event;
+	struct isp_device *isp;
+	struct isp_obj_entity *isp_entity;
+	struct isp_obj_event *isp_event;
 	struct ipu_psys *psys;
 	int ret;
 
-	kcam = cam_device_get();
-	if (!kcam) {
+	isp = isp_device_get();
+	if (!isp) {
 		dev_err(&adev->auxdev.dev,
-			"%s: kcam device initialization failed\n",
+			"%s: isp device initialization failed\n",
 			__func__);
 		return -ENOMEM;
 	}
 
-	cam_ns_enumeration_forbid(kcam);
-	kcam_entity = cam_entity_register(kcam,
-					  CAM_OBJ_ID_ROOT,
-					  adev,
-					  &kcam_entity_ops,
-					  U32_MAX >> 1,
-					  "PSYS%d",
-					  id);
-	if (!kcam_entity) {
+	isp_ns_enumeration_forbid(isp);
+	isp_entity = isp_entity_register(isp,
+					 ISP_OBJ_ID_ROOT,
+					 adev,
+					 &isp_entity_ops,
+					 U32_MAX >> 1,
+					 "PSYS%d",
+					 id);
+	if (!isp_entity) {
 		ret = -ENOMEM;
-		goto out_kcam_put;
+		goto out_isp_put;
 	}
 
-	kcam_event = cam_event_register(kcam,
-					cam_entity_id(kcam_entity),
-					"PSYS%d",
-					id);
+	isp_event = isp_event_register(isp,
+				       isp_entity_id(isp_entity),
+				       "PSYS%d",
+				       id);
 
-	if (!kcam_event) {
+	if (!isp_event) {
 		ret = -ENOMEM;
-		goto out_kcam_unregister_entity;
+		goto out_isp_unregister_entity;
 	}
-	cam_ns_enumeration_permit(kcam);
+	isp_ns_enumeration_permit(isp);
 
 	psys = ipu_bus_get_drvdata(adev);
-	psys->kcam = kcam;
-	psys->kcam_entity = kcam_entity;
-	psys->kcam_event = kcam_event;
+	psys->isp = isp;
+	psys->isp_entity = isp_entity;
+	psys->isp_event = isp_event;
 	INIT_LIST_HEAD(&psys->bufmap);
 
-	cam_device_put(kcam);
+	isp_device_put(isp);
 
 	return 0;
 
-out_kcam_unregister_entity:
-	cam_entity_unregister(kcam_entity);
+out_isp_unregister_entity:
+	isp_entity_unregister(isp_entity);
 
-out_kcam_put:
-	cam_ns_enumeration_permit(kcam);
-	cam_device_put(kcam);
+out_isp_put:
+	isp_ns_enumeration_permit(isp);
+	isp_device_put(isp);
 	return ret;
 }
 
-void ipu_kcam_exit(struct ipu_bus_device *adev)
+void ipu_isp_exit(struct ipu_bus_device *adev)
 {
 	struct ipu_psys *psys;
 
 	psys = ipu_bus_get_drvdata(adev);
-	cam_event_unregister(psys->kcam_event);
-	cam_entity_unregister(psys->kcam_entity);
-	cam_device_put(psys->kcam);
+	isp_event_unregister(psys->isp_event);
+	isp_entity_unregister(psys->isp_entity);
+	isp_device_put(psys->isp);
 }

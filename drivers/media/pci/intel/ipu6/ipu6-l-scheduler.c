@@ -152,7 +152,7 @@ static void ipu_psys_scheduler_ppg_sort(struct ipu_psys *psys, bool *stopping)
 {
 	struct ipu_psys_ppg *kppg, *tmp;
 	struct ipu_psys_scheduler *sched;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 
 	list_for_each_entry(instance, &psys->instances, list) {
 		mutex_lock(&instance->mutex);
@@ -299,7 +299,7 @@ static bool ipu_psys_scheduler_ppg_enqueue_bufset(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	bool resched = false;
 
 	list_for_each_entry(instance, &psys->instances, list) {
@@ -330,7 +330,7 @@ static bool ipu_psys_scheduler_ppg_halt(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	bool stopping_exit = false;
 
 	list_for_each_entry(instance, &psys->instances, list) {
@@ -411,7 +411,7 @@ static void ipu_psys_scheduler_kcmd_set(struct ipu_psys *psys)
 	struct ipu_psys_kcmd *kcmd;
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 
 	list_for_each_entry(instance, &psys->instances, list) {
 		mutex_lock(&instance->mutex);
@@ -441,7 +441,7 @@ static bool is_ready_to_enter_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 
 	list_for_each_entry(instance, &psys->instances, list) {
 		mutex_lock(&instance->mutex);
@@ -478,7 +478,7 @@ static bool has_pending_kcmd(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 
 	list_for_each_entry(instance, &psys->instances, list) {
 		mutex_lock(&instance->mutex);
@@ -519,7 +519,7 @@ static bool ipu_psys_scheduler_enter_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 
 	if (!enable_power_gating)
 		return false;

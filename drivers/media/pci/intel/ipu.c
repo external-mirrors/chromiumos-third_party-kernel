@@ -137,31 +137,31 @@ out_put_device:
 
 int ipu_fw_authenticate(void *data, u64 val)
 {
-	struct ipu_device *isp = data;
+	struct ipu_device *ipu = data;
 	int ret;
 
-	if (!isp->secure_mode)
+	if (!ipu->secure_mode)
 		return -EINVAL;
 
-	ret = ipu_buttress_reset_authentication(isp);
+	ret = ipu_buttress_reset_authentication(ipu);
 	if (ret) {
-		dev_err(&isp->pdev->dev, "Failed to reset authentication!\n");
+		dev_err(&ipu->pdev->dev, "Failed to reset authentication!\n");
 		return ret;
 	}
 
-	ret = pm_runtime_resume_and_get(&isp->psys->auxdev.dev);
+	ret = pm_runtime_resume_and_get(&ipu->psys->auxdev.dev);
 	if (ret < 0) {
-		dev_err(&isp->pdev->dev, "Runtime PM failed (%d)\n", ret);
+		dev_err(&ipu->pdev->dev, "Runtime PM failed (%d)\n", ret);
 		return ret;
 	}
 
-	ret = ipu_buttress_authenticate(isp);
+	ret = ipu_buttress_authenticate(ipu);
 	if (ret) {
-		dev_err(&isp->pdev->dev, "FW authentication failed\n");
+		dev_err(&ipu->pdev->dev, "FW authentication failed\n");
 		return ret;
 	}
 
-	pm_runtime_put(&isp->psys->auxdev.dev);
+	pm_runtime_put(&ipu->psys->auxdev.dev);
 
 	return 0;
 }
@@ -193,8 +193,8 @@ static int suspend_ipu_bus_device(struct ipu_bus_device *adev)
 
 static int force_suspend_get(void *data, u64 *val)
 {
-	struct ipu_device *isp = data;
-	struct ipu_buttress *b = &isp->buttress;
+	struct ipu_device *ipu = data;
+	struct ipu_buttress *b = &ipu->buttress;
 
 	*val = b->force_suspend;
 	return 0;
@@ -202,8 +202,8 @@ static int force_suspend_get(void *data, u64 *val)
 
 static int force_suspend_set(void *data, u64 val)
 {
-	struct ipu_device *isp = data;
-	struct ipu_buttress *b = &isp->buttress;
+	struct ipu_device *ipu = data;
+	struct ipu_buttress *b = &ipu->buttress;
 	int ret = 0;
 
 	if (val == b->force_suspend)
@@ -211,37 +211,37 @@ static int force_suspend_set(void *data, u64 val)
 
 	if (val) {
 		b->force_suspend = 1;
-		ret = suspend_ipu_bus_device(isp->psys);
+		ret = suspend_ipu_bus_device(ipu->psys);
 		if (ret) {
-			dev_err(&isp->pdev->dev, "Failed to suspend psys\n");
+			dev_err(&ipu->pdev->dev, "Failed to suspend psys\n");
 			return ret;
 		}
-		ret = suspend_ipu_bus_device(isp->isys);
+		ret = suspend_ipu_bus_device(ipu->isys);
 		if (ret) {
-			dev_err(&isp->pdev->dev, "Failed to suspend isys\n");
+			dev_err(&ipu->pdev->dev, "Failed to suspend isys\n");
 			return ret;
 		}
-		ret = pci_set_power_state(isp->pdev, PCI_D3hot);
+		ret = pci_set_power_state(ipu->pdev, PCI_D3hot);
 		if (ret) {
-			dev_err(&isp->pdev->dev,
+			dev_err(&ipu->pdev->dev,
 				"Failed to suspend IUnit PCI device\n");
 			return ret;
 		}
 	} else {
-		ret = pci_set_power_state(isp->pdev, PCI_D0);
+		ret = pci_set_power_state(ipu->pdev, PCI_D0);
 		if (ret) {
-			dev_err(&isp->pdev->dev,
+			dev_err(&ipu->pdev->dev,
 				"Failed to suspend IUnit PCI device\n");
 			return ret;
 		}
-		ret = resume_ipu_bus_device(isp->isys);
+		ret = resume_ipu_bus_device(ipu->isys);
 		if (ret) {
-			dev_err(&isp->pdev->dev, "Failed to resume isys\n");
+			dev_err(&ipu->pdev->dev, "Failed to resume isys\n");
 			return ret;
 		}
-		ret = resume_ipu_bus_device(isp->psys);
+		ret = resume_ipu_bus_device(ipu->psys);
 		if (ret) {
-			dev_err(&isp->pdev->dev, "Failed to resume psys\n");
+			dev_err(&ipu->pdev->dev, "Failed to resume psys\n");
 			return ret;
 		}
 		b->force_suspend = 0;
@@ -258,18 +258,18 @@ DEFINE_SIMPLE_ATTRIBUTE(force_suspend_fops, force_suspend_get,
  */
 static int cpd_fw_reload(void *data, u64 val)
 {
-	struct ipu_device *isp = data;
+	struct ipu_device *ipu = data;
 	int rval = -EINVAL;
 
-	if (isp->cpd_fw_reload)
-		rval = isp->cpd_fw_reload(isp);
+	if (ipu->cpd_fw_reload)
+		rval = ipu->cpd_fw_reload(ipu);
 
 	return rval;
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(cpd_fw_fops, NULL, cpd_fw_reload, "%llu\n");
 
-static int ipu_init_debugfs(struct ipu_device *isp)
+static int ipu_init_debugfs(struct ipu_device *ipu)
 {
 	struct dentry *file;
 	struct dentry *dir;
@@ -278,26 +278,26 @@ static int ipu_init_debugfs(struct ipu_device *isp)
 	if (!dir)
 		return -ENOMEM;
 
-	file = debugfs_create_file("force_suspend", 0700, dir, isp,
+	file = debugfs_create_file("force_suspend", 0700, dir, ipu,
 				   &force_suspend_fops);
 	if (!file)
 		goto err;
-	file = debugfs_create_file("authenticate", 0700, dir, isp,
+	file = debugfs_create_file("authenticate", 0700, dir, ipu,
 				   &authenticate_fops);
 	if (!file)
 		goto err;
 
-	file = debugfs_create_file("cpd_fw_reload", 0700, dir, isp,
+	file = debugfs_create_file("cpd_fw_reload", 0700, dir, ipu,
 				   &cpd_fw_fops);
 	if (!file)
 		goto err;
 
-	if (ipu_trace_debugfs_add(isp, dir))
+	if (ipu_trace_debugfs_add(ipu, dir))
 		goto err;
 
-	isp->ipu_dir = dir;
+	ipu->ipu_dir = dir;
 
-	if (ipu_buttress_debugfs_init(isp))
+	if (ipu_buttress_debugfs_init(ipu))
 		goto err;
 
 	return 0;
@@ -306,14 +306,14 @@ err:
 	return -ENOMEM;
 }
 
-static void ipu_remove_debugfs(struct ipu_device *isp)
+static void ipu_remove_debugfs(struct ipu_device *ipu)
 {
 	/*
 	 * Since isys and psys debugfs dir will be created under ipu root dir,
 	 * mark its dentry to NULL to avoid duplicate removal.
 	 */
-	debugfs_remove_recursive(isp->ipu_dir);
-	isp->ipu_dir = NULL;
+	debugfs_remove_recursive(ipu->ipu_dir);
+	ipu->ipu_dir = NULL;
 }
 #endif /* CONFIG_DEBUG_FS */
 
@@ -345,9 +345,9 @@ static int ipu_pci_config_setup(struct pci_dev *dev)
 	return rval;
 }
 
-static void ipu_configure_vc_mechanism(struct ipu_device *isp)
+static void ipu_configure_vc_mechanism(struct ipu_device *ipu)
 {
-	u32 val = readl(isp->base + BUTTRESS_REG_BTRS_CTRL);
+	u32 val = readl(ipu->base + BUTTRESS_REG_BTRS_CTRL);
 
 	if (IPU_BTRS_ARB_STALL_MODE_VC0 == IPU_BTRS_ARB_MODE_TYPE_STALL)
 		val |= BUTTRESS_REG_BTRS_CTRL_STALL_MODE_VC0;
@@ -359,7 +359,7 @@ static void ipu_configure_vc_mechanism(struct ipu_device *isp)
 	else
 		val &= ~BUTTRESS_REG_BTRS_CTRL_STALL_MODE_VC1;
 
-	writel(val, isp->base + BUTTRESS_REG_BTRS_CTRL);
+	writel(val, ipu->base + BUTTRESS_REG_BTRS_CTRL);
 }
 
 int request_cpd_fw(const struct firmware **firmware_p, const char *name,
@@ -399,7 +399,7 @@ EXPORT_SYMBOL(request_cpd_fw);
 
 static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
-	struct ipu_device *isp;
+	struct ipu_device *ipu;
 	phys_addr_t phys;
 	void __iomem *const *iomap;
 	void __iomem *isys_base = NULL;
@@ -414,13 +414,13 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (!fwnode || fwnode_property_read_u32(fwnode, "is_es", &is_es))
 		is_es = 0;
 
-	isp = devm_kzalloc(&pdev->dev, sizeof(*isp), GFP_KERNEL);
-	if (!isp)
+	ipu = devm_kzalloc(&pdev->dev, sizeof(*ipu), GFP_KERNEL);
+	if (!ipu)
 		return -ENOMEM;
 
-	isp->pdev = pdev;
-	INIT_LIST_HEAD(&isp->devices);
-	mutex_init(&isp->mutex);
+	ipu->pdev = pdev;
+	INIT_LIST_HEAD(&ipu->devices);
+	mutex_init(&ipu->mutex);
 
 	rval = pcim_enable_device(pdev);
 	if (rval) {
@@ -450,30 +450,30 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return -ENODEV;
 	}
 
-	isp->base = iomap[IPU_PCI_BAR];
-	dev_info(&pdev->dev, "mapped as: 0x%p\n", isp->base);
+	ipu->base = iomap[IPU_PCI_BAR];
+	dev_info(&pdev->dev, "mapped as: 0x%p\n", ipu->base);
 
-	pci_set_drvdata(pdev, isp);
+	pci_set_drvdata(pdev, ipu);
 	pci_set_master(pdev);
 
 	switch (id->device) {
 	case IPU6_PCI_ID:
 		ipu_ver = IPU_VER_6;
-		isp->cpd_fw_name = IPU6_FIRMWARE_NAME;
+		ipu->cpd_fw_name = IPU6_FIRMWARE_NAME;
 		break;
 	case IPU6SE_PCI_ID:
 		ipu_ver = IPU_VER_6SE;
-		isp->cpd_fw_name = IPU6SE_FIRMWARE_NAME;
+		ipu->cpd_fw_name = IPU6SE_FIRMWARE_NAME;
 		break;
 	case IPU6EP_ADL_P_PCI_ID:
 	case IPU6EP_ADL_N_PCI_ID:
 	case IPU6EP_RPL_P_PCI_ID:
 		ipu_ver = IPU_VER_6EP;
-		isp->cpd_fw_name = is_es ? IPU6EPES_FIRMWARE_NAME : IPU6EP_FIRMWARE_NAME;
+		ipu->cpd_fw_name = is_es ? IPU6EPES_FIRMWARE_NAME : IPU6EP_FIRMWARE_NAME;
 		break;
 	case IPU6EP_MTL_PCI_ID:
 		ipu_ver = IPU_VER_6EP_MTL;
-		isp->cpd_fw_name = IPU6EPMTL_FIRMWARE_NAME;
+		ipu->cpd_fw_name = IPU6EPMTL_FIRMWARE_NAME;
 		break;
 	default:
 		WARN(1, "Unsupported IPU device");
@@ -482,8 +482,8 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	ipu_internal_pdata_init();
 
-	isys_base = isp->base + isys_ipdata.hw_variant.offset;
-	psys_base = isp->base + psys_ipdata.hw_variant.offset;
+	isys_base = ipu->base + isys_ipdata.hw_variant.offset;
+	psys_base = ipu->base + psys_ipdata.hw_variant.offset;
 
 	dev_dbg(&pdev->dev, "isys_base: 0x%lx\n", (unsigned long)isys_base);
 	dev_dbg(&pdev->dev, "psys_base: 0x%lx\n", (unsigned long)psys_base);
@@ -503,32 +503,32 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rval = devm_request_threaded_irq(&pdev->dev, pdev->irq,
 					 ipu_buttress_isr,
 					 ipu_buttress_isr_threaded,
-					 IRQF_SHARED, IPU_NAME, isp);
+					 IRQF_SHARED, IPU_NAME, ipu);
 	if (rval) {
 		dev_err(&pdev->dev, "Requesting irq failed(%d)\n", rval);
 		return rval;
 	}
 
-	rval = ipu_buttress_init(isp);
+	rval = ipu_buttress_init(ipu);
 	if (rval)
 		return rval;
 
-	dev_info(&pdev->dev, "cpd file name: %s\n", isp->cpd_fw_name);
+	dev_info(&pdev->dev, "cpd file name: %s\n", ipu->cpd_fw_name);
 
-	rval = request_cpd_fw(&isp->cpd_fw, isp->cpd_fw_name, &pdev->dev);
+	rval = request_cpd_fw(&ipu->cpd_fw, ipu->cpd_fw_name, &pdev->dev);
 	if (rval) {
-		dev_err(&isp->pdev->dev, "Requesting signed firmware failed\n");
+		dev_err(&ipu->pdev->dev, "Requesting signed firmware failed\n");
 		return rval;
 	}
 
-	rval = ipu_cpd_validate_cpd_file(isp, isp->cpd_fw->data,
-					 isp->cpd_fw->size);
+	rval = ipu_cpd_validate_cpd_file(ipu, ipu->cpd_fw->data,
+					 ipu->cpd_fw->size);
 	if (rval) {
-		dev_err(&isp->pdev->dev, "Failed to validate cpd\n");
+		dev_err(&ipu->pdev->dev, "Failed to validate cpd\n");
 		goto out_ipu_bus_del_devices;
 	}
 
-	rval = ipu_trace_add(isp);
+	rval = ipu_trace_add(ipu);
 	if (rval)
 		dev_err(&pdev->dev, "Trace support not available\n");
 
@@ -549,12 +549,12 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Init butress control with default values based on the HW */
 	memcpy(isys_ctrl, &isys_buttress_ctrl, sizeof(*isys_ctrl));
 
-	isp->isys = ipu_isys_init(pdev, &pdev->dev,
+	ipu->isys = ipu_isys_init(pdev, &pdev->dev,
 				  isys_ctrl, isys_base,
 				  &isys_ipdata,
 				  0);
-	if (IS_ERR(isp->isys)) {
-		rval = PTR_ERR(isp->isys);
+	if (IS_ERR(ipu->isys)) {
+		rval = PTR_ERR(ipu->isys);
 		goto out_ipu_bus_del_devices;
 	}
 
@@ -567,16 +567,16 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Init butress control with default values based on the HW */
 	memcpy(psys_ctrl, &psys_buttress_ctrl, sizeof(*psys_ctrl));
 
-	isp->psys = ipu_psys_init(pdev, &isp->isys->auxdev.dev,
+	ipu->psys = ipu_psys_init(pdev, &ipu->isys->auxdev.dev,
 				  psys_ctrl, psys_base,
 				  &psys_ipdata, 0);
-	if (IS_ERR(isp->psys)) {
-		rval = PTR_ERR(isp->psys);
+	if (IS_ERR(ipu->psys)) {
+		rval = PTR_ERR(ipu->psys);
 		goto out_ipu_bus_del_devices;
 	}
 
 #ifdef CONFIG_DEBUG_FS
-	rval = ipu_init_debugfs(isp);
+	rval = ipu_init_debugfs(ipu);
 	if (rval) {
 		dev_err(&pdev->dev, "Failed to initialize debugfs");
 		goto out_ipu_bus_del_devices;
@@ -584,9 +584,9 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 #endif
 
 	/* Configure the arbitration mechanisms for VC requests */
-	ipu_configure_vc_mechanism(isp);
+	ipu_configure_vc_mechanism(ipu);
 
-	val = readl(isp->base + BUTTRESS_REG_SKU);
+	val = readl(ipu->base + BUTTRESS_REG_SKU);
 	dev_info(&pdev->dev, "IPU%u-v%u driver version %d.%d\n",
 		 val & 0xf, (val >> 4) & 0x7,
 		 IPU_MAJOR_VERSION,
@@ -599,20 +599,20 @@ static int ipu_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 out_ipu_bus_del_devices:
 	ipu_bus_del_devices(pdev);
-	ipu_buttress_exit(isp);
-	release_firmware(isp->cpd_fw);
+	ipu_buttress_exit(ipu);
+	release_firmware(ipu->cpd_fw);
 
 	return rval;
 }
 
 static void ipu_pci_remove(struct pci_dev *pdev)
 {
-	struct ipu_device *isp = pci_get_drvdata(pdev);
+	struct ipu_device *ipu = pci_get_drvdata(pdev);
 
 #ifdef CONFIG_DEBUG_FS
-	ipu_remove_debugfs(isp);
+	ipu_remove_debugfs(ipu);
 #endif
-	ipu_trace_release(isp);
+	ipu_trace_release(ipu);
 
 	ipu_bus_del_devices(pdev);
 
@@ -622,34 +622,34 @@ static void ipu_pci_remove(struct pci_dev *pdev)
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
 
-	ipu_buttress_exit(isp);
+	ipu_buttress_exit(ipu);
 
-	release_firmware(isp->cpd_fw);
+	release_firmware(ipu->cpd_fw);
 
-	ipu_mmu_cleanup(isp->psys->mmu);
-	ipu_mmu_cleanup(isp->isys->mmu);
+	ipu_mmu_cleanup(ipu->psys->mmu);
+	ipu_mmu_cleanup(ipu->isys->mmu);
 }
 
 static void ipu_pci_reset_prepare(struct pci_dev *pdev)
 {
-	struct ipu_device *isp = pci_get_drvdata(pdev);
+	struct ipu_device *ipu = pci_get_drvdata(pdev);
 
 	dev_warn(&pdev->dev, "FLR prepare\n");
-	pm_runtime_forbid(&isp->pdev->dev);
-	isp->flr_done = true;
+	pm_runtime_forbid(&ipu->pdev->dev);
+	ipu->flr_done = true;
 }
 
 static void ipu_pci_reset_done(struct pci_dev *pdev)
 {
-	struct ipu_device *isp = pci_get_drvdata(pdev);
+	struct ipu_device *ipu = pci_get_drvdata(pdev);
 
-	ipu_buttress_restore(isp);
-	if (isp->secure_mode)
-		ipu_buttress_reset_authentication(isp);
+	ipu_buttress_restore(ipu);
+	if (ipu->secure_mode)
+		ipu_buttress_reset_authentication(ipu);
 
 	ipu_bus_flr_recovery(pdev);
-	isp->ipc_reinit = true;
-	pm_runtime_allow(&isp->pdev->dev);
+	ipu->ipc_reinit = true;
+	pm_runtime_allow(&ipu->pdev->dev);
 
 	dev_warn(&pdev->dev, "FLR completed\n");
 }
@@ -663,9 +663,9 @@ static void ipu_pci_reset_done(struct pci_dev *pdev)
 static int ipu_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct ipu_device *isp = pci_get_drvdata(pdev);
+	struct ipu_device *ipu = pci_get_drvdata(pdev);
 
-	isp->flr_done = false;
+	ipu->flr_done = false;
 
 	return 0;
 }
@@ -673,36 +673,36 @@ static int ipu_suspend(struct device *dev)
 static int ipu_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct ipu_device *isp = pci_get_drvdata(pdev);
-	struct ipu_buttress *b = &isp->buttress;
+	struct ipu_device *ipu = pci_get_drvdata(pdev);
+	struct ipu_buttress *b = &ipu->buttress;
 	int rval;
 
 	/* Configure the arbitration mechanisms for VC requests */
-	ipu_configure_vc_mechanism(isp);
+	ipu_configure_vc_mechanism(ipu);
 
-	ipu_buttress_set_secure_mode(isp);
-	isp->secure_mode = ipu_buttress_get_secure_mode(isp);
+	ipu_buttress_set_secure_mode(ipu);
+	ipu->secure_mode = ipu_buttress_get_secure_mode(ipu);
 	dev_info(dev, "IPU in %s mode\n",
-		 isp->secure_mode ? "secure" : "non-secure");
+		 ipu->secure_mode ? "secure" : "non-secure");
 
-	ipu_buttress_restore(isp);
+	ipu_buttress_restore(ipu);
 
-	rval = ipu_buttress_ipc_reset(isp, &b->cse);
+	rval = ipu_buttress_ipc_reset(ipu, &b->cse);
 	if (rval)
-		dev_err(&isp->pdev->dev, "IPC reset protocol failed!\n");
+		dev_err(&ipu->pdev->dev, "IPC reset protocol failed!\n");
 
-	rval = pm_runtime_resume_and_get(&isp->psys->auxdev.dev);
+	rval = pm_runtime_resume_and_get(&ipu->psys->auxdev.dev);
 	if (rval < 0) {
-		dev_err(&isp->psys->auxdev.dev, "Failed to get runtime PM\n");
+		dev_err(&ipu->psys->auxdev.dev, "Failed to get runtime PM\n");
 		return 0;
 	}
 
-	rval = ipu_buttress_authenticate(isp);
+	rval = ipu_buttress_authenticate(ipu);
 	if (rval)
-		dev_err(&isp->pdev->dev, "FW authentication failed(%d)\n",
+		dev_err(&ipu->pdev->dev, "FW authentication failed(%d)\n",
 			rval);
 
-	pm_runtime_put(&isp->psys->auxdev.dev);
+	pm_runtime_put(&ipu->psys->auxdev.dev);
 
 	return 0;
 }
@@ -710,19 +710,19 @@ static int ipu_resume(struct device *dev)
 static int ipu_runtime_resume(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	struct ipu_device *isp = pci_get_drvdata(pdev);
+	struct ipu_device *ipu = pci_get_drvdata(pdev);
 	int rval;
 
-	ipu_configure_vc_mechanism(isp);
-	ipu_buttress_restore(isp);
+	ipu_configure_vc_mechanism(ipu);
+	ipu_buttress_restore(ipu);
 
-	if (isp->ipc_reinit) {
-		struct ipu_buttress *b = &isp->buttress;
+	if (ipu->ipc_reinit) {
+		struct ipu_buttress *b = &ipu->buttress;
 
-		isp->ipc_reinit = false;
-		rval = ipu_buttress_ipc_reset(isp, &b->cse);
+		ipu->ipc_reinit = false;
+		rval = ipu_buttress_ipc_reset(ipu, &b->cse);
 		if (rval)
-			dev_err(&isp->pdev->dev,
+			dev_err(&ipu->pdev->dev,
 				"IPC reset protocol failed!\n");
 	}
 

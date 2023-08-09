@@ -13,15 +13,15 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/cam/cam-entity.h>
-#include <linux/cam/cam-buffer.h>
+#include <linux/isp/isp-entity.h>
+#include <linux/isp/isp-buffer.h>
 
 #include "ipu.h"
 #include "ipu-psys.h"
 #include "ipu6-ppg.h"
 #include "ipu-platform-regs.h"
 #include "ipu-trace.h"
-#include "ipu-kcam.h"
+#include "ipu-isp.h"
 
 MODULE_IMPORT_NS(DMA_BUF);
 
@@ -161,11 +161,11 @@ void ipu_psys_setup_hw(struct ipu_psys *psys)
 
 static struct ipu_psys_ppg *ipu_psys_identify_kppg(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	sched = &instance->sched;
 
 	mutex_lock(&instance->mutex);
@@ -190,7 +190,7 @@ not_found:
  */
 static void ipu_psys_kcmd_free(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_ppg *kppg;
 	struct ipu_psys_scheduler *sched;
 	int i;
@@ -198,7 +198,7 @@ static void ipu_psys_kcmd_free(struct ipu_psys_kcmd *kcmd)
 	if (!kcmd)
 		return;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 
 	kppg = ipu_psys_identify_kppg(kcmd);
 	sched = &instance->sched;
@@ -217,19 +217,19 @@ static void ipu_psys_kcmd_free(struct ipu_psys_kcmd *kcmd)
 		mutex_unlock(&kppg->mutex);
 	}
 
-	if (kcmd->kcam_instance)
-		cam_instance_put(kcmd->kcam_instance);
+	if (kcmd->isp_instance)
+		isp_instance_put(kcmd->isp_instance);
 
-	if (kcmd->kcam_pg_buffer)
-		cam_buffer_put(kcmd->kcam_pg_buffer);
+	if (kcmd->isp_pg_buffer)
+		isp_buffer_put(kcmd->isp_pg_buffer);
 
-	if (kcmd->kcam_buffers) {
+	if (kcmd->isp_buffers) {
 		for (i = 0; i < kcmd->nbuffers; i++) {
-			if (!kcmd->kcam_buffers[i])
+			if (!kcmd->isp_buffers[i])
 				break;
-			cam_buffer_put(kcmd->kcam_buffers[i]);
+			isp_buffer_put(kcmd->isp_buffers[i]);
 		}
-		kfree(kcmd->kcam_buffers);
+		kfree(kcmd->isp_buffers);
 	}
 
 	kfree(kcmd->pg_manifest);
@@ -239,13 +239,13 @@ static void ipu_psys_kcmd_free(struct ipu_psys_kcmd *kcmd)
 
 static struct ipu_psys_kcmd *
 ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
-		  struct cam_obj_instance *kcam_instance,
-		  struct cam_obj_buffer **kcam_buffers)
+		  struct isp_obj_instance *isp_instance,
+		  struct isp_obj_buffer **isp_buffers)
 {
-	struct ipu_kcam_psys_instance *psys_instance;
+	struct ipu_isp_psys_instance *psys_instance;
 	struct ipu_psys *psys = NULL;
 	struct ipu_psys_kcmd *kcmd;
-	struct ipu_kcam_psys_dbuf *psys_pg_buf, *psys_buf;
+	struct ipu_isp_psys_dbuf *psys_pg_buf, *psys_buf;
 	unsigned int i;
 	int ret;
 
@@ -255,18 +255,18 @@ ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 	if (!cmd->pg_manifest_size)
 		return NULL;
 
-	if (!kcam_buffers)
+	if (!isp_buffers)
 		return NULL;
 
 	kcmd = kzalloc(sizeof(*kcmd), GFP_KERNEL);
 	if (!kcmd)
 		return NULL;
 
-	if (!cam_instance_get(kcam_instance))
+	if (!isp_instance_get(isp_instance))
 		goto error;
-	kcmd->kcam_instance = kcam_instance;
+	kcmd->isp_instance = isp_instance;
 
-	psys_instance = cam_instance_driver_data(kcam_instance);
+	psys_instance = isp_instance_driver_data(isp_instance);
 	psys = psys_instance->psys;
 
 	kcmd->state = KCMD_STATE_PPG_NEW;
@@ -276,11 +276,11 @@ ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 	 * increment the reference count of the buffer object to indirectly keep
 	 * the mapping alive
 	 */
-	if (!cam_buffer_get(kcam_buffers[0]))
+	if (!isp_buffer_get(isp_buffers[0]))
 		goto error;
-	kcmd->kcam_pg_buffer = kcam_buffers[0];
+	kcmd->isp_pg_buffer = isp_buffers[0];
 
-	psys_pg_buf = cam_buffer_driver_data(kcam_buffers[0]);
+	psys_pg_buf = isp_buffer_driver_data(isp_buffers[0]);
 	kcmd->pg_user = psys_pg_buf->va;
 	kcmd->kpg = __get_pg_buf(psys, psys_pg_buf->dma_buf->size);
 	if (!kcmd->kpg)
@@ -333,10 +333,10 @@ ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 		return kcmd;
 	}
 
-	kcmd->kcam_buffers = kcalloc(kcmd->nbuffers,
-				     sizeof(kcmd->kcam_buffers[0]),
-				     GFP_KERNEL);
-	if (!kcmd->kcam_buffers)
+	kcmd->isp_buffers = kcalloc(kcmd->nbuffers,
+				    sizeof(kcmd->isp_buffers[0]),
+				    GFP_KERNEL);
+	if (!kcmd->isp_buffers)
 		goto error;
 
 	for (i = 0; i < kcmd->nbuffers; i++) {
@@ -346,10 +346,10 @@ ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 		if (!terminal)
 			continue;
 
-		if (!cam_buffer_get(kcam_buffers[i + 1]))
+		if (!isp_buffer_get(isp_buffers[i + 1]))
 			goto error;
-		kcmd->kcam_buffers[i] = kcam_buffers[i + 1];
-		psys_buf = cam_buffer_driver_data(kcam_buffers[i + 1]);
+		kcmd->isp_buffers[i] = isp_buffers[i + 1];
+		psys_buf = isp_buffer_driver_data(isp_buffers[i + 1]);
 		if (!psys_buf ||
 		    !psys_buf->dma_sgt ||
 		    psys_buf->dma_buf->size < kcmd->buffers[i].bytes_used)
@@ -379,7 +379,7 @@ error:
 static struct ipu_psys_buffer_set *
 ipu_psys_lookup_kbuffer_set(struct ipu_psys *psys, u32 addr)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_buffer_set *kbuf_set;
 	struct ipu_psys_scheduler *sched;
 
@@ -402,7 +402,7 @@ ipu_psys_lookup_kbuffer_set(struct ipu_psys *psys, u32 addr)
 static struct ipu_psys_ppg *ipu_psys_lookup_ppg(struct ipu_psys *psys,
 						dma_addr_t pg_addr)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
 
@@ -433,10 +433,10 @@ static struct ipu_psys_ppg *ipu_psys_lookup_ppg(struct ipu_psys *psys,
 void ipu_psys_kcmd_complete(struct ipu_psys_ppg *kppg,
 			    struct ipu_psys_kcmd *kcmd, int error)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys *psys;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	psys = instance->psys;
 
 	kcmd->ev.type = IPU_PSYS_EVENT_TYPE_CMD_COMPLETE;
@@ -457,9 +457,9 @@ void ipu_psys_kcmd_complete(struct ipu_psys_ppg *kppg,
 		memcpy(kcmd->pg_user, kcmd->kpg->pg, kcmd->kpg->pg_size);
 
 	kcmd->state = KCMD_STATE_PPG_COMPLETE;
-	cam_instance_event_trigger_signals(psys->kcam_entity,
-					   kcmd->kcam_instance,
-					   psys->kcam_event);
+	isp_instance_event_trigger_signals(psys->isp_entity,
+					   kcmd->isp_instance,
+					   psys->isp_event);
 }
 
 /*
@@ -501,7 +501,7 @@ int ipu_psys_kcmd_start(struct ipu_psys *psys, struct ipu_psys_kcmd *kcmd)
 
 static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys *psys;
 	struct ipu_psys_ppg *kppg;
@@ -509,7 +509,7 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 	int queue_id;
 	int ret;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	sched = &instance->sched;
 	psys = instance->psys;
 
@@ -586,7 +586,7 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 
 static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys *psys;
 	struct ipu_psys_ppg *kppg;
 	struct ipu_psys_resource_pool *rpr;
@@ -597,7 +597,7 @@ static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 	if (kcmd->state == KCMD_STATE_PPG_START)
 		return ipu_psys_kcmd_send_to_ppg_start(kcmd);
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	psys = instance->psys;
 	rpr = &psys->resource_pool_running;
 
@@ -653,8 +653,8 @@ static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 
 int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
 		      struct ipu_bus_device *adev,
-		      struct cam_obj_instance *kcam_instance,
-		      struct cam_obj_buffer **kcam_buffers)
+		      struct isp_obj_instance *isp_instance,
+		      struct isp_obj_buffer **isp_buffers)
 {
 	struct ipu_psys_kcmd *kcmd;
 	size_t pg_size;
@@ -663,7 +663,7 @@ int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
 	if (adev->isp->flr_done)
 		return -EIO;
 
-	kcmd = ipu_psys_copy_cmd(cmd, kcam_instance, kcam_buffers);
+	kcmd = ipu_psys_copy_cmd(cmd, isp_instance, isp_buffers);
 	if (!kcmd) {
 		ret = -EINVAL;
 		goto error;
@@ -709,7 +709,7 @@ error:
 static bool ipu_psys_kcmd_is_valid(struct ipu_psys *psys,
 				   struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_kcmd *kcmd0;
 	struct ipu_psys_ppg *kppg, *tmp;
 	struct ipu_psys_scheduler *sched;
@@ -833,7 +833,7 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 	} while (1);
 }
 
-int ipu_psys_instance_init(struct ipu_kcam_psys_instance *instance)
+int ipu_psys_instance_init(struct ipu_isp_psys_instance *instance)
 {
 	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_buffer_set *kbuf_set, *kbuf_set_tmp;
@@ -879,7 +879,7 @@ out_free_buf_sets:
 }
 EXPORT_SYMBOL_GPL(ipu_psys_instance_init);
 
-int ipu_psys_instance_deinit(struct ipu_kcam_psys_instance *instance)
+int ipu_psys_instance_deinit(struct ipu_isp_psys_instance *instance)
 {
 	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_ppg *kppg, *kppg0;
@@ -968,7 +968,7 @@ int ipu_psys_instance_deinit(struct ipu_kcam_psys_instance *instance)
 EXPORT_SYMBOL_GPL(ipu_psys_instance_deinit);
 
 struct ipu_psys_kcmd *
-ipu_get_completed_kcmd(struct ipu_kcam_psys_instance *instance)
+ipu_get_completed_kcmd(struct ipu_isp_psys_instance *instance)
 {
 	struct ipu_psys_scheduler *sched = &instance->sched;
 	struct ipu_psys_kcmd *kcmd;
@@ -1001,7 +1001,7 @@ ipu_get_completed_kcmd(struct ipu_kcam_psys_instance *instance)
 }
 
 long ipu_ioctl_dqevent(struct ipu_psys_event *event,
-		       struct ipu_kcam_psys_instance *instance)
+		       struct ipu_isp_psys_instance *instance)
 {
 	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_kcmd *kcmd = NULL;

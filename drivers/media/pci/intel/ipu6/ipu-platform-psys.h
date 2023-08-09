@@ -4,8 +4,6 @@
 #ifndef IPU_PLATFORM_PSYS_H
 #define IPU_PLATFORM_PSYS_H
 
-#include <linux/cam/cam-entity.h>
-
 #include "ipu-psys.h"
 #include <uapi/linux/ipu-psys.h>
 

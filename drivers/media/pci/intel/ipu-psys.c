@@ -33,7 +33,7 @@
 #include "ipu-platform-psys.h"
 #include "ipu-platform-regs.h"
 #include "ipu-fw-com.h"
-#include "ipu-kcam.h"
+#include "ipu-isp.h"
 
 static bool async_fw_init;
 module_param(async_fw_init, bool, 0664);
@@ -719,9 +719,9 @@ static int ipu_psys_probe(struct auxiliary_device *auxdev,
 
 	set_bit(id, ipu_psys_devices);
 
-	rval = ipu_kcam_init(adev, id);
+	rval = ipu_isp_init(adev, id);
 	if (rval < 0) {
-		dev_err(&auxdev->dev, "kcam initialization failed\n");
+		dev_err(&auxdev->dev, "ISP initialization failed\n");
 		goto out_release;
 	}
 
@@ -794,7 +794,7 @@ static void ipu_psys_remove(struct auxiliary_device *auxdev)
 	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
 	struct ipu_psys_pg *kpg, *kpg0;
 
-	ipu_kcam_exit(adev);
+	ipu_isp_exit(adev);
 
 #ifdef CONFIG_DEBUG_FS
 	if (isp->ipu_dir)

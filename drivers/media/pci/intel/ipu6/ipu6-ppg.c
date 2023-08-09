@@ -3,8 +3,8 @@
 
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
-#include <linux/cam/cam-buffer.h>
-#include <linux/cam/cam-entity.h>
+#include <linux/isp/isp-buffer.h>
+#include <linux/isp/isp-entity.h>
 
 #include <asm/cacheflush.h>
 
@@ -48,7 +48,7 @@ struct ipu_psys_kcmd *ipu_psys_ppg_get_stop_kcmd(struct ipu_psys_ppg *kppg)
 }
 
 static struct ipu_psys_buffer_set *
-__get_buf_set(struct ipu_kcam_psys_instance *instance, size_t buf_set_size)
+__get_buf_set(struct ipu_isp_psys_instance *instance, size_t buf_set_size)
 {
 	struct ipu_psys_buffer_set *kbuf_set;
 	struct ipu_psys_scheduler *sched = &instance->sched;
@@ -89,13 +89,13 @@ __get_buf_set(struct ipu_kcam_psys_instance *instance, size_t buf_set_size)
 static struct ipu_psys_buffer_set *
 ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys *psys;
 	struct ipu_psys_buffer_set *kbuf_set;
 	size_t buf_set_size;
 	u32 *keb;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	psys = instance->psys;
 
 	buf_set_size = ipu_fw_psys_ppg_get_buffer_set_size(kcmd);
@@ -121,13 +121,13 @@ ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd)
 
 int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys *psys;
 	struct ipu_psys_buffer_set *kbuf_set;
 	unsigned int i;
 	int ret;
 
-	instance = cam_instance_driver_data(kcmd->kcam_instance);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
 	psys = instance->psys;
 
 	kbuf_set = ipu_psys_create_buffer_set(kcmd);
@@ -140,14 +140,14 @@ int ipu_psys_ppg_get_bufset(struct ipu_psys_kcmd *kcmd)
 
 	for (i = 0; i < kcmd->nbuffers; i++) {
 		struct ipu_fw_psys_terminal *terminal;
-		struct ipu_kcam_psys_dbuf *dbuf;
+		struct ipu_isp_psys_dbuf *dbuf;
 		u32 buffer;
 
 		terminal = ipu_fw_psys_pg_get_terminal(kcmd->kpg, i);
 		if (!terminal)
 			continue;
 
-		dbuf = cam_buffer_driver_data(kcmd->kcam_buffers[i]);
+		dbuf = isp_buffer_driver_data(kcmd->isp_buffers[i]);
 		buffer = (u32)dbuf->dma_addr + kcmd->buffers[i].data_offset;
 
 		ret = ipu_fw_psys_ppg_set_buffer_set(kcmd, terminal, i, buffer);
@@ -487,7 +487,7 @@ void ipu_psys_enter_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	int ret = 0;
 
 	list_for_each_entry(instance, &psys->instances, list) {
@@ -526,7 +526,7 @@ void ipu_psys_exit_power_gating(struct ipu_psys *psys)
 {
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_kcam_psys_instance *instance;
+	struct ipu_isp_psys_instance *instance;
 	int ret = 0;
 
 	list_for_each_entry(instance, &psys->instances, list) {

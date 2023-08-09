@@ -38,7 +38,7 @@ struct ipu_psys_event {
  * @data_offset:offset to valid data
  * @bytes_used:	amount of valid data including offset
  * @flags:	flags
- * @kcam_buf_id:KCAM buffer object ID
+ * @isp_buf_id: ISP buffer object ID
  */
 struct ipu_psys_buffer {
 	uint64_t len;
@@ -50,7 +50,7 @@ struct ipu_psys_buffer {
 	uint32_t data_offset;
 	uint32_t bytes_used;
 	uint32_t flags;
-	uint32_t kcam_buf_id;
+	uint32_t isp_buf_id;
 	uint32_t reserved[1];
 } __attribute__ ((packed));
 
@@ -115,7 +115,7 @@ struct ipu_psys_manifest {
 	uint32_t reserved[5];
 } __attribute__ ((packed));
 
-/* these are actually not the ioctl() commands when KCAM is used */
+/* these are actually not the ioctl() commands when ISP is used */
 #define IPU_IOC_QUERYCAP _IOR('A', 1, struct ipu_psys_capability)
 #define IPU_IOC_GETBUF _IOWR('A', 4, struct ipu_psys_buffer)
 #define IPU_IOC_PUTBUF _IOWR('A', 5, struct ipu_psys_buffer)

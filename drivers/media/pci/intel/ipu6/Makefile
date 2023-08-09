@@ -51,7 +51,7 @@ intel-ipu6-objs			+= ipu-fw-resources.o \
 					   ipu6ep-fw-resources.o \
 					   ../ipu-fw-psys.o
 
-intel-ipu6-objs			+= ../ipu-kcam.o
+intel-ipu6-objs			+= ../ipu-isp.o
 
 ccflags-y += -I$(srcpath)/$(src)/../../../../../include/
 ccflags-y += -I$(srcpath)/$(src)/../

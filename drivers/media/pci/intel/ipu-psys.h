@@ -78,9 +78,9 @@ struct ipu_psys_resource_alloc {
 };
 
 struct task_struct;
-struct cam_obj_entity;
-struct cam_obj_event;
-struct cam_obj_buffer;
+struct isp_obj_entity;
+struct isp_obj_event;
+struct isp_obj_buffer;
 struct ipu_psys {
 	struct ipu_psys_capability caps;
 	unsigned int id;
@@ -121,20 +121,20 @@ struct ipu_psys {
 
 	int power_gating;
 
-	struct cam_device *kcam;
-	struct cam_obj_entity *kcam_entity;
-	struct cam_obj_event *kcam_event;
+	struct isp_device *isp;
+	struct isp_obj_entity *isp_entity;
+	struct isp_obj_event *isp_event;
 	struct list_head bufmap;
 };
 
-struct ipu_kcam_psys_instance {
+struct ipu_isp_psys_instance {
 	struct ipu_psys *psys;
 	struct mutex mutex;	/* protect below */
 	struct ipu_psys_scheduler sched;
 	struct list_head list;
 };
 
-struct ipu_kcam_psys_dbuf {
+struct ipu_isp_psys_dbuf {
 	struct list_head bufmap_list;
 	struct kref kref;
 	struct ipu_psys *psys;
@@ -175,9 +175,9 @@ struct ipu_psys_kcmd {
 	struct ipu_psys_event ev;
 	struct timer_list watchdog;
 
-	struct cam_obj_instance *kcam_instance;
-	struct cam_obj_buffer *kcam_pg_buffer;
-	struct cam_obj_buffer **kcam_buffers;
+	struct isp_obj_instance *isp_instance;
+	struct isp_obj_buffer *isp_pg_buffer;
+	struct isp_obj_buffer **isp_buffers;
 };
 
 struct ipu_dma_buf_attachment {
@@ -206,8 +206,8 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on);
 void ipu_psys_handle_events(struct ipu_psys *psys);
 int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
 		      struct ipu_bus_device *adev,
-		      struct cam_obj_instance *kcam_instance,
-		      struct cam_obj_buffer **kcam_buffers);
+		      struct isp_obj_instance *isp_instance,
+		      struct isp_obj_buffer **isp_buffers);
 void ipu_psys_run_next(struct ipu_psys *psys);
 struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size);
 #ifdef IPU_PSYS_GPC
@@ -216,15 +216,15 @@ int ipu_psys_gpc_init_debugfs(struct ipu_psys *psys);
 int ipu_psys_resource_pool_init(struct ipu_psys_resource_pool *pool);
 void ipu_psys_resource_pool_cleanup(struct ipu_psys_resource_pool *pool);
 struct ipu_psys_kcmd *
-ipu_get_completed_kcmd(struct ipu_kcam_psys_instance *instance);
+ipu_get_completed_kcmd(struct ipu_isp_psys_instance *instance);
 long ipu_ioctl_dqevent(struct ipu_psys_event *event,
-		       struct ipu_kcam_psys_instance *instance);
+		       struct ipu_isp_psys_instance *instance);
 
 long ipu_get_manifest(struct ipu_psys_manifest *manifest,
 		      struct ipu_psys *psys);
 
-int ipu_psys_instance_init(struct ipu_kcam_psys_instance *instance);
-int ipu_psys_instance_deinit(struct ipu_kcam_psys_instance *instance);
+int ipu_psys_instance_init(struct ipu_isp_psys_instance *instance);
+int ipu_psys_instance_deinit(struct ipu_isp_psys_instance *instance);
 
 int register_psys_driver(void);
 void unregister_psys_driver(void);

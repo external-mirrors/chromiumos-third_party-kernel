@@ -10,7 +10,7 @@
 
 struct ipu_bus_device;
 
-int ipu_kcam_init(struct ipu_bus_device *adev, unsigned int minor);
-void ipu_kcam_exit(struct ipu_bus_device *adev);
+int ipu_isp_init(struct ipu_bus_device *adev, unsigned int minor);
+void ipu_isp_exit(struct ipu_bus_device *adev);
 
 #endif /* IPU_KCAM_H */
