@@ -64,7 +64,7 @@ steps:
         cd tools/isp
         sh autogen.sh
         ./configure
-        make
+        make -j $(nproc)
 - name: 'gcr.io/${PROJECT_ID}/kcam'
   entrypoint: 'bash'
   id: 'virtme'
@@ -98,7 +98,7 @@ steps:
   - '-c'
   - |
         set -v
-        make ARCH=x86_64 mrproper
+        make ARCH=x86_64 -j $(nproc) mrproper
         mkdir -p /tmp/kunit
         TMPDIR=/tmp/kunit ./tools/testing/kunit/kunit.py run --jobs=$(nproc) --kunitconfig=drivers/isp/.kunitconfig --arch x86_64
 - name: 'gcr.io/${PROJECT_ID}/kcam'
