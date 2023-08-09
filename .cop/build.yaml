@@ -41,8 +41,6 @@ steps:
   - '-c'
   - |
         set -ve
-        #FIXME: workaround
-        ./scripts/config -m ISP_VIRTUAL_DEVICE -e ISP
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
 - name: 'gcr.io/${PROJECT_ID}/kcam'
@@ -54,8 +52,6 @@ steps:
   - |
         set -ve
         git checkout CUT
-        #FIXME: workaround
-        ./scripts/config -m ISP_VIRTUAL_DEVICE -e ISP
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
 - name: 'gcr.io/${PROJECT_ID}/kcam'
@@ -112,10 +108,9 @@ steps:
   - '-c'
   - |
         set -v
-        #FIXME: workaroud
-        #        scripts/checkpatch.pl --show-types --strict --ignore GERRIT_CHANGE_ID \
-        #        --ignore UNKNOWN_COMMIT_ID --ignore COMMIT_LOG_LONG_LINE \
-        #        --ignore FILE_PATH_CHANGES --ignore COMPARISON_TO_NULL *patch
+        scripts/checkpatch.pl --show-types --strict --ignore GERRIT_CHANGE_ID \
+                --ignore UNKNOWN_COMMIT_ID --ignore COMMIT_LOG_LONG_LINE \
+                --ignore FILE_PATH_CHANGES --ignore COMPARISON_TO_NULL *patch
 substitutions:
   _ARCH: x86
   _CROSS_COMPILE: ""
