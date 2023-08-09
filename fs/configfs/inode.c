@@ -188,8 +188,10 @@ struct inode *configfs_create(struct dentry *dentry, umode_t mode)
 	if (parent && !sd->s_iattr) {
 		sd->s_iattr = configfs_alloc_iattr(parent->d_fsdata, sd,
 						   parent->d_sb->s_time_gran);
-		if (!sd->s_iattr)
+		if (!sd->s_iattr) {
+			dput(parent);
 			return ERR_PTR(-ENOMEM);
+		}
 	}
 	dput(parent);
 	inode = configfs_new_inode(mode, sd, dentry->d_sb);
