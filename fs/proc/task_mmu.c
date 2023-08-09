@@ -1133,32 +1133,39 @@ static int smaps_rollup_release(struct inode *inode, struct file *file)
 static int totmaps_open(struct inode *inode, struct file *file)
 {
 	struct proc_maps_private *priv;
-	int ret = -ENOMEM;
+	int ret;
+
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (priv) {
-		priv->mss = kzalloc(sizeof(*priv->mss), GFP_KERNEL);
-		if (!priv->mss)
-			return -ENOMEM;
+	if (!priv)
+		return -ENOMEM;
 
-		/* we need to grab references to the task_struct */
-		/* at open time, because there's a potential information */
-		/* leak where the totmaps file is opened and held open */
-		/* while the underlying pid to task mapping changes */
-		/* underneath it */
-		priv->task = get_pid_task(proc_pid(inode), PIDTYPE_PID);
-		if (!priv->task) {
-			kfree(priv->mss);
-			kfree(priv);
-			return -ESRCH;
-		}
-
-		ret = single_open(file, totmaps_proc_show, priv);
-		if (ret) {
-			put_task_struct(priv->task);
-			kfree(priv->mss);
-			kfree(priv);
-		}
+	priv->mss = kzalloc(sizeof(*priv->mss), GFP_KERNEL);
+	if (!priv->mss) {
+		ret = -ENOMEM;
+		goto exit;
 	}
+
+	/* we need to grab references to the task_struct */
+	/* at open time, because there's a potential information */
+	/* leak where the totmaps file is opened and held open */
+	/* while the underlying pid to task mapping changes */
+	/* underneath it */
+	priv->task = get_pid_task(proc_pid(inode), PIDTYPE_PID);
+	if (!priv->task) {
+		ret = -ESRCH;
+		goto exit;
+	}
+
+	ret = single_open(file, totmaps_proc_show, priv);
+	if (ret)
+		goto exit;
+
+	return 0;
+exit:
+	if (priv->task)
+		put_task_struct(priv->task);
+	kfree(priv->mss);
+	kfree(priv);
 	return ret;
 }
 
