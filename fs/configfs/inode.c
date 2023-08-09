@@ -33,7 +33,7 @@ static const struct inode_operations configfs_inode_operations ={
 };
 
 static struct iattr *configfs_alloc_iattr(struct configfs_dirent *sd_parent,
-					  struct configfs_dirent *sd, unsigned int s_time_gran)
+					  struct configfs_dirent *sd)
 {
 	struct iattr *sd_iattr;
 
@@ -69,7 +69,7 @@ int configfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	sd_iattr = sd->s_iattr;
 	if (!sd_iattr) {
 		/* setting attributes for the first time, allocate now */
-		sd_iattr = configfs_alloc_iattr(NULL, sd, inode->i_sb->s_time_gran);
+		sd_iattr = configfs_alloc_iattr(NULL, sd);
 		if (!sd_iattr)
 			return -ENOMEM;
 		sd->s_iattr = sd_iattr;
@@ -185,8 +185,7 @@ struct inode *configfs_create(struct dentry *dentry, umode_t mode)
 	sd = dentry->d_fsdata;
 	parent = dget_parent(dentry);
 	if (parent && !sd->s_iattr) {
-		sd->s_iattr = configfs_alloc_iattr(parent->d_fsdata, sd,
-						   parent->d_sb->s_time_gran);
+		sd->s_iattr = configfs_alloc_iattr(parent->d_fsdata, sd);
 		if (!sd->s_iattr) {
 			dput(parent);
 			return ERR_PTR(-ENOMEM);
