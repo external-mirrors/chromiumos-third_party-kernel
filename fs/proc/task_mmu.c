@@ -2153,7 +2153,7 @@ regular_page:
 static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned long nr_to_try)
 {
 	struct vm_area_struct *start, *vma;
-	struct mm_walk_ops reclaim_walk = {0};
+	struct mm_walk_ops reclaim_walk = {};
 	struct walk_data reclaim_data = {
 		.type = type,
 		.nr_to_try = nr_to_try,
