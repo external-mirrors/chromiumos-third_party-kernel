@@ -72,6 +72,12 @@
 
 #define MP0_MP1_DATA_REGION_SIZE_COMBOPPTABLE	0x4000
 
+#define PP_OD_FEATURE_GFXCLK_FMIN			0
+#define PP_OD_FEATURE_GFXCLK_FMAX			1
+#define PP_OD_FEATURE_UCLK_FMIN				2
+#define PP_OD_FEATURE_UCLK_FMAX				3
+#define PP_OD_FEATURE_GFX_VF_CURVE			4
+
 static struct cmn2asic_msg_mapping smu_v13_0_7_message_map[SMU_MSG_MAX_COUNT] = {
 	MSG_MAP(TestMessage,			PPSMC_MSG_TestMessage,                 1),
 	MSG_MAP(GetSmuVersion,			PPSMC_MSG_GetSmuVersion,               1),
@@ -1040,7 +1046,6 @@ static bool smu_v13_0_7_is_od_feature_supported(struct smu_context *smu,
 
 static void smu_v13_0_7_get_od_setting_limits(struct smu_context *smu,
 					      int od_feature_bit,
-					      bool lower_boundary,
 					      int32_t *min,
 					      int32_t *max)
 {
@@ -1052,29 +1057,28 @@ static void smu_v13_0_7_get_od_setting_limits(struct smu_context *smu,
 	int32_t od_min_setting, od_max_setting;
 
 	switch (od_feature_bit) {
-	case PP_OD_FEATURE_GFXCLK_BIT:
-		if (lower_boundary) {
-			od_min_setting = overdrive_lowerlimits->GfxclkFmin;
-			od_max_setting = overdrive_upperlimits->GfxclkFmin;
-		} else {
-			od_min_setting = overdrive_lowerlimits->GfxclkFmax;
-			od_max_setting = overdrive_upperlimits->GfxclkFmax;
-		}
+	case PP_OD_FEATURE_GFXCLK_FMIN:
+		od_min_setting = overdrive_lowerlimits->GfxclkFmin;
+		od_max_setting = overdrive_upperlimits->GfxclkFmin;
 		break;
-	case PP_OD_FEATURE_UCLK_BIT:
-		if (lower_boundary) {
-			od_min_setting = overdrive_lowerlimits->UclkFmin;
-			od_max_setting = overdrive_upperlimits->UclkFmin;
-		} else {
-			od_min_setting = overdrive_lowerlimits->UclkFmax;
-			od_max_setting = overdrive_upperlimits->UclkFmax;
-		}
+	case PP_OD_FEATURE_GFXCLK_FMAX:
+		od_min_setting = overdrive_lowerlimits->GfxclkFmax;
+		od_max_setting = overdrive_upperlimits->GfxclkFmax;
 		break;
-	case PP_OD_FEATURE_GFX_VF_CURVE_BIT:
+	case PP_OD_FEATURE_UCLK_FMIN:
+		od_min_setting = overdrive_lowerlimits->UclkFmin;
+		od_max_setting = overdrive_upperlimits->UclkFmin;
+		break;
+	case PP_OD_FEATURE_UCLK_FMAX:
+		od_min_setting = overdrive_lowerlimits->UclkFmax;
+		od_max_setting = overdrive_upperlimits->UclkFmax;
+		break;
+	case PP_OD_FEATURE_GFX_VF_CURVE:
 		od_min_setting = overdrive_lowerlimits->VoltageOffsetPerZoneBoundary;
 		od_max_setting = overdrive_upperlimits->VoltageOffsetPerZoneBoundary;
 		break;
 	default:
+		od_min_setting = od_max_setting = INT_MAX;
 		break;
 	}
 
@@ -1300,13 +1304,11 @@ static int smu_v13_0_7_print_clk_levels(struct smu_context *smu,
 
 		if (smu_v13_0_7_is_od_feature_supported(smu, PP_OD_FEATURE_GFXCLK_BIT)) {
 			smu_v13_0_7_get_od_setting_limits(smu,
-							  PP_OD_FEATURE_GFXCLK_BIT,
-							  true,
+							  PP_OD_FEATURE_GFXCLK_FMIN,
 							  &min_value,
 							  NULL);
 			smu_v13_0_7_get_od_setting_limits(smu,
-							  PP_OD_FEATURE_GFXCLK_BIT,
-							  false,
+							  PP_OD_FEATURE_GFXCLK_FMAX,
 							  NULL,
 							  &max_value);
 			size += sysfs_emit_at(buf, size, "SCLK: %7uMhz %10uMhz\n",
@@ -1315,13 +1317,11 @@ static int smu_v13_0_7_print_clk_levels(struct smu_context *smu,
 
 		if (smu_v13_0_7_is_od_feature_supported(smu, PP_OD_FEATURE_UCLK_BIT)) {
 			smu_v13_0_7_get_od_setting_limits(smu,
-							  PP_OD_FEATURE_UCLK_BIT,
-							  true,
+							  PP_OD_FEATURE_UCLK_FMIN,
 							  &min_value,
 							  NULL);
 			smu_v13_0_7_get_od_setting_limits(smu,
-							  PP_OD_FEATURE_UCLK_BIT,
-							  false,
+							  PP_OD_FEATURE_UCLK_FMAX,
 							  NULL,
 							  &max_value);
 			size += sysfs_emit_at(buf, size, "MCLK: %7uMhz %10uMhz\n",
@@ -1330,8 +1330,7 @@ static int smu_v13_0_7_print_clk_levels(struct smu_context *smu,
 
 		if (smu_v13_0_7_is_od_feature_supported(smu, PP_OD_FEATURE_GFX_VF_CURVE_BIT)) {
 			smu_v13_0_7_get_od_setting_limits(smu,
-							  PP_OD_FEATURE_GFX_VF_CURVE_BIT,
-							  true,
+							  PP_OD_FEATURE_GFX_VF_CURVE,
 							  &min_value,
 							  &max_value);
 			size += sysfs_emit_at(buf, size, "VDDC_CURVE: %7dmv %10dmv\n",
@@ -1376,8 +1375,7 @@ static int smu_v13_0_7_od_edit_dpm_table(struct smu_context *smu,
 			switch (input[i]) {
 			case 0:
 				smu_v13_0_7_get_od_setting_limits(smu,
-								  PP_OD_FEATURE_GFXCLK_BIT,
-								  true,
+								  PP_OD_FEATURE_GFXCLK_FMIN,
 								  &minimum,
 								  &maximum);
 				if (input[i + 1] < minimum ||
@@ -1393,8 +1391,7 @@ static int smu_v13_0_7_od_edit_dpm_table(struct smu_context *smu,
 
 			case 1:
 				smu_v13_0_7_get_od_setting_limits(smu,
-								  PP_OD_FEATURE_GFXCLK_BIT,
-								  false,
+								  PP_OD_FEATURE_GFXCLK_FMAX,
 								  &minimum,
 								  &maximum);
 				if (input[i + 1] < minimum ||
@@ -1439,8 +1436,7 @@ static int smu_v13_0_7_od_edit_dpm_table(struct smu_context *smu,
 			switch (input[i]) {
 			case 0:
 				smu_v13_0_7_get_od_setting_limits(smu,
-								  PP_OD_FEATURE_UCLK_BIT,
-								  true,
+								  PP_OD_FEATURE_UCLK_FMIN,
 								  &minimum,
 								  &maximum);
 				if (input[i + 1] < minimum ||
@@ -1456,8 +1452,7 @@ static int smu_v13_0_7_od_edit_dpm_table(struct smu_context *smu,
 
 			case 1:
 				smu_v13_0_7_get_od_setting_limits(smu,
-								  PP_OD_FEATURE_UCLK_BIT,
-								  false,
+								  PP_OD_FEATURE_UCLK_FMAX,
 								  &minimum,
 								  &maximum);
 				if (input[i + 1] < minimum ||
@@ -1498,8 +1493,7 @@ static int smu_v13_0_7_od_edit_dpm_table(struct smu_context *smu,
 			return -EINVAL;
 
 		smu_v13_0_7_get_od_setting_limits(smu,
-						  PP_OD_FEATURE_GFX_VF_CURVE_BIT,
-						  true,
+						  PP_OD_FEATURE_GFX_VF_CURVE,
 						  &minimum,
 						  &maximum);
 		if (input[1] < minimum ||
