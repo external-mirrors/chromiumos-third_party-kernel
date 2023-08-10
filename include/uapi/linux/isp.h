@@ -353,7 +353,7 @@ struct isp_rw_instruction {
 		struct isp_dmabuf_instruction		db;
 		struct isp_instance_instruction		in;
 		struct isp_out_fence_instruction	of;
-		__u32					reserved[28];
+		__u8					reserved[128];
 	};
 } __attribute__((packed));
 
