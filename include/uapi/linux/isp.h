@@ -203,7 +203,7 @@ struct isp_query {
 		struct isp_query_events		query_events;
 		struct isp_query_operations	query_operations;
 		struct isp_query_dmabuf		query_dmabuf;
-		__u8 max_query_size[128];
+		__u8				reserved[128];
 	};
 } __attribute__((packed));
 
