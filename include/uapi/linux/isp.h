@@ -14,7 +14,7 @@
 #include <linux/types.h>
 
 /**
- * struct isp_output - Describe output data buffer
+ * struct isp_output - Query output data buffer
  *
  * @address:		Memory address of the buffer
  * @size:		Size of the buffer
@@ -34,9 +34,9 @@ struct isp_output {
  * @output:		Query results
  */
 struct isp_header {
-	__u32		num_requests;
-	__u32		error;
-	struct isp_output output;
+	__u32			num_requests;
+	__u32			error;
+	struct isp_output	output;
 } __attribute__((packed));
 
 #define ISP_ENTITY_NAME_SZ	16
@@ -106,8 +106,8 @@ enum query_depth {
  * @maxdepth:		Depth of the query.
  *			- ISP_QUERY_EXACT_OBJECT: object itself
  *			- ISP_QUERY_ALL_OBJECTS: unlimited
- * @num_entities:	output: number of entities read
- * @graph_version:	output: Version of the graph at the time of the query
+ * @num_entities:	out: number of entities read
+ * @graph_version:	out: Version of the graph at the time of the query
  */
 struct isp_query_entities {
 	__u32		id;
@@ -121,8 +121,8 @@ struct isp_query_entities {
  *
  * @entity:		Entity id
  * @id:			Event id or ISP_QUERY_ALL_OBJECTS (0xffffffff) for all
- * @num_events:		output: number of events read
- * @graph_version:	output: Version of the graph at the time of the query
+ * @num_events:		out: number of events read
+ * @graph_version:	out: Version of the graph at the time of the query
  */
 struct isp_query_events {
 	__u32		entity;
@@ -153,7 +153,7 @@ enum isp_operation_query_mode {
  * struct isp_query_operations - Query one or all pipeline operations
  *
  * @id:			id of the operation or ISP_OP_ID_ALL_OP
- * @num_ops:		output: number of operations queried
+ * @num_ops:		out: number of operations queried
  * @mode:		ISP_OP_QUERY_UNIQUE, ISP_OP_QUERY_UNIQUE_AND_DEPS,
  *			ISP_OP_QUERY_ALL, ISP_OP_QUERY_SLEEP,
  *			ISP_OP_QUERY_QUEUED
@@ -353,7 +353,7 @@ struct isp_rw_instruction {
 		struct isp_dmabuf_instruction		db;
 		struct isp_instance_instruction		in;
 		struct isp_out_fence_instruction	of;
-		__u32				reserved[28];
+		__u32					reserved[28];
 	};
 } __attribute__((packed));
 
@@ -528,7 +528,7 @@ struct isp_operation {
 	union {
 		struct isp_operation_add	operation_add;
 		struct isp_operation_remove	operation_remove;
-		__u8 reserved[128];
+		__u8				reserved[128];
 	};
 } __attribute__((packed));
 
@@ -564,7 +564,7 @@ struct isp_completion {
 	__u32		id;
 	__u8		type;
 	union {
-		__u8 reserved[3];
+		__u8	reserved[3];
 	};
 } __attribute__((packed));
 
