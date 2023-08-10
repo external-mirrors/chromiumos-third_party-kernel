@@ -241,37 +241,48 @@ static int ipu_isp_instance_read(void *dev,
 				 struct isp_read_instruction *inst)
 {
 	struct ipu_bus_device *adev = dev;
+	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
 	union {
 		struct ipu_psys_capability caps;
+		struct ipu_psys_manifest m;
 		struct ipu_psys_event ev;
 	} karg;
 	struct ipu_isp_psys_instance *psys_instance;
 	void __user *up = (void __user *)inst->ptr;
-	unsigned int cmd = inst->reg;
 	int err = 0;
 
-	if (_IOC_SIZE(cmd) > sizeof(karg))
+	if (inst->size > sizeof(karg))
 		return -ENOTTY;
 
+	memset(&karg, 0, sizeof(karg));
 	psys_instance = isp_instance_driver_data(instance);
 
-	switch (cmd) {
-	case IPU_IOC_QUERYCAP:
+	switch (inst->reg) {
+	case IPU_REG_QUERYCAP:
 		karg.caps = psys_instance->psys->caps;
 		break;
-	case IPU_IOC_DQEVENT:
+	case IPU_REG_GET_MANIFEST:
+		err = copy_from_user(&karg.m, up, sizeof(karg.m));
+		if (err) {
+			err = -EFAULT;
+			break;
+		}
+		err = ipu_get_manifest(&karg.m, psys);
+		break;
+	case IPU_REG_DQEVENT:
 		err = ipu_ioctl_dqevent(&karg.ev, psys_instance);
 		break;
 	default:
-		dev_err(&adev->auxdev.dev, "unsupported reg for read %x\n", cmd);
+		dev_err(&adev->auxdev.dev, "unsupported reg for read %x\n",
+			inst->reg);
 		err = -ENOTTY;
 	}
 
-	if (copy_to_user(up, &karg, _IOC_SIZE(cmd)))
-		return -EFAULT;
-
 	if (err)
 		return err;
+
+	if (copy_to_user(up, &karg, inst->size))
+		return -EFAULT;
 
 	return 0;
 }
@@ -281,47 +292,33 @@ static int ipu_isp_instance_write(void *dev,
 				  struct isp_write_instruction *inst)
 {
 	struct ipu_bus_device *adev = dev;
-	struct ipu_psys *psys = ipu_bus_get_drvdata(adev);
-	union {
-		struct ipu_psys_buffer buf;
-		struct ipu_psys_command cmd;
-		struct ipu_psys_manifest m;
-	} karg;
+	struct ipu_psys_command cmd;
 	void __user *up = (void __user *)inst->ptr;
-	unsigned int cmd = inst->reg;
 	int err = 0;
 
-	if (_IOC_SIZE(cmd) > sizeof(karg)) {
-		dev_err(&adev->auxdev.dev, "instance_write: wrong argument size\n");
+	if (inst->size != sizeof(cmd)) {
+		dev_err(&adev->auxdev.dev, "instance_write: wrong argument size");
 		return -ENOTTY;
 	}
 
-	if (_IOC_DIR(cmd) & _IOC_WRITE) {
-		err = copy_from_user(&karg, up, _IOC_SIZE(cmd));
-		if (err) {
-			dev_err(&adev->auxdev.dev, "instance_write: copy from user error\n");
-			return -EFAULT;
-		}
+	err = copy_from_user(&cmd, up, inst->size);
+	if (err) {
+		dev_err(&adev->auxdev.dev, "instance_write: copy from user error\n");
+		return -EFAULT;
 	}
 
-	switch (cmd) {
-	case IPU_IOC_QCMD:
-		err = ipu_psys_kcmd_new(&karg.cmd,
+	switch (inst->reg) {
+	case IPU_REG_QCMD:
+		err = ipu_psys_kcmd_new(&cmd,
 					adev,
 					instance,
 					(struct isp_obj_buffer **)inst->buffers_list);
 		break;
-	case IPU_IOC_GET_MANIFEST:
-		err = ipu_get_manifest(&karg.m, psys);
-		break;
 	default:
-		dev_err(&adev->auxdev.dev, "unsupported reg for write\n");
+		dev_err(&adev->auxdev.dev, "unsupported reg for write %x\n",
+			inst->reg);
 		err = -ENOTTY;
 	}
-
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		if (copy_to_user(up, &karg, _IOC_SIZE(cmd)))
-			return -EFAULT;
 
 	if (err)
 		return err;

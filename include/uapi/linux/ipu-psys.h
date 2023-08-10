@@ -115,13 +115,9 @@ struct ipu_psys_manifest {
 	uint32_t reserved[5];
 } __attribute__ ((packed));
 
-/* these are actually not the ioctl() commands when ISP is used */
-#define IPU_IOC_QUERYCAP _IOR('A', 1, struct ipu_psys_capability)
-#define IPU_IOC_GETBUF _IOWR('A', 4, struct ipu_psys_buffer)
-#define IPU_IOC_PUTBUF _IOWR('A', 5, struct ipu_psys_buffer)
-#define IPU_IOC_QCMD _IOWR('A', 6, struct ipu_psys_command)
-#define IPU_IOC_DQEVENT _IOWR('A', 7, struct ipu_psys_event)
-#define IPU_IOC_CMD_CANCEL _IOWR('A', 8, struct ipu_psys_command)
-#define IPU_IOC_GET_MANIFEST _IOWR('A', 9, struct ipu_psys_manifest)
+#define IPU_REG_QUERYCAP	1
+#define IPU_REG_QCMD		2
+#define IPU_REG_DQEVENT		3
+#define IPU_REG_GET_MANIFEST	4
 
 #endif /* _UAPI_IPU_PSYS_H */
