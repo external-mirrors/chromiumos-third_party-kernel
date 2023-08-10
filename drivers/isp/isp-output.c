@@ -16,16 +16,17 @@
 
 int isp_output_init(struct isp_header *hdr, struct isp_koutput *output)
 {
-	output->origin = output->base = u64_to_user_ptr(hdr->output.address);
-	output->end = output->origin + hdr->output.size;
+	output->origin = u64_to_user_ptr(hdr->qd.output.address);
+	output->base = u64_to_user_ptr(hdr->qd.output.address);
+	output->end = output->origin + hdr->qd.output.size;
 
 	if (!output->origin)
 		return 0;
 
-	if (!access_ok(output->base, hdr->output.size))
+	if (!access_ok(output->base, hdr->qd.output.size))
 		return -EFAULT;
 
-	if (clear_user(output->base, hdr->output.size))
+	if (clear_user(output->base, hdr->qd.output.size))
 		return -EFAULT;
 
 	return 0;

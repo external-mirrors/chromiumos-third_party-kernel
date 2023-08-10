@@ -10,7 +10,7 @@
 void libisp_iterator_init(struct isp_header *hdr,
 			  struct libisp_iterator *iter)
 {
-	iter->base = (void *)hdr->output.address;
+	iter->base = (void *)hdr->qd.output.address;
 	iter->offt = 0;
 }
 
@@ -27,12 +27,12 @@ int libisp_output_get(struct isp_header *hdr, uint32_t sz)
 		return -ENOMEM;
 	}
 
-	hdr->output.address	= (uint64_t)buf;
-	hdr->output.size	= sz;
+	hdr->qd.output.address	= (uint64_t)buf;
+	hdr->qd.output.size	= sz;
 	return 0;
 }
 
 void libisp_output_put(struct isp_header *hdr)
 {
-	free((void *)hdr->output.address);
+	free((void *)hdr->qd.output.address);
 }

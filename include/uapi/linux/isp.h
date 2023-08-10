@@ -27,16 +27,28 @@ struct isp_output {
 } __attribute__((packed));
 
 /**
+ * struct isp_query_header - Query request header descriptor
+ *
+ * @output:		Query results
+ */
+struct isp_query_desc {
+	struct isp_output	output;
+} __attribute__((packed));
+
+/**
  * struct isp_header - A set of ISP queries/operations
  *
  * @num_requests:	Number of requests
- * @error:		Error index in case of an error
- * @output:		Query results
+ * @error:		Index of the first failed request (in case of an error)
+ * @qd:			Query header descriptor (only for ISP_IOC_QUERY calls)
  */
 struct isp_header {
 	__u32			num_requests;
 	__u32			error;
-	struct isp_output	output;
+	union {
+		struct isp_query_desc	qd;
+		__u8			reserved[64];
+	};
 } __attribute__((packed));
 
 #define ISP_ENTITY_NAME_SZ	16

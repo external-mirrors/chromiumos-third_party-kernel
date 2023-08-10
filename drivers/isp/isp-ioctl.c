@@ -176,8 +176,8 @@ static int isp_ioctl_parse_query(struct isp_fh *fh, unsigned int cmd,
 		payload++;
 	}
 
-	hdr->output.length = output.length;
-	if (output.length > hdr->output.size)
+	hdr->qd.output.length = output.length;
+	if (output.length > hdr->qd.output.size)
 		return -ENOMEM;
 
 	return ret;
