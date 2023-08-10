@@ -45,13 +45,13 @@ struct isp_header {
  * struct isp_query_entity_entry - Entries from a tree query
  *
  * @id:			Entity identifier (unique)
- * @name:		Entity name (not unique)
  * @parent:		Identifier of the parent object or 0 for the root node
+ * @name:		Entity name (not unique)
  */
 struct isp_query_entity_entry {
 	__u32		id;
-	char		name[ISP_ENTITY_NAME_SZ];
 	__u32		parent;
+	char		name[ISP_ENTITY_NAME_SZ];
 } __attribute__((packed));
 
 #define ISP_EVENT_NAME_SZ	16
