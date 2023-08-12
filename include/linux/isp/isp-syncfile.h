@@ -75,7 +75,7 @@ void isp_out_syncfile_unregister(struct isp_obj *nsobj);
 void isp_syncfile_put(struct isp_obj_syncfile *sf);
 
 bool isp_in_syncfile_activate_signal(struct isp_op_signal *sig);
-void isp_in_syncfile_deactivate_signal(struct isp_op_signal *sig);
+bool isp_in_syncfile_deactivate_signal(struct isp_op_signal *sig);
 
 int isp_fire_out_syncfile_signal(struct isp_obj *nsobj);
 

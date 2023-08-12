@@ -89,7 +89,7 @@ struct isp_op_signal {
 	 * @deactivate: Function that removes the signal from the active
 	 * chain without raising it
 	 */
-	void (*deactivate)(struct isp_op_signal *sig);
+	bool (*deactivate)(struct isp_op_signal *sig);
 	/**
 	 * @entry: List entry in the pending/active lists of either a
 	 * targer or source object, depending on the signal state

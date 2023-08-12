@@ -187,28 +187,33 @@ bool isp_in_syncfile_activate_signal(struct isp_op_signal *sig)
 	return true;
 }
 
-void isp_in_syncfile_deactivate_signal(struct isp_op_signal *sig)
+bool isp_in_syncfile_deactivate_signal(struct isp_op_signal *sig)
 {
 	struct isp_op_signal *active;
 	struct isp_obj_syncfile *sf;
 	unsigned long flags;
+	bool ret;
 
 	sf = nsobj_to_isp_in_syncfile(sig->source);
 	if (WARN_ON(!sf))
-		return;
+		return false;
 
 	/*
 	 * notify_active_chain is accessed from the IRQ context,
 	 * so we need to disable local IRQs.
 	 */
+	ret = false;
 	write_lock_irqsave(&sf->in.notify_lock, flags);
 	list_for_each_entry(active, &sf->in.notify_active_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
+			ret = true;
 			break;
 		}
 	}
 	write_unlock_irqrestore(&sf->in.notify_lock, flags);
+
+	return ret;
 }
 
 static void isp_out_syncfile_release(struct isp_obj *nsobj)

@@ -585,28 +585,33 @@ bool isp_event_activate_signal(struct isp_op_signal *sig)
 	return true;
 }
 
-void isp_event_deactivate_signal(struct isp_op_signal *sig)
+bool isp_event_deactivate_signal(struct isp_op_signal *sig)
 {
 	struct isp_op_signal *active;
 	struct isp_obj_event *event;
 	unsigned long flags;
+	bool ret;
 
 	event = nsobj_to_isp_event(sig->source);
 	if (WARN_ON(!event))
-		return;
+		return false;
 
 	/*
 	 * notify_active_chain is accessed from the IRQ context,
 	 * so we need to disable local IRQs.
 	 */
+	ret = false;
 	write_lock_irqsave(&event->notify_lock, flags);
 	list_for_each_entry(active, &event->notify_active_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
+			ret = true;
 			break;
 		}
 	}
 	write_unlock_irqrestore(&event->notify_lock, flags);
+
+	return ret;
 }
 
 /**

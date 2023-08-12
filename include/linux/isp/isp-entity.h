@@ -146,7 +146,7 @@ void isp_event_unregister(struct isp_obj_event *ce);
 u32 isp_event_id(struct isp_obj_event *ce);
 
 bool isp_event_activate_signal(struct isp_op_signal *sig);
-void isp_event_deactivate_signal(struct isp_op_signal *sig);
+bool isp_event_deactivate_signal(struct isp_op_signal *sig);
 
 void isp_event_trigger_signals(struct isp_obj_entity *entity,
 			       struct isp_obj_event *event);

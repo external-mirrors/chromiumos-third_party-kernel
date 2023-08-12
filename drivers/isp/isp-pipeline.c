@@ -576,24 +576,29 @@ out:
 	return ret;
 }
 
-static void isp_op_deactivate_signal(struct isp_op_signal *sig)
+static bool isp_op_deactivate_signal(struct isp_op_signal *sig)
 {
 	struct isp_op_signal *active;
 	struct isp_obj_op *source;
 	unsigned long flags;
+	bool ret;
 
 	source = nsobj_to_isp_op(sig->source);
 	if (WARN_ON(!source))
-		return;
+		return false;
 
+	ret = true;
 	write_lock_irqsave(&source->notify_lock, flags);
 	list_for_each_entry(active, &source->notify_active_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
+			ret = true;
 			break;
 		}
 	}
 	write_unlock_irqrestore(&source->notify_lock, flags);
+
+	return ret;
 }
 
 /**
@@ -1082,7 +1087,7 @@ static int isp_op_add_pending_signal(struct isp_obj *source,
 				     struct isp_obj_op *target,
 				     u32 instance,
 				     bool (*activate)(struct isp_op_signal *),
-				     void (*deactivate)(struct isp_op_signal *))
+				     bool (*deactivate)(struct isp_op_signal *))
 {
 	struct isp_op_signal *sig;
 
