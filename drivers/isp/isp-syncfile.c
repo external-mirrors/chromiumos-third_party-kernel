@@ -174,9 +174,6 @@ bool isp_in_syncfile_activate_signal(struct isp_op_signal *sig)
 	if (WARN_ON(!sf))
 		return false;
 
-	if (dma_fence_is_signaled(sf->in.fence))
-		return false;
-
 	/*
 	 * notify_active_chain is accessed from the IRQ context,
 	 * so we need to disable local IRQs.
@@ -184,6 +181,24 @@ bool isp_in_syncfile_activate_signal(struct isp_op_signal *sig)
 	write_lock_irqsave(&sf->in.notify_lock, flags);
 	list_add_tail(&sig->entry, &sf->in.notify_active_chain);
 	write_unlock_irqrestore(&sf->in.notify_lock, flags);
+
+	if (dma_fence_is_signaled(sf->in.fence)) {
+		/*
+		 * If the fence is in signaled state at this point then check
+		 * whether sig activation has raced with fence signaling, IOW
+		 * whether list_add() has raced with isp_syncfile_fence_cb().
+		 *
+		 * If the sig is on the syncfile's active_chain list then
+		 * activation happened too late and fence won't ever fire that
+		 * sig: remove the sig and let pipeline handle failed
+		 * activation.
+		 *
+		 * If the sig is not on the list, then it was activated just
+		 * in time and isp_syncfile_fence_cb() fired it.
+		 */
+		if (isp_in_syncfile_deactivate_signal(sig))
+			return false;
+	}
 	return true;
 }
 
