@@ -198,7 +198,7 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 	memcpy(page_address(page), DMVERROR, strlen(DMVERROR));
 
 	/* The block dev was being changed on read. Let's reopen here. */
-	blkdev_put(bdev, dev_mode);
+	blkdev_put(bdev, chromeos_invalidate_kernel_bio);
 	dev_mode = BLK_OPEN_WRITE | BLK_OPEN_EXCL;
 	bdev = blkdev_get_by_dev(devt, dev_mode,
 				 chromeos_invalidate_kernel_bio, NULL);
@@ -239,7 +239,7 @@ failed_to_alloc_page:
 	bio_put(bio);
 failed_bio_alloc:
 	if (dev_mode)
-		blkdev_put(bdev, dev_mode);
+		blkdev_put(bdev, chromeos_invalidate_kernel_bio);
 failed_to_read:
 	return ret;
 }
