@@ -1294,7 +1294,11 @@ static int verity_parse_opt_args(struct dm_arg_set *as, struct dm_verity *v,
 	return r;
 }
 
-static int verity_get_device(struct dm_target *ti, const char *devname,
+/*
+ * This function is marked __ref because it calls the __init marked
+ * early_lookup_bdev when called from the early boot code.
+ */
+static int __ref verity_get_device(struct dm_target *ti, const char *devname,
 			     struct dm_dev **dm_dev)
 {
 	do {
