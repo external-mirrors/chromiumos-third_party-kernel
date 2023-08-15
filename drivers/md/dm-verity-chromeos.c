@@ -88,8 +88,13 @@ static dev_t get_boot_dev_from_root_dev(struct block_device *root_bdev)
 
 static char kern_guid[48];
 
-/* get_boot_dev is bassed on dm_get_device_by_uuid in dm_bootcache. */
-static dev_t get_boot_dev(void)
+/*
+ * get_boot_dev is based on dm_get_device_by_uuid in dm_bootcache.
+ *
+ * This function is marked __ref because it calls the __init marked
+ * early_lookup_bdev when called from the early boot code.
+ */
+static dev_t __ref get_boot_dev(void)
 {
 	const char partuuid[] = "PARTUUID=";
 	char uuid[sizeof(partuuid) + 36];
