@@ -247,15 +247,13 @@ bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
  *
  * Return: 0 on success or error value otherwise.
  */
-int isp_enum_graph_objects(struct isp_graph_walk *ctl,
-			   struct isp_obj *nsobj,
-			   size_t depth)
+int isp_enum_graph_objects(struct isp_graph_walk *ctl, struct isp_obj *nsobj)
 {
 	struct isp_graph_stack st;
 	bool abort;
 	int ret;
 
-	ret = isp_graph_stack_alloc(&st, depth);
+	ret = isp_graph_stack_alloc(&st, ISP_GRAPH_STACK_DEPTH);
 	if (ret)
 		return ret;
 

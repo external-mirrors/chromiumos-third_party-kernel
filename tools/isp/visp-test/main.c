@@ -87,7 +87,6 @@ static int test_query_unknown_entity(struct libisp *isp,
 	for_each_isp_query(liq, i, q) {
 		q->query_type			= ISP_QUERY_TYPE_ENTITIES;
 		q->query_entities.id		= 0xfffffff;
-		q->query_entities.maxdepth	= ISP_QUERY_ALL_OBJECTS;
 	}
 
 	ret = libisp_query_ioctl(isp, liq);
@@ -123,8 +122,7 @@ out:
 }
 
 static int test_query_all_entities(struct libisp *isp,
-				   struct libisp_query *liq,
-				   u32 max_depth)
+				   struct libisp_query *liq)
 {
 	struct libisp_iterator iter;
 	struct isp_query *q;
@@ -136,7 +134,6 @@ static int test_query_all_entities(struct libisp *isp,
 	for_each_isp_query(liq, i, q) {
 		q->query_type			= ISP_QUERY_TYPE_ENTITIES;
 		q->query_entities.id		= ISP_OBJ_ID_ROOT;
-		q->query_entities.maxdepth	= max_depth;
 	}
 
 	ret = libisp_query_ioctl(isp, liq);
@@ -186,7 +183,6 @@ static int test_compound_query_count(struct libisp *isp,
 
 	q->query_type			= ISP_QUERY_TYPE_ENTITIES;
 	q->query_entities.id		= ISP_OBJ_ID_ROOT;
-	q->query_entities.maxdepth	= ISP_QUERY_ALL_OBJECTS;
 
 	entity = libisp_entity_lookup_by_name(isp, VISP_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
@@ -257,7 +253,6 @@ static int test_compound_query(struct libisp *isp, struct libisp_query *liq)
 
 	q->query_type			= ISP_QUERY_TYPE_ENTITIES;
 	q->query_entities.id		= ISP_OBJ_ID_ROOT;
-	q->query_entities.maxdepth	= ISP_QUERY_ALL_OBJECTS;
 
 	entity = libisp_entity_lookup_by_name(isp, VISP_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
@@ -351,7 +346,6 @@ static int test_query_exact_entity(struct libisp *isp,
 	for_each_isp_query(liq, i, q) {
 		q->query_type			= ISP_QUERY_TYPE_ENTITIES;
 		q->query_entities.id		= entity->id;
-		q->query_entities.maxdepth	= ISP_QUERY_EXACT_OBJECT;
 	}
 
 	ret = libisp_query_ioctl(isp, liq);
@@ -402,14 +396,7 @@ static int test_query_entities(struct libisp *isp)
 		goto out;
 	}
 
-	ret = test_query_all_entities(isp, liq, 0);
-	if (!ret) {
-		pr_err("FAIL: test_query_all_entities(0) should fail\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = test_query_all_entities(isp, liq, ISP_QUERY_ALL_OBJECTS);
+	ret = test_query_all_entities(isp, liq);
 	if (ret) {
 		pr_err("FAIL: test_query_all_entities(ISP_QUERY_ALL_OBJECTS)\n");
 		goto out;

@@ -834,17 +834,6 @@ out:
 }
 
 /**
- * entity_depth_limit() - Get depth limit of a query
- * @query: input query from user space
- *
- * Return: The maximal available depth.
- */
-static u32 entity_depth_limit(struct isp_query_entities *query)
-{
-	return min_t(u32, query->maxdepth, ISP_GRAPH_STACK_DEPTH);
-}
-
-/**
  * isp_enum_entities() - Enumerate objects that belong to an entity
  * @isp: pointer to ISP device
  * @query: input query from user space
@@ -858,7 +847,6 @@ int isp_enum_entities(struct isp_device *isp,
 {
 	struct isp_graph_walk ctl = {};
 	struct isp_obj_entity *entity;
-	size_t depth;
 	int ret;
 
 	query->num_entities = 0;
@@ -872,8 +860,7 @@ int isp_enum_entities(struct isp_device *isp,
 	ctl.match_type	= ISP_OBJ_TYPE_ENTITY;
 	ctl.flags	= ISP_GRAPH_WALK_RECURSIVE;
 
-	depth = entity_depth_limit(query);
-	ret = isp_enum_graph_objects(&ctl, &entity->nsobj, depth);
+	ret = isp_enum_graph_objects(&ctl, &entity->nsobj);
 	query->num_entities = output->num_entries;
 	isp_entity_put(entity);
 	return ret;

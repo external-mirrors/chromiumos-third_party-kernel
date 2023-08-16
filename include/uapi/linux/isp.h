@@ -101,29 +101,14 @@ struct isp_query_dmabuf_entry {
 };
 
 /**
- * enum query_depth - Maximal depth of the query stack
- *
- * ISP_QUERY_EXACT_OBJECT:	Stack size to hold exactly one object
- * ISP_QUERY_ALL_OBJECTS:	Stack size assigned by ISP internally
- */
-enum query_depth {
-	ISP_QUERY_EXACT_OBJECT	= 1,
-	ISP_QUERY_ALL_OBJECTS	= 0xffffffff,
-};
-
-/**
  * struct isp_query_entities - Query entities
  *
  * @id:			Entity ID or ISP_OBJ_ID_ROOT (0) for root
- * @maxdepth:		Depth of the query.
- *			- ISP_QUERY_EXACT_OBJECT: object itself
- *			- ISP_QUERY_ALL_OBJECTS: unlimited
  * @num_entities:	out: number of entities read
  * @graph_version:	out: Version of the graph at the time of the query
  */
 struct isp_query_entities {
 	__u32		id;
-	__u32		maxdepth;
 	__u32		num_entities;
 	__u32		graph_version;
 } __attribute__((packed));
