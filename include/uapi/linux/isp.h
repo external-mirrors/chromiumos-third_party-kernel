@@ -131,13 +131,11 @@ struct isp_query_entities {
 /**
  * struct isp_query_events - Query events from an entity
  *
- * @entity:		Entity id
- * @id:			Event id or ISP_QUERY_ALL_OBJECTS (0xffffffff) for all
+ * @id:			Entity id
  * @num_events:		out: number of events read
  * @graph_version:	out: Version of the graph at the time of the query
  */
 struct isp_query_events {
-	__u32		entity;
 	__u32		id;
 	__u32		num_events;
 	__u32		graph_version;

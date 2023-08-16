@@ -110,5 +110,7 @@ bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
 int isp_enum_graph_objects(struct isp_graph_walk *ctl,
 			   struct isp_obj *nsobj,
 			   size_t depth);
+int isp_enum_object_graph_links(struct isp_graph_walk *ctl,
+				struct isp_obj *nsobj);
 
 #endif /* __LINUX_ISP_GRAPH_H__ */

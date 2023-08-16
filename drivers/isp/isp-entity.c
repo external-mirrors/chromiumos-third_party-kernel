@@ -870,7 +870,7 @@ int isp_enum_entities(struct isp_device *isp,
 	ctl.data	= output;
 	ctl.cb		= enum_entity;
 	ctl.match_type	= ISP_OBJ_TYPE_ENTITY;
-	ctl.match_id	= ISP_QUERY_ALL_OBJECTS;
+	ctl.flags	= ISP_GRAPH_WALK_RECURSIVE;
 
 	depth = entity_depth_limit(query);
 	ret = isp_enum_graph_objects(&ctl, &entity->nsobj, depth);
@@ -897,26 +897,18 @@ int isp_enum_events(struct isp_device *isp,
 
 	query->num_events = 0;
 
-	entity = isp_entity_lookup(isp, query->entity);
+	entity = isp_entity_lookup(isp, query->id);
 	if (!entity)
 		return -ENOENT;
 
 	ctl.data	= output;
 	ctl.cb		= enum_event;
 	ctl.match_type	= ISP_OBJ_TYPE_EVENT;
-	/* query->id is either a specific object ID or ISP_QUERY_ALL_OBJECTS */
-	ctl.match_id	= query->id;
+	ctl.flags	= ISP_GRAPH_WALK_RECURSIVE;
 
-	ret = isp_enum_graph_objects(&ctl, &entity->nsobj,
-				     ISP_GRAPH_STACK_DEPTH);
+	ret = isp_enum_object_graph_links(&ctl, &entity->nsobj);
 	query->num_events = output->num_entries;
 	isp_entity_put(entity);
-	/*
-	 * We queried a particular event on a particular entity but could not
-	 * find it.
-	 */
-	if (ctl.match_id != ISP_QUERY_ALL_OBJECTS && !output->num_entries)
-		ret = -ENOENT;
 	return ret;
 }
 

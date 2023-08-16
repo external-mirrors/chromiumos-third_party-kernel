@@ -224,15 +224,16 @@ bool isp_graph_stack_empty(struct isp_graph_stack *stack)
  * @nsobj: pointer to ISP object
  * @ctl: auxiliary data
  *
- * Return: true if the object has the expected type and ID (or use
- * ISP_QUERY_ALL_OBJECTS for arbitrary IDs).
+ * Return: true if the object has the expected type (in case of
+ * ISP_GRAPH_WALK_RECURSIVE walk) or if the object has exepcted type and ID
+ * (in case of ISP_GRAPH_WALK_ONESHOT walk).
  */
 bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
 			      struct isp_graph_walk *ctl)
 {
 	if (!(ctl->match_type & nsobj->type))
 		return false;
-	if (ctl->match_id == ISP_QUERY_ALL_OBJECTS)
+	if (ctl->flags & ISP_GRAPH_WALK_RECURSIVE)
 		return true;
 	return ctl->match_id == isp_obj_id(nsobj);
 }
@@ -317,6 +318,32 @@ out:
 		isp_graph_stack_pop(&st);
 	}
 	isp_graph_stack_free(&st);
+	return ret;
+}
+
+int isp_enum_object_graph_links(struct isp_graph_walk *ctl,
+				struct isp_obj *nsobj)
+{
+	struct isp_obj *link;
+	int ret = 0;
+
+	down_read(&nsobj->gnode.lock);
+	isp_obj_for_each_link(link, nsobj) {
+		if (!isp_graph_walk_match_obj(link, ctl))
+			continue;
+
+		if (!ctl->cb(link, ctl)) {
+			ret = -EINVAL;
+			break;
+		}
+
+		if (ctl->flags & ISP_GRAPH_WALK_ONESHOT) {
+			ret = 0;
+			break;
+		}
+	}
+	up_read(&nsobj->gnode.lock);
+
 	return ret;
 }
 

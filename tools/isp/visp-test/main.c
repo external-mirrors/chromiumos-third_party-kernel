@@ -198,8 +198,7 @@ static int test_compound_query_count(struct libisp *isp,
 	q = libisp_query_at(liq, 1);
 
 	q->query_type			= ISP_QUERY_TYPE_EVENTS;
-	q->query_events.entity		= entity->id;
-	q->query_events.id		= ISP_QUERY_ALL_OBJECTS;
+	q->query_events.id		= entity->id;
 
 	entity = libisp_entity_lookup_by_name(isp, VISP_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
@@ -211,8 +210,7 @@ static int test_compound_query_count(struct libisp *isp,
 	q = libisp_query_at(liq, 2);
 
 	q->query_type			= ISP_QUERY_TYPE_EVENTS;
-	q->query_events.entity		= entity->id;
-	q->query_events.id		= ISP_QUERY_ALL_OBJECTS;
+	q->query_events.id		= entity->id;
 
 	ret = libisp_query_ioctl(isp, liq);
 	if (ret)
@@ -271,8 +269,7 @@ static int test_compound_query(struct libisp *isp, struct libisp_query *liq)
 	q = libisp_query_at(liq, 1);
 
 	q->query_type			= ISP_QUERY_TYPE_EVENTS;
-	q->query_events.entity		= entity->id;
-	q->query_events.id		= ISP_QUERY_ALL_OBJECTS;
+	q->query_events.id		= entity->id;
 
 	entity = libisp_entity_lookup_by_name(isp, VISP_SLOW_IRQ_ENTITY_NAME);
 	if (!entity) {
@@ -284,8 +281,7 @@ static int test_compound_query(struct libisp *isp, struct libisp_query *liq)
 	q = libisp_query_at(liq, 2);
 
 	q->query_type			= ISP_QUERY_TYPE_EVENTS;
-	q->query_events.entity		= entity->id;
-	q->query_events.id		= ISP_QUERY_ALL_OBJECTS;
+	q->query_events.id		= entity->id;
 
 	ret = libisp_query_ioctl(isp, liq);
 	if (ret)
@@ -452,115 +448,6 @@ out:
 	return ret;
 }
 
-static int test_query_unknown_event(struct libisp *isp,
-				    struct libisp_query *liq,
-				    unsigned int entity_id)
-{
-	struct libisp_iterator iter;
-	struct isp_query *q;
-	int ret;
-	int i;
-
-	pr_info("Test test_query_unknown_event() on entity: %d\n",
-		entity_id);
-
-	/* We should never have event with this ID */
-	for_each_isp_query(liq, i, q) {
-		q->query_type			= ISP_QUERY_TYPE_EVENTS;
-		q->query_events.entity		= entity_id;
-		q->query_events.id		= 0xfffffff;
-	}
-
-	ret = libisp_query_ioctl(isp, liq);
-	if (ret) {
-		/* Failure is expected here */
-		ret = 0;
-		goto out;
-	}
-
-	pr_err("Unexpected events\n");
-	ret = -EINVAL;
-
-	libisp_iterator_init(&liq->hdr, &iter);
-	for_each_isp_query(liq, i, q) {
-		struct isp_query_event_entry *entry;
-
-		if (q->query_type != ISP_QUERY_TYPE_EVENTS) {
-			pr_err("Unexpected query return type: %d\n",
-			       q->query_type);
-			ret = -EINVAL;
-			goto out;
-		}
-
-		for_each_query_event(q, &iter, entry) {
-			pr_info("[UNEXPECTED] Event ID: %d, Name: %s\n",
-				entry->id,
-				entry->name);
-			ret = -EINVAL;
-		}
-	}
-
-out:
-	return ret;
-}
-
-static int test_query_specific_event(struct libisp *isp,
-				     struct libisp_query *liq,
-				     unsigned int entity_id,
-				     unsigned int event_id)
-{
-	struct libisp_iterator iter;
-	struct isp_query *q;
-	int ret;
-	int i;
-
-	pr_info("Test test_query_specific_event() event: %d on entity: %d\n",
-		event_id,
-		entity_id);
-
-	for_each_isp_query(liq, i, q) {
-		q->query_type			= ISP_QUERY_TYPE_EVENTS;
-		q->query_events.entity		= entity_id;
-		q->query_events.id		= event_id;
-	}
-
-	ret = libisp_query_ioctl(isp, liq);
-	if (ret)
-		goto out;
-
-	libisp_iterator_init(&liq->hdr, &iter);
-	for_each_isp_query(liq, i, q) {
-		struct isp_query_event_entry *entry;
-
-		if (q->query_type != ISP_QUERY_TYPE_EVENTS) {
-			pr_err("Unexpected query return type: %d\n",
-			       q->query_type);
-			ret = -EINVAL;
-			goto out;
-		}
-
-		for_each_query_event(q, &iter, entry) {
-			bool ok = false;
-
-			if (entry->id == event_id)
-				ok = true;
-
-			pr_info("[%s] Event ID: %d, Name: %s\n",
-				ok ? "OK" : "UNEXPECTED",
-				entry->id,
-				entry->name);
-
-			if (!ok) {
-				ret = -EINVAL;
-				goto out;
-			}
-		}
-	}
-
-out:
-	return ret;
-}
-
 static int test_query_entity_events(struct libisp *isp,
 				    struct libisp_query *liq,
 				    unsigned int entity_id)
@@ -575,8 +462,7 @@ static int test_query_entity_events(struct libisp *isp,
 
 	for_each_isp_query(liq, i, q) {
 		q->query_type			= ISP_QUERY_TYPE_EVENTS;
-		q->query_events.entity		= entity_id;
-		q->query_events.id		= ISP_QUERY_ALL_OBJECTS;
+		q->query_events.id		= entity_id;
 	}
 
 	ret = libisp_query_ioctl(isp, liq);
@@ -623,10 +509,6 @@ static int test_query_events(struct libisp *isp)
 	list_for_each_entry(entity, &isp->entities, obj_list) {
 		struct obj_event *child;
 
-		ret = test_query_unknown_event(isp, liq, entity->id);
-		if (ret)
-			break;
-
 		ret = test_query_entity_events(isp, liq, entity->id);
 		if (ret)
 			break;
@@ -635,12 +517,9 @@ static int test_query_events(struct libisp *isp)
 			if (child->type != OBJ_TYPE_EVENT)
 				continue;
 
-			ret = test_query_specific_event(isp,
-							liq,
-							entity->id,
-							child->id);
-			if (ret)
-				goto out;
+			pr_info("Event ID: %d, Name: %s\n",
+				child->id,
+				child->name);
 		}
 	}
 
