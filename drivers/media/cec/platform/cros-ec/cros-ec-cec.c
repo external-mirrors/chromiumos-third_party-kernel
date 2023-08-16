@@ -313,6 +313,8 @@ static const struct cec_dmi_match cec_dmi_match_table[] = {
 	{ "Google", "Lisbon", "0000:00:02.0", { "Port B" } },
 	/* Google Dibbi */
 	{ "Google", "Dibbi", "0000:00:02.0", { "Port D", "Port B" } },
+	/* Google Constitution */
+	{ "Google", "Constitution", "0000:00:02.0", { "Port B", "Port A" } },
 };
 
 static struct device *cros_ec_cec_find_hdmi_dev(struct device *dev,
