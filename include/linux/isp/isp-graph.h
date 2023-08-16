@@ -104,9 +104,6 @@ void isp_graph_stack_pop(struct isp_graph_stack *stack);
 int isp_graph_stack_push(struct isp_graph_stack *stack, struct isp_obj *obj);
 bool isp_graph_stack_empty(struct isp_graph_stack *stack);
 
-bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
-			      struct isp_graph_walk *ctl);
-
 int isp_enum_graph_objects(struct isp_graph_walk *ctl,
 			   struct isp_obj *nsobj);
 int isp_enum_object_graph_links(struct isp_graph_walk *ctl,

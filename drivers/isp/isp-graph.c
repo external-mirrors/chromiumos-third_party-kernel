@@ -228,8 +228,8 @@ bool isp_graph_stack_empty(struct isp_graph_stack *stack)
  * ISP_GRAPH_WALK_RECURSIVE walk) or if the object has exepcted type and ID
  * (in case of ISP_GRAPH_WALK_ONESHOT walk).
  */
-bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
-			      struct isp_graph_walk *ctl)
+static bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
+				     struct isp_graph_walk *ctl)
 {
 	if (!(ctl->match_type & nsobj->type))
 		return false;
