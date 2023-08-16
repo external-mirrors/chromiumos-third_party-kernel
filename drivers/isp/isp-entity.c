@@ -858,7 +858,7 @@ int isp_enum_entities(struct isp_device *isp,
 	ctl.data	= output;
 	ctl.cb		= enum_entity;
 	ctl.match_type	= ISP_OBJ_TYPE_ENTITY;
-	ctl.flags	= ISP_GRAPH_WALK_RECURSIVE;
+	ctl.flags	= ISP_GRAPH_ENUM_SUBTREE;
 
 	ret = isp_enum_graph_objects(&ctl, &entity->nsobj);
 	query->num_entities = output->num_entries;
@@ -891,7 +891,7 @@ int isp_enum_events(struct isp_device *isp,
 	ctl.data	= output;
 	ctl.cb		= enum_event;
 	ctl.match_type	= ISP_OBJ_TYPE_EVENT;
-	ctl.flags	= ISP_GRAPH_WALK_RECURSIVE;
+	ctl.flags	= ISP_GRAPH_ENUM_SUBTREE;
 
 	ret = isp_enum_object_graph_links(&ctl, &entity->nsobj);
 	query->num_events = output->num_entries;

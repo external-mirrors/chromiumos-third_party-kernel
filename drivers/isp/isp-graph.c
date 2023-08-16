@@ -224,17 +224,23 @@ bool isp_graph_stack_empty(struct isp_graph_stack *stack)
  * @nsobj: pointer to ISP object
  * @ctl: auxiliary data
  *
- * Return: true if the object has the expected type (in case of
- * ISP_GRAPH_WALK_RECURSIVE walk) or if the object has exepcted type and ID
- * (in case of ISP_GRAPH_WALK_ONESHOT walk).
+ * Return: true if the object matches the search criteria
  */
 static bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
 				     struct isp_graph_walk *ctl)
 {
 	if (!(ctl->match_type & nsobj->type))
 		return false;
-	if (ctl->flags & ISP_GRAPH_WALK_RECURSIVE)
+	/*
+	 * For ISP_GRAPH_ENUM_SUBTREE walk we match only object type, as in
+	 * this case we are not looking for particular ID.
+	 */
+	if (ctl->flags & ISP_GRAPH_ENUM_SUBTREE)
 		return true;
+	/*
+	 * For ISP_GRAPH_ENUM_SINGLE, on the other hand, we are looking for
+	 * exact object: type and ID should match the criteria.
+	 */
 	return ctl->match_id == isp_obj_id(nsobj);
 }
 
@@ -281,7 +287,7 @@ int isp_enum_graph_objects(struct isp_graph_walk *ctl, struct isp_obj *nsobj)
 			abort = true;
 		}
 
-		if (ctl->flags & ISP_GRAPH_WALK_ONESHOT) {
+		if (ctl->flags & ISP_GRAPH_ENUM_SINGLE) {
 			ret = 0;
 			abort = true;
 		}
@@ -335,7 +341,7 @@ int isp_enum_object_graph_links(struct isp_graph_walk *ctl,
 			break;
 		}
 
-		if (ctl->flags & ISP_GRAPH_WALK_ONESHOT) {
+		if (ctl->flags & ISP_GRAPH_ENUM_SINGLE) {
 			ret = 0;
 			break;
 		}

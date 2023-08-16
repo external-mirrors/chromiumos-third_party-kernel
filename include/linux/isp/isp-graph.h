@@ -72,10 +72,10 @@ struct isp_graph_stack {
 	s32		end;
 };
 
-/* Process only one graph object and terminate, do not walk the graph */
-#define ISP_GRAPH_WALK_ONESHOT		BIT(0)
-/* Walk all sub-graph objects */
-#define ISP_GRAPH_WALK_RECURSIVE	BIT(1)
+/* Enumerate the single matching object */
+#define ISP_GRAPH_ENUM_SINGLE	BIT(0)
+/* Enumerate objects sub-tree (multiple objects) */
+#define ISP_GRAPH_ENUM_SUBTREE	BIT(1)
 
 /**
  * isp_graph_walk - the graph walk controller

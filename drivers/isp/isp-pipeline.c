@@ -203,7 +203,7 @@ static int pipeline_walk(struct isp_obj *nsobj, struct isp_graph_walk *ctl)
 			abort = true;
 		}
 
-		if (ctl->flags & ISP_GRAPH_WALK_ONESHOT) {
+		if (ctl->flags & ISP_GRAPH_ENUM_SINGLE) {
 			ret = 0;
 			abort = true;
 		}
@@ -1794,9 +1794,9 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 			return -EINVAL;
 
 		if (query->mode == ISP_OP_QUERY_UNIQUE)
-			ctl.flags = ISP_GRAPH_WALK_ONESHOT;
+			ctl.flags = ISP_GRAPH_ENUM_SINGLE;
 		if (query->mode == ISP_OP_QUERY_UNIQUE_AND_DEPS)
-			ctl.flags = ISP_GRAPH_WALK_RECURSIVE;
+			ctl.flags = ISP_GRAPH_ENUM_SUBTREE;
 
 		ctl.data = output;
 		ctl.cb = pipeline_walk_query_callback;
