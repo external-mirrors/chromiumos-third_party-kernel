@@ -768,7 +768,7 @@ static bool enum_entity(struct isp_obj *nsobj, struct isp_graph_walk *ctl)
 	struct isp_obj_entity *entity;
 	struct isp_koutput *output;
 
-	output = ctl->data;
+	output = ctl->output;
 
 	/* User just want the size, not the data. */
 	if (!isp_output_has_buffer(output))
@@ -811,7 +811,7 @@ static bool enum_event(struct isp_obj *nsobj, struct isp_graph_walk *ctl)
 	struct isp_obj_event *event;
 	struct isp_koutput *output;
 
-	output = ctl->data;
+	output = ctl->output;
 
 	/* User just want the size, not the data. */
 	if (!isp_output_has_buffer(output))
@@ -855,7 +855,7 @@ int isp_enum_entities(struct isp_device *isp,
 	if (!entity)
 		return -ENOENT;
 
-	ctl.data	= output;
+	ctl.output	= output;
 	ctl.cb		= enum_entity;
 	ctl.match_type	= ISP_OBJ_TYPE_ENTITY;
 	ctl.flags	= ISP_GRAPH_ENUM_SUBTREE;
@@ -888,7 +888,7 @@ int isp_enum_events(struct isp_device *isp,
 	if (!entity)
 		return -ENOENT;
 
-	ctl.data	= output;
+	ctl.output	= output;
 	ctl.cb		= enum_event;
 	ctl.match_type	= ISP_OBJ_TYPE_EVENT;
 	ctl.flags	= ISP_GRAPH_ENUM_SUBTREE;

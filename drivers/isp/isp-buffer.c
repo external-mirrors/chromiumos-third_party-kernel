@@ -220,7 +220,7 @@ static bool enum_buffer(struct isp_obj *nsobj, struct isp_ns_walk_control *ctl)
 	struct isp_koutput *output;
 	struct dma_buf *dma_buf;
 
-	output = ctl->data;
+	output = ctl->output;
 	if (!isp_output_has_buffer(output))
 		return true;
 
@@ -262,7 +262,7 @@ int isp_enum_buffer(struct isp_pipeline *pipeline,
 	 * This is a quick and dirty implementation that walks the entire
 	 * namespace searching for DMA buffers.
 	 */
-	ctl.data	= output;
+	ctl.output	= output;
 	ctl.flags	= (u64)dma_buf;
 	ctl.cb		= enum_buffer;
 	isp_ns_for_each(&pipeline->objs, &ctl);

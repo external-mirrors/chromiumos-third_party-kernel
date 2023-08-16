@@ -1723,7 +1723,7 @@ static bool pipeline_walk_query_callback(struct isp_obj *nsobj,
 	if (!op)
 		return false;
 
-	return isp_op_enum(op, ctl->data);
+	return isp_op_enum(op, ctl->output);
 }
 
 static bool isp_ns_walk_callback(struct isp_obj *nsobj,
@@ -1743,7 +1743,7 @@ static bool isp_ns_walk_callback(struct isp_obj *nsobj,
 	read_unlock_irqrestore(&op->notify_lock, flags);
 
 	if (valid)
-		isp_op_enum(op, ctl->data);
+		isp_op_enum(op, ctl->output);
 	return false;
 }
 
@@ -1753,7 +1753,7 @@ static void query_state_filter(struct isp_pipeline *pipeline,
 {
 	struct isp_ns_walk_control ctl;
 
-	ctl.data	= output;
+	ctl.output	= output;
 	ctl.flags	= state;
 	ctl.cb		= isp_ns_walk_callback;
 	isp_ns_for_each(&pipeline->ops, &ctl);
@@ -1798,7 +1798,7 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 		if (query->mode == ISP_OP_QUERY_UNIQUE_AND_DEPS)
 			ctl.flags = ISP_GRAPH_ENUM_SUBTREE;
 
-		ctl.data = output;
+		ctl.output = output;
 		ctl.cb = pipeline_walk_query_callback;
 
 		ret = pipeline_walk(&op->nsobj, &ctl);

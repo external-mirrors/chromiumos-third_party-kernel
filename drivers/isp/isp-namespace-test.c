@@ -527,7 +527,7 @@ static void obj_insert(struct kunit *test)
 	KUNIT_EXPECT_TRUE(test, release_flag);
 }
 
-struct for_each_test {
+struct isp_koutput {
 	unsigned long n_objs;
 	unsigned long sum_ids;
 };
@@ -535,11 +535,11 @@ struct for_each_test {
 static bool for_each_test_callback(struct isp_obj *obj,
 				   struct isp_ns_walk_control *ctl)
 {
-	struct for_each_test *fet;
+	struct isp_koutput *out;
 
-	fet = ctl->data;
-	fet->n_objs++;
-	fet->sum_ids += isp_obj_id(obj);
+	out = ctl->output;
+	out->n_objs++;
+	out->sum_ids += isp_obj_id(obj);
 	return false;
 }
 
@@ -547,7 +547,7 @@ static bool for_each_test_callback(struct isp_obj *obj,
 static void ns_for_each(struct kunit *test)
 {
 	struct isp_ns_walk_control ctl = {};
-	struct for_each_test fet = {};
+	struct isp_koutput out = {};
 	struct isp_obj *obj;
 	unsigned long sum_ids = 0;
 	unsigned long id0, id;
@@ -580,19 +580,19 @@ static void ns_for_each(struct kunit *test)
 	}
 
 	// Valid call
-	ctl.data = &fet;
+	ctl.output = &out;
 	ctl.cb = for_each_test_callback;
 	isp_ns_for_each(&ns, &ctl);
-	KUNIT_EXPECT_EQ(test, fet.n_objs, N_OBJS);
-	KUNIT_EXPECT_EQ(test, fet.sum_ids, sum_ids);
+	KUNIT_EXPECT_EQ(test, out.n_objs, N_OBJS);
+	KUNIT_EXPECT_EQ(test, out.sum_ids, sum_ids);
 
 	// Valid call - 1
 	sum_ids -= id0;
 	isp_obj_remove_id(&ns, ISP_OBJ_TYPE_ENTITY, id0);
-	memset(&fet, 0, sizeof(fet));
+	memset(&out, 0, sizeof(out));
 	isp_ns_for_each(&ns, &ctl);
-	KUNIT_EXPECT_EQ(test, fet.n_objs, N_OBJS - 1);
-	KUNIT_EXPECT_EQ(test, fet.sum_ids, sum_ids);
+	KUNIT_EXPECT_EQ(test, out.n_objs, N_OBJS - 1);
+	KUNIT_EXPECT_EQ(test, out.sum_ids, sum_ids);
 
 	isp_ns_release(&ns);
 }

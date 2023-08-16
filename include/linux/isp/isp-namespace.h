@@ -122,12 +122,13 @@ struct isp_ns {
  * isp_ns_walk_control - ISP namespace walk control
  */
 struct isp_ns_walk_control {
-	/** @data: pointer to auxiliary data */
-	void		*data;
+	/** @output: pointer to query output buffer */
+	struct isp_koutput	*output;
 	/** @flags: auxiliary flags */
-	u64		flags;
+	u64			flags;
 	/** @cb: callback operation to the (matched) namespace objects */
-	bool (*cb)(struct isp_obj *nsobj, struct isp_ns_walk_control *ctl);
+	bool			(*cb)(struct isp_obj *nsobj,
+				      struct isp_ns_walk_control *ctl);
 };
 
 void isp_ns_for_each(struct isp_ns *ns, struct isp_ns_walk_control *ctl);

@@ -84,17 +84,17 @@ struct isp_graph_stack {
  * walk.
  */
 struct isp_graph_walk {
-	/** @data: pointer to auxiliary data e.g. output of a pipeline query */
-	void		*data;
+	/** @output: pointer to query output buffer */
+	struct isp_koutput	*output;
 	/** @flags: auxiliary flag */
-	u64		flags;
+	u64			flags;
 	/** @match_type: the target type of a query e.g. entity or event */
-	u32		match_type;
+	u32			match_type;
 	/** @match_id: the target ID of a query, or ISP_QUERY_ALL_OBJECTS */
-	u32		match_id;
+	u32			match_id;
 	/** @cb: callback operation to the (matched) namespace objects */
-	bool		(*cb)(struct isp_obj *nsobj,
-			      struct isp_graph_walk *ctl);
+	bool			(*cb)(struct isp_obj *nsobj,
+				      struct isp_graph_walk *ctl);
 };
 
 int isp_graph_stack_alloc(struct isp_graph_stack *stack, u32 depth);
