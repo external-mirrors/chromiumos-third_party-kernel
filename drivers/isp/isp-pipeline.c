@@ -1795,7 +1795,7 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 
 		if (query->mode == ISP_OP_QUERY_UNIQUE)
 			ctl.flags = ISP_GRAPH_ENUM_SINGLE;
-		if (query->mode == ISP_OP_QUERY_UNIQUE_AND_DEPS)
+		if (query->mode == ISP_OP_QUERY_DEPS)
 			ctl.flags = ISP_GRAPH_ENUM_SUBTREE;
 
 		ctl.output = output;

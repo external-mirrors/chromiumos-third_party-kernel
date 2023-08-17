@@ -1290,8 +1290,8 @@ static int test_query_operations(struct libisp *isp, u32 id, u32 mode)
 	case ISP_OP_QUERY_UNIQUE:
 		mode_name = "ISP_OP_QUERY_UNIQUE";
 		break;
-	case ISP_OP_QUERY_UNIQUE_AND_DEPS:
-		mode_name = "ISP_OP_QUERY_UNIQUE_AND_DEPS";
+	case ISP_OP_QUERY_DEPS:
+		mode_name = "ISP_OP_QUERY_DEPS";
 		break;
 	default:
 		mode_name = "Unknown ISP_OP_QUERY mode";
@@ -1443,7 +1443,7 @@ static int test_operations(struct libisp *isp)
 		return ret;
 	}
 
-	ret = test_query_operations(isp, 0, ISP_OP_QUERY_UNIQUE_AND_DEPS);
+	ret = test_query_operations(isp, 0, ISP_OP_QUERY_DEPS);
 	if (ret != 3) {
 		pr_err("FATAL: failure test_query_operation(): %d\n", ret);
 		ret = -EINVAL;
@@ -2864,7 +2864,7 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_query_operations(isp, 0, ISP_OP_QUERY_UNIQUE_AND_DEPS);
+	ret = test_query_operations(isp, 0, ISP_OP_QUERY_DEPS);
 	if (ret != 3) {
 		pr_err("FATAL: failure test_query_operation(): %d\n", ret);
 		goto out;

@@ -130,16 +130,16 @@ struct isp_query_events {
 /**
  * enum isp_operation_query_mode - Query operation IOCTL mode
  *
- * @ISP_OP_QUERY_UNIQUE:		Query exact operation
- * @ISP_OP_QUERY_UNIQUE_AND_DEPS:	Query exact operation and its child
- *					(dependent) operations
- * @ISP_OP_QUERY_ALL:			Query all operations
- * @ISP_OP_QUERY_SLEEP:			Query operations in sleep state
- * @ISP_OP_QUERY_QUEUED:		Query operations in queued state
+ * @ISP_OP_QUERY_UNIQUE:	Query exact operation
+ * @ISP_OP_QUERY_DEPS:		Query operation and its dependent (child)
+ *				operations
+ * @ISP_OP_QUERY_ALL:		Query all operations
+ * @ISP_OP_QUERY_SLEEP:		Query operations in sleep state
+ * @ISP_OP_QUERY_QUEUED:	Query operations in queued state
  */
 enum isp_operation_query_mode {
 	ISP_OP_QUERY_UNIQUE,
-	ISP_OP_QUERY_UNIQUE_AND_DEPS,
+	ISP_OP_QUERY_DEPS,
 	ISP_OP_QUERY_ALL,
 	ISP_OP_QUERY_SLEEP,
 	ISP_OP_QUERY_QUEUED,
@@ -150,9 +150,7 @@ enum isp_operation_query_mode {
  *
  * @id:			id of the operation or ISP_OP_ID_ALL_OP
  * @num_ops:		out: number of operations queried
- * @mode:		ISP_OP_QUERY_UNIQUE, ISP_OP_QUERY_UNIQUE_AND_DEPS,
- *			ISP_OP_QUERY_ALL, ISP_OP_QUERY_SLEEP,
- *			ISP_OP_QUERY_QUEUED
+ * @mode:		Operation query mode (one of isp_operation_query_mode)
  */
 struct isp_query_operations {
 	__u32		id;
