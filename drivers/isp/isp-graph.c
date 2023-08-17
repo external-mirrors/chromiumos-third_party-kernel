@@ -246,10 +246,9 @@ static bool isp_graph_walk_match_obj(struct isp_obj *nsobj,
 
 /**
  * isp_enum_graph_objects() - Walk through the sub-graph of the ISP object and
- * enumerate its children
+ * enumerate its children. This implements BFS traversal.
  * @ctl: auxiliary data
  * @nsobj: pointer to ISP object
- * @depth: depth limit of graph walk
  *
  * Return: 0 on success or error value otherwise.
  */
@@ -325,6 +324,14 @@ out:
 	return ret;
 }
 
+/**
+ * isp_enum_object_graph_links() - Iterate thought object graph links and
+ * enumerate its children.
+ * @ctl: auxiliary data
+ * @nsobj: pointer to ISP object
+ *
+ * Return: 0 on success or error value otherwise.
+ */
 int isp_enum_object_graph_links(struct isp_graph_walk *ctl,
 				struct isp_obj *nsobj)
 {
