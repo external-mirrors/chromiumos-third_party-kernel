@@ -27,7 +27,7 @@ struct isp_output {
 } __attribute__((packed));
 
 /**
- * struct isp_query_header - Query request header descriptor
+ * struct isp_query_desc - Query request header descriptor
  *
  * @output:		Query results
  */
@@ -41,6 +41,7 @@ struct isp_query_desc {
  * @num_requests:	Number of requests
  * @error:		Index of the first failed request (in case of an error)
  * @qd:			Query header descriptor (only for ISP_IOC_QUERY calls)
+ * @reserved:		Reserved for alignment and future extension
  */
 struct isp_header {
 	__u32			num_requests;
@@ -129,12 +130,12 @@ struct isp_query_events {
 /**
  * enum isp_operation_query_mode - Query operation IOCTL mode
  *
- * ISP_OP_QUERY_UNIQUE:			Query exact operation
- * ISP_OP_QUERY_UNIQUE_AND_DEPS:	Query exact operation and its child
+ * @ISP_OP_QUERY_UNIQUE:		Query exact operation
+ * @ISP_OP_QUERY_UNIQUE_AND_DEPS:	Query exact operation and its child
  *					(dependent) operations
- * ISP_OP_QUERY_ALL:			Query all operations
- * ISP_OP_QUERY_SLEEP:			Query operations in sleep state
- * ISP_OP_QUERY_QUEUED:			Query operations in queued state
+ * @ISP_OP_QUERY_ALL:			Query all operations
+ * @ISP_OP_QUERY_SLEEP:			Query operations in sleep state
+ * @ISP_OP_QUERY_QUEUED:		Query operations in queued state
  */
 enum isp_operation_query_mode {
 	ISP_OP_QUERY_UNIQUE,
@@ -190,6 +191,7 @@ enum query_type {
  * @query_events:	Used when query type is ISP_QUERY_TYPE_EVENTS
  * @query_operations:	Used when query type is ISP_QUERY_TYPE_OPERATIONS
  * @query_dmabuf:	Used when query type is ISP_QUERY_TYPE_DMABUF
+ * @reserved:		Reserved for alignment and future extension
  */
 struct isp_query {
 	__u32		query_type;
@@ -250,7 +252,7 @@ enum isp_instance_instruction_op {
  * struct isp_instance_instruction - Operation instance instruction
  *
  * @op:		Entity instance operation
- * @buf_id:	Requested ISP object ID
+ * @id:		Requested ISP object ID
  */
 struct isp_instance_instruction {
 	__u32		op;
@@ -338,6 +340,7 @@ enum isp_rw_instruction_type {
  * @db:		Used when type is ISP_DMABUF_INSTRUCTION
  * @in:		Used when type is ISP_INSTANCE_INSTRUCTION
  * @of:		Used when type is ISP_OUT_FENCE_INSTRUCTION
+ * @reserved:	Reserved for alignment and future extension
  */
 struct isp_rw_instruction {
 	__u32		type;
@@ -355,8 +358,8 @@ struct isp_rw_instruction {
 /**
  * struct isp_rw_instruction_list - List of read/write instructions
  *
- * @num_entries		- Number of read/write instructions
- * @payload		- Array of read/write instructions
+ * @num_entries:	Number of read/write instructions
+ * @instructions:	Array of read/write instructions
  */
 struct isp_rw_instruction_list {
 	__u32				num_entries;
@@ -475,11 +478,11 @@ struct isp_operation_remove {
 /**
  * enum isp_operation_state - ISP operation state
  *
- * ISP_OPERATION_STATE_SLEEP:		Operation is waiting for events
- * ISP_OPERATION_STATE_QUEUED:		Operation is queued for execution
- * ISP_OPERATION_STATE_RUNNING:		Operation is being executed
- * ISP_OPERATION_STATE_EXECUTED:	Operation was executed
- * ISP_OPERATION_STATE_DELETED:		Operation was deleted
+ * @ISP_OPERATION_STATE_SLEEP:		Operation is waiting for events
+ * @ISP_OPERATION_STATE_QUEUED:		Operation is queued for execution
+ * @ISP_OPERATION_STATE_RUNNING:	Operation is being executed
+ * @ISP_OPERATION_STATE_EXECUTED:	Operation was executed
+ * @ISP_OPERATION_STATE_DELETED:	Operation was deleted
  */
 enum isp_operation_state {
 	ISP_OPERATION_STATE_SLEEP	= _BITUL(0),
@@ -493,7 +496,7 @@ enum isp_operation_state {
  * enum isp_operation_query_id - Predefined operation ID to use when not
  * querying pipeline for a specific operation ID.
  *
- * ISP_OP_ID_ALL_OP:	Set when query all operations
+ * @ISP_OP_ID_ALL_OP:	Set when query all operations
  */
 enum isp_operation_query_id {
 	ISP_OP_ID_ALL_OP = 0xffffffff,
@@ -513,10 +516,11 @@ enum operation_type {
 /**
  * struct isp_operation - Operation request
  *
- * @operation_type	- Type of operation request (ISP_OPERATION_TYPE_ADD,
- *			  ISP_OPERATION_TYPE_REMOVE or ISP_OPERATION_TYPE_QUERY)
- * @operation_add	- Add operation to execution pipelines
- * @operation_remove	- Remove operation from execution pipeline
+ * @operation_type:	Type of operation request (ISP_OPERATION_TYPE_ADD,
+ *			ISP_OPERATION_TYPE_REMOVE or ISP_OPERATION_TYPE_QUERY)
+ * @operation_add:	Add operation to execution pipelines
+ * @operation_remove:	Remove operation from execution pipeline
+ * @reserved:		Reserved for alignment and future extension
  */
 struct isp_operation {
 	__u32		operation_type;
@@ -539,8 +543,8 @@ enum isp_obj_id {
 /**
  * enum isp_completion_type - ISP completion entry type
  *
- * ISP_COMPLETION_TYPE_EXECUTED:		Operation executed
- * ISP_COMPLETION_TYPE_DELETED:			Operation deleted
+ * @ISP_COMPLETION_TYPE_EXECUTED:	Operation executed
+ * @ISP_COMPLETION_TYPE_DELETED:	Operation deleted
  */
 enum isp_completion_type {
 	ISP_COMPLETION_TYPE_EXECUTED,
@@ -553,6 +557,7 @@ enum isp_completion_type {
  * @seqno:		Sequence Number
  * @id:			Operation ID
  * @type:		Type of event (executed, deleted, buffer overflow)
+ * @reserved:		Reserved for alignment and future extension
  */
 struct isp_completion {
 	__u64		seqno;
