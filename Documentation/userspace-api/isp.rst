@@ -24,20 +24,22 @@ The ISP device
 The ISP subsystem exposes one device (``/dev/isp``) to the user space. All the
 drivers under the ISP subsystem is accessed through this device.
 
-A user application performs requests in the following manner. It first opens
-the ISP common device to obtain a file descriptor. With this file descriptor, it
-issues requests through ``ioctl()``. The requests can be a set of queries or a
-set of operations. It finally checks the result of requests through ``read()``.
-When it is done with using the ISP, it closes the file descriptor.
+A user application performs requests in the following manner. It first
+opens the ISP common device to obtain a file descriptor. With this file
+descriptor, it issues requests through ``ioctl()``. The requests can be
+a set of queries or a set of operations. For operation requests that are
+successfully accepted, the application obtains the result through
+``read()``. Finally, when it is done with using the ISP, it closes the
+file descriptor.
 
-The ISP file descriptor is used as a unit of resource management. For example,
-the reservation of a processing block is done per file descriptor. A processing
-block cannot be used by any file descriptor other than the one that was used for
-reservation. Consequently, it is not recommended to share the ISP file
-descriptor with a different process. The ISP subsystem does not guarantee
-serialization of requests, so those processes have to synchronize on their own.
-It could also lead to a security issue where an image frame is mistakenly leaked
-to unintended recipients.
+The ISP file descriptor is used as a unit of resource management. For
+example, the reservation of a processing block is done per file
+descriptor. A reserved processing block cannot be accessed from any
+other file descriptors. Consequently, it is not recommended to share the
+ISP file descriptor with a different process. The ISP subsystem does not
+guarantee serialization of requests, so those processes have to
+synchronize on their own. It could also lead to a security issue where
+an image frame is mistakenly leaked to unintended recipients.
 
 Representation of Specific Hardware
 ===================================
@@ -63,8 +65,8 @@ objects will be released. The ID of these objects are given from the
 user space and must be unique within a file desriptor's scope.
 
 * operation - represents an in-flight operation
-* buffer - represents a DMA-BUF registered to the ISP subsystem
-
+* buffer - represents a DMA-BUF
+* fence - represents a DMA fence
 
 Header File
 ===========
@@ -115,11 +117,12 @@ the table below.
 | buffer      | struct isp_query_dmabuf     | struct isp_query_dmabuf_entry    |
 +-------------+-----------------------------+----------------------------------+
 
-The result of a query command is written in a buffer attached to the
-query. If the command contains more than one queries, the outputs are
-written in the same order as the queries. Each output entry is of a type
-that is specific to the matched object type. The number of result
-entries per query is also returned together. The user can use this
+The result of a query command is stored in an output buffer attached to
+the query. The output buffer must be allocated in the user space. If the
+command contains more than one queries, the outputs are written in the
+same order as the queries. Each output entry is of a type that is
+specific to the matched object type. The number of result entries per
+query is returned in each query data structure, so the user can use this
 information to parse the output buffer from the top.
 
 If the size of the buffer happens to be insufficient to hold all the
@@ -152,7 +155,8 @@ operation object was not found. This can happen when a wrong ID was
 specified or when the operation object is already deleted by that time.
 If the dependency is of an event, the driver need to signal the event
 with an appropriate signal. If the dependency is of a DMA fence, it must
-be signaled from an external subsystem.
+be signaled. If a wrong ID was specified for an event or DMA fence
+dependency, the operation request immediately returns with an error.
 
 An operation can have a list of instructions, each of which represents
 the actual work to be performed. Depending on its type (enum
