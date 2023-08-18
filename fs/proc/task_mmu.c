@@ -1924,6 +1924,7 @@ enum reclaim_type {
 };
 
 struct walk_data {
+	unsigned long nr_to_try;
 	enum reclaim_type type;
 };
 
@@ -1932,7 +1933,7 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	pte_t *orig_pte, *pte, ptent;
 	spinlock_t *ptl;
-	struct page *page;
+	struct folio *folio;
 	struct vm_area_struct *vma = walk->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long next = pmd_addr_end(addr, end);
@@ -1945,34 +1946,32 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 		if (is_huge_zero_pmd(*pmd))
 			goto huge_unlock;
 
-		page = pmd_page(*pmd);
-		if (page_mapcount(page) > 1)
+		folio = pfn_folio(pmd_pfn(*pmd));
+		if (folio_mapcount(folio) > 1)
 			goto huge_unlock;
 
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
-			get_page(page);
+			folio_get(folio);
 			spin_unlock(ptl);
-			lock_page(page);
-			err = split_huge_page(page);
-			unlock_page(page);
-			put_page(page);
+			folio_lock(folio);
+			err = split_folio(folio);
+			folio_unlock(folio);
+			folio_put(folio);
 			if (!err)
-				goto regular_page;
+				goto regular_folio;
 			return 0;
 		}
 
 		pmdp_test_and_clear_young(vma, addr, pmd);
-		deactivate_page(page);
+		folio_deactivate(folio);
 huge_unlock:
 		spin_unlock(ptl);
 		return 0;
 	}
 
-regular_page:
-	if (pmd_trans_unstable(pmd))
-		return 0;
+regular_folio:
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
@@ -1981,40 +1980,40 @@ regular_page:
 		if (!pte_present(ptent))
 			continue;
 
-		page = vm_normal_page(vma, addr, ptent);
-		if (!page)
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio)
 			continue;
 
-		if (PageTransCompound(page))  {
-			if (page_mapcount(page) != 1)
+		if (folio_test_large(folio))  {
+			if (folio_mapcount(folio) != 1)
 				break;
-			get_page(page);
-			if (!trylock_page(page)) {
-				put_page(page);
+			folio_get(folio);
+			if (!folio_trylock(folio)) {
+				folio_put(folio);
 				break;
 			}
 			pte_unmap_unlock(orig_pte, ptl);
-			if (split_huge_page(page)) {
-				unlock_page(page);
-				put_page(page);
+			if (split_folio(folio)) {
+				folio_unlock(folio);
+				folio_put(folio);
 				pte_offset_map_lock(mm, pmd, addr, &ptl);
 				break;
 			}
-			unlock_page(page);
-			put_page(page);
+			folio_unlock(folio);
+			folio_put(folio);
 			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 			pte--;
 			addr -= PAGE_SIZE;
 			continue;
 		}
 
-		VM_BUG_ON_PAGE(PageTransCompound(page), page);
+		VM_BUG_ON_FOLIO(folio_test_large(folio), folio);
 
-		if (page_mapcount(page) > 1)
+		if (folio_mapcount(folio) > 1)
 			continue;
 
 		ptep_test_and_clear_young(vma, addr, pte);
-		deactivate_page(page);
+		folio_deactivate(folio);
 	}
 	pte_unmap_unlock(orig_pte, ptl);
 	cond_resched();
@@ -2027,8 +2026,8 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	pte_t *orig_pte, *pte, ptent;
 	spinlock_t *ptl;
-	LIST_HEAD(page_list);
-	struct page *page;
+	LIST_HEAD(folio_list);
+	struct folio *folio;
 	int isolated = 0;
 	struct vm_area_struct *vma = walk->vma;
 	struct walk_data *data = (struct walk_data*)walk->private;
@@ -2047,41 +2046,48 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		if (is_huge_zero_pmd(*pmd))
 			goto huge_unlock;
 
-		page = pmd_page(*pmd);
-		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
+		folio = pfn_folio(pmd_pfn(*pmd));
+		if (type != RECLAIM_SHMEM && folio_mapcount(folio) > 1)
 			goto huge_unlock;
 
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
-			get_page(page);
+			folio_get(folio);
 			spin_unlock(ptl);
-			lock_page(page);
-			err = split_huge_page(page);
-			unlock_page(page);
-			put_page(page);
+			folio_lock(folio);
+			err = split_folio(folio);
+			folio_unlock(folio);
+			folio_put(folio);
 			if (!err)
-				goto regular_page;
+				goto regular_folio;
 			return 0;
 		}
 
-		if (isolate_lru_page(page))
+		if (folio_isolate_lru(folio))
 			goto huge_unlock;
+
+		/*
+		 * Reclaim the whole folio even if it would make us go
+		 * over our limit. The alternative would be to split the
+		 * folio, but if we try to do that pmd_trans_unstable()
+		 * below would fail, and we wouldn't progress.
+		 */
+		data->nr_to_try -= min_t(unsigned long, data->nr_to_try,
+		    folio_nr_pages(folio));
 
 		/* Clear all the references to make sure it gets reclaimed */
 		pmdp_test_and_clear_young(vma, addr, pmd);
-		ClearPageReferenced(page);
-		test_and_clear_page_young(page);
-		list_add(&page->lru, &page_list);
+		folio_clear_referenced(folio);
+		folio_test_clear_young(folio);
+		list_add(&folio->lru, &folio_list);
 huge_unlock:
 		spin_unlock(ptl);
-		reclaim_pages(&page_list);
+		reclaim_pages(&folio_list);
 		return 0;
 	}
 
-regular_page:
-	if (pmd_trans_unstable(pmd))
-		return 0;
+regular_folio:
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
@@ -2089,54 +2095,55 @@ regular_page:
 		if (!pte_present(ptent))
 			continue;
 
-		page = vm_normal_page(vma, addr, ptent);
-		if (!page)
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio)
 			continue;
 
-		if (PageTransCompound(page)) {
-			if (type != RECLAIM_SHMEM && page_mapcount(page) != 1)
+		if (folio_test_large(folio)) {
+			if (type != RECLAIM_SHMEM && folio_mapcount(folio) != 1)
 				break;
-			get_page(page);
-			if (!trylock_page(page)) {
-				put_page(page);
+			folio_get(folio);
+			if (!folio_trylock(folio)) {
+				folio_put(folio);
 				break;
 			}
 			pte_unmap_unlock(orig_pte, ptl);
 
-			if (split_huge_page(page)) {
-				unlock_page(page);
-				put_page(page);
+			if (split_folio(folio)) {
+				folio_unlock(folio);
+				folio_put(folio);
 				pte_offset_map_lock(mm, pmd, addr, &ptl);
 				break;
 			}
-			unlock_page(page);
-			put_page(page);
+			folio_unlock(folio);
+			folio_put(folio);
 			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 			pte--;
 			addr -= PAGE_SIZE;
 			continue;
 		}
 
-		VM_BUG_ON_PAGE(PageTransCompound(page), page);
+		VM_BUG_ON_FOLIO(folio_test_large(folio), folio);
 
-		if (!PageLRU(page))
+		if (!folio_test_lru(folio))
 			continue;
 
-		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
+		if (type != RECLAIM_SHMEM && folio_mapcount(folio) > 1)
 			continue;
 
-		if (isolate_lru_page(page))
+		if (folio_isolate_lru(folio))
 			continue;
 
 		isolated++;
-		list_add(&page->lru, &page_list);
+		data->nr_to_try--;
+		list_add(&folio->lru, &folio_list);
 		/* Clear all the references to make sure it gets reclaimed */
 		ptep_test_and_clear_young(vma, addr, pte);
-		ClearPageReferenced(page);
-		test_and_clear_page_young(page);
+		folio_clear_referenced(folio);
+		folio_test_clear_young(folio);
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);
-			reclaim_pages(&page_list);
+			reclaim_pages(&folio_list);
 			isolated = 0;
 			pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 			orig_pte = pte;
@@ -2144,7 +2151,7 @@ regular_page:
 	}
 
 	pte_unmap_unlock(orig_pte, ptl);
-	reclaim_pages(&page_list);
+	reclaim_pages(&folio_list);
 
 	cond_resched();
 	return 0;
@@ -2251,7 +2258,8 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	char buffer[PROC_NUMBUF];
 	struct mm_struct *mm;
 	enum reclaim_type type;
-	char *type_buf;
+	unsigned long num = 0;
+	char *tok, *type_buf;
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
@@ -2273,6 +2281,10 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 		type = RECLAIM_ALL;
 	else
 		return -EINVAL;
+
+	tok = strsep(&type_buf, " ");
+	if (!tok || kstrtol(tok, 10, &num) < 0)
+		num = ULONG_MAX;
 
 	task = get_proc_task(file->f_path.dentry->d_inode);
 	if (!task)
