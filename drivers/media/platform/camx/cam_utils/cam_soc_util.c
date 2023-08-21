@@ -332,12 +332,12 @@ int cam_soc_util_irq_enable(struct cam_hw_soc_info *soc_info)
 		return -EINVAL;
 	}
 
-	if (!soc_info->irq_line) {
+	if (soc_info->irq_line <= 0) {
 		CAM_ERR(CAM_UTIL, "No IRQ line available");
 		return -ENODEV;
 	}
 
-	enable_irq(soc_info->irq_line->start);
+	enable_irq(soc_info->irq_line);
 
 	return 0;
 }
@@ -349,12 +349,12 @@ int cam_soc_util_irq_disable(struct cam_hw_soc_info *soc_info)
 		return -EINVAL;
 	}
 
-	if (!soc_info->irq_line) {
+	if (soc_info->irq_line <= 0) {
 		CAM_ERR(CAM_UTIL, "No IRQ line available");
 		return -ENODEV;
 	}
 
-	disable_irq(soc_info->irq_line->start);
+	disable_irq(soc_info->irq_line);
 
 	return 0;
 }
@@ -1237,9 +1237,9 @@ int cam_soc_util_get_dt_properties(struct cam_hw_soc_info *soc_info)
 		rc = 0;
 	} else {
 		soc_info->irq_line =
-			platform_get_resource_byname(soc_info->pdev,
-			IORESOURCE_IRQ, soc_info->irq_name);
-		if (!soc_info->irq_line) {
+			platform_get_irq_byname(soc_info->pdev,
+						soc_info->irq_name);
+		if (soc_info->irq_line <= 0) {
 			CAM_ERR(CAM_UTIL, "no irq resource");
 			rc = -ENODEV;
 			return rc;
@@ -1553,8 +1553,8 @@ int cam_soc_util_request_platform_resource(
 			goto put_regulator;
 	}
 
-	if (soc_info->irq_line) {
-		rc = devm_request_irq(soc_info->dev, soc_info->irq_line->start,
+	if (soc_info->irq_line > 0) {
+		rc = devm_request_irq(soc_info->dev, soc_info->irq_line,
 				      handler, 0, soc_info->irq_name,
 				      irq_data);
 		if (rc) {
@@ -1562,7 +1562,7 @@ int cam_soc_util_request_platform_resource(
 			rc = -EBUSY;
 			goto put_regulator;
 		}
-		disable_irq(soc_info->irq_line->start);
+		disable_irq(soc_info->irq_line);
 		soc_info->irq_data = irq_data;
 	}
 
@@ -1603,10 +1603,10 @@ put_clk:
 		}
 	}
 
-	if (soc_info->irq_line) {
-		disable_irq(soc_info->irq_line->start);
+	if (soc_info->irq_line > 0) {
+		disable_irq(soc_info->irq_line);
 		devm_free_irq(soc_info->dev,
-			soc_info->irq_line->start, irq_data);
+			soc_info->irq_line, irq_data);
 	}
 
 put_regulator:
@@ -1664,10 +1664,10 @@ int cam_soc_util_release_platform_resource(struct cam_hw_soc_info *soc_info)
 		soc_info->reg_map[i].size = 0;
 	}
 
-	if (soc_info->irq_line) {
-		disable_irq(soc_info->irq_line->start);
+	if (soc_info->irq_line > 0) {
+		disable_irq(soc_info->irq_line);
 		devm_free_irq(soc_info->dev,
-			soc_info->irq_line->start, soc_info->irq_data);
+			soc_info->irq_line, soc_info->irq_data);
 	}
 
 	if (soc_info->pinctrl_info.pinctrl)
