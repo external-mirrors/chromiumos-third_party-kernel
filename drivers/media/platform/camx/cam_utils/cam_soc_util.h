@@ -126,7 +126,7 @@ struct cam_soc_gpio_data {
  * @index:                  Instance id for the camera device
  * @dev_name:               Device Name
  * @irq_name:               Name of the irq associated with the device
- * @irq_line:               Irq resource
+ * @irq_line:               Irq
  * @irq_data:               Private data that is passed when IRQ is requested
  * @num_mem_block:          Number of entry in the "reg-names"
  * @mem_block_name:         Array of the reg block name
@@ -171,7 +171,7 @@ struct cam_hw_soc_info {
 	uint32_t                        index;
 	const char                     *dev_name;
 	const char                     *irq_name;
-	struct resource                *irq_line;
+	int                             irq_line;
 	void                           *irq_data;
 
 	uint32_t                        num_mem_block;
