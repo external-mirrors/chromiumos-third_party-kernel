@@ -110,7 +110,7 @@ available subsections can be seen below.
    xillybus
    zorro
    hte/index
-   isp/index
+   isp
 
 .. only::  subproject and html
 

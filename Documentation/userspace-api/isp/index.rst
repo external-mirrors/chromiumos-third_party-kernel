@@ -165,8 +165,16 @@ common framework or by a specific driver. An instruction whose type is
 ``ISP_READ_INSTRUCTION`` or ``ISP_WRITE_INSTRUCTION`` is handled by a
 driver, so it contains a driver defined data structure.
 
-Data Structure References
-=========================
+Data Structure Reference
+========================
 
 .. kernel-doc:: include/uapi/linux/isp.h
+
+ISP Driver Documentation
+------------------------
+
+.. toctree::
+   :maxdepth: 2
+
+   ipu6.rst
 
