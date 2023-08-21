@@ -10,6 +10,15 @@
 #include <stdint.h>
 #endif
 
+/**
+ * struct ipu_psys_capability - Capability query
+ *
+ * @version:	Version number
+ * @driver:	Driver name (unused)
+ * @pg_count:	PG count
+ * @dev_model:	Device model
+ * @reserved:	Reserved
+ */
 struct ipu_psys_capability {
 	uint32_t version;
 	uint8_t driver[20];
@@ -18,8 +27,19 @@ struct ipu_psys_capability {
 	uint32_t reserved[17];
 } __attribute__ ((packed));
 
+/**
+ * struct ipu_psys_event - Event occurred due to command execution
+ *
+ * @type:	Type of event (IPU_PSYS_EVENT_TYPE_CMD_COMPLETE or
+ * IPU_PSYS_EVENT_TYPE_BUFFER_COMPLETE)
+ * @user_token:	Token of command (given in struct ipu_psys_command)
+ * @issue_id:	Unique ID of command
+ * @buffer_idx:	Buffer index (unused)
+ * @error:	Error code
+ * @reserved:	Reserved
+ */
 struct ipu_psys_event {
-	uint32_t type;		/* IPU_PSYS_EVENT_TYPE_ */
+	uint32_t type;
 	uint64_t user_token;
 	uint64_t issue_id;
 	uint32_t buffer_idx;
@@ -31,22 +51,25 @@ struct ipu_psys_event {
 #define IPU_PSYS_EVENT_TYPE_BUFFER_COMPLETE	2
 
 /**
- * struct ipu_psys_buffer - for input/output terminals
- * @len:	total allocated size @ base address
- * @userptr:	user pointer
- * @fd:		DMA-BUF handle
- * @data_offset:offset to valid data
- * @bytes_used:	amount of valid data including offset
- * @flags:	flags
- * @isp_buf_id: ISP buffer object ID
+ * struct ipu_psys_buffer - Buffer for input/output terminals
+ *
+ * @len:		Total allocated size of base
+ * @userptr:		User pointer
+ * @resv:		Reserved
+ * @fd:			DMA-BUF handle
+ * @data_offset:	Offset to valid data
+ * @bytes_used:		Amount of valid data including offset
+ * @flags:		Flags
+ * @isp_buf_id:		ISP buffer object ID
+ * @reserved:		Reserved
  */
 struct ipu_psys_buffer {
 	uint64_t len;
 	union {
 		int fd;
 		void __user *userptr;
-		uint64_t reserved;
-	} base;
+		uint64_t resv;
+	};
 	uint32_t data_offset;
 	uint32_t bytes_used;
 	uint32_t flags;
@@ -73,20 +96,22 @@ enum ipu_psys_command_type {
 };
 
 /**
- * struct ipu_psys_command - processing command
- * @issue_id:		unique id for the command set by user
- * @user_token:		token of the command
- * @priority:		priority of the command
- * @pg_manifest:	userspace pointer to program group manifest
- * @buffers:		userspace pointers to array of psys dma buf structs
- * @pg_manifest_size:	size of program group manifest
- * @bufcount:		number of buffers in buffers array
- * @min_psys_freq:	minimum psys frequency in MHz used for this cmd
- * @frame_counter:      counter of current frame synced between isys and psys
- * @kernel_enable_bitmap:       enable bits for each individual kernel
- * @terminal_enable_bitmap:     enable bits for each individual terminals
- * @routing_enable_bitmap:      enable bits for each individual routing
- * @rbm:                        enable bits for routing
+ * struct ipu_psys_command - Processing command
+ * @type:		Type of command
+ * @issue_id:		Unique id for the command set by user
+ * @user_token:		Token of the command
+ * @priority:		Priority of the command
+ * @pg_manifest:	Userspace pointer to program group manifest
+ * @buffers:		Userspace pointers to array of psys dma buf structs
+ * @pg_manifest_size:	Size of program group manifest
+ * @bufcount:		Number of buffers in buffers array
+ * @min_psys_freq:	Minimum psys frequency in MHz used for this cmd
+ * @frame_counter:      Counter of current frame synced between isys and psys
+ * @kernel_enable_bitmap:       Enable bits for each individual kernel
+ * @terminal_enable_bitmap:     Enable bits for each individual terminals
+ * @routing_enable_bitmap:      Enable bits for each individual routing
+ * @rbm:                        Enable bits for routing
+ * @reserved:                   Reserved
  *
  * Specifies a processing command with input and output buffers.
  */
@@ -108,6 +133,14 @@ struct ipu_psys_command {
 	uint32_t reserved[3];
 } __attribute__ ((packed));
 
+/**
+ * struct ipu_psys_manifest - PG Manifest
+ *
+ * @index:	Package diretory index
+ * @size:	Size of manifest buffer
+ * @manifest:	Userspace pointer to manifest buffer
+ * @reserved:	Reserved
+ */
 struct ipu_psys_manifest {
 	uint32_t index;
 	uint32_t size;
