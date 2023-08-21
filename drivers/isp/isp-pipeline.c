@@ -1689,6 +1689,8 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 			return -EINVAL;
 
 		isp_op_enum(op, output);
+		isp_op_put(op);
+
 		query->num_ops = output->num_entries;
 		return 0;
 	}
