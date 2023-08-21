@@ -85,10 +85,12 @@ struct isp_query_event_entry {
  *
  * @id:			Operation identifier
  * @state:		Operation state
+ * @num_blockers:	The number of notifications the OP is waiting for
  */
 struct isp_query_operation_entry {
 	__u32		id;
 	__u32		state;
+	__u32		num_blockers;
 } __attribute__((packed));
 
 /**
@@ -131,18 +133,11 @@ struct isp_query_events {
  * enum isp_operation_query_mode - Query operation IOCTL mode
  *
  * @ISP_OP_QUERY_UNIQUE:	Query exact operation
- * @ISP_OP_QUERY_DEPS:		Query operation and its dependent (child)
- *				operations
  * @ISP_OP_QUERY_ALL:		Query all operations
- * @ISP_OP_QUERY_SLEEP:		Query operations in sleep state
- * @ISP_OP_QUERY_QUEUED:	Query operations in queued state
  */
 enum isp_operation_query_mode {
 	ISP_OP_QUERY_UNIQUE,
-	ISP_OP_QUERY_DEPS,
 	ISP_OP_QUERY_ALL,
-	ISP_OP_QUERY_SLEEP,
-	ISP_OP_QUERY_QUEUED,
 };
 
 /**

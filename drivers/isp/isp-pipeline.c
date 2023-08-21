@@ -161,83 +161,6 @@ out:
 }
 
 /**
- * pipeline_walk() - Walk through the dependency graph
- * @nsobj: pointer to ISP object that represents the operation to start with
- * @ctl: auxiliary data
- *
- * This walks through the operation dependency graph and executes the provided
- * callbacks on the root operation and all its dependencies.
- * It's also possible to apply the callback on the root operation only by
- * setting ISP_GRAPH_WALK_ONESHOT in the control flag.
- *
- * Return: 0 on success or error value otherwise.
- */
-static int pipeline_walk(struct isp_obj *nsobj, struct isp_graph_walk *ctl)
-{
-	struct isp_graph_stack st;
-	unsigned long flags;
-	bool abort;
-	int ret;
-
-	ret = isp_graph_stack_alloc(&st, ISP_GRAPH_STACK_DEPTH);
-	if (ret)
-		return ret;
-
-	if (!isp_obj_get(nsobj)) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	isp_graph_stack_push(&st, nsobj);
-	abort = false;
-
-	while (!abort && !isp_graph_stack_empty(&st)) {
-		struct isp_obj_op *op;
-		struct isp_op_signal *psig;
-
-		nsobj = isp_graph_stack_front(&st);
-		isp_graph_stack_pop(&st);
-
-		if (!ctl->cb(nsobj, ctl)) {
-			ret = -EFAULT;
-			abort = true;
-		}
-
-		if (ctl->flags & ISP_GRAPH_ENUM_SINGLE) {
-			ret = 0;
-			abort = true;
-		}
-
-		op = nsobj_to_isp_op(nsobj);
-		/* Should never happen */
-		WARN_ON(!op);
-
-		read_lock_irqsave(&op->notify_lock, flags);
-		list_for_each_entry(psig, &op->notify_active_chain, entry) {
-			if (abort)
-				continue;
-			if (!isp_obj_get(psig->target))
-				continue;
-			ret = isp_graph_stack_push(&st, psig->target);
-			if (ret) {
-				isp_obj_put(psig->target);
-				abort = true;
-			}
-		}
-		read_unlock_irqrestore(&op->notify_lock, flags);
-		isp_obj_put(nsobj);
-	}
-
-out:
-	while (!isp_graph_stack_empty(&st)) {
-		isp_obj_put(isp_graph_stack_front(&st));
-		isp_graph_stack_pop(&st);
-	}
-	isp_graph_stack_free(&st);
-	return ret;
-}
-
-/**
  * isp_op_enqueue() - Enqueue an operation
  * @op: pointer to ISP operation
  *
@@ -1693,6 +1616,8 @@ int isp_pipeline_enqueue_cancel(struct isp_pipeline *pipeline,
 static bool isp_op_enum(struct isp_obj_op *op, struct isp_koutput *output)
 {
 	struct isp_query_operation_entry *qent;
+	unsigned long flags;
+	u32 state;
 
 	/* User just want the size, not the data. */
 	if (!isp_output_has_buffer(output))
@@ -1705,8 +1630,18 @@ static bool isp_op_enum(struct isp_obj_op *op, struct isp_koutput *output)
 	if (__put_user(isp_obj_id(&op->nsobj), &qent->id))
 		return false;
 
-	/* This is racy either way */
-	if (__put_user(op->state, &qent->state))
+	/*
+	 * State and num_blockers can become obsolete by the time we
+	 * finish enumeration
+	 */
+	read_lock_irqsave(&op->notify_lock, flags);
+	state = op->state;
+	read_unlock_irqrestore(&op->notify_lock, flags);
+
+	if (__put_user(state, &qent->state))
+		return false;
+
+	if (__put_user(atomic_read(&op->num_blockers), &qent->num_blockers))
 		return false;
 
 out:
@@ -1714,49 +1649,19 @@ out:
 	return true;
 }
 
-static bool pipeline_walk_query_callback(struct isp_obj *nsobj,
-					 struct isp_graph_walk *ctl)
-{
-	struct isp_obj_op *op;
-
-	op = nsobj_to_isp_op(nsobj);
-	if (!op)
-		return false;
-
-	return isp_op_enum(op, ctl->output);
-}
-
 static bool isp_ns_walk_callback(struct isp_obj *nsobj,
 				 struct isp_ns_walk_control *ctl)
 {
 	struct isp_obj_op *op;
-	unsigned long flags;
-	bool valid;
 
 	op = nsobj_to_isp_op(nsobj);
 	if (WARN_ON(!op))
 		return true;
 
-	/* This is racy but what can we do */
-	read_lock_irqsave(&op->notify_lock, flags);
-	valid = (op->state & ctl->flags);
-	read_unlock_irqrestore(&op->notify_lock, flags);
+	if (!isp_op_enum(op, ctl->output))
+		return true;
 
-	if (valid)
-		isp_op_enum(op, ctl->output);
 	return false;
-}
-
-static void query_state_filter(struct isp_pipeline *pipeline,
-			       int state,
-			       struct isp_koutput *output)
-{
-	struct isp_ns_walk_control ctl;
-
-	ctl.output	= output;
-	ctl.flags	= state;
-	ctl.cb		= isp_ns_walk_callback;
-	isp_ns_for_each(&pipeline->ops, &ctl);
 }
 
 /**
@@ -1774,58 +1679,32 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 			struct isp_query_operations *query,
 			struct isp_koutput *output)
 {
-	int state;
-	int ret;
-
 	query->num_ops = 0;
 
-	/*
-	 * We have two different mechanisms here: the former one starts at
-	 * a given pipeline work item and walks the dependency graph (think
-	 * BFS or DFS), the latter one simply does a linear scan of pipeline
-	 * hash table.
-	 */
-	if (query->id != ISP_OP_ID_ALL_OP) {
-		struct isp_graph_walk ctl;
+	if (query->mode == ISP_OP_QUERY_UNIQUE) {
 		struct isp_obj_op *op;
 
 		op = isp_op_lookup(&pipeline->ops, query->id);
 		if (!op)
 			return -EINVAL;
 
-		if (query->mode == ISP_OP_QUERY_UNIQUE)
-			ctl.flags = ISP_GRAPH_ENUM_SINGLE;
-		if (query->mode == ISP_OP_QUERY_DEPS)
-			ctl.flags = ISP_GRAPH_ENUM_SUBTREE;
-
-		ctl.output = output;
-		ctl.cb = pipeline_walk_query_callback;
-
-		ret = pipeline_walk(&op->nsobj, &ctl);
+		isp_op_enum(op, output);
 		query->num_ops = output->num_entries;
-		isp_op_put(op);
-		return ret;
+		return 0;
 	}
 
-	switch (query->mode) {
-	case ISP_OP_QUERY_ALL:
-		/* ISP_OPERATION_STATE_EXECUTED | ISP_OPERATION_STATE_DELETED ? */
-		state = ISP_OPERATION_STATE_QUEUED | ISP_OPERATION_STATE_SLEEP |
-			ISP_OPERATION_STATE_RUNNING;
-		break;
-	case ISP_OP_QUERY_SLEEP:
-		state = ISP_OPERATION_STATE_SLEEP;
-		break;
-	case ISP_OP_QUERY_QUEUED:
-		state = ISP_OPERATION_STATE_QUEUED;
-		break;
-	default:
-		return -EINVAL;
+	if (query->mode == ISP_OP_QUERY_ALL) {
+		struct isp_ns_walk_control ctl = {};
+
+		ctl.output	= output;
+		ctl.cb		= isp_ns_walk_callback;
+		isp_ns_for_each(&pipeline->ops, &ctl);
+
+		query->num_ops = output->num_entries;
+		return 0;
 	}
 
-	query_state_filter(pipeline, state, output);
-	query->num_ops = output->num_entries;
-	return 0;
+	return -EINVAL;
 }
 ALLOW_ERROR_INJECTION(isp_enum_operations, ERRNO);
 

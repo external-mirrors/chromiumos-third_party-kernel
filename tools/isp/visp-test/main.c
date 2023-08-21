@@ -1281,17 +1281,8 @@ static int test_query_operations(struct libisp *isp, u32 id, u32 mode)
 	case ISP_OP_QUERY_ALL:
 		mode_name = "ISP_OP_QUERY_ALL";
 		break;
-	case ISP_OP_QUERY_SLEEP:
-		mode_name = "ISP_OP_QUERY_SLEEP";
-		break;
-	case ISP_OP_QUERY_QUEUED:
-		mode_name = "ISP_OP_QUERY_QUEUED";
-		break;
 	case ISP_OP_QUERY_UNIQUE:
 		mode_name = "ISP_OP_QUERY_UNIQUE";
-		break;
-	case ISP_OP_QUERY_DEPS:
-		mode_name = "ISP_OP_QUERY_DEPS";
 		break;
 	default:
 		mode_name = "Unknown ISP_OP_QUERY mode";
@@ -1443,13 +1434,6 @@ static int test_operations(struct libisp *isp)
 		return ret;
 	}
 
-	ret = test_query_operations(isp, 0, ISP_OP_QUERY_DEPS);
-	if (ret != 3) {
-		pr_err("FATAL: failure test_query_operation(): %d\n", ret);
-		ret = -EINVAL;
-		return ret;
-	}
-
 	ret = read_operations_completion_events(isp, TEST_NUM_OPERATIONS);
 	if (ret != TEST_NUM_OPERATIONS) {
 		pr_err("FATAL: read_operations_completion_events() failed\n");
@@ -1486,19 +1470,7 @@ static int test_operations(struct libisp *isp)
 	}
 
 	ret = test_query_operations(isp, ISP_OP_ID_ALL_OP, ISP_OP_QUERY_ALL);
-	if (ret <= 0) {
-		pr_err("FATAL: failure test_query_operations()\n");
-		return ret;
-	}
-
-	ret = test_query_operations(isp, ISP_OP_ID_ALL_OP, ISP_OP_QUERY_SLEEP);
-	if (ret <= 0) {
-		pr_err("FATAL: failure test_query_operations()\n");
-		return ret;
-	}
-
-	ret = test_query_operations(isp, ISP_OP_ID_ALL_OP, ISP_OP_QUERY_QUEUED);
-	if (ret != 0) {
+	if (ret != TEST_NUM_OPERATIONS) {
 		pr_err("FATAL: failure test_query_operations()\n");
 		return ret;
 	}
@@ -2864,12 +2836,6 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_query_operations(isp, 0, ISP_OP_QUERY_DEPS);
-	if (ret != 3) {
-		pr_err("FATAL: failure test_query_operation(): %d\n", ret);
-		goto out;
-	}
-
 	ret = read_operations_completion_events(isp, TEST_NUM_OPERATIONS);
 	if (ret != TEST_NUM_OPERATIONS) {
 		pr_err("FATAL: read_operations_completion_events() failed\n");
@@ -2893,19 +2859,7 @@ static void *thread_fn(void *arg)
 	}
 
 	ret = test_query_operations(isp, ISP_OP_ID_ALL_OP, ISP_OP_QUERY_ALL);
-	if (ret <= 0) {
-		pr_err("FATAL: failure test_query_operations()\n");
-		goto out;
-	}
-
-	ret = test_query_operations(isp, ISP_OP_ID_ALL_OP, ISP_OP_QUERY_SLEEP);
-	if (ret <= 0) {
-		pr_err("FATAL: failure test_query_operations()\n");
-		goto out;
-	}
-
-	ret = test_query_operations(isp, ISP_OP_ID_ALL_OP, ISP_OP_QUERY_QUEUED);
-	if (ret != 0) {
+	if (ret != TEST_NUM_OPERATIONS) {
 		pr_err("FATAL: failure test_query_operations()\n");
 		goto out;
 	}
