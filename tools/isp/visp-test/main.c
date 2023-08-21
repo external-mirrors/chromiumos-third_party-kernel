@@ -1268,6 +1268,23 @@ out:
 	return ret;
 }
 
+static const char *operation_state(u32 state)
+{
+	switch (state) {
+	case ISP_OPERATION_STATE_SLEEP:
+		return "SLEEP";
+	case ISP_OPERATION_STATE_QUEUED:
+		return "QUEUED";
+	case ISP_OPERATION_STATE_RUNNING:
+		return "RUNNING";
+	case ISP_OPERATION_STATE_EXECUTED:
+		return "EXECUTED";
+	case ISP_OPERATION_STATE_DELETED:
+		return "DELETED";
+	}
+	return "UNKNOWN STATE";
+}
+
 static int test_query_operations(struct libisp *isp, u32 id, u32 mode)
 {
 	struct libisp_query *liq;
@@ -1323,7 +1340,10 @@ static int test_query_operations(struct libisp *isp, u32 id, u32 mode)
 		}
 
 		for_each_query_operation(q, &iter, entry) {
-			pr_info("Operation ID: %d\n", entry->id);
+			pr_info("Operation ID: %d state: %s num_blockers: %d\n",
+				entry->id,
+				operation_state(entry->state),
+				entry->num_blockers);
 			ret++;
 		}
 	}
