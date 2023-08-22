@@ -55,7 +55,7 @@ struct isp_header {
 #define ISP_ENTITY_NAME_SZ	16
 
 /**
- * struct isp_query_entity_entry - Entry from a tree query
+ * struct isp_query_entity_entry - Entity query result entry
  *
  * @id:			Entity identifier (unique)
  * @parent:		Identifier of the parent object or 0 for the root node
@@ -70,7 +70,7 @@ struct isp_query_entity_entry {
 #define ISP_EVENT_NAME_SZ	16
 
 /**
- * struct isp_query_event_entry - Entry in an event query
+ * struct isp_query_event_entry - Event query result entry
  *
  * @id:			Event identifier (unique for that entity)
  * @name:		Event name (unique for that entity)
@@ -81,7 +81,7 @@ struct isp_query_event_entry {
 } __attribute__((packed));
 
 /**
- * struct isp_query_operation_entry - Entry in an operation query
+ * struct isp_query_operation_entry - Operation query result entry
  *
  * @id:			Operation identifier
  * @state:		Operation state
@@ -94,7 +94,7 @@ struct isp_query_operation_entry {
 } __attribute__((packed));
 
 /**
- * struct isp_query_dmabuf_entry - Entry in DMA buffer query
+ * struct isp_query_dmabuf_entry - DMA buffer query result entry
  *
  * @id:			ISP ID that corresponds to the given DMA buffer
  *			file descriptor (if any)
