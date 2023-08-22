@@ -14,7 +14,7 @@ struct isp_ns;
 struct isp_obj;
 
 /**
- * isp_graph_node - ISP graph node structure
+ * struct isp_graph_node - ISP graph node structure
  *
  * This is used to represent the associated parent and children of the node
  * in which this structure is embedded.
@@ -59,7 +59,7 @@ struct isp_obj *isp_obj_linked_to(struct isp_obj *nsobj);
 
 #define ISP_GRAPH_STACK_DEPTH		32
 /**
- * isp_graph_stack - the stack for graph traversal
+ * struct isp_graph_stack - the stack for graph traversal
  *
  * Mainly used in graph object enumeration or pipeline walk.
  */
@@ -78,7 +78,7 @@ struct isp_graph_stack {
 #define ISP_GRAPH_ENUM_SUBTREE	BIT(1)
 
 /**
- * isp_graph_walk - the graph walk controller
+ * struct isp_graph_walk - the graph walk controller
  *
  * This wraps the necessary flag and callback for better control over pipeline
  * walk.

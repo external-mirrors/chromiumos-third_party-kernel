@@ -18,7 +18,7 @@
 struct isp_obj_entity;
 
 /**
- * isp_obj_buffer - ISP buffer structure
+ * struct isp_obj_buffer - ISP buffer structure
  *
  * This structure represents a ISP buffer and holds information of the target
  * dma_buf object.
@@ -28,7 +28,7 @@ struct isp_obj_buffer {
 	struct isp_obj			nsobj;
 	/** @dma_buf: pointer to the target dma_buf object */
 	struct dma_buf			*dma_buf;
-	/** @device_buffer: device-specific DMA-buffer mapping */
+	/** @driver_data: device-specific DMA-buffer mapping */
 	void				*driver_data;
 	/** @entity: ISP entity that imported this buffer */
 	struct isp_obj_entity		*entity;

@@ -12,7 +12,7 @@
 #include <linux/types.h>
 
 /**
- * isp_koutput - Describe user output data buffer
+ * struct isp_koutput - Describe user output data buffer
  *
  * This struct mirrors struct isp_output in UAPI.
  */

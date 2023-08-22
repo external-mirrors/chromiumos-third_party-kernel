@@ -17,7 +17,7 @@
 #define ISP_PIPELINE_IO_EXITING	(1 << 1)
 
 /**
- * isp_pipeline - ISP execution pipeline
+ * struct isp_pipeline - ISP execution pipeline
  *
  * @TODO add documentation
  */
@@ -40,14 +40,14 @@ struct isp_pipeline {
 	wait_queue_head_t	io_queue_wait;
 	/** @io_state: IO queue/thread state flags */
 	unsigned long		io_state;
-	/** @io_relase_lock: Lock to protect IO-thread release */
+	/** @io_release_lock: Lock to protect IO-thread release */
 	struct mutex		io_release_lock;
 	/** @id: ID of the pipeline used for debugging */
 	int			id;
 };
 
 /**
- * isp_op_signal - signalling mechanism between operations
+ * struct isp_op_signal - signalling mechanism between operations
  *
  * This is used to register signal for an operation dependency
  * pair (source-target), so that the source can notify the target
@@ -102,7 +102,7 @@ struct isp_op_signal {
 };
 
 /**
- * isp_obj_op - ISP operations
+ * struct isp_obj_op - ISP operations
  *
  * The actual executable request.
  */
@@ -117,9 +117,9 @@ struct isp_obj_op {
 	struct isp_obj_instance		*exec_instance;
 	/** @exec_rw_list_addr: Pointer to the list of read/write payloads */
 	void __user			*exec_rw_list_addr;
-	/** @isp: Execution pipeline */
+	/** @pipeline: Execution pipeline */
 	struct isp_pipeline		*pipeline;
-	/** @num_blocker: Number of objects we are (or will be) blocked on */
+	/** @num_blockers: Number of objects we are (or will be) blocked on */
 	atomic_t			num_blockers;
 	/** @io_queue_entry: Entry in pipeline's IO queue */
 	struct list_head		io_queue_entry;

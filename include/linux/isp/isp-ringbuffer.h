@@ -14,7 +14,7 @@
 #define ISP_RINGBUFFER_SIZE	PAGE_SIZE
 
 /**
- * isp_ringbuffer - ring buffer implementation
+ * struct isp_ringbuffer - ring buffer implementation
  */
 struct isp_ringbuffer {
 	/** @buffer: the actual buffer */

@@ -16,7 +16,7 @@
 
 #include <uapi/linux/isp.h>
 
-/**
+/*
  * Namespaces map object IDs to object pointers (ISP objects).
  *
  * A namespace consists of:
@@ -76,9 +76,9 @@ enum isp_obj_type {
 };
 
 /**
- * enum isp_ns_policy - ID allocation policy
+ * enum isp_id_policy - ID allocation policy
  *
- * @ISP_NS_POL_REUSE_ID:	Reuses released IDs immediately
+ * @ISP_NS_POL_UNIQUE_ID:	Use kernel-chosen unique ID
  * @ISP_NS_POL_USER_ID:		Use user-supplied ID
  */
 enum isp_id_policy {
@@ -97,10 +97,10 @@ enum isp_id_policy {
 #define ISP_OBJS_NS_INSTANCE_ID_END	0x0003ffffUL
 
 /**
- * isp_ns - ISP file handle namespace
+ * struct isp_ns - ISP file handle namespace
  */
 struct isp_ns {
-	/** @objs: XArray to lookup namespace objects in */
+	/** @objs_table: XArray to lookup namespace objects in */
 	struct xarray		objs_table;
 	/** @lock: objs_list lock */
 	struct rw_semaphore	lock;
@@ -112,14 +112,14 @@ struct isp_ns {
 	u32			next_id;
 };
 
-/**
+/*
  * This does not take the namespace lock, so should be used with caution
  */
 #define isp_ns_for_each_obj_safe(obj, tmp, ns)			\
 	list_for_each_entry_safe((obj), (tmp), &(ns)->objs_list, list_entry)
 
 /**
- * isp_ns_walk_control - ISP namespace walk control
+ * struct isp_ns_walk_control - ISP namespace walk control
  */
 struct isp_ns_walk_control {
 	/** @output: pointer to query output buffer */
@@ -136,7 +136,7 @@ int isp_ns_init(struct isp_ns *ns, enum isp_id_policy id_policy);
 void isp_ns_release(struct isp_ns *ns);
 
 /**
- * isp_obj - Base ISP object
+ * struct isp_obj - Base ISP object
  *
  * Rules of ISP graph objects:
  *

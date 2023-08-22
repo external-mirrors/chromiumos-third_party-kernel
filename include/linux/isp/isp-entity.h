@@ -21,13 +21,13 @@ struct isp_obj_entity;
 struct isp_obj_instance;
 
 /**
- * isp_entity_ops - ISP entity operation list
+ * struct isp_entity_ops - ISP entity operation list
  *
  * The available register read/write execution callback on an entity.
  */
 struct isp_entity_ops {
 	/**
-	 * instance_read(): entity instance register read callback
+	 * @instance_read: entity instance register read callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
@@ -35,7 +35,7 @@ struct isp_entity_ops {
 			     struct isp_obj_instance *instance,
 			     struct isp_read_instruction *rw);
 	/**
-	 * instance_write(): entity instance register write callback
+	 * @instance_write: entity instance register write callback
 	 *
 	 * Return: 0 on success, or negative error code on failure
 	 */
@@ -43,30 +43,30 @@ struct isp_entity_ops {
 			      struct isp_obj_instance *instance,
 			      struct isp_write_instruction *rw);
 	/**
-	 * instance_create(): callback to create entity instance
+	 * @instance_create: callback to create entity instance
 	 *
 	 * Return: pointer to instance or NULL
 	 */
 	void *(*instance_create)(void *dev);
 	/**
-	 * instance_destroy(): callback to destroy entity instance
+	 * @instance_destroy: callback to destroy entity instance
 	 */
 	void (*instance_destroy)(void *dev, void *data);
 	/**
-	 * dmabuf_add(): callback to create device-specific DMA-buffer mapping
+	 * @dmabuf_add: callback to create device-specific DMA-buffer mapping
 	 *
 	 * Return: pointer to buffer mapping or NULL
 	 */
 	void *(*dmabuf_add)(void *dev, struct dma_buf *dma_buf);
 	/**
-	 * dmabuf_remove(): callback to destroy device-specific DMA-buffer
+	 * @dmabuf_remove: callback to destroy device-specific DMA-buffer
 	 * mapping
 	 */
 	void (*dmabuf_remove)(void *dev, void *data, struct dma_buf *dma_buf);
 };
 
 /**
- * isp_obj_entity - ISP entity structure
+ * struct isp_obj_entity - ISP entity structure
  *
  * The structure that represents a specific entity.
  * An entity refers to a "node" in the ISP graph tree, which can be, for
@@ -88,7 +88,7 @@ struct isp_obj_entity {
 };
 
 /**
- * isp_obj_instance - ISP entity instance (execution context)
+ * struct isp_obj_instance - ISP entity instance (execution context)
  *
  * This structure holds driver's execution context data (if any).
  */
@@ -102,7 +102,7 @@ struct isp_obj_instance {
 };
 
 /**
- * isp_obj_event - The pipeline event structure
+ * struct isp_obj_event - The pipeline event structure
  *
  * Pipeline event that generates signals but is never executed on its own.
  */
@@ -111,7 +111,7 @@ struct isp_obj_event {
 	struct isp_obj		nsobj;
 	/** @notify_lock: protects list of signals i.e. @notify_active_chain */
 	rwlock_t		notify_lock;
-	/** @notify_chain: list of pipeline objects that are blocked on us */
+	/** @notify_active_chain: list of pipeline objects that are blocked on us */
 	struct list_head	notify_active_chain;
 	/** @name: event name */
 	char			name[ISP_EVENT_NAME_SZ];
