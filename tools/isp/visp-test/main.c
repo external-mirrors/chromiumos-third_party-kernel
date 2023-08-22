@@ -133,7 +133,7 @@ static int test_query_all_entities(struct libisp *isp,
 
 	for_each_isp_query(liq, i, q) {
 		q->query_type			= ISP_QUERY_TYPE_ENTITIES;
-		q->query_entities.id		= ISP_OBJ_ID_ROOT;
+		q->query_entities.id		= ISP_ENTITY_ID_ROOT;
 	}
 
 	ret = libisp_query_ioctl(isp, liq);
@@ -182,7 +182,7 @@ static int test_compound_query_count(struct libisp *isp,
 	q = libisp_query_at(liq, 0);
 
 	q->query_type			= ISP_QUERY_TYPE_ENTITIES;
-	q->query_entities.id		= ISP_OBJ_ID_ROOT;
+	q->query_entities.id		= ISP_ENTITY_ID_ROOT;
 
 	entity = libisp_entity_lookup_by_name(isp, VISP_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {
@@ -252,7 +252,7 @@ static int test_compound_query(struct libisp *isp, struct libisp_query *liq)
 	q = libisp_query_at(liq, 0);
 
 	q->query_type			= ISP_QUERY_TYPE_ENTITIES;
-	q->query_entities.id		= ISP_OBJ_ID_ROOT;
+	q->query_entities.id		= ISP_ENTITY_ID_ROOT;
 
 	entity = libisp_entity_lookup_by_name(isp, VISP_FAST_IRQ_ENTITY_NAME);
 	if (!entity) {

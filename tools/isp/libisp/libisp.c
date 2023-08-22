@@ -175,7 +175,7 @@ int libisp_entity_register(struct libisp *isp,
 	INIT_LIST_HEAD(&obj->obj_list);
 	list_add_tail(&obj->obj_list, &isp->entities);
 
-	if (obj->id == ISP_OBJ_ID_ROOT)
+	if (obj->id == ISP_ENTITY_ID_ROOT)
 		return 0;
 
 	parent = libisp_entity_lookup(isp, entry->parent);

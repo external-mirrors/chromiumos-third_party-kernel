@@ -103,11 +103,11 @@ void isp_obj_unlink(struct isp_obj *nsobj)
 u32 isp_obj_link_id(struct isp_obj *nsobj)
 {
 	struct isp_graph_node *curr_node = &nsobj->gnode;
-	u32 pair_id = ISP_OBJ_ID_ROOT;
+	u32 pair_id = ISP_ENTITY_ID_ROOT;
 
 	/*
 	 * If this object is not paired with anything explicitly then return
-	 * ISP_OBJ_ID_ROOT.
+	 * ISP_ENTITY_ID_ROOT.
 	 */
 	if (curr_node->linked_to)
 		pair_id = isp_obj_id(curr_node->linked_to);

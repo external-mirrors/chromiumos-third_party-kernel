@@ -280,7 +280,7 @@ struct isp_obj_entity *isp_root_entity_register(struct isp_device *isp)
 	if (isp_obj_insert(&entity->nsobj))
 		goto error;
 
-	if (WARN_ON(isp_entity_id(entity) != ISP_OBJ_ID_ROOT)) {
+	if (WARN_ON(isp_entity_id(entity) != ISP_ENTITY_ID_ROOT)) {
 		isp_obj_remove(&entity->nsobj);
 		goto error;
 	}

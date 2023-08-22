@@ -106,7 +106,7 @@ struct isp_query_dmabuf_entry {
 /**
  * struct isp_query_entities - Query entities
  *
- * @id:			Entity ID or ISP_OBJ_ID_ROOT (0) for root
+ * @id:			Entity ID or ISP_ENTITY_ID_ROOT (0) for root
  * @num_entities:	out: number of entities read
  * @graph_version:	out: Version of the graph at the time of the query
  */
@@ -525,12 +525,12 @@ struct isp_operation {
 } __attribute__((packed));
 
 /**
- * enum isp_obj_id - ISP object IDs
+ * enum isp_entity_id - ISP entity IDs
  *
- * @ISP_OBJ_ID_ROOT:		Root object
+ * @ISP_ENTITY_ID_ROOT:		Root entity object
  */
-enum isp_obj_id {
-	ISP_OBJ_ID_ROOT = 0,
+enum isp_entity_id {
+	ISP_ENTITY_ID_ROOT = 0,
 };
 
 /**

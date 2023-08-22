@@ -366,7 +366,7 @@ static int visp_probe(struct platform_device *pdev)
 	isp_ns_enumeration_forbid(visp->isp);
 	idx = 0;
 	visp->root_entity = isp_entity_register(visp->isp,
-						ISP_OBJ_ID_ROOT,
+						ISP_ENTITY_ID_ROOT,
 						visp,
 						&entity_ops,
 						ISP_ENTITY_MIN_INSTANCES,

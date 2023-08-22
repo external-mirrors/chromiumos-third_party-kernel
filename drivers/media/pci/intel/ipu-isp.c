@@ -353,7 +353,7 @@ int ipu_isp_init(struct ipu_bus_device *adev, unsigned int id)
 
 	isp_ns_enumeration_forbid(isp);
 	isp_entity = isp_entity_register(isp,
-					 ISP_OBJ_ID_ROOT,
+					 ISP_ENTITY_ID_ROOT,
 					 adev,
 					 &isp_entity_ops,
 					 U32_MAX >> 1,
