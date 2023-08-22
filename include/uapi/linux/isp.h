@@ -55,7 +55,7 @@ struct isp_header {
 #define ISP_ENTITY_NAME_SZ	16
 
 /**
- * struct isp_query_entity_entry - Entries from a tree query
+ * struct isp_query_entity_entry - Entry from a tree query
  *
  * @id:			Entity identifier (unique)
  * @parent:		Identifier of the parent object or 0 for the root node
