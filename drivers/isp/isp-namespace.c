@@ -320,7 +320,6 @@ unsigned long isp_obj_id(struct isp_obj *nsobj)
 
 	return nsobj->id;
 }
-EXPORT_SYMBOL_GPL(isp_obj_id);
 
 enum isp_obj_type isp_obj_type(struct isp_obj *nsobj)
 {

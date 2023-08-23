@@ -135,7 +135,6 @@ error:
 	isp_buffer_release(&buffer->release_work);
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(isp_buffer_register);
 ALLOW_ERROR_INJECTION(isp_buffer_register, NULL);
 
 /**
@@ -152,7 +151,6 @@ int isp_buffer_unregister(struct isp_ns *ns, u32 id)
 		return -EINVAL;
 	return isp_obj_remove_id(ns, ISP_OBJ_TYPE_BUFFER, id);
 }
-EXPORT_SYMBOL_GPL(isp_buffer_unregister);
 
 /**
  * isp_buffer_lookup() - Lookup ISP buffer by ID
@@ -176,7 +174,6 @@ struct isp_obj_buffer *isp_buffer_lookup(struct isp_ns *ns, u32 id)
 
 	return nsobj_to_isp_buffer(nsobj);
 }
-EXPORT_SYMBOL_GPL(isp_buffer_lookup);
 ALLOW_ERROR_INJECTION(isp_buffer_lookup, NULL);
 
 /**
