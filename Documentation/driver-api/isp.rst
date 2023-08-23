@@ -60,31 +60,24 @@ Driver API Reference
 .. We are omitting some files intentionally, since they are not
 .. necessary for driver development.
 
-Buffers (isp/isp-buffer.h)
---------------------------
+Buffers (linux/isp/isp-buffer.h)
+--------------------------------
 .. kernel-doc:: include/linux/isp/isp-buffer.h
     :internal:
 .. kernel-doc:: drivers/isp/isp-buffer.c
     :export:
 
-Device (isp/isp-device.h)
--------------------------
+Device (linux/isp/isp-device.h)
+-------------------------------
 .. kernel-doc:: include/linux/isp/isp-device.h
     :internal:
 .. kernel-doc:: drivers/isp/isp-device.c
     :export:
 
-Entity (isp/isp-entity.h)
--------------------------
+Entity / Event (linux/isp/isp-entity.h)
+---------------------------------------
 .. kernel-doc:: include/linux/isp/isp-entity.h
     :internal:
 .. kernel-doc:: drivers/isp/isp-entity.c
-    :export:
-
-Namespace (isp/isp-namespace.h)
--------------------------------
-.. kernel-doc:: include/linux/isp/isp-namespace.h
-    :internal:
-.. kernel-doc:: drivers/isp/isp-namespace.c
     :export:
 
