@@ -47,6 +47,14 @@ Event
     completion of a request at the hardware level.
 
 
+Entity Callbacks
+================
+
+When a driver registers an entity object, it passes a structure that
+defines a set of callbacks (struct isp_entity_ops). These callbacks
+must be a valid function.
+
+
 Driver API Reference
 ====================
 .. We are omitting some files intentionally, since they are not
