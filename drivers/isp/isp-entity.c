@@ -102,7 +102,6 @@ struct isp_obj_entity *isp_entity_lookup(struct isp_device *isp, u32 id)
 
 	return nsobj_to_isp_entity(nsobj);
 }
-EXPORT_SYMBOL_GPL(isp_entity_lookup);
 ALLOW_ERROR_INJECTION(isp_entity_lookup, NULL);
 
 /**
@@ -154,7 +153,6 @@ void isp_entity_put(struct isp_obj_entity *entity)
 	else
 		WARN_ON(1);
 }
-EXPORT_SYMBOL_GPL(isp_entity_put);
 
 /**
  * isp_entity_unregister() - Unregister (remove from namespace and possibly
@@ -545,7 +543,6 @@ struct isp_obj_event *isp_event_lookup(struct isp_device *isp, u32 event_id)
 
 	return nsobj_to_isp_event(event);
 }
-EXPORT_SYMBOL_GPL(isp_event_lookup);
 ALLOW_ERROR_INJECTION(isp_event_lookup, NULL);
 
 /**
@@ -663,7 +660,6 @@ void isp_event_put(struct isp_obj_event *event)
 	else
 		WARN_ON(1);
 }
-EXPORT_SYMBOL_GPL(isp_event_put);
 
 /**
  * isp_event_id() - Return ID of the ISP event
