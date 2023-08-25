@@ -81,7 +81,7 @@ steps:
         cat /sys/devices/platform/visp.0/modalias
         /workspace/tools/isp/visp-test/visptest --exit_at test_add_valid_operations
         /workspace/tools/isp/visp-test/visptest --exit_at test_add_valid_rw_operations
-        /workspace/tools/isp/visp-test/visptest --exit_at test_export_import_operations
+        /workspace/tools/isp/visp-test/visptest --exit_at test_dma_fence
         /workspace/tools/isp/visp-test/visptest
         dmesg
         EOF

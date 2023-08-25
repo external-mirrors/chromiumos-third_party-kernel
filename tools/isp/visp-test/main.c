@@ -27,7 +27,7 @@ static char *exit_at_functions[] = {
 	"wait_for_slow_entity_timer",
 	"test_add_valid_operations",
 	"test_add_valid_rw_operations",
-	"test_export_import_operations",
+	"test_dma_fence",
 	"test_add_buffer"
 };
 
@@ -1519,21 +1519,22 @@ static int test_operations(struct libisp *isp)
 	return 0;
 }
 
-static int test_export_import_operations(struct libisp *isp)
+static int test_dma_fence(struct libisp *isp)
 {
-#if 0
+	struct libisp_notifier_list *no_list;
 	struct isp_rw_instruction *rw;
 	struct libisp_rw_list *rw_list;
 	struct libisp_operation *lio;
 	struct obj_entity *entity;
 	struct isp_operation *op;
+	struct isp_notifier *no;
 	struct obj_event *event;
 	int fence_out;
 	int ret, i, rw_idx;
 
 	pr_info("Test fence export/import\n");
 
-	entity = libisp_entity_lookup_by_name(isp, VISP_SLOW_IRQ_ENTITY_NAME);
+	entity = libisp_entity_lookup_by_name(isp, VISP_FAST_IRQ_ENTITY_NAME);
 	if (!entity)
 		return -EINVAL;
 
@@ -1590,27 +1591,57 @@ static int test_export_import_operations(struct libisp *isp)
 		goto out;
 	}
 
-	pr_info("Export syncfile fd: %d\n", rw->of.id);
+	pr_info("Exported DMA fence ID: %d\n", rw->of.id);
 	fence_out = rw->of.id;
 
 	libisp_operation_put(lio);
-	lio = libisp_operation_get(3);
+
+	entity = libisp_entity_lookup_by_name(isp, VISP_SLOW_IRQ_ENTITY_NAME);
+	if (!entity)
+		return -EINVAL;
+
+	event = libisp_entity_first_event(entity);
+	if (!event)
+		return -EINVAL;
+
+	lio = libisp_operation_get(2);
 	if (!lio)
 		return -EINVAL;
 
-	for_each_isp_operation(lio, i, op) {
-		op->operation_type		= ISP_OPERATION_TYPE_ADD;
-		op->operation_add.id		= i + 1;
-		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
-		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
-		op->operation_add.entity	= entity->id;
-		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
+	op = libisp_operation_at(lio, 0);
+	op->operation_type		= ISP_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
+	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.deps[0].type	= ISP_DEPENDENCY_EVENT;
+	op->operation_add.deps[0].id	= event->id;
 
-		op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
-		op->operation_add.deps[0].type	= ISP_DEPENDENCY_FENCE_IN;
-		op->operation_add.deps[0].id	= fence_out;
+	no_list = libisp_notifier_list_get(1);
+	if (!no_list) {
+		ret = -ENOMEM;
+		goto out;
 	}
+
+	op->operation_add.notifier_list	= (uint64_t)no_list;
+	no = libisp_notifier_at(no_list, 0);
+
+	no->type	= ISP_FENCE_NOTIFIER;
+	no->fn.id	= fence_out;
+
+	op = libisp_operation_at(lio, 1);
+	op->operation_type		= ISP_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 2;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
+	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.deps[0].type	= ISP_DEPENDENCY_FENCE_IN;
+	op->operation_add.deps[0].id	= fence_out;
 
 	ret = libisp_operation_ioctl(isp, lio);
 	if (ret) {
@@ -1620,8 +1651,8 @@ static int test_export_import_operations(struct libisp *isp)
 
 	MAY_EXIT_AT();
 
-	ret = read_operations_completion_events(isp, 3);
-	if (ret != 3) {
+	ret = read_operations_completion_events(isp, 2);
+	if (ret != 2) {
 		pr_err("FATAL: unexpected completion read error: %d\n", ret);
 		ret = -EINVAL;
 		goto out;
@@ -1641,8 +1672,6 @@ static int test_export_import_operations(struct libisp *isp)
 out:
 	libisp_operation_put(lio);
 	return ret;
-#endif
-	return 0;
 }
 
 static int test_compound_buffer_operations(struct libisp *isp)
@@ -2925,9 +2954,9 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = test_export_import_operations(isp);
+	ret = test_dma_fence(isp);
 	if (ret) {
-		pr_err("FATAL: failure test_export_import_operations()\n");
+		pr_err("FATAL: failure test_dma_fence()\n");
 		goto out;
 	}
 
@@ -3091,9 +3120,9 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = test_export_import_operations(isp);
+	ret = test_dma_fence(isp);
 	if (ret) {
-		pr_err("FATAL: failure test_export_import_operations()\n");
+		pr_err("FATAL: failure test_dma_fence()\n");
 		return ret;
 	}
 
