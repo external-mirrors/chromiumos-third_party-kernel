@@ -56,8 +56,7 @@ struct isp_obj_fence {
 
 struct isp_obj_op;
 
-struct isp_obj_fence *isp_out_fence_register(struct isp_device *isp,
-					     struct isp_obj_op *op,
+struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     const char *namefmt,
 					     ...);
 
@@ -69,6 +68,8 @@ struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
 
 int isp_out_fence_fd(struct isp_obj_fence *sf);
 
+struct isp_obj_fence *isp_out_fence_lookup(struct isp_ns *ns, u32 id);
+
 void isp_in_fence_unregister(struct isp_obj *nsobj);
 void isp_out_fence_unregister(struct isp_obj *nsobj);
 
@@ -78,5 +79,5 @@ bool isp_in_fence_activate_signal(struct isp_op_signal *sig);
 bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig);
 
 int isp_fire_out_fence_signal(struct isp_obj *nsobj);
-
+int isp_drain_out_fences(struct isp_pipeline *pipeline);
 #endif /* __LINUX_ISP_FENCE_H__ */

@@ -20,8 +20,17 @@
 
 #include <uapi/linux/isp.h>
 
-static struct isp_obj_fence *__nsobj_to_isp_fence(struct isp_obj *nsobj,
-						  u32 type)
+static bool isp_valid_fence_id(u32 id)
+{
+	if (id + ISP_OBJS_NS_FENCE_ID_START > ISP_OBJS_NS_FENCE_ID_END) {
+		pr_devel("Invalid fence ID: %u\n", id);
+		return false;
+	}
+	return true;
+}
+
+static struct isp_obj_fence *nsobj_to_isp_fence(struct isp_obj *nsobj,
+						u32 type)
 {
 	if (!isp_obj_check_type(nsobj, type))
 		return NULL;
@@ -39,12 +48,12 @@ int isp_out_fence_fd(struct isp_obj_fence *sf)
 
 static struct isp_obj_fence *nsobj_to_isp_in_fence(struct isp_obj *nsobj)
 {
-	return __nsobj_to_isp_fence(nsobj, ISP_OBJ_TYPE_IN_FENCE);
+	return nsobj_to_isp_fence(nsobj, ISP_OBJ_TYPE_IN_FENCE);
 }
 
 static struct isp_obj_fence *nsobj_to_isp_out_fence(struct isp_obj *nsobj)
 {
-	return __nsobj_to_isp_fence(nsobj, ISP_OBJ_TYPE_OUT_FENCE);
+	return nsobj_to_isp_fence(nsobj, ISP_OBJ_TYPE_OUT_FENCE);
 }
 
 void isp_in_fence_unregister(struct isp_obj *nsobj)
@@ -251,6 +260,26 @@ static void isp_dma_fence_release(struct dma_fence *fence)
 	isp_obj_deinit(&sf->nsobj);
 }
 
+static struct isp_obj *isp_fence_lookup(struct isp_ns *ns, u32 type, u32 id)
+{
+	if (!isp_valid_fence_id(id))
+		return NULL;
+
+	id += ISP_OBJS_NS_FENCE_ID_START;
+	return isp_obj_lookup(ns, type, id);
+}
+
+struct isp_obj_fence *isp_out_fence_lookup(struct isp_ns *ns, u32 id)
+{
+	struct isp_obj *nsobj;
+
+	nsobj = isp_fence_lookup(ns, ISP_OBJ_TYPE_OUT_FENCE, id);
+	if (!nsobj)
+		return NULL;
+
+	return nsobj_to_isp_out_fence(nsobj);
+}
+
 static const char *isp_dma_fence_driver_name(struct dma_fence *fence)
 {
 	return "isp";
@@ -267,9 +296,8 @@ static struct dma_fence_ops isp_out_fence_ops = {
 	.release		= isp_dma_fence_release,
 };
 
-__printf(3, 4)
-struct isp_obj_fence *isp_out_fence_register(struct isp_device *isp,
-					     struct isp_obj_op *op,
+__printf(2, 3)
+struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     const char *namefmt,
 					     ...)
 {
@@ -293,7 +321,7 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_device *isp,
 	isp_obj_init(&sf->nsobj,
 		     ISP_OBJ_TYPE_OUT_FENCE,
 		     isp_out_fence_release,
-		     &isp->ns);
+		     ns);
 
 	sf->out.fence_context = dma_fence_context_alloc(1);
 	dma_fence_init(&sf->out.fence,
@@ -306,11 +334,13 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_device *isp,
 	if (sf->out.fd < 0)
 		goto error;
 
-	syncfile = sync_file_create(&sf->out.fence);
-	if (!syncfile)
+	if (!isp_valid_fence_id(sf->out.fd))
 		goto error;
 
-	if (isp_obj_link(&sf->nsobj, &op->nsobj))
+	isp_obj_set_id(&sf->nsobj, sf->out.fd + ISP_OBJS_NS_FENCE_ID_START);
+
+	syncfile = sync_file_create(&sf->out.fence);
+	if (!syncfile)
 		goto error;
 
 	if (isp_obj_insert(&sf->nsobj))
@@ -338,4 +368,19 @@ int isp_fire_out_fence_signal(struct isp_obj *nsobj)
 		return -EINVAL;
 
 	return dma_fence_signal(&sf->out.fence);
+}
+
+int isp_drain_out_fences(struct isp_pipeline *pipeline)
+{
+	struct isp_obj *nsobj;
+	struct isp_obj *save;
+
+	isp_ns_for_each_obj_safe(nsobj, save, &pipeline->objs) {
+		if (isp_obj_type(nsobj) != ISP_OBJ_TYPE_OUT_FENCE)
+			continue;
+
+		isp_fire_out_fence_signal(nsobj);
+		isp_out_fence_unregister(nsobj);
+	}
+	return 0;
 }

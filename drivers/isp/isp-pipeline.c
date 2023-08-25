@@ -337,10 +337,6 @@ static void isp_drain_op_fences(struct isp_obj_op *op)
 		case ISP_OBJ_TYPE_IN_FENCE:
 			isp_in_fence_unregister(link);
 			break;
-		case ISP_OBJ_TYPE_OUT_FENCE:
-			isp_fire_out_fence_signal(link);
-			isp_out_fence_unregister(link);
-			break;
 		default:
 			pr_err("Unknown link object type: %d\n",
 			       isp_obj_type(link));
@@ -943,6 +939,7 @@ static int isp_pipeline_io_worker(void *data)
 		}
 	}
 
+	isp_drain_out_fences(pipeline);
 	isp_drain_instances(pipeline);
 	isp_drain_buffers(pipeline);
 	isp_drain_ops(pipeline);
@@ -1127,10 +1124,7 @@ static int isp_fence_in_dependency_add(struct isp_pipeline *pipeline,
 	struct isp_obj_fence *sf;
 	int ret;
 
-	/*
-	 * We store fence pointer indirectly: fence is linked to this
-	 * OP.
-	 */
+	/* Imported fences are linked to their OP */
 	sf = isp_in_fence_register(pipeline->isp, op, req->id,
 				   "in-fence-%d", req->id);
 	if (!sf)
@@ -1157,11 +1151,8 @@ static int isp_out_fence_instruction(struct isp_obj_op *op,
 	struct isp_obj_fence *sf;
 
 	insn->id = ISP_OP_NO_FENCE;
-	/*
-	 * We store fence pointer indirectly: fence is linked to this
-	 * OP.
-	 */
-	sf = isp_out_fence_register(pipeline->isp, op, "out-fence-%d",
+	/* Exported fences are pipeline objects, not linked to any OPs */
+	sf = isp_out_fence_register(&pipeline->objs, "out-fence-%d",
 				    isp_obj_id(&op->nsobj));
 	if (!sf)
 		return -EINVAL;

@@ -95,6 +95,8 @@ enum isp_id_policy {
 #define ISP_OBJS_NS_BUFFER_ID_END	0x0001ffffUL
 #define ISP_OBJS_NS_INSTANCE_ID_START	0x00020000UL
 #define ISP_OBJS_NS_INSTANCE_ID_END	0x0003ffffUL
+#define ISP_OBJS_NS_FENCE_ID_START	0x00040000UL
+#define ISP_OBJS_NS_FENCE_ID_END	0x0005ffffUL
 
 /**
  * struct isp_ns - ISP file handle namespace
