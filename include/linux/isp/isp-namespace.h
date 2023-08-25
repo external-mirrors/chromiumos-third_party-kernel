@@ -60,8 +60,8 @@ struct isp_obj;
  * @ISP_OBJ_TYPE_EVENT:		Event
  * @ISP_OBJ_TYPE_OPERATION:	Operation
  * @ISP_OBJ_TYPE_BUFFER:	Buffer
- * @ISP_OBJ_TYPE_IN_SYNCFILE:	Imported (in) sync file
- * @ISP_OBJ_TYPE_OUT_SYNCFILE:	Exported (out) sync file
+ * @ISP_OBJ_TYPE_IN_FENCE:	Imported DMA fence
+ * @ISP_OBJ_TYPE_OUT_FENCE:	Exported DMD fence
  * @ISP_OBJ_TYPE_ROOT:		Root node
  */
 enum isp_obj_type {
@@ -70,8 +70,8 @@ enum isp_obj_type {
 	ISP_OBJ_TYPE_EVENT		= BIT(2),
 	ISP_OBJ_TYPE_OPERATION		= BIT(3),
 	ISP_OBJ_TYPE_BUFFER		= BIT(4),
-	ISP_OBJ_TYPE_IN_SYNCFILE	= BIT(5),
-	ISP_OBJ_TYPE_OUT_SYNCFILE	= BIT(6),
+	ISP_OBJ_TYPE_IN_FENCE		= BIT(5),
+	ISP_OBJ_TYPE_OUT_FENCE		= BIT(6),
 	ISP_OBJ_TYPE_ROOT		= BIT(12),
 };
 

@@ -10,7 +10,7 @@ isp-objs			+= isp-device.o \
 					isp-entity.o \
 					isp-buffer.o \
 					isp-ringbuffer.o \
-					isp-syncfile.o \
+					isp-fence.o \
 					isp-pipeline.o
 
 ifeq ($(CONFIG_TRACEPOINTS),y)

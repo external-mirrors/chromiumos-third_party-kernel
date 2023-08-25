@@ -365,7 +365,7 @@ struct isp_rw_instruction_list {
  * @ISP_DEPENDENCY_NONE:	Empty entry (no dependency)
  * @ISP_DEPENDENCY_OP:		Operation dependency
  * @ISP_DEPENDENCY_EVENT:	Event dependency
- * @ISP_DEPENDENCY_FENCE_IN:	Fence IN (sync_file) dependency
+ * @ISP_DEPENDENCY_FENCE_IN:	Fence IN (imported fence) dependency
  */
 enum isp_dependency_type {
 	ISP_DEPENDENCY_NONE,
@@ -411,7 +411,7 @@ enum operation_entity_id {
 /**
  * enum isp_fence_fd - Special values of operation_add out fence FD
  *
- * @ISP_OP_NO_FENCE:	Set when operation did not export fence out (sync_file)
+ * @ISP_OP_NO_FENCE:	Set when operation did not export fence
  */
 enum isp_fence_fd {
 	ISP_OP_NO_FENCE = 0xffffffff,

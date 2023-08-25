@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * ISP sync file
+ * ISP fence
  *
  * Copyright (C) Google LLC
  */
 
-#ifndef __LINUX_ISP_SYNCFILE_H__
-#define __LINUX_ISP_SYNCFILE_H__
+#ifndef __LINUX_ISP_FENCE_H__
+#define __LINUX_ISP_FENCE_H__
 
 #include <linux/isp/isp-device.h>
 #include <linux/isp/isp-namespace.h>
@@ -15,13 +15,13 @@
 
 #include <uapi/linux/isp.h>
 
-#define ISP_SYNCFILE_NAME_SZ		16
+#define ISP_FENCE_NAME_SZ		16
 
-struct isp_obj_syncfile {
+struct isp_obj_fence {
 	/** @nsobj: namespace object */
 	struct isp_obj	nsobj;
 
-	/* ISP syncfile is either imported (in) or exported (out) */
+	/* ISP fence is either ined (in) or outed (out) */
 	union {
 		struct export {
 			/** @fd: File descriptor of this fence */
@@ -51,32 +51,32 @@ struct isp_obj_syncfile {
 		} in;
 	};
 
-	char		name[ISP_SYNCFILE_NAME_SZ];
+	char		name[ISP_FENCE_NAME_SZ];
 };
 
 struct isp_obj_op;
 
-struct isp_obj_syncfile *isp_out_syncfile_register(struct isp_device *isp,
-						   struct isp_obj_op *op,
-						   const char *namefmt,
-						   ...);
+struct isp_obj_fence *isp_out_fence_register(struct isp_device *isp,
+					     struct isp_obj_op *op,
+					     const char *namefmt,
+					     ...);
 
-struct isp_obj_syncfile *isp_in_syncfile_register(struct isp_device *isp,
-						  struct isp_obj_op *op,
-						  int fd,
-						  const char *namefmt,
-						  ...);
+struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
+					    struct isp_obj_op *op,
+					    int fd,
+					    const char *namefmt,
+					    ...);
 
-int isp_out_syncfile_fd(struct isp_obj_syncfile *sf);
+int isp_out_fence_fd(struct isp_obj_fence *sf);
 
-void isp_in_syncfile_unregister(struct isp_obj *nsobj);
-void isp_out_syncfile_unregister(struct isp_obj *nsobj);
+void isp_in_fence_unregister(struct isp_obj *nsobj);
+void isp_out_fence_unregister(struct isp_obj *nsobj);
 
-void isp_syncfile_put(struct isp_obj_syncfile *sf);
+void isp_fence_put(struct isp_obj_fence *sf);
 
-bool isp_in_syncfile_activate_signal(struct isp_op_signal *sig);
-bool isp_in_syncfile_deactivate_signal(struct isp_op_signal *sig);
+bool isp_in_fence_activate_signal(struct isp_op_signal *sig);
+bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig);
 
-int isp_fire_out_syncfile_signal(struct isp_obj *nsobj);
+int isp_fire_out_fence_signal(struct isp_obj *nsobj);
 
-#endif /* __LINUX_ISP_SYNCFILE_H__ */
+#endif /* __LINUX_ISP_FENCE_H__ */

@@ -11,10 +11,10 @@
 #include <linux/isp/isp-buffer.h>
 #include <linux/isp/isp-device.h>
 #include <linux/isp/isp-entity.h>
+#include <linux/isp/isp-fence.h>
 #include <linux/isp/isp-ioctl.h>
 #include <linux/isp/isp-namespace.h>
 #include <linux/isp/isp-output.h>
-#include <linux/isp/isp-syncfile.h>
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

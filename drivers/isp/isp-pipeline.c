@@ -10,11 +10,11 @@
 #include <linux/isp/isp-buffer.h>
 #include <linux/isp/isp-device.h>
 #include <linux/isp/isp-entity.h>
+#include <linux/isp/isp-fence.h>
 #include <linux/isp/isp-graph.h>
 #include <linux/isp/isp-output.h>
 #include <linux/isp/isp-pipeline.h>
 #include <linux/isp/isp-ringbuffer.h>
-#include <linux/isp/isp-syncfile.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>
@@ -327,19 +327,19 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 	}
 }
 
-static void isp_drain_op_syncfiles(struct isp_obj_op *op)
+static void isp_drain_op_fences(struct isp_obj_op *op)
 {
 	struct isp_obj *link;
 	struct isp_obj *save;
 
 	isp_obj_for_each_link_safe(link, save, &op->nsobj) {
 		switch (isp_obj_type(link)) {
-		case ISP_OBJ_TYPE_IN_SYNCFILE:
-			isp_in_syncfile_unregister(link);
+		case ISP_OBJ_TYPE_IN_FENCE:
+			isp_in_fence_unregister(link);
 			break;
-		case ISP_OBJ_TYPE_OUT_SYNCFILE:
-			isp_fire_out_syncfile_signal(link);
-			isp_out_syncfile_unregister(link);
+		case ISP_OBJ_TYPE_OUT_FENCE:
+			isp_fire_out_fence_signal(link);
+			isp_out_fence_unregister(link);
 			break;
 		default:
 			pr_err("Unknown link object type: %d\n",
@@ -408,7 +408,7 @@ static bool isp_drain_op(struct isp_obj_op *op)
 		return false;
 
 	isp_drain_op_signals(op);
-	isp_drain_op_syncfiles(op);
+	isp_drain_op_fences(op);
 	isp_obj_remove(&op->nsobj);
 	/*
 	 * We cannot deinit OP nsobj at this point, as we still
@@ -458,7 +458,7 @@ static void isp_op_fire_signals(struct isp_obj_op *op)
 	 */
 	isp_fire_active_signals(&op->notify_active_chain);
 	isp_op_destroy_signals(op);
-	isp_drain_op_syncfiles(op);
+	isp_drain_op_fences(op);
 }
 
 /**
@@ -899,7 +899,7 @@ static bool io_queue_status(struct isp_pipeline *pipeline)
  * @data: pointer to ISP pipeline
  *
  * This worker thread executes each ISP operations in the IO-queue while the
- * pipeline is active, and clean up the dangling events/operations/syncfiles
+ * pipeline is active, and clean up the dangling events/operations/fences
  * once the IO-queue becomes empty or pipeline becomes inactive.
  */
 static int isp_pipeline_io_worker(void *data)
@@ -1124,22 +1124,22 @@ static int isp_fence_in_dependency_add(struct isp_pipeline *pipeline,
 				       struct isp_dependency *req,
 				       struct isp_obj_op *op)
 {
-	struct isp_obj_syncfile *sf;
+	struct isp_obj_fence *sf;
 	int ret;
 
 	/*
-	 * We store syncfile pointer indirectly: syncfile is linked to this
+	 * We store fence pointer indirectly: fence is linked to this
 	 * OP.
 	 */
-	sf = isp_in_syncfile_register(pipeline->isp, op, req->id,
-				      "in-fence-%d", req->id);
+	sf = isp_in_fence_register(pipeline->isp, op, req->id,
+				   "in-fence-%d", req->id);
 	if (!sf)
 		return -EINVAL;
 
 	ret = isp_op_add_pending_signal(&sf->nsobj, op,
 					ISP_OP_NO_INSTANCE,
-					isp_in_syncfile_activate_signal,
-					isp_in_syncfile_deactivate_signal);
+					isp_in_fence_activate_signal,
+					isp_in_fence_deactivate_signal);
 	return ret;
 }
 
@@ -1154,19 +1154,19 @@ static int isp_out_fence_instruction(struct isp_obj_op *op,
 				     struct isp_out_fence_instruction *insn)
 {
 	struct isp_pipeline *pipeline = op->pipeline;
-	struct isp_obj_syncfile *sf;
+	struct isp_obj_fence *sf;
 
 	insn->id = ISP_OP_NO_FENCE;
 	/*
-	 * We store syncfile pointer indirectly: syncfile is linked to this
+	 * We store fence pointer indirectly: fence is linked to this
 	 * OP.
 	 */
-	sf = isp_out_syncfile_register(pipeline->isp, op, "out-fence-%d",
-				       isp_obj_id(&op->nsobj));
+	sf = isp_out_fence_register(pipeline->isp, op, "out-fence-%d",
+				    isp_obj_id(&op->nsobj));
 	if (!sf)
 		return -EINVAL;
 
-	insn->id = isp_out_syncfile_fd(sf);
+	insn->id = isp_out_fence_fd(sf);
 	return 0;
 }
 
@@ -1604,7 +1604,7 @@ int isp_pipeline_enqueue_cancel(struct isp_pipeline *pipeline,
 	isp_op_set_state(op, ISP_OPERATION_STATE_DELETED);
 	isp_op_cancel_rw_instruction(op);
 	isp_drain_op_signals(op);
-	isp_drain_op_syncfiles(op);
+	isp_drain_op_fences(op);
 	/* drop lookup ref-count */
 	isp_op_put(op);
 	/* Now release the object */
