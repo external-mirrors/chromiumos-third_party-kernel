@@ -360,6 +360,50 @@ struct isp_rw_instruction_list {
 } __attribute__((packed));
 
 /**
+ * enum isp_notifier_type - Operation execution notifier type
+ *
+ * @ISP_FENCE_NOTIFIER:	Exported fence (out fence) notifier
+ */
+enum isp_notifier_type {
+	ISP_FENCE_NOTIFIER,
+};
+
+/**
+ * struct isp_fence_notifier - Notify exported fence (out fence)
+ *
+ * @id:		ID of the exported fence
+ */
+struct isp_fence_notifier {
+	__u32		id;
+} __attribute__((packed));
+
+/**
+ * struct isp_notifier - Operation execution notifier entry
+ *
+ * @type:	Type of the notifier entry (one of isp_notifier_type)
+ * @fn:		Used when type is ISP_FENCE_NOTIFIER
+ * @reserved:	Reserved for alignment and future extension
+ */
+struct isp_notifier {
+	__u32		type;
+	union {
+		struct isp_fence_notifier	fn;
+		__u8				reserved[32];
+	};
+} __attribute__((packed));
+
+/**
+ * struct isp_notifer_list - List of operation execution notifiers
+ *
+ * @num_entries:	Number of notifiers
+ * @notifiers:		Array of notifiers' descriptors
+ */
+struct isp_notifier_list {
+	__u32			num_entries;
+	struct isp_notifier	notifiers[];
+} __attribute__((packed));
+
+/**
  * enum isp_dependency_type - Operation dependency entry type
  *
  * @ISP_DEPENDENCY_NONE:	Empty entry (no dependency)
@@ -418,12 +462,12 @@ enum isp_fence_fd {
 };
 
 /**
- * enum isp_no_rd_wr - Special values of operation_add RW instructions list
+ * enum isp_op_list - Special values of operation_add lists
  *
- * @ISP_OP_NO_RW_LIST:	Set when operation has no RW instructions list
+ * @ISP_OP_NO_LIST:	Set when operation has no corresponding list
  */
-enum isp_no_rd_wr {
-	ISP_OP_NO_RW_LIST = 0x0,
+enum isp_op_list {
+	ISP_OP_NO_LIST = 0x0,
 };
 
 /**
@@ -436,7 +480,9 @@ enum isp_no_rd_wr {
  * @delay_ns:		Time to pause an operation after all its dependencies
  *			are ready
  * @rd_wr_list:		Pointer to the property read/write list or
- *			ISP_OP_NO_RW_LIST
+ *			ISP_OP_NO_LIST
+ * @notifier_list:	Pointer to the list of execution notifiers or
+ *			ISP_OP_NO_LIST
  * @entity:		ID of the entity operation is executed on or
  *			ISP_OP_NO_ENTITY
  * @instance:		ID of the entity instance (context) operation is
@@ -454,6 +500,7 @@ struct isp_operation_add {
 	 */
 	__u64			delay_ns;
 	__u64			rd_wr_list;
+	__u64			notifier_list;
 	__u32			entity;
 	__u32			instance;
 } __attribute__((packed));

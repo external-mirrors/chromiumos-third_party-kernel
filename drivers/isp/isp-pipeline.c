@@ -779,7 +779,7 @@ static void isp_op_run_rw_instructions(struct isp_obj_op *op)
 	int i;
 
 	/* No execution payload, this probably was a SYNC operation */
-	if (op->exec_rw_list_addr == ISP_OP_NO_RW_LIST)
+	if (op->exec_rw_list_addr == ISP_OP_NO_LIST)
 		return;
 
 	/* At this point OPs require an entity to be run against */
@@ -1257,15 +1257,15 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 				  struct isp_obj_op *op)
 {
 	op->delay_ns		= req->delay_ns;
-	op->exec_rw_list_addr	= (void *)ISP_OP_NO_RW_LIST;
+	op->exec_rw_list_addr	= (void *)ISP_OP_NO_LIST;
 	op->exec_entity		= NULL;
 	op->exec_instance	= NULL;
 
 	if (req->entity == ISP_OP_NO_ENTITY &&
-	    req->rd_wr_list != ISP_OP_NO_RW_LIST)
+	    req->rd_wr_list != ISP_OP_NO_LIST)
 		return -EINVAL;
 
-	if (req->rd_wr_list != ISP_OP_NO_RW_LIST) {
+	if (req->rd_wr_list != ISP_OP_NO_LIST) {
 		struct isp_rw_instruction_list rw;
 		struct isp_rw_instruction insn;
 		uintptr_t __user *addr;
@@ -1324,7 +1324,7 @@ static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 	struct isp_rw_instruction_list rw_list;
 	int i;
 
-	if (op->exec_rw_list_addr == ISP_OP_NO_RW_LIST)
+	if (op->exec_rw_list_addr == ISP_OP_NO_LIST)
 		return 0;
 
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
@@ -1543,7 +1543,7 @@ static void isp_op_cancel_rw_instruction(struct isp_obj_op *op)
 	struct isp_rw_instruction_list rw_list;
 	int i;
 
-	if (op->exec_rw_list_addr == ISP_OP_NO_RW_LIST)
+	if (op->exec_rw_list_addr == ISP_OP_NO_LIST)
 		return;
 
 	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {

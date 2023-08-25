@@ -598,7 +598,8 @@ static int wait_for_slow_entity_timer(struct libisp *isp)
 		op->operation_type		= ISP_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 		op->operation_add.entity	= entity->id;
 		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 
@@ -649,7 +650,8 @@ static int add_single_invalid_operation(struct libisp *isp,
 	op->operation_type		= ISP_OPERATION_TYPE_ADD;
 	op->operation_add.id		= 0;
 	op->operation_add.delay_ns	= 0;
-	op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+	op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.entity	= event_entity;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
@@ -701,7 +703,8 @@ static int add_many_invalid_operations(struct libisp *isp,
 		op->operation_type		= ISP_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 		op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 		op->operation_add.entity	= entity->id;
 		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
@@ -735,7 +738,7 @@ static int add_many_invalid_operations(struct libisp *isp,
 	ret = libisp_operation_ioctl(isp, lio);
 	/* Otherwise we will free(0xC0FFEE) in libisp_operation_put() */
 	for_each_isp_operation(lio, i, op) {
-		op->operation_add.rd_wr_list		= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list		= ISP_OP_NO_LIST;
 	}
 	return ret;
 }
@@ -846,7 +849,8 @@ static int test_add_instant_operations(struct libisp *isp, u32 num_ops)
 		op->operation_add.delay_ns	= 0;
 		op->operation_add.entity	= ISP_OP_NO_ENTITY;
 		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 		op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 	}
 
@@ -891,7 +895,8 @@ static int test_add_valid_operations(struct libisp *isp,
 		op->operation_type		= ISP_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 		op->operation_add.mode		= mode;
 		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 
@@ -952,7 +957,8 @@ static int test_add_valid_complex_operations(struct libisp *isp,
 		op->operation_type		= ISP_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 		op->operation_add.mode		= ISP_DEPENDENCY_STRICT_ORDER;
 		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 
@@ -1043,7 +1049,8 @@ static int test_add_valid_rw_operations(struct libisp *isp,
 		op->operation_add.entity	= entity->id;
 		op->operation_add.instance	= instance_id;
 		op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 		/*
 		 * The first operation is instance write, the second
@@ -1177,6 +1184,7 @@ static int test_add_invalid_rw_num_entries(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	if (!rw_list) {
@@ -1243,6 +1251,7 @@ static int test_add_too_many_rw_instructions(struct libisp *isp,
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= instance_id;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	if (!rw_list) {
@@ -1542,6 +1551,7 @@ static int test_export_import_operations(struct libisp *isp)
 	op->operation_add.id		= 0;
 	op->operation_add.delay_ns	= 8888;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_EVENT;
@@ -1592,7 +1602,8 @@ static int test_export_import_operations(struct libisp *isp)
 		op->operation_type		= ISP_OPERATION_TYPE_ADD;
 		op->operation_add.id		= i + 1;
 		op->operation_add.delay_ns	= 0;
-		op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+		op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+		op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 		op->operation_add.entity	= entity->id;
 		op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 
@@ -1680,6 +1691,7 @@ static int test_compound_buffer_operations(struct libisp *isp)
 	op->operation_add.id		= 1;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 
@@ -1715,6 +1727,7 @@ static int test_compound_buffer_operations(struct libisp *isp)
 	op->operation_add.id		= 2;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= VISP_FAST_IRQ_INSTANCE_ID;
 	op->operation_add.mode		= ISP_DEPENDENCY_STRICT_ORDER;
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
@@ -1744,6 +1757,7 @@ static int test_compound_buffer_operations(struct libisp *isp)
 	op->operation_add.id		= 3;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_STRICT_ORDER;
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
@@ -1838,6 +1852,7 @@ static int test_add_buffer_cancellation(struct libisp *isp)
 	op->operation_add.id		= 1;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 
@@ -1919,6 +1934,7 @@ static int test_buffer_enumeration(struct libisp *isp)
 	op->operation_add.id		= 1;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 
@@ -2071,7 +2087,8 @@ static int test_instance_verfication(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= VISP_SLOW_IRQ_INSTANCE_ID;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
-	op->operation_add.rd_wr_list	= ISP_OP_NO_RW_LIST;
+	op->operation_add.rd_wr_list	= ISP_OP_NO_LIST;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	ret = libisp_operation_ioctl(isp, lio);
 	if (ret)
@@ -2116,6 +2133,7 @@ static int test_entity_instance_avail_limit(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(101);
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
@@ -2188,6 +2206,7 @@ static int test_create_entity_instance(struct libisp *isp,
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	op->operation_add.rd_wr_list	= (uint64_t)rw_list;
@@ -2267,6 +2286,7 @@ static int test_compound_instance_operations(struct libisp *isp)
 	op->operation_add.id		= 1;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 
@@ -2290,6 +2310,7 @@ static int test_compound_instance_operations(struct libisp *isp)
 	op->operation_add.id		= 2;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= 42;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
@@ -2318,6 +2339,7 @@ static int test_compound_instance_operations(struct libisp *isp)
 	op->operation_add.id		= 3;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.entity	= entity->id;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 	op->operation_add.instance	= 42;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
@@ -2397,6 +2419,7 @@ static int test_destroy_unknown_instance(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	if (!rw_list) {
@@ -2494,6 +2517,7 @@ static int test_add_buffer(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	if (!rw_list) {
@@ -2578,6 +2602,7 @@ static int test_remove_buffer(struct libisp *isp, struct obj_buffer *buf)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	if (!rw_list) {
@@ -2648,6 +2673,7 @@ static int test_remove_unknown_buffer(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NO_LIST;
 
 	rw_list = libisp_rw_list_get(1);
 	if (!rw_list) {
