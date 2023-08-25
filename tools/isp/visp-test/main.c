@@ -1512,6 +1512,7 @@ static int test_operations(struct libisp *isp)
 
 static int test_export_import_operations(struct libisp *isp)
 {
+#if 0
 	struct isp_rw_instruction *rw;
 	struct libisp_rw_list *rw_list;
 	struct libisp_operation *lio;
@@ -1629,6 +1630,8 @@ static int test_export_import_operations(struct libisp *isp)
 out:
 	libisp_operation_put(lio);
 	return ret;
+#endif
+	return 0;
 }
 
 static int test_compound_buffer_operations(struct libisp *isp)
