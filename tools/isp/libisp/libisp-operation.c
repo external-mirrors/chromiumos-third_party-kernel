@@ -34,9 +34,10 @@ void libisp_operation_put(struct libisp_operation *lio)
 	for_each_isp_operation(lio, i, op) {
 		if (op->operation_type != ISP_OPERATION_TYPE_ADD)
 			break;
-		if (op->operation_add.rd_wr_list == ISP_OP_NO_LIST)
-			continue;
-		libisp_rw_list_put((void *)op->operation_add.rd_wr_list);
+		if (op->operation_add.rd_wr_list != ISP_OP_NO_LIST)
+			libisp_rw_list_put((void *)op->operation_add.rd_wr_list);
+		if (op->operation_add.notifier_list != ISP_OP_NO_LIST)
+			libisp_notifier_list_put((void *)op->operation_add.notifier_list);
 	}
 
 	free(lio);
@@ -138,6 +139,48 @@ void libisp_rw_list_put(struct libisp_rw_list *rwl)
 		return;
 
 	free(rwl);
+}
+
+struct isp_notifier *libisp_notifier_at(struct libisp_notifier_list *nl,
+					u32 idx)
+{
+	if (nl->num_ents == 0) {
+		LIBISP_BUG();
+		return NULL;
+	}
+
+	if (idx >= nl->num_ents) {
+		LIBISP_BUG();
+		return NULL;
+	}
+
+	return &nl->ents[idx];
+}
+
+struct libisp_notifier_list *libisp_notifier_list_get(uint32_t num_ents)
+{
+	struct libisp_notifier_list *nl;
+	size_t sz;
+
+	if (!num_ents)
+		return NULL;
+
+	sz = sizeof(struct libisp_notifier_list) +
+		num_ents * sizeof(struct isp_notifier);
+	nl = calloc(1, sz);
+	if (!nl)
+		return NULL;
+
+	nl->num_ents = num_ents;
+	return nl;
+}
+
+void libisp_notifier_list_put(struct libisp_notifier_list *nl)
+{
+	if (!nl)
+		return;
+
+	free(nl);
 }
 
 int libisp_operation_ioctl(struct libisp *isp, struct libisp_operation *lio)
