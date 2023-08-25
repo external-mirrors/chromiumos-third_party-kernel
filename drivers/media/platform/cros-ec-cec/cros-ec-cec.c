@@ -295,11 +295,14 @@ struct cec_dmi_match {
 };
 
 static const char *const fizz_conns[] = { "Port B", NULL };
+static const char *const dibbi_conns[] = { "Port D", "Port B", NULL };
 static const char *const boxy_conns[] = { "Port D", NULL };
 
 static const struct cec_dmi_match cec_dmi_match_table[] = {
 	/* Google Fizz */
 	{ "Google", "Fizz", "0000:00:02.0", fizz_conns },
+	/* Google Dibbi */
+	{ "Google", "Dibbi", "0000:00:02.0", dibbi_conns },
 	/* Google Boxy */
 	{ "Google", "Boxy", "0000:00:02.0", boxy_conns },
 };
