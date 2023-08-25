@@ -712,6 +712,56 @@ error:
 	return NULL;
 }
 
+static void isp_fence_notifier(struct isp_obj_op *op,
+			       struct isp_fence_notifier *fn)
+{
+	struct isp_pipeline *pipeline = op->pipeline;
+	struct isp_obj_fence *fence;
+
+	fence = isp_out_fence_lookup(&pipeline->objs, fn->id);
+	if (!fence)
+		return;
+
+	isp_fire_out_fence_signal(&fence->nsobj);
+	isp_out_fence_unregister(&fence->nsobj);
+	isp_fence_put(fence);
+}
+
+static void isp_op_process_notifiers(struct isp_obj_op *op)
+{
+	struct isp_notifier_list notifier_list;
+	struct isp_notifier __user *payload;
+	int i;
+
+	if (op->exec_notifier_list_addr == ISP_OP_NO_LIST)
+		return;
+
+	if (copy_from_user(&notifier_list, op->exec_notifier_list_addr,
+			   sizeof(notifier_list))) {
+		pr_err("Unable to access operation notifier list\n");
+		return;
+	}
+
+	payload = op->exec_notifier_list_addr +
+		offsetof(struct isp_notifier_list, notifiers);
+
+	for (i = 0; i < notifier_list.num_entries; i++) {
+		struct isp_notifier no;
+
+		if (copy_from_user(&no, payload, sizeof(no))) {
+			pr_err("Unable to access notifier\n");
+			break;
+		}
+
+		switch (no.type) {
+		case ISP_FENCE_NOTIFIER:
+			isp_fence_notifier(op, &no.fn);
+			break;
+		}
+		payload++;
+	}
+}
+
 static int isp_read_instruction(struct isp_obj_op *op,
 				struct isp_read_instruction *insn)
 {
@@ -852,6 +902,7 @@ static void isp_op_run(struct isp_obj_op *op)
 		ndelay(op->delay_ns);
 
 	isp_op_run_rw_instructions(op);
+	isp_op_process_notifiers(op);
 
 	/* New signals cannot be registered after this line */
 	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_EXECUTED));
@@ -1256,10 +1307,11 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 				  struct isp_operation_add *req,
 				  struct isp_obj_op *op)
 {
-	op->delay_ns		= req->delay_ns;
-	op->exec_rw_list_addr	= (void *)ISP_OP_NO_LIST;
-	op->exec_entity		= NULL;
-	op->exec_instance	= NULL;
+	op->delay_ns			= req->delay_ns;
+	op->exec_rw_list_addr		= (void *)ISP_OP_NO_LIST;
+	op->exec_notifier_list_addr	= (void *)ISP_OP_NO_LIST;
+	op->exec_entity			= NULL;
+	op->exec_instance		= NULL;
 
 	if (req->entity == ISP_OP_NO_ENTITY &&
 	    req->rd_wr_list != ISP_OP_NO_LIST)
@@ -1289,6 +1341,21 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 		size += rw.num_entries * sizeof(struct isp_rw_instruction);
 		addr += size - sizeof(struct isp_rw_instruction);
 		if (copy_from_user(&insn, addr, sizeof(insn)))
+			goto error;
+	}
+
+	if (req->notifier_list != ISP_OP_NO_LIST) {
+		struct isp_notifier_list notifiers;
+		uintptr_t __user *addr;
+		size_t size;
+
+		addr = u64_to_user_ptr(req->notifier_list);
+		op->exec_notifier_list_addr = addr;
+		size = sizeof(notifiers);
+		if (copy_from_user(&notifiers, addr, size))
+			goto error;
+
+		if (notifiers.num_entries == 0)
 			goto error;
 	}
 

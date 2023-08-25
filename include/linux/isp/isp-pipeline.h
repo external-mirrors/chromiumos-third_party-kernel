@@ -117,6 +117,8 @@ struct isp_obj_op {
 	struct isp_obj_instance		*exec_instance;
 	/** @exec_rw_list_addr: Pointer to the list of read/write payloads */
 	void __user			*exec_rw_list_addr;
+	/** @exec_notifier_list_addr: Pointer to the list of notifiers */
+	void __user			*exec_notifier_list_addr;
 	/** @pipeline: Execution pipeline */
 	struct isp_pipeline		*pipeline;
 	/** @num_blockers: Number of objects we are (or will be) blocked on */
