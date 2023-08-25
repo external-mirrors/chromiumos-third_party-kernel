@@ -2774,7 +2774,7 @@ out:
 	return ret;
 }
 
-static int isp_test_instances(struct libisp *isp)
+static int test_instances(struct libisp *isp)
 {
 	int ret;
 
@@ -2849,9 +2849,9 @@ static void *thread_fn(void *arg)
 		goto out;
 	}
 
-	ret = isp_test_instances(isp);
+	ret = test_instances(isp);
 	if (ret) {
-		pr_err("FATAL: failure isp_test_instances()\n");
+		pr_err("FATAL: failure test_instances()\n");
 		goto out;
 	}
 
@@ -3108,9 +3108,9 @@ int main(int argc, char *argv[])
 		return ret;
 	}
 
-	ret = isp_test_instances(isp);
+	ret = test_instances(isp);
 	if (ret) {
-		pr_err("FATAL: failure isp_test_instances()\n");
+		pr_err("FATAL: failure test_instances()\n");
 		return ret;
 	}
 
