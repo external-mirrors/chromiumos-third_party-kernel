@@ -38,12 +38,12 @@ static struct isp_obj_fence *nsobj_to_isp_fence(struct isp_obj *nsobj,
 	return container_of(nsobj, struct isp_obj_fence, nsobj);
 }
 
-int isp_out_fence_fd(struct isp_obj_fence *sf)
+int isp_out_fence_fd(struct isp_obj_fence *fc)
 {
-	if (!(sf->nsobj.type & ISP_OBJ_TYPE_OUT_FENCE))
+	if (!(fc->nsobj.type & ISP_OBJ_TYPE_OUT_FENCE))
 		return -1;
 
-	return sf->out.fd;
+	return fc->out.fd;
 }
 
 static struct isp_obj_fence *nsobj_to_isp_in_fence(struct isp_obj *nsobj)
@@ -58,22 +58,22 @@ static struct isp_obj_fence *nsobj_to_isp_out_fence(struct isp_obj *nsobj)
 
 void isp_in_fence_unregister(struct isp_obj *nsobj)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 
-	sf = nsobj_to_isp_in_fence(nsobj);
-	if (WARN_ON(!sf))
+	fc = nsobj_to_isp_in_fence(nsobj);
+	if (WARN_ON(!fc))
 		return;
 
-	isp_obj_remove(&sf->nsobj);
-	isp_obj_deinit(&sf->nsobj);
+	isp_obj_remove(&fc->nsobj);
+	isp_obj_deinit(&fc->nsobj);
 }
 
 void isp_out_fence_unregister(struct isp_obj *nsobj)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 
-	sf = nsobj_to_isp_out_fence(nsobj);
-	if (WARN_ON(!sf))
+	fc = nsobj_to_isp_out_fence(nsobj);
+	if (WARN_ON(!fc))
 		return;
 
 	isp_obj_unlink(nsobj);
@@ -87,38 +87,38 @@ void isp_out_fence_unregister(struct isp_obj *nsobj)
 	 * We take a different approach here: we put DMA fence and release
 	 * ISP fence object only from DAM fence ->release callback.
 	 */
-	dma_fence_put(&sf->out.fence);
+	dma_fence_put(&fc->out.fence);
 }
 
-void isp_fence_put(struct isp_obj_fence *sf)
+void isp_fence_put(struct isp_obj_fence *fc)
 {
-	if (likely(sf))
-		isp_obj_put(&sf->nsobj);
+	if (likely(fc))
+		isp_obj_put(&fc->nsobj);
 	else
 		WARN_ON(1);
 }
 
 static void isp_in_fence_release(struct isp_obj *nsobj)
 {
-	struct isp_obj_fence *sf = nsobj_to_isp_in_fence(nsobj);
+	struct isp_obj_fence *fc = nsobj_to_isp_in_fence(nsobj);
 
-	if (sf->in.fence)
-		dma_fence_remove_callback(sf->in.fence, &sf->in.cb);
-	dma_fence_put(sf->in.fence);
+	if (fc->in.fence)
+		dma_fence_remove_callback(fc->in.fence, &fc->in.cb);
+	dma_fence_put(fc->in.fence);
 	isp_obj_unlink(nsobj);
-	kfree(sf);
+	kfree(fc);
 }
 
 static void isp_fence_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 	unsigned long flags;
 
-	sf = container_of(cb, struct isp_obj_fence, in.cb);
+	fc = container_of(cb, struct isp_obj_fence, in.cb);
 
-	write_lock_irqsave(&sf->in.notify_lock, flags);
-	isp_fire_active_signals(&sf->in.notify_active_chain);
-	write_unlock_irqrestore(&sf->in.notify_lock, flags);
+	write_lock_irqsave(&fc->in.notify_lock, flags);
+	isp_fire_active_signals(&fc->in.notify_active_chain);
+	write_unlock_irqrestore(&fc->in.notify_lock, flags);
 }
 
 __printf(4, 5)
@@ -129,69 +129,69 @@ struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
 					    ...)
 {
 	char name[ISP_FENCE_NAME_SZ];
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 	va_list args;
 	int ret;
 
-	sf = kzalloc(sizeof(*sf), GFP_KERNEL);
-	if (!sf)
+	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+	if (!fc)
 		return NULL;
 
 	va_start(args, namefmt);
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
-	INIT_LIST_HEAD(&sf->in.notify_active_chain);
-	rwlock_init(&sf->in.notify_lock);
-	strscpy(sf->name, name, ISP_FENCE_NAME_SZ);
-	isp_obj_init(&sf->nsobj,
+	INIT_LIST_HEAD(&fc->in.notify_active_chain);
+	rwlock_init(&fc->in.notify_lock);
+	strscpy(fc->name, name, ISP_FENCE_NAME_SZ);
+	isp_obj_init(&fc->nsobj,
 		     ISP_OBJ_TYPE_IN_FENCE,
 		     isp_in_fence_release,
 		     &isp->ns);
 
-	sf->in.fence = sync_file_get_fence(fd);
-	if (!sf->in.fence)
+	fc->in.fence = sync_file_get_fence(fd);
+	if (!fc->in.fence)
 		goto error;
 
-	ret = dma_fence_add_callback(sf->in.fence,
-				     &sf->in.cb,
+	ret = dma_fence_add_callback(fc->in.fence,
+				     &fc->in.cb,
 				     isp_fence_fence_cb);
 	/* -ENOENT is returned when fence is already signaled */
 	if (ret && ret != -ENOENT)
 		goto error;
 
-	if (isp_obj_link(&sf->nsobj, &op->nsobj))
+	if (isp_obj_link(&fc->nsobj, &op->nsobj))
 		goto error;
 
-	if (isp_obj_insert(&sf->nsobj))
+	if (isp_obj_insert(&fc->nsobj))
 		goto error;
 
-	return sf;
+	return fc;
 
 error:
-	isp_in_fence_release(&sf->nsobj);
+	isp_in_fence_release(&fc->nsobj);
 	return NULL;
 }
 ALLOW_ERROR_INJECTION(isp_in_fence_register, NULL);
 
 bool isp_in_fence_activate_signal(struct isp_op_signal *sig)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 	unsigned long flags;
 
-	sf = nsobj_to_isp_in_fence(sig->source);
-	if (WARN_ON(!sf))
+	fc = nsobj_to_isp_in_fence(sig->source);
+	if (WARN_ON(!fc))
 		return false;
 
 	/*
 	 * notify_active_chain is accessed from the IRQ context,
 	 * so we need to disable local IRQs.
 	 */
-	write_lock_irqsave(&sf->in.notify_lock, flags);
-	list_add_tail(&sig->entry, &sf->in.notify_active_chain);
-	write_unlock_irqrestore(&sf->in.notify_lock, flags);
+	write_lock_irqsave(&fc->in.notify_lock, flags);
+	list_add_tail(&sig->entry, &fc->in.notify_active_chain);
+	write_unlock_irqrestore(&fc->in.notify_lock, flags);
 
-	if (dma_fence_is_signaled(sf->in.fence)) {
+	if (dma_fence_is_signaled(fc->in.fence)) {
 		/*
 		 * If the fence is in signaled state at this point then check
 		 * whether sig activation has raced with fence signaling, IOW
@@ -214,12 +214,12 @@ bool isp_in_fence_activate_signal(struct isp_op_signal *sig)
 bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig)
 {
 	struct isp_op_signal *active;
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 	unsigned long flags;
 	bool ret;
 
-	sf = nsobj_to_isp_in_fence(sig->source);
-	if (WARN_ON(!sf))
+	fc = nsobj_to_isp_in_fence(sig->source);
+	if (WARN_ON(!fc))
 		return false;
 
 	/*
@@ -227,37 +227,37 @@ bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig)
 	 * so we need to disable local IRQs.
 	 */
 	ret = false;
-	write_lock_irqsave(&sf->in.notify_lock, flags);
-	list_for_each_entry(active, &sf->in.notify_active_chain, entry) {
+	write_lock_irqsave(&fc->in.notify_lock, flags);
+	list_for_each_entry(active, &fc->in.notify_active_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
 			ret = true;
 			break;
 		}
 	}
-	write_unlock_irqrestore(&sf->in.notify_lock, flags);
+	write_unlock_irqrestore(&fc->in.notify_lock, flags);
 
 	return ret;
 }
 
 static void isp_out_fence_release(struct isp_obj *nsobj)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 
-	sf = nsobj_to_isp_out_fence(nsobj);
-	if (WARN_ON(!sf))
+	fc = nsobj_to_isp_out_fence(nsobj);
+	if (WARN_ON(!fc))
 		return;
 
 	isp_obj_unlink(nsobj);
-	kfree(sf);
+	kfree(fc);
 }
 
 static void isp_dma_fence_release(struct dma_fence *fence)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 
-	sf = container_of(fence, struct isp_obj_fence, out.fence);
-	isp_obj_deinit(&sf->nsobj);
+	fc = container_of(fence, struct isp_obj_fence, out.fence);
+	isp_obj_deinit(&fc->nsobj);
 }
 
 static struct isp_obj *isp_fence_lookup(struct isp_ns *ns, u32 type, u32 id)
@@ -303,71 +303,71 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 {
 	struct sync_file *syncfile = NULL;
 	char name[ISP_FENCE_NAME_SZ];
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 	va_list args;
 
-	sf = kzalloc(sizeof(*sf), GFP_KERNEL);
-	if (!sf)
+	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
+	if (!fc)
 		return NULL;
 
 	va_start(args, namefmt);
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
-	spin_lock_init(&sf->out.context_lock);
-	atomic64_set(&sf->out.fence_seqno, 0);
-	sf->out.fd = -1;
-	strscpy(sf->name, name, ISP_FENCE_NAME_SZ);
-	isp_obj_init(&sf->nsobj,
+	spin_lock_init(&fc->out.context_lock);
+	atomic64_set(&fc->out.fence_seqno, 0);
+	fc->out.fd = -1;
+	strscpy(fc->name, name, ISP_FENCE_NAME_SZ);
+	isp_obj_init(&fc->nsobj,
 		     ISP_OBJ_TYPE_OUT_FENCE,
 		     isp_out_fence_release,
 		     ns);
 
-	sf->out.fence_context = dma_fence_context_alloc(1);
-	dma_fence_init(&sf->out.fence,
+	fc->out.fence_context = dma_fence_context_alloc(1);
+	dma_fence_init(&fc->out.fence,
 		       &isp_out_fence_ops,
-		       &sf->out.context_lock,
-		       sf->out.fence_context,
-		       atomic64_inc_return(&sf->out.fence_seqno));
+		       &fc->out.context_lock,
+		       fc->out.fence_context,
+		       atomic64_inc_return(&fc->out.fence_seqno));
 
-	sf->out.fd = get_unused_fd_flags(O_CLOEXEC);
-	if (sf->out.fd < 0)
+	fc->out.fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fc->out.fd < 0)
 		goto error;
 
-	if (!isp_valid_fence_id(sf->out.fd))
+	if (!isp_valid_fence_id(fc->out.fd))
 		goto error;
 
-	isp_obj_set_id(&sf->nsobj, sf->out.fd + ISP_OBJS_NS_FENCE_ID_START);
+	isp_obj_set_id(&fc->nsobj, fc->out.fd + ISP_OBJS_NS_FENCE_ID_START);
 
-	syncfile = sync_file_create(&sf->out.fence);
+	syncfile = sync_file_create(&fc->out.fence);
 	if (!syncfile)
 		goto error;
 
-	if (isp_obj_insert(&sf->nsobj))
+	if (isp_obj_insert(&fc->nsobj))
 		goto error;
 
-	fd_install(sf->out.fd, syncfile->file);
-	return sf;
+	fd_install(fc->out.fd, syncfile->file);
+	return fc;
 
 error:
-	if (sf->out.fd > 0)
-		put_unused_fd(sf->out.fd);
+	if (fc->out.fd > 0)
+		put_unused_fd(fc->out.fd);
 	if (syncfile)
 		fput(syncfile->file);
-	isp_out_fence_release(&sf->nsobj);
+	isp_out_fence_release(&fc->nsobj);
 	return NULL;
 }
 ALLOW_ERROR_INJECTION(isp_out_fence_register, NULL);
 
 int isp_fire_out_fence_signal(struct isp_obj *nsobj)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 
-	sf = nsobj_to_isp_out_fence(nsobj);
-	if (WARN_ON(!sf))
+	fc = nsobj_to_isp_out_fence(nsobj);
+	if (WARN_ON(!fc))
 		return -EINVAL;
 
-	return dma_fence_signal(&sf->out.fence);
+	return dma_fence_signal(&fc->out.fence);
 }
 
 int isp_drain_out_fences(struct isp_pipeline *pipeline)
