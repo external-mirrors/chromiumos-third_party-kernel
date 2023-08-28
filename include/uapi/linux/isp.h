@@ -393,7 +393,7 @@ struct isp_notifier {
 } __attribute__((packed));
 
 /**
- * struct isp_notifer_list - List of operation execution notifiers
+ * struct isp_notifier_list - List of operation execution notifiers
  *
  * @num_entries:	Number of notifiers
  * @notifiers:		Array of notifiers' descriptors
