@@ -883,14 +883,6 @@ static void isp_op_run_rw_instructions(struct isp_obj_op *op)
  * @op: pointer to ISP operation to be executed
  *
  * This is the place where an operation is being executed.
- * Here's the simplified flow:
- *	1. Set operation's state to RUNNING
- *	2. Read/write registers according to the registered instructions
- *	3. Set operation's state to EXECUTED
- *	4. Notify the completion to user-space
- *	5. Trigger registered signals to notify the dependencies that are
- *	   blocked on the current operation
- *	6. clean-up for the executed operation (e.g. put ref-counter)
  */
 static void isp_op_run(struct isp_obj_op *op)
 {
