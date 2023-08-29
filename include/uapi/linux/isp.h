@@ -462,12 +462,12 @@ enum isp_fence_fd {
 };
 
 /**
- * enum isp_op_list - Special values of operation_add lists
+ * enum isp_op_payload - Special values of operation_add payload
  *
- * @ISP_OP_NO_LIST:	Set when operation has no corresponding list
+ * @ISP_OP_NULL_PTR:	No payload data (NULL pointer)
  */
-enum isp_op_list {
-	ISP_OP_NO_LIST = 0x0,
+enum isp_op_payload {
+	ISP_OP_NULL_PTR = 0x0,
 };
 
 /**
@@ -480,9 +480,9 @@ enum isp_op_list {
  * @delay_ns:		Time to pause an operation after all its dependencies
  *			are ready
  * @rd_wr_list:		Pointer to the property read/write list or
- *			ISP_OP_NO_LIST
+ *			ISP_OP_NULL_PTR
  * @notifier_list:	Pointer to the list of execution notifiers or
- *			ISP_OP_NO_LIST
+ *			ISP_OP_NULL_PTR
  * @entity:		ID of the entity operation is executed on or
  *			ISP_OP_NO_ENTITY
  * @instance:		ID of the entity instance (context) operation is

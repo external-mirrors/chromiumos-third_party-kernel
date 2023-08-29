@@ -34,9 +34,9 @@ void libisp_operation_put(struct libisp_operation *lio)
 	for_each_isp_operation(lio, i, op) {
 		if (op->operation_type != ISP_OPERATION_TYPE_ADD)
 			break;
-		if (op->operation_add.rd_wr_list != ISP_OP_NO_LIST)
+		if (op->operation_add.rd_wr_list != ISP_OP_NULL_PTR)
 			libisp_rw_list_put((void *)op->operation_add.rd_wr_list);
-		if (op->operation_add.notifier_list != ISP_OP_NO_LIST)
+		if (op->operation_add.notifier_list != ISP_OP_NULL_PTR)
 			libisp_notifier_list_put((void *)op->operation_add.notifier_list);
 	}
 
@@ -91,7 +91,7 @@ struct isp_rw_instruction *libisp_failed_instruction(struct isp_operation *op,
 	if (op->operation_type != ISP_OPERATION_TYPE_ADD)
 		return NULL;
 
-	if (op->operation_add.rd_wr_list == ISP_OP_NO_LIST)
+	if (op->operation_add.rd_wr_list == ISP_OP_NULL_PTR)
 		return NULL;
 
 	rw = (struct libisp_rw_list *)op->operation_add.rd_wr_list;
