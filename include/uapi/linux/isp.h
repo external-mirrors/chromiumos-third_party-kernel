@@ -349,17 +349,6 @@ struct isp_rw_instruction {
 } __attribute__((packed));
 
 /**
- * struct isp_rw_instruction_list - List of read/write instructions
- *
- * @num_entries:	Number of read/write instructions
- * @instructions:	Array of read/write instructions
- */
-struct isp_rw_instruction_list {
-	__u32				num_entries;
-	struct isp_rw_instruction	instructions[];
-} __attribute__((packed));
-
-/**
  * enum isp_notifier_type - Operation execution notifier type
  *
  * @ISP_FENCE_NOTIFIER:	Exported fence (out fence) notifier
@@ -479,7 +468,7 @@ enum isp_op_payload {
  * @deps:		Array that describes operation dependencies (if any).
  * @delay_ns:		Time to pause an operation after all its dependencies
  *			are ready
- * @rd_wr_list:		Pointer to the property read/write list or
+ * @instruction:	Pointer to the operation's read/write instruction or
  *			ISP_OP_NULL_PTR
  * @notifier_list:	Pointer to the list of execution notifiers or
  *			ISP_OP_NULL_PTR
@@ -499,7 +488,7 @@ struct isp_operation_add {
 	 * Execution context specific data (if any)
 	 */
 	__u64			delay_ns;
-	__u64			rd_wr_list;
+	__u64			instruction;
 	__u64			notifier_list;
 	__u32			entity;
 	__u32			instance;

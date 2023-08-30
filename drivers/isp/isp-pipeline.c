@@ -825,56 +825,42 @@ static int isp_write_instruction(struct isp_obj_op *op,
 static void isp_op_run_rw_instructions(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
-	struct isp_rw_instruction_list rw_list;
-	int i;
+	struct isp_rw_instruction insn;
+	int ret;
 
 	/* No execution payload, this probably was a SYNC operation */
-	if (op->exec_rw_list_addr == ISP_OP_NULL_PTR)
+	payload = op->exec_instruction_addr;
+	if (payload == ISP_OP_NULL_PTR)
 		return;
 
 	/* At this point OPs require an entity to be run against */
 	if (!op->exec_entity)
 		return;
 
-	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
-		pr_err("Unable to access operation RW instructions list\n");
+	if (copy_from_user(&insn, payload, sizeof(insn))) {
+		pr_err("Unable to access RW instruction\n");
 		return;
 	}
 
-	payload = op->exec_rw_list_addr +
-		offsetof(struct isp_rw_instruction_list, instructions);
+	ret = 0;
+	switch (insn.type) {
+	case ISP_READ_INSTRUCTION:
+		ret = isp_read_instruction(op, &insn.rd);
+		break;
+	case ISP_WRITE_INSTRUCTION:
+		ret = isp_write_instruction(op, &insn.wr);
+		break;
+	case ISP_DMABUF_INSTRUCTION:
+		ret = isp_run_dmabuf_instruction(op, &insn.db);
+		break;
+	case ISP_INSTANCE_INSTRUCTION:
+		ret = isp_run_instance_instruction(op, &insn.in);
+		break;
+	}
 
-	for (i = 0; i < rw_list.num_entries; i++) {
-		struct isp_rw_instruction insn;
-		int ret = 0;
-
-		if (copy_from_user(&insn, payload, sizeof(insn))) {
-			pr_err("Unable to access RW instruction\n");
-			break;
-		}
-
-		switch (insn.type) {
-		case ISP_READ_INSTRUCTION:
-			ret = isp_read_instruction(op, &insn.rd);
-			break;
-		case ISP_WRITE_INSTRUCTION:
-			ret = isp_write_instruction(op, &insn.wr);
-			break;
-		case ISP_DMABUF_INSTRUCTION:
-			ret = isp_run_dmabuf_instruction(op, &insn.db);
-			break;
-		case ISP_INSTANCE_INSTRUCTION:
-			ret = isp_run_instance_instruction(op, &insn.in);
-			break;
-		}
-
-		if (ret) {
-			pr_devel("Operation execution error, aborting\n");
-			put_user(ret, &payload->error);
-			break;
-		}
-
-		payload++;
+	if (ret) {
+		pr_devel("Operation execution error, aborting\n");
+		put_user(ret, &payload->error);
 	}
 }
 
@@ -1300,38 +1286,22 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 				  struct isp_obj_op *op)
 {
 	op->delay_ns			= req->delay_ns;
-	op->exec_rw_list_addr		= (void *)ISP_OP_NULL_PTR;
+	op->exec_instruction_addr	= (void *)ISP_OP_NULL_PTR;
 	op->exec_notifier_list_addr	= (void *)ISP_OP_NULL_PTR;
 	op->exec_entity			= NULL;
 	op->exec_instance		= NULL;
 
 	if (req->entity == ISP_OP_NO_ENTITY &&
-	    req->rd_wr_list != ISP_OP_NULL_PTR)
+	    req->instruction != ISP_OP_NULL_PTR)
 		return -EINVAL;
 
-	if (req->rd_wr_list != ISP_OP_NULL_PTR) {
-		struct isp_rw_instruction_list rw;
+	if (req->instruction != ISP_OP_NULL_PTR) {
 		struct isp_rw_instruction insn;
 		uintptr_t __user *addr;
-		size_t size;
 
-		addr = u64_to_user_ptr(req->rd_wr_list);
-		op->exec_rw_list_addr = addr;
-		size = sizeof(rw);
-		if (copy_from_user(&rw, addr, size))
-			goto error;
-
-		if (rw.num_entries == 0)
-			goto error;
-
-		/*
-		 * This will attempt to access the last RW instruction in
-		 * the buffer. This check is not very reliable. User-space
-		 * maps whole pages, so we will fail here only when the
-		 * number of instructions points past allocated buffer pages.
-		 */
-		size += rw.num_entries * sizeof(struct isp_rw_instruction);
-		addr += size - sizeof(struct isp_rw_instruction);
+		addr = u64_to_user_ptr(req->instruction);
+		op->exec_instruction_addr = addr;
+		/* Make sure we can access instruction */
 		if (copy_from_user(&insn, addr, sizeof(insn)))
 			goto error;
 	}
@@ -1380,52 +1350,38 @@ error:
 static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
-	struct isp_rw_instruction_list rw_list;
-	int i;
+	struct isp_rw_instruction insn;
+	int ret;
 
-	if (op->exec_rw_list_addr == ISP_OP_NULL_PTR)
+	payload = op->exec_instruction_addr;
+	if (payload == ISP_OP_NULL_PTR)
 		return 0;
 
-	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
-		pr_err("Unable to access operation RW instructions list\n");
+	if (copy_from_user(&insn, payload, sizeof(insn))) {
+		pr_err("Unable to access RW instruction\n");
 		return -EFAULT;
 	}
 
-	payload = op->exec_rw_list_addr +
-		offsetof(struct isp_rw_instruction_list, instructions);
-
-	for (i = 0; i < rw_list.num_entries; i++) {
-		struct isp_rw_instruction insn;
-		int ret = 0;
-
-		if (copy_from_user(&insn, payload, sizeof(insn))) {
-			pr_err("Unable to access RW instruction\n");
-			return -EFAULT;
-		}
-
-		switch (insn.type) {
-		case ISP_DMABUF_INSTRUCTION:
-			ret = isp_prepare_dmabuf_instruction(op, &insn.db);
-			break;
-		case ISP_INSTANCE_INSTRUCTION:
-			ret = isp_prepare_instance_instruction(op, &insn.in);
-			break;
-		case ISP_OUT_FENCE_INSTRUCTION:
-			ret = isp_out_fence_instruction(op, &insn.of);
-			ret |= copy_to_user(payload, &insn, sizeof(insn));
-			break;
-		}
-
-		if (ret) {
-			pr_devel("Failed instruction at prepare stage\n");
-			put_user(ret, &payload->error);
-			return ret;
-		}
-
-		payload++;
+	ret = 0;
+	switch (insn.type) {
+	case ISP_DMABUF_INSTRUCTION:
+		ret = isp_prepare_dmabuf_instruction(op, &insn.db);
+		break;
+	case ISP_INSTANCE_INSTRUCTION:
+		ret = isp_prepare_instance_instruction(op, &insn.in);
+		break;
+	case ISP_OUT_FENCE_INSTRUCTION:
+		ret = isp_out_fence_instruction(op, &insn.of);
+		ret |= copy_to_user(payload, &insn, sizeof(insn));
+		break;
 	}
 
-	return 0;
+	if (ret) {
+		pr_devel("Failed instruction at prepare stage\n");
+		put_user(ret, &payload->error);
+	}
+
+	return ret;
 }
 
 /**
@@ -1599,38 +1555,24 @@ isp_cancel_instance_instruction(struct isp_obj_op *op,
 static void isp_op_cancel_rw_instruction(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
-	struct isp_rw_instruction_list rw_list;
-	int i;
+	struct isp_rw_instruction insn;
 
-	if (op->exec_rw_list_addr == ISP_OP_NULL_PTR)
+	payload = op->exec_instruction_addr;
+	if (payload == ISP_OP_NULL_PTR)
 		return;
 
-	if (copy_from_user(&rw_list, op->exec_rw_list_addr, sizeof(rw_list))) {
-		pr_err("Unable to access operation RW instructions list\n");
+	if (copy_from_user(&insn, payload, sizeof(insn))) {
+		pr_err("Unable to access RW instruction\n");
 		return;
 	}
 
-	payload = op->exec_rw_list_addr +
-		offsetof(struct isp_rw_instruction_list, instructions);
-
-	for (i = 0; i < rw_list.num_entries; i++) {
-		struct isp_rw_instruction insn;
-
-		if (copy_from_user(&insn, payload, sizeof(insn))) {
-			pr_err("Unable to access RW instruction\n");
-			break;
-		}
-
-		switch (insn.type) {
-		case ISP_DMABUF_INSTRUCTION:
-			isp_cancel_dmabuf_instruction(op, &insn.db);
-			break;
-		case ISP_INSTANCE_INSTRUCTION:
-			isp_cancel_instance_instruction(op, &insn.in);
-			break;
-		}
-
-		payload++;
+	switch (insn.type) {
+	case ISP_DMABUF_INSTRUCTION:
+		isp_cancel_dmabuf_instruction(op, &insn.db);
+		break;
+	case ISP_INSTANCE_INSTRUCTION:
+		isp_cancel_instance_instruction(op, &insn.in);
+		break;
 	}
 }
 

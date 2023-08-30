@@ -31,8 +31,8 @@ struct libisp_operation *libisp_operation_get(uint32_t num_operations);
 int libisp_operation_ioctl(struct libisp *isp, struct libisp_operation *lio);
 void libisp_operation_put(struct libisp_operation *lio);
 
-struct libisp_rw_list *libisp_rw_list_get(uint32_t num_rw_entries);
-void libisp_rw_list_put(struct libisp_rw_list *rwl);
+struct isp_rw_instruction *libisp_rw_instruction_get(void);
+void libisp_rw_instruction_put(struct isp_rw_instruction *insn);
 
 struct libisp_notifier_list *libisp_notifier_list_get(uint32_t num_rw_entries);
 void libisp_notifier_list_put(struct libisp_notifier_list *nl);
@@ -46,18 +46,6 @@ struct isp_operation *libisp_operation_at(struct libisp_operation *lio,
 	     ((e) = libisp_operation_at((q), (i)));			\
 	     (i)++)
 
-struct isp_rw_instruction *libisp_rw_instruction_at(struct libisp_rw_list *rw,
-						    u32 idx);
-
-#define for_each_rw_instruction(q, i, e)				\
-	for ((i) = (0), (e) = libisp_rw_instruction_at((q), (i));	\
-	     (i) < (q)->num_ents &&					\
-	     ((e) = libisp_rw_instruction_at((q), (i)));		\
-	     (i)++)
-
 struct isp_notifier *libisp_notifier_at(struct libisp_notifier_list *nl,
 					u32 idx);
-
-struct isp_rw_instruction *libisp_failed_instruction(struct isp_operation *op,
-						     u32 *idx);
 #endif /* LIBISP_OPERATION_H_ */

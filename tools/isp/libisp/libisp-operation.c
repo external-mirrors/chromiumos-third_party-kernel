@@ -34,8 +34,8 @@ void libisp_operation_put(struct libisp_operation *lio)
 	for_each_isp_operation(lio, i, op) {
 		if (op->operation_type != ISP_OPERATION_TYPE_ADD)
 			break;
-		if (op->operation_add.rd_wr_list != ISP_OP_NULL_PTR)
-			libisp_rw_list_put((void *)op->operation_add.rd_wr_list);
+		if (op->operation_add.instruction != ISP_OP_NULL_PTR)
+			libisp_rw_instruction_put((void *)op->operation_add.instruction);
 		if (op->operation_add.notifier_list != ISP_OP_NULL_PTR)
 			libisp_notifier_list_put((void *)op->operation_add.notifier_list);
 	}
@@ -67,22 +67,6 @@ struct libisp_operation *libisp_operation_get(uint32_t num_operations)
 	return lio;
 }
 
-struct isp_rw_instruction *libisp_rw_instruction_at(struct libisp_rw_list *rw,
-						    u32 idx)
-{
-	if (rw->num_ents == 0) {
-		LIBISP_BUG();
-		return NULL;
-	}
-
-	if (idx >= rw->num_ents) {
-		LIBISP_BUG();
-		return NULL;
-	}
-
-	return &rw->ents[idx];
-}
-
 struct isp_rw_instruction *libisp_failed_instruction(struct isp_operation *op,
 						     u32 *idx)
 {
@@ -91,10 +75,10 @@ struct isp_rw_instruction *libisp_failed_instruction(struct isp_operation *op,
 	if (op->operation_type != ISP_OPERATION_TYPE_ADD)
 		return NULL;
 
-	if (op->operation_add.rd_wr_list == ISP_OP_NULL_PTR)
+	if (op->operation_add.instruction == ISP_OP_NULL_PTR)
 		return NULL;
 
-	rw = (struct libisp_rw_list *)op->operation_add.rd_wr_list;
+	rw = (struct libisp_rw_list *)op->operation_add.instruction;
 	if (rw->num_ents == 0)
 		return NULL;
 
@@ -115,30 +99,17 @@ struct isp_rw_instruction *libisp_failed_instruction(struct isp_operation *op,
 	return NULL;
 }
 
-struct libisp_rw_list *libisp_rw_list_get(uint32_t num_ents)
+struct isp_rw_instruction *libisp_rw_instruction_get(void)
 {
-	struct libisp_rw_list *rwl;
-	size_t sz;
-
-	if (!num_ents)
-		return NULL;
-
-	sz = sizeof(struct libisp_rw_list) +
-		num_ents * sizeof(struct isp_rw_instruction);
-	rwl = calloc(1, sz);
-	if (!rwl)
-		return NULL;
-
-	rwl->num_ents = num_ents;
-	return rwl;
+	return calloc(1, sizeof(struct isp_rw_instruction));
 }
 
-void libisp_rw_list_put(struct libisp_rw_list *rwl)
+void libisp_rw_instruction_put(struct isp_rw_instruction *insn)
 {
-	if (!rwl)
+	if (!insn)
 		return;
 
-	free(rwl);
+	free(insn);
 }
 
 struct isp_notifier *libisp_notifier_at(struct libisp_notifier_list *nl,

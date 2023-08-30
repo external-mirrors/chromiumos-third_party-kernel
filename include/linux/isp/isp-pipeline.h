@@ -115,8 +115,8 @@ struct isp_obj_op {
 	struct isp_obj_entity		*exec_entity;
 	/** @exec_instance: Entity instance object OP will be executed on */
 	struct isp_obj_instance		*exec_instance;
-	/** @exec_rw_list_addr: Pointer to the list of read/write payloads */
-	void __user			*exec_rw_list_addr;
+	/** @exec_instruction_addr: Pointer to the read/write instruction */
+	void __user			*exec_instruction_addr;
 	/** @exec_notifier_list_addr: Pointer to the list of notifiers */
 	void __user			*exec_notifier_list_addr;
 	/** @pipeline: Execution pipeline */
