@@ -1840,8 +1840,6 @@ huge_unlock:
 	}
 
 regular_page:
-	if (pmd_trans_unstable(pmd))
-		return 0;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
@@ -1960,8 +1958,6 @@ huge_unlock:
 	}
 
 regular_page:
-	if (pmd_trans_unstable(pmd))
-		return 0;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
