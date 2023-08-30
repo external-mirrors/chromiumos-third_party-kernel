@@ -724,11 +724,11 @@ static int add_many_invalid_operations(struct libisp *isp,
 		} else {
 			op->operation_add.instruction	= 0xC0FFEE;
 
-			op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
-			op->operation_add.deps[0].id	= i - 1;
+			op->operation_add.deps[0].type	= ISP_DEPENDENCY_EVENT;
+			op->operation_add.deps[0].id	= event->id;
 
-			op->operation_add.deps[1].type	= ISP_DEPENDENCY_EVENT;
-			op->operation_add.deps[1].id	= event->id;
+			op->operation_add.deps[1].type	= ISP_DEPENDENCY_OP;
+			op->operation_add.deps[1].id	= i - 1;
 
 			op->operation_add.deps[2].type	= ISP_DEPENDENCY_FENCE_IN;
 			op->operation_add.deps[2].id	= 255;
@@ -1082,8 +1082,10 @@ static int test_add_valid_rw_operations(struct libisp *isp,
 
 		if (op_idx == 1) {
 			op->operation_add.instance	= instance_id;
-			op->operation_add.deps[1].type	= ISP_DEPENDENCY_EVENT;
-			op->operation_add.deps[1].id	= event->id;
+			op->operation_add.deps[0].type	= ISP_DEPENDENCY_EVENT;
+			op->operation_add.deps[0].id	= event->id;
+			op->operation_add.deps[1].type	= ISP_DEPENDENCY_OP;
+			op->operation_add.deps[1].id	= op_idx - 1;
 
 			insn = libisp_rw_instruction_get();
 			if (!insn) {
@@ -2275,10 +2277,10 @@ static int test_compound_instance_operations(struct libisp *isp)
 	op->operation_add.notifier_list	= ISP_OP_NULL_PTR;
 	op->operation_add.instance	= 42;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
-	op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
-	op->operation_add.deps[0].id	= 2;
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_EVENT;
 	op->operation_add.deps[0].id	= event->id;
+	op->operation_add.deps[1].type	= ISP_DEPENDENCY_OP;
+	op->operation_add.deps[1].id	= 2;
 
 	insn = libisp_rw_instruction_get();
 	if (!insn) {
