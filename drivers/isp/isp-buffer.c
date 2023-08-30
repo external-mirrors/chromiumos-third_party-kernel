@@ -287,6 +287,7 @@ int isp_drain_buffers(struct isp_pipeline *pipeline)
 	isp_ns_for_each_obj_safe(nsobj, save, &pipeline->objs) {
 		if (isp_obj_type(nsobj) != ISP_OBJ_TYPE_BUFFER)
 			continue;
+
 		ret = isp_buffer_unregister(&pipeline->objs, isp_obj_id(nsobj));
 		if (ret)
 			return ret;

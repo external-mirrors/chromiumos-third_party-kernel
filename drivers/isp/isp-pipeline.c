@@ -286,47 +286,6 @@ static bool isp_op_notify(struct isp_op_signal *sig)
 	return execute;
 }
 
-/**
- * isp_fire_active_signals() - Raise all signals in an active chain
- * @notify_active_chain: operation notify chain with signals to be fired
- *
- * After firing the signals will be removed from the chain and released.
- */
-void isp_fire_active_signals(struct list_head *notify_active_chain)
-{
-	struct isp_op_signal *sig, *safe;
-
-	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
-		if (sig->instance != ISP_OP_NO_INSTANCE)
-			continue;
-
-		list_del_init(&sig->entry);
-		sig->fire(sig);
-	}
-}
-
-/**
- * isp_instance_fire_active_signals() - Raise signals that wait on instance
- * event
- * @instance: entity instance (context)
- * @notify_active_chain: operation notify chain with signals to be fired
- *
- * After firing the signals will be removed from the chain and released.
- */
-void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
-				      struct list_head *notify_active_chain)
-{
-	struct isp_op_signal *sig, *safe;
-
-	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
-		if (sig->instance != isp_obj_id(&instance->nsobj))
-			continue;
-
-		list_del_init(&sig->entry);
-		sig->fire(sig);
-	}
-}
-
 static void isp_drain_op_fences(struct isp_obj_op *op)
 {
 	struct isp_obj *link;
@@ -784,8 +743,12 @@ static int isp_read_instruction(struct isp_obj_op *op,
 		insn->buffers_list = (u64)buffers_list;
 	}
 
+	/* Set exclusive ownership flag */
+	isp_instance_private_set(op->exec_instance, op);
 	dev = isp_entity_driver_data(entity);
 	ret = entity->ops->instance_read(dev, op->exec_instance, insn);
+	/* Clear ownership flag */
+	isp_instance_private_set(op->exec_instance, NULL);
 
 	if (insn->num_buffers)
 		isp_buffers_list_put(insn->num_buffers, buffers_list);
@@ -804,6 +767,9 @@ static int isp_write_instruction(struct isp_obj_op *op,
 	if (!op->exec_instance)
 		return -EINVAL;
 
+	if (WARN_ON(op->exec_instance->private))
+		return -EINVAL;
+
 	if (insn->num_buffers) {
 		buffers_list = isp_buffers_list_get(pipeline,
 						    insn->num_buffers,
@@ -814,6 +780,11 @@ static int isp_write_instruction(struct isp_obj_op *op,
 		insn->buffers_list = (u64)buffers_list;
 	}
 
+	/*
+	 * Set exclusive ownership flag. It will be cleared only when the
+	 * driver signals that instruction was handled.
+	 */
+	isp_instance_private_set(op->exec_instance, op);
 	dev = isp_entity_driver_data(entity);
 	ret = entity->ops->instance_write(dev, op->exec_instance, insn);
 
@@ -822,46 +793,88 @@ static int isp_write_instruction(struct isp_obj_op *op,
 	return ret;
 }
 
-static void isp_op_run_rw_instructions(struct isp_obj_op *op)
+static void isp_op_run_complete(struct isp_obj_op *op)
+{
+	struct isp_pipeline *pipeline = op->pipeline;
+
+	/* New signals cannot be registered after this line */
+	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_EXECUTED));
+
+	/* Notify exported (external) objects of operation completion */
+	isp_op_process_notifiers(op);
+
+	/*
+	 * Remove operation from the namespace, so that its ID can be
+	 * reused from now on.
+	 */
+	isp_obj_remove(&op->nsobj);
+
+	/* Notify user-space that we are done with this OP */
+	isp_op_completion_event(pipeline, op);
+
+	/* Notify dependencies of operation completion */
+	isp_op_fire_signals(op);
+
+	/*
+	 * Lastly, put operation's refcount. Note that we cannot reliably
+	 * isp_obj_deinit() here, because some other OP that is still blocked
+	 * on some signals may be holding ref-count of this OP.
+	 */
+	isp_op_put(op);
+}
+
+enum insn_exec_mode {
+	INSTRUCTION_EXEC_DIRECT,
+	INSTRUCTION_EXEC_DEFERRED,
+};
+
+static int isp_op_run_rw_instructions(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
 	struct isp_rw_instruction insn;
-	int ret;
+	int mode;
+	int err;
 
-	/* No execution payload, this probably was a SYNC operation */
 	payload = op->exec_instruction_addr;
-	if (payload == ISP_OP_NULL_PTR)
-		return;
+	if (payload == ISP_OP_NULL_PTR) {
+		/* No execution payload. Mark it done. */
+		return INSTRUCTION_EXEC_DIRECT;
+	}
 
 	/* At this point OPs require an entity to be run against */
 	if (!op->exec_entity)
-		return;
+		return INSTRUCTION_EXEC_DIRECT;
 
 	if (copy_from_user(&insn, payload, sizeof(insn))) {
 		pr_err("Unable to access RW instruction\n");
-		return;
+		return INSTRUCTION_EXEC_DIRECT;
 	}
 
-	ret = 0;
+	mode = INSTRUCTION_EXEC_DIRECT;
+	err = -EINVAL;
+
 	switch (insn.type) {
 	case ISP_READ_INSTRUCTION:
-		ret = isp_read_instruction(op, &insn.rd);
+		err = isp_read_instruction(op, &insn.rd);
 		break;
 	case ISP_WRITE_INSTRUCTION:
-		ret = isp_write_instruction(op, &insn.wr);
+		err = isp_write_instruction(op, &insn.wr);
+		mode = INSTRUCTION_EXEC_DEFERRED;
 		break;
 	case ISP_DMABUF_INSTRUCTION:
-		ret = isp_run_dmabuf_instruction(op, &insn.db);
+		err = isp_run_dmabuf_instruction(op, &insn.db);
 		break;
 	case ISP_INSTANCE_INSTRUCTION:
-		ret = isp_run_instance_instruction(op, &insn.in);
+		err = isp_run_instance_instruction(op, &insn.in);
 		break;
 	}
 
-	if (ret) {
+	if (err) {
 		pr_devel("Operation execution error, aborting\n");
-		put_user(ret, &payload->error);
+		put_user(err, &payload->error);
 	}
+
+	return mode;
 }
 
 /**
@@ -872,34 +885,25 @@ static void isp_op_run_rw_instructions(struct isp_obj_op *op)
  */
 static void isp_op_run(struct isp_obj_op *op)
 {
-	struct isp_pipeline *pipeline = op->pipeline;
+	int mode;
 
 	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_RUNNING));
 
 	if (op->delay_ns)
 		ndelay(op->delay_ns);
 
-	isp_op_run_rw_instructions(op);
-	isp_op_process_notifiers(op);
-
-	/* New signals cannot be registered after this line */
-	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_EXECUTED));
+	mode = isp_op_run_rw_instructions(op);
 
 	/*
-	 * Remove operation from the namespace, so that its ID can be reused
-	 * from now on.
+	 * If operation RW instruction was executed in direct mode then such
+	 * operation is considered completed.
+	 *
+	 * Otherwise operation is completed only after driver's deferred
+	 * execution context notifies pipeline that it has finished operation
+	 * processing.
 	 */
-	isp_obj_remove(&op->nsobj);
-
-	/* Notify user-space that we are done with this OP */
-	isp_op_completion_event(pipeline, op);
-	isp_op_fire_signals(op);
-	/*
-	 * Lastly, put operation's refcount. Note that we cannot reliably
-	 * isp_obj_deinit() here, because some other OP that is still blocked
-	 * on some signals may be holding ref-count of this OP.
-	 */
-	isp_op_put(op);
+	if (mode == INSTRUCTION_EXEC_DIRECT)
+		isp_op_run_complete(op);
 }
 
 static bool io_queue_status(struct isp_pipeline *pipeline)
@@ -980,6 +984,61 @@ static int isp_pipeline_io_worker(void *data)
 	clear_bit(ISP_PIPELINE_IO_EXITING, &pipeline->io_state);
 	do_exit(0);
 	return 0;
+}
+
+/**
+ * isp_fire_active_signals() - Raise all signals in an active chain
+ * @notify_active_chain: operation notify chain with signals to be fired
+ *
+ * After firing the signals will be removed from the chain and released.
+ */
+void isp_fire_active_signals(struct list_head *notify_active_chain)
+{
+	struct isp_op_signal *sig, *safe;
+
+	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+		if (sig->instance != ISP_OP_NO_INSTANCE)
+			continue;
+
+		list_del_init(&sig->entry);
+		sig->fire(sig);
+	}
+}
+
+/**
+ * isp_instance_fire_active_signals() - Raise signals that wait on instance
+ * event
+ * @instance: entity instance (context)
+ * @notify_active_chain: operation notify chain with signals to be fired
+ *
+ * After firing the signals will be removed from the chain and released.
+ */
+void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
+				      struct list_head *notify_active_chain)
+{
+	struct isp_op_signal *sig, *safe;
+	struct isp_obj_op *op;
+
+	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+		if (sig->instance != isp_obj_id(&instance->nsobj))
+			continue;
+
+		list_del_init(&sig->entry);
+		sig->fire(sig);
+	}
+
+	op = isp_instance_private_set(instance, NULL);
+	if (!op)
+		return;
+
+	/*
+	 * Instances can fire signals from atomic context (e.g. driver IRQ),
+	 * while operation completion in general requires a non-atomic
+	 * context: we need to cleanup namespace, notify dependencies,
+	 * notify exported objects, etc. Handle operation completion in a
+	 * deferred context.
+	 */
+	queue_work(system_wq, &op->completion_work);
 }
 
 /**
@@ -1384,6 +1443,14 @@ static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 	return ret;
 }
 
+static void isp_op_completion_work(struct work_struct *work)
+{
+	struct isp_obj_op *op;
+
+	op = container_of(work, struct isp_obj_op, completion_work);
+	isp_op_run_complete(op);
+}
+
 /**
  * isp_pipeline_enqueue_prepare() - Create an operation
  * @pipeline: pointer to ISP pipeline
@@ -1419,6 +1486,7 @@ int isp_pipeline_enqueue_prepare(struct isp_pipeline *pipeline,
 	INIT_LIST_HEAD(&op->notify_pending_chain);
 	INIT_LIST_HEAD(&op->notifiers);
 	INIT_LIST_HEAD(&op->io_queue_entry);
+	INIT_WORK(&op->completion_work, isp_op_completion_work);
 	rwlock_init(&op->notify_lock);
 	op->pipeline = pipeline;
 	isp_op_set_state(op, ISP_OPERATION_STATE_SLEEP);

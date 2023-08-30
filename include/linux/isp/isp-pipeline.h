@@ -12,6 +12,7 @@
 #include <linux/isp/isp-ringbuffer.h>
 #include <linux/rwsem.h>
 #include <linux/sched.h>
+#include <linux/workqueue.h>
 
 #define ISP_PIPELINE_IO_ACTIVE	(1 << 0)
 #define ISP_PIPELINE_IO_EXITING	(1 << 1)
@@ -149,6 +150,8 @@ struct isp_obj_op {
 	 * @notifiers: List of all signals this OP owns.
 	 */
 	struct list_head		notifiers;
+	/** @completion_work: Deferred OP release */
+	struct work_struct		completion_work;
 };
 
 struct isp_device;

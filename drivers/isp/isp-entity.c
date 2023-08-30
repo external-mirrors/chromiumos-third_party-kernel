@@ -400,6 +400,7 @@ struct isp_obj_instance *isp_instance_create(struct isp_ns *ns,
 		     ns);
 	isp_obj_set_id(&instance->nsobj, id);
 	INIT_WORK(&instance->release_work, isp_instance_release);
+	spin_lock_init(&instance->lock);
 
 	if (atomic_dec_if_positive(&entity->instances_avail) < 0)
 		goto error;
@@ -895,6 +896,20 @@ int isp_enum_events(struct isp_device *isp,
 	return ret;
 }
 
+void *isp_instance_private_set(struct isp_obj_instance *instance,
+			       void *private)
+{
+	unsigned long flags;
+	void *prev;
+
+	spin_lock_irqsave(&instance->lock, flags);
+	prev = instance->private;
+	instance->private = private;
+	spin_unlock_irqrestore(&instance->lock, flags);
+
+	return prev;
+}
+
 /**
  * isp_drain_instances() - Drains pipeline entities instances. This must be used
  * only from the pipeline (emergency) termination path.
@@ -912,6 +927,7 @@ int isp_drain_instances(struct isp_pipeline *pipeline)
 		if (isp_obj_type(nsobj) != ISP_OBJ_TYPE_INSTANCE)
 			continue;
 
+		isp_instance_private_set(nsobj_to_isp_instance(nsobj), NULL);
 		ret = isp_obj_remove_id(&pipeline->objs,
 					ISP_OBJ_TYPE_INSTANCE,
 					isp_obj_id(nsobj));
