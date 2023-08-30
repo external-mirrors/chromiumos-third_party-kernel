@@ -35,6 +35,10 @@ struct isp_pipeline {
 	spinlock_t		io_queue_lock;
 	/** @io_queue: A queue of OPs */
 	struct list_head	io_queue;
+	/** @io_comp_queue_lock: Deferred OP completion queue lock */
+	spinlock_t		io_comp_queue_lock;
+	/** @io_comp_queue: Deferred OP completion queue */
+	struct list_head	io_comp_queue;
 	/** @io_thread: IO thread that handles OPs execution */
 	struct task_struct	*io_thread;
 	/** @io_queue_wait: IO-queue wait_queue */
@@ -150,8 +154,6 @@ struct isp_obj_op {
 	 * @notifiers: List of all signals this OP owns.
 	 */
 	struct list_head		notifiers;
-	/** @completion_work: Deferred OP release */
-	struct work_struct		completion_work;
 };
 
 struct isp_device;

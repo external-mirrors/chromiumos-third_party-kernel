@@ -896,18 +896,13 @@ int isp_enum_events(struct isp_device *isp,
 	return ret;
 }
 
-void *isp_instance_private_set(struct isp_obj_instance *instance,
-			       void *private)
+void isp_instance_private_set(struct isp_obj_instance *instance, void *private)
 {
 	unsigned long flags;
-	void *prev;
 
 	spin_lock_irqsave(&instance->lock, flags);
-	prev = instance->private;
 	instance->private = private;
 	spin_unlock_irqrestore(&instance->lock, flags);
-
-	return prev;
 }
 
 /**

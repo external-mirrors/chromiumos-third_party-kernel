@@ -916,11 +916,40 @@ static bool io_queue_status(struct isp_pipeline *pipeline)
 	if (signal_pending(current))
 		return true;
 
+	spin_lock_irqsave(&pipeline->io_comp_queue_lock, flags);
+	pending_ops = !list_empty(&pipeline->io_comp_queue);
+	spin_unlock_irqrestore(&pipeline->io_comp_queue_lock, flags);
+
+	if (pending_ops)
+		return true;
+
 	spin_lock_irqsave(&pipeline->io_queue_lock, flags);
 	pending_ops = !list_empty(&pipeline->io_queue);
 	spin_unlock_irqrestore(&pipeline->io_queue_lock, flags);
 
 	return pending_ops;
+}
+
+static void isp_pipeline_io_completions(struct isp_pipeline *pipeline)
+{
+	struct isp_obj_op *op;
+	unsigned long flags;
+
+	do {
+		op = NULL;
+
+		spin_lock_irqsave(&pipeline->io_comp_queue_lock, flags);
+		if (!list_empty(&pipeline->io_comp_queue)) {
+			op = list_first_entry(&pipeline->io_comp_queue,
+					      struct isp_obj_op,
+					      io_queue_entry);
+			list_del(&op->io_queue_entry);
+		}
+		spin_unlock_irqrestore(&pipeline->io_comp_queue_lock, flags);
+
+		if (op)
+			isp_op_run_complete(op);
+	} while (op);
 }
 
 /**
@@ -952,6 +981,12 @@ static int isp_pipeline_io_worker(void *data)
 			clear_bit(ISP_PIPELINE_IO_ACTIVE, &pipeline->io_state);
 			break;
 		}
+
+		/*
+		 * Flush previously completed operations that were executed
+		 * in deferred contexts.
+		 */
+		isp_pipeline_io_completions(pipeline);
 
 		spin_lock_irqsave(&pipeline->io_queue_lock, flags);
 		if (!list_empty(&pipeline->io_queue)) {
@@ -1027,18 +1062,36 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 		sig->fire(sig);
 	}
 
-	op = isp_instance_private_set(instance, NULL);
-	if (!op)
-		return;
-
 	/*
-	 * Instances can fire signals from atomic context (e.g. driver IRQ),
-	 * while operation completion in general requires a non-atomic
-	 * context: we need to cleanup namespace, notify dependencies,
-	 * notify exported objects, etc. Handle operation completion in a
-	 * deferred context.
+	 * This synchronizes with instance drain. If instance has ->private
+	 * set then pipeline still exists and we can queue deferred OP
+	 * completion.
+	 *
+	 * We don't need to disable local IRQs here.
 	 */
-	queue_work(system_wq, &op->completion_work);
+	spin_lock(&instance->lock);
+	op = instance->private;
+	if (op) {
+		struct isp_pipeline *pipeline = op->pipeline;
+
+		/*
+		 * Instances can fire signals from atomic context (e.g. driver
+		 * IRQ), while operation completion in general requires a
+		 * non-atomic context: we need to cleanup namespace, notify
+		 * dependencies, notify exported objects, etc.
+		 *
+		 * Handle operation completion in a deferred context.
+		 */
+		spin_lock(&pipeline->io_comp_queue_lock);
+		list_add_tail(&op->io_queue_entry, &pipeline->io_comp_queue);
+		spin_unlock(&pipeline->io_comp_queue_lock);
+
+		if (isp_pipeline_is_active(pipeline))
+			wake_up(&pipeline->io_queue_wait);
+
+		instance->private = NULL;
+	}
+	spin_unlock(&instance->lock);
 }
 
 /**
@@ -1443,14 +1496,6 @@ static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 	return ret;
 }
 
-static void isp_op_completion_work(struct work_struct *work)
-{
-	struct isp_obj_op *op;
-
-	op = container_of(work, struct isp_obj_op, completion_work);
-	isp_op_run_complete(op);
-}
-
 /**
  * isp_pipeline_enqueue_prepare() - Create an operation
  * @pipeline: pointer to ISP pipeline
@@ -1486,7 +1531,6 @@ int isp_pipeline_enqueue_prepare(struct isp_pipeline *pipeline,
 	INIT_LIST_HEAD(&op->notify_pending_chain);
 	INIT_LIST_HEAD(&op->notifiers);
 	INIT_LIST_HEAD(&op->io_queue_entry);
-	INIT_WORK(&op->completion_work, isp_op_completion_work);
 	rwlock_init(&op->notify_lock);
 	op->pipeline = pipeline;
 	isp_op_set_state(op, ISP_OPERATION_STATE_SLEEP);
@@ -1866,6 +1910,8 @@ int isp_pipeline_init(struct isp_device *isp, struct isp_pipeline *pipeline)
 
 	INIT_LIST_HEAD(&pipeline->io_queue);
 	spin_lock_init(&pipeline->io_queue_lock);
+	INIT_LIST_HEAD(&pipeline->io_comp_queue);
+	spin_lock_init(&pipeline->io_comp_queue_lock);
 	mutex_init(&pipeline->io_release_lock);
 	pipeline->io_thread = NULL;
 	pipeline->isp = isp;
