@@ -139,6 +139,8 @@ struct isp_obj_op {
 	rwlock_t			notify_lock;
 	/** @state: State of the operation */
 	enum isp_operation_state	state;
+	/** @exec_error: Instruction execution error code */
+	u32				exec_error;
 	/**
 	 * @notify_active_chain: List of operations that are blocked on us.
 	 * This is a list of imported signals.
@@ -178,7 +180,8 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 
 void isp_fire_active_signals(struct list_head *notify_active_chain);
 void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
-				      struct list_head *notify_active_chain);
+				      struct list_head *notify_active_chain,
+				      int error);
 
 int isp_pipeline_io_setup(struct isp_pipeline *pipeline);
 int isp_pipeline_io_release(struct isp_pipeline *pipeline);

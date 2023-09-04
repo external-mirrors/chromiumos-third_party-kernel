@@ -636,16 +636,20 @@ EXPORT_SYMBOL_GPL(isp_event_trigger_signals);
  * @entity: pointer to ISP entity
  * @instance: entity instance (context)
  * @event: pointer to ISP event
+ * @error: instance execution context error code, or 0 if success
  */
 void isp_instance_event_trigger_signals(struct isp_obj_entity *entity,
 					struct isp_obj_instance *instance,
-					struct isp_obj_event *event)
+					struct isp_obj_event *event,
+					int error)
 {
 	unsigned long flags;
 
 	trace_isp_event_trigger(entity, instance, event);
 	write_lock_irqsave(&event->notify_lock, flags);
-	isp_instance_fire_active_signals(instance, &event->notify_active_chain);
+	isp_instance_fire_active_signals(instance,
+					 &event->notify_active_chain,
+					 error);
 	write_unlock_irqrestore(&event->notify_lock, flags);
 }
 EXPORT_SYMBOL_GPL(isp_instance_event_trigger_signals);

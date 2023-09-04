@@ -793,12 +793,26 @@ static int isp_write_instruction(struct isp_obj_op *op,
 	return ret;
 }
 
+static void isp_op_set_rw_instruction_error(struct isp_obj_op *op, int error)
+{
+	struct isp_rw_instruction __user *payload;
+
+	payload = op->exec_instruction_addr;
+	if (payload == ISP_OP_NULL_PTR)
+		return;
+
+	put_user(error, &payload->error);
+}
+
 static void isp_op_run_complete(struct isp_obj_op *op)
 {
 	struct isp_pipeline *pipeline = op->pipeline;
 
 	/* New signals cannot be registered after this line */
 	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_EXECUTED));
+
+	if (op->exec_error)
+		isp_op_set_rw_instruction_error(op, op->exec_error);
 
 	/* Notify exported (external) objects of operation completion */
 	isp_op_process_notifiers(op);
@@ -821,17 +835,6 @@ static void isp_op_run_complete(struct isp_obj_op *op)
 	 * on some signals may be holding ref-count of this OP.
 	 */
 	isp_op_put(op);
-}
-
-static void isp_op_set_rw_instruction_error(struct isp_obj_op *op, int error)
-{
-	struct isp_rw_instruction __user *payload;
-
-	payload = op->exec_instruction_addr;
-	if (payload == ISP_OP_NULL_PTR)
-		return;
-
-	put_user(error, &payload->error);
 }
 
 static int isp_op_run_rw_instructions(struct isp_obj_op *op)
@@ -874,7 +877,7 @@ static int isp_op_run_rw_instructions(struct isp_obj_op *op)
 
 	if (ret < 0) {
 		pr_devel("Operation execution error: %d\n", ret);
-		isp_op_set_rw_instruction_error(op, ret);
+		op->exec_error = ret;
 	}
 
 	return ret;
@@ -1038,11 +1041,13 @@ void isp_fire_active_signals(struct list_head *notify_active_chain)
  * event
  * @instance: entity instance (context)
  * @notify_active_chain: operation notify chain with signals to be fired
+ * @error: execution context error code, or 0 if success
  *
  * After firing the signals will be removed from the chain and released.
  */
 void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
-				      struct list_head *notify_active_chain)
+				      struct list_head *notify_active_chain,
+				      int error)
 {
 	struct isp_op_signal *sig, *safe;
 	struct isp_obj_op *op;
@@ -1067,6 +1072,7 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 	if (op) {
 		struct isp_pipeline *pipeline = op->pipeline;
 
+		op->exec_error = error;
 		/*
 		 * Instances can fire signals from atomic context (e.g. driver
 		 * IRQ), while operation completion in general requires a
@@ -1395,6 +1401,7 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 	op->exec_notifier_list_addr	= (void *)ISP_OP_NULL_PTR;
 	op->exec_entity			= NULL;
 	op->exec_instance		= NULL;
+	op->exec_error			= 0;
 
 	if (req->entity == ISP_OP_NO_ENTITY &&
 	    req->instruction != ISP_OP_NULL_PTR)

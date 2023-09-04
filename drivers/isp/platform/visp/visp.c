@@ -246,7 +246,8 @@ static void trigger_event_on(struct visp_device *visp,
 
 		isp_instance_event_trigger_signals(visp->entities[entity_id],
 						   inst->instance,
-						   visp->events[event_id]);
+						   visp->events[event_id],
+						   0);
 		isp_instance_put(inst->instance);
 		kfree(inst);
 	}

@@ -164,7 +164,8 @@ void isp_event_trigger_signals(struct isp_obj_entity *entity,
 
 void isp_instance_event_trigger_signals(struct isp_obj_entity *entity,
 					struct isp_obj_instance *instance,
-					struct isp_obj_event *event);
+					struct isp_obj_event *event,
+					int error);
 
 struct isp_obj_event *isp_event_lookup(struct isp_device *isp, u32 event_id);
 void isp_event_put(struct isp_obj_event *ce);
