@@ -284,7 +284,7 @@ static int ipu_isp_instance_read(void *dev,
 	if (copy_to_user(up, &karg, inst->size))
 		return -EFAULT;
 
-	return 0;
+	return ISP_INSTRUCTION_EXEC_HANDLED;
 }
 
 static int ipu_isp_instance_write(void *dev,
@@ -323,7 +323,7 @@ static int ipu_isp_instance_write(void *dev,
 	if (err)
 		return err;
 
-	return 0;
+	return ISP_INSTRUCTION_EXEC_DEFERRED;
 }
 
 static struct isp_entity_ops isp_entity_ops = {
