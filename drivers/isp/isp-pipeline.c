@@ -823,6 +823,17 @@ static void isp_op_run_complete(struct isp_obj_op *op)
 	isp_op_put(op);
 }
 
+static void isp_op_set_rw_instruction_error(struct isp_obj_op *op, int error)
+{
+	struct isp_rw_instruction __user *payload;
+
+	payload = op->exec_instruction_addr;
+	if (payload == ISP_OP_NULL_PTR)
+		return;
+
+	put_user(error, &payload->error);
+}
+
 static int isp_op_run_rw_instructions(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
@@ -863,7 +874,7 @@ static int isp_op_run_rw_instructions(struct isp_obj_op *op)
 
 	if (ret < 0) {
 		pr_devel("Operation execution error: %d\n", ret);
-		put_user(ret, &payload->error);
+		isp_op_set_rw_instruction_error(op, ret);
 	}
 
 	return ret;
@@ -1470,9 +1481,9 @@ static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 		break;
 	}
 
-	if (ret) {
-		pr_devel("Failed instruction at prepare stage\n");
-		put_user(ret, &payload->error);
+	if (ret < 0) {
+		pr_devel("Failed instruction at prepare stage: %d\n", ret);
+		isp_op_set_rw_instruction_error(op, ret);
 	}
 
 	return ret;
