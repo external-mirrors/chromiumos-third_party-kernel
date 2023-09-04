@@ -823,58 +823,50 @@ static void isp_op_run_complete(struct isp_obj_op *op)
 	isp_op_put(op);
 }
 
-enum insn_exec_mode {
-	INSTRUCTION_EXEC_DIRECT,
-	INSTRUCTION_EXEC_DEFERRED,
-};
-
 static int isp_op_run_rw_instructions(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
 	struct isp_rw_instruction insn;
-	int mode;
-	int err;
+	int ret;
 
 	payload = op->exec_instruction_addr;
 	if (payload == ISP_OP_NULL_PTR) {
 		/* No execution payload. Mark it done. */
-		return INSTRUCTION_EXEC_DIRECT;
+		return ISP_INSTRUCTION_EXEC_HANDLED;
 	}
 
 	/* At this point OPs require an entity to be run against */
 	if (!op->exec_entity)
-		return INSTRUCTION_EXEC_DIRECT;
+		return ISP_INSTRUCTION_EXEC_HANDLED;
 
 	if (copy_from_user(&insn, payload, sizeof(insn))) {
 		pr_err("Unable to access RW instruction\n");
-		return INSTRUCTION_EXEC_DIRECT;
+		return ISP_INSTRUCTION_EXEC_HANDLED;
 	}
 
-	mode = INSTRUCTION_EXEC_DIRECT;
-	err = -EINVAL;
+	ret = -EINVAL;
 
 	switch (insn.type) {
 	case ISP_READ_INSTRUCTION:
-		err = isp_read_instruction(op, &insn.rd);
+		ret = isp_read_instruction(op, &insn.rd);
 		break;
 	case ISP_WRITE_INSTRUCTION:
-		err = isp_write_instruction(op, &insn.wr);
-		mode = INSTRUCTION_EXEC_DEFERRED;
+		ret = isp_write_instruction(op, &insn.wr);
 		break;
 	case ISP_DMABUF_INSTRUCTION:
-		err = isp_run_dmabuf_instruction(op, &insn.db);
+		ret = isp_run_dmabuf_instruction(op, &insn.db);
 		break;
 	case ISP_INSTANCE_INSTRUCTION:
-		err = isp_run_instance_instruction(op, &insn.in);
+		ret = isp_run_instance_instruction(op, &insn.in);
 		break;
 	}
 
-	if (err) {
-		pr_devel("Operation execution error, aborting\n");
-		put_user(err, &payload->error);
+	if (ret < 0) {
+		pr_devel("Operation execution error: %d\n", ret);
+		put_user(ret, &payload->error);
 	}
 
-	return mode;
+	return ret;
 }
 
 /**
@@ -885,25 +877,15 @@ static int isp_op_run_rw_instructions(struct isp_obj_op *op)
  */
 static void isp_op_run(struct isp_obj_op *op)
 {
-	int mode;
-
 	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_RUNNING));
 
 	if (op->delay_ns)
 		ndelay(op->delay_ns);
 
-	mode = isp_op_run_rw_instructions(op);
+	if (isp_op_run_rw_instructions(op) == ISP_INSTRUCTION_EXEC_DEFERRED)
+		return;
 
-	/*
-	 * If operation RW instruction was executed in direct mode then such
-	 * operation is considered completed.
-	 *
-	 * Otherwise operation is completed only after driver's deferred
-	 * execution context notifies pipeline that it has finished operation
-	 * processing.
-	 */
-	if (mode == INSTRUCTION_EXEC_DIRECT)
-		isp_op_run_complete(op);
+	isp_op_run_complete(op);
 }
 
 static bool io_queue_status(struct isp_pipeline *pipeline)

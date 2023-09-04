@@ -117,7 +117,7 @@ static int record_event_instance(struct visp_device *visp,
 	spin_lock_irqsave(&visp->instances_lock, flags);
 	list_add(&inst->entry, &visp->instances);
 	spin_unlock_irqrestore(&visp->instances_lock, flags);
-	return 0;
+	return ISP_INSTRUCTION_EXEC_DEFERRED;
 }
 
 static int entity_instance_read(void *dev,
@@ -130,7 +130,7 @@ static int entity_instance_read(void *dev,
 	pr_devel("VISP: execute entity register %u read\n", rw->reg);
 
 	if (!rw->size)
-		return 0;
+		return ISP_INSTRUCTION_EXEC_HANDLED;
 
 	strcpy(dummy_buffer, "From VISP driver");
 	len = strlen(dummy_buffer);
@@ -141,7 +141,7 @@ static int entity_instance_read(void *dev,
 		return -EINVAL;
 	}
 
-	return 0;
+	return ISP_INSTRUCTION_EXEC_HANDLED;
 }
 
 static int entity_instance_write(void *dev,

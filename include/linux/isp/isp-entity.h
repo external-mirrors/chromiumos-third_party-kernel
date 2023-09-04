@@ -20,6 +20,11 @@ struct isp_obj_entity;
 
 struct isp_obj_instance;
 
+enum isp_instruction_exec {
+	ISP_INSTRUCTION_EXEC_HANDLED,
+	ISP_INSTRUCTION_EXEC_DEFERRED,
+};
+
 /**
  * struct isp_entity_ops - ISP entity operation list
  *
@@ -29,7 +34,8 @@ struct isp_entity_ops {
 	/**
 	 * @instance_read: entity instance register read callback
 	 *
-	 * Return: 0 on success, or negative error code on failure
+	 * Return: one of isp_instruction_exec on success, or negative error
+	 * code on failure
 	 */
 	int (*instance_read)(void *dev,
 			     struct isp_obj_instance *instance,
@@ -37,7 +43,8 @@ struct isp_entity_ops {
 	/**
 	 * @instance_write: entity instance register write callback
 	 *
-	 * Return: 0 on success, or negative error code on failure
+	 * Return: one of isp_instruction_exec on success, or negative error
+	 * code on failure
 	 */
 	int (*instance_write)(void *dev,
 			      struct isp_obj_instance *instance,
