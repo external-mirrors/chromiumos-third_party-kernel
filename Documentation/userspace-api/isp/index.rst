@@ -202,7 +202,10 @@ An operation command submits a set of operation requests to the ISP
 subsystem. The argument (``size``) is the size of the entire data passed
 to the kernel, including the size of the header. The body for this
 command is an array of request structures (struct isp_operation). A
-request either adds or removes of an operation.
+request either adds or removes of an operation. For all the added
+operations, the user-space need to make sure that the data structures
+referenced from them remain valid and unchanged until their completion
+is read.
 
 If an opration has dependencies, they must be set at the time of adding
 the dependent operation. It cannot be changed after the request is
@@ -221,7 +224,7 @@ corresponding object released by the time the new request reaches the
 ISP subsystem. For all the other types, the operation request
 immediately returns with an error.
 
-Some operations require an instructions. An instruction may have a
+Some operations require an instruction. An instruction may have a
 driver specific data structure . For example, if an instruction type
 (enum isp_rw_instruction_type) is ``ISP_READ_INSTRUCTION`` or
 ``ISP_WRITE_INSTRUCTION``, it could have a driver specific data
