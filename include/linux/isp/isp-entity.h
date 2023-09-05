@@ -104,7 +104,7 @@ struct isp_obj_instance {
 	struct isp_obj		nsobj;
 	/** @driver_data: Driver specific data */
 	void			*driver_data;
-	/** @private_lock: Protects access to instance private data */
+	/** @lock: Protects access to instance private data */
 	spinlock_t		lock;
 	/** @private: ISP pipeline data associated with this instance */
 	void			*private;
