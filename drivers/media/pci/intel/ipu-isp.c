@@ -366,7 +366,7 @@ int ipu_isp_init(struct ipu_bus_device *adev, unsigned int id)
 
 	isp_event = isp_event_register(isp,
 				       isp_entity_id(isp_entity),
-				       "PSYS%d",
+				       "PSYS%d-internal",
 				       id);
 
 	if (!isp_event) {

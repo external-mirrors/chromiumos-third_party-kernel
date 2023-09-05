@@ -22,9 +22,10 @@ the PSYS driver share some common codes, for example for IOMMU controls.
 PSYS Objects
 ------------
 
-The PSYS driver registers one entity object and one event object. Both
-objects have the same name "PSYS0". The event object is registered under
-the entity object.
+The PSYS driver registers one entity object ("PSYS0") and one event
+object ("PSYS0-internal"). The event object is registered under the
+entity object. It is visible to the user-space, but it is only used
+internally and operations should not explicitly depend on it.
 
 Requests
 ^^^^^^^^
