@@ -35,7 +35,6 @@ struct ipu_psys_capability {
  * @user_token:	Token of command (given in struct ipu_psys_command)
  * @issue_id:	Unique ID of command
  * @buffer_idx:	Buffer index (unused)
- * @error:	Error code
  * @reserved:	Reserved
  */
 struct ipu_psys_event {
@@ -43,7 +42,6 @@ struct ipu_psys_event {
 	uint64_t user_token;
 	uint64_t issue_id;
 	uint32_t buffer_idx;
-	uint32_t error;
 	int32_t reserved[2];
 } __attribute__ ((packed));
 

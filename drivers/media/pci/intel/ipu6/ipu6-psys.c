@@ -442,7 +442,6 @@ void ipu_psys_kcmd_complete(struct ipu_psys_ppg *kppg,
 	kcmd->ev.type = IPU_PSYS_EVENT_TYPE_CMD_COMPLETE;
 	kcmd->ev.user_token = kcmd->user_token;
 	kcmd->ev.issue_id = kcmd->issue_id;
-	kcmd->ev.error = error;
 	list_move_tail(&kcmd->list, &kppg->kcmds_finished_list);
 
 	if (kcmd->constraint.min_freq)
@@ -459,7 +458,8 @@ void ipu_psys_kcmd_complete(struct ipu_psys_ppg *kppg,
 	kcmd->state = KCMD_STATE_PPG_COMPLETE;
 	isp_instance_event_trigger_signals(psys->isp_entity,
 					   kcmd->isp_instance,
-					   psys->isp_event);
+					   psys->isp_event,
+					   error);
 }
 
 /*
