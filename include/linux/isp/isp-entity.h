@@ -20,6 +20,14 @@ struct isp_obj_entity;
 
 struct isp_obj_instance;
 
+/**
+ * enum isp_instruction_exec - ISP instruction execution mode
+ *
+ * @ISP_INSTRUCTION_EXEC_HANDLED:	instruction has been fully handled on
+ *					return from the callback
+ * @ISP_INSTRUCTION_EXEC_DEFERRED:	instruction has started processing, but
+ *					its completion will be notified later
+ */
 enum isp_instruction_exec {
 	ISP_INSTRUCTION_EXEC_HANDLED,
 	ISP_INSTRUCTION_EXEC_DEFERRED,
