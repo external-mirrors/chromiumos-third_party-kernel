@@ -56,14 +56,26 @@ An application wanting to use the block will first obtain an instance
 and then post some requests with its ID. The ISP framework will resolve
 the ID into the instance and pass its pointer to the callback.
 
+A driver can choose an execution mode for read or write instructions:
+direct or deferred. In the direct mode, the instruction is completed
+when the callback returns. The ISP framework immediately makes the
+completion visible to the user-space. In the deferred mode, the
+instruction is not completed yet on return. The ISP framework waits for
+a signal from the driver. The framework only makes the completion
+visible to the user-space when it has received the waiting signal.
+
 Event
 -----
 
 An event is an object that acts as a point of synchronization. A driver
-typically sends a signal to this object on a hardware interrupt. This
-can be used for synchronization of the user-space with the completion of
-a request at the hardware level.
-
+that supports deferred mode of execution must register an event object.
+This event object is only internally used by the driver, but it is still
+visible to the user-space. A driver can also register an event object
+for explicit synchronization between the user-space and the
+kernel/hardware. A typical use case is to schedule the execution of an
+operation after a certain event. This can be achieved by the user-space
+setting the dependency of an operation to the event object and the
+driver signaling the event on a synchronization point.
 
 Object Lifetime Management
 ==========================
