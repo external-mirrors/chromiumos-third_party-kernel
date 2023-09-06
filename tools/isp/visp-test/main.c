@@ -166,7 +166,7 @@ out:
 	return ret;
 }
 
-#define VISP_ENTITIES_COUNT	4
+#define VISP_ENTITIES_COUNT	5
 #define VISP_EVENTS_COUNT	1
 
 static int test_compound_query_count(struct libisp *isp,
