@@ -99,19 +99,23 @@ interrupt handler.
 Openness Policy
 ===============
 
-The ISP framework follows the Linux standard openness policy. It puts
-the following requirement to the kernel and the user-space stack.
+The ISP subsystem has some requirements before a driver can be included.
 
-* The kernel driver source code must be disclosed.
-* There must be at least one open source implementation of user stack
-  that can be used to provide the minimal functionalities to
-  applications.
+It is expected that all ISP drivers can be used with an *open source* user-space
+stack. That stack might have some binary blobs for the "Auto Algorithms", but
+the input and the output of such blobs should be well documented; and the blobs
+should not access the ISP by themselves.
 
-The ISP framework defines the minimal functionalities as follows. The
-quality of the image must be good enough to be used in photo capturing
-applications and/or video applications. What is not part of the
-disclosure requirement is the disclosure of hardware interface
-(registers).
+The open source user-space should be ready when the driver is merged and should
+be good enough to use the ISPs for video-conferencing or still imaging.
+User-spaces based on libcamera are preferred than other custom implementations.
+
+This open source stack is the only way that users have a warranty that their
+hardware will work after the vendors have stopped their support.
+
+Vendors can also provide proprietary user-spaces, using the same uAPI exposed
+by the ISP subsystem. Vendors can have exclusive features in these user-spaces,
+allowing them to compete in consumer distros like Android.
 
 Driver API Reference
 ====================
