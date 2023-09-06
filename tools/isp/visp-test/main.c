@@ -22,6 +22,7 @@
 
 #define VISP_FAST_IRQ_INSTANCE_ID	1
 #define VISP_SLOW_IRQ_INSTANCE_ID	100
+#define VISP_BM_IRQ_INSTANCE_ID	1000
 
 static char *exit_at_functions[] = {
 	"wait_for_slow_entity_timer",
@@ -2706,6 +2707,189 @@ static int test_instances(struct libisp *isp)
 	return 0;
 }
 
+static int test_perf_benchmark(struct libisp *isp)
+{
+	struct libisp_buffers_list *buf_list = NULL;
+	struct isp_rw_instruction *r_insn, *w_insn;
+	struct timespec start_time, end_time;
+	struct libisp_operation *lio;
+	struct obj_entity *entity;
+	struct isp_operation *op;
+	struct obj_event *event;
+	int saved_log_level;
+	double elapsed_time;
+	int idx;
+	int ret;
+
+	saved_log_level = log_level;
+	pr_info("Test perf benchmark\n");
+
+	ret = test_create_entity_instance(isp, VISP_BM_IRQ_ENTITY_NAME,
+					  VISP_BM_IRQ_INSTANCE_ID);
+	if (ret) {
+		pr_err("FATAL: failure test_create_entity_instance()\n");
+		return ret;
+	}
+
+	entity = libisp_entity_lookup_by_name(isp,
+					      VISP_BM_IRQ_ENTITY_NAME);
+	if (!entity) {
+		pr_err("Entity lookup has failed\n");
+		return -EINVAL;
+	}
+
+	event = libisp_entity_first_event(entity);
+	if (!event) {
+		pr_err("Unable to find event\n");
+		return -EINVAL;
+	}
+
+	lio = libisp_operation_get(1);
+	if (!lio) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	buf_list = libisp_buffers_list_get(isp, 1, 4);
+	if (!buf_list) {
+		pr_err("Failed to create buffers\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	op = libisp_operation_at(lio, 0);
+
+	op->operation_type		= ISP_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 1;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
+	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.notifier_list	= ISP_OP_NULL_PTR;
+
+	w_insn = libisp_rw_instruction_get();
+	if (!w_insn) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	op->operation_add.instruction	= (uint64_t)w_insn;
+
+	w_insn->type		= ISP_DMABUF_INSTRUCTION;
+	w_insn->error		= 0;
+	w_insn->db.op		= ISP_OP_DMABUF_ADD;
+	w_insn->db.dma_fd	= buf_list->bufs[0]->fd;
+	w_insn->db.buf_id	= 111;
+	buf_list->ids[0]	= 111;
+
+	ret = libisp_operation_ioctl(isp, lio);
+	if (ret)
+		goto out;
+
+	ret = read_operations_completion_events(isp, 1);
+	if (ret != 1) {
+		pr_err("Invalid number of completions %d\n", ret);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	libisp_operation_put(lio);
+
+	lio = libisp_operation_get(2);
+	if (!lio) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	w_insn = libisp_rw_instruction_get();
+	r_insn = libisp_rw_instruction_get();
+	if (!r_insn || !w_insn) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	w_insn->type		= ISP_WRITE_INSTRUCTION;
+	w_insn->error		= 0;
+	w_insn->wr.reg		= 42;
+	w_insn->wr.size		= READ_BUFFER_SIZE;
+	w_insn->wr.num_buffers	= buf_list->size;
+	w_insn->wr.buffers_list	= (uint64_t)buf_list->ids;
+	w_insn->wr.ptr		= (uint64_t)ISP_OP_NULL_PTR;
+
+	r_insn->type		= ISP_READ_INSTRUCTION;
+	r_insn->error		= 0;
+	r_insn->rd.reg		= 42;
+	r_insn->rd.size		= READ_BUFFER_SIZE;
+	r_insn->rd.num_buffers	= buf_list->size;
+	r_insn->rd.buffers_list	= (uint64_t)buf_list->ids;
+	r_insn->rd.ptr		= (uint64_t)ISP_OP_NULL_PTR;
+
+	/* Silent mode (printing to console has a significant footprint) */
+	saved_log_level = log_level;
+	log_level = PR_ERROR;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &start_time) != 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	idx = 0;
+	while (idx < BM_NUM_OPS) {
+		op = libisp_operation_at(lio, 0);
+		op->operation_type		= ISP_OPERATION_TYPE_ADD;
+		op->operation_add.id		= idx;
+		op->operation_add.delay_ns	= 0;
+		op->operation_add.entity	= entity->id;
+		op->operation_add.notifier_list	= ISP_OP_NULL_PTR;
+		op->operation_add.instance	= VISP_BM_IRQ_INSTANCE_ID;
+		op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+		op->operation_add.instruction	= (uint64_t)w_insn;
+		idx++;
+
+		op = libisp_operation_at(lio, 1);
+		op->operation_type		= ISP_OPERATION_TYPE_ADD;
+		op->operation_add.id		= idx;
+		op->operation_add.delay_ns	= 0;
+		op->operation_add.entity	= entity->id;
+		op->operation_add.notifier_list	= ISP_OP_NULL_PTR;
+		op->operation_add.instance	= VISP_BM_IRQ_INSTANCE_ID;
+		op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+		op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
+		op->operation_add.deps[0].id	= idx - 1;
+		op->operation_add.instruction	= (uint64_t)r_insn;
+		idx++;
+
+		ret = libisp_operation_ioctl(isp, lio);
+		if (ret)
+			goto out;
+
+		ret = read_operations_completion_events(isp, 2);
+		if (ret != 2) {
+			ret = -EINVAL;
+			goto out;
+		}
+		ret = 0;
+	}
+
+	if (clock_gettime(CLOCK_MONOTONIC, &end_time) != 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	elapsed_time = (end_time.tv_sec - start_time.tv_sec) +
+		(end_time.tv_nsec - start_time.tv_nsec) / 1.0e9;
+
+	log_level = saved_log_level;
+	pr_info("*** BENCHMARK done: num_ops %d, time: %0.9f (ops/s: %f)\n",
+		idx, elapsed_time, idx / elapsed_time);
+
+out:
+	log_level = saved_log_level;
+	libisp_buffers_list_put(buf_list);
+	libisp_operation_put(lio);
+	return ret;
+}
+
 static void *thread_fn(void *arg)
 {
 	struct obj_buffer *buf;
@@ -2941,23 +3125,55 @@ static int multi_threaded_test(void)
 	return 0;
 }
 
+static int test_benchmark(struct libisp *isp)
+{
+	struct libisp_query *liq;
+	int ret;
+
+	liq = libisp_query_get(1, ISP_DEFAULT_OUT_SZ);
+	if (!liq)
+		return -EINVAL;
+
+	ret = test_query_all_entities(isp, liq);
+	if (ret) {
+		pr_err("FAIL: test_query_all_entities(ISP_QUERY_ALL_OBJECTS)\n");
+		return ret;
+	}
+
+	ret = test_query_events(isp);
+	if (ret) {
+		pr_err("FATAL: failure test_query_events()\n");
+		return ret;
+	}
+
+	libisp_query_put(liq);
+
+	ret = test_perf_benchmark(isp);
+	if (ret)
+		pr_err("FATAL: failure test_perf_benchmark()\n");
+
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
 	static struct option long_options[] = {
-		{ "exit_at", required_argument, 0, 'e' },
-		{ 0, 0, 0, 0 }
+		{ "exit_at",   required_argument, 0, 'e' },
+		{ "benchmark", no_argument,       0, 'b' },
+		{ 0,           0,                 0,  0  }
 	};
 
 	struct libisp *isp;
 	const char *isp_path = "/dev/isp";
 	int option_index = 0;
+	int benchmark = 0;
 	int opt;
 	int ret;
 
 	log_level = PR_DEBUG;
 
 	while (1) {
-		opt = getopt_long_only(argc, argv, "e:h", long_options, &option_index);
+		opt = getopt_long_only(argc, argv, "e:hb", long_options, &option_index);
 
 		if (opt == -1)
 			break;
@@ -2969,6 +3185,9 @@ int main(int argc, char *argv[])
 		case 'h':
 			show_exit_at_functions();
 			break;
+		case 'b':
+			benchmark = 1;
+			break;
 		}
 	}
 
@@ -2977,6 +3196,9 @@ int main(int argc, char *argv[])
 		pr_err("FATAL: cannot open %s\n", isp_path);
 		return -EINVAL;
 	}
+
+	if (benchmark)
+		return test_benchmark(isp);
 
 	ret = test_query_entities(isp);
 	if (ret) {
