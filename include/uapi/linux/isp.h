@@ -18,12 +18,10 @@
  *
  * @address:		Memory address of the buffer
  * @size:		Size of the buffer
- * @length:		Length of the data available (may be larger than size)
  */
 struct isp_output {
 	__u64		address;
 	__u32		size;
-	__u32		length;
 } __attribute__((packed));
 
 /**
