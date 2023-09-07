@@ -751,8 +751,10 @@ static int isp_read_instruction(struct isp_obj_op *op,
 
 	dev = isp_entity_driver_data(entity);
 	ret = entity->ops->instance_read(dev, op->exec_instance, insn);
-	/* Clear ownership flag */
-	isp_instance_private_set(op->exec_instance, NULL);
+
+	/* If insn executed in non-deferred context then clear ownership */
+	if (ret != ISP_INSTRUCTION_EXEC_DEFERRED)
+		isp_instance_private_set(op->exec_instance, NULL);
 
 	if (insn->num_buffers)
 		isp_buffers_list_put(insn->num_buffers, buffers_list);
@@ -771,10 +773,7 @@ static int isp_write_instruction(struct isp_obj_op *op,
 	if (!op->exec_instance)
 		return -EINVAL;
 
-	/*
-	 * Set exclusive ownership flag. It will be cleared only when the
-	 * driver signals that instruction was handled.
-	 */
+	/* Set exclusive ownership flag */
 	if (!isp_instance_private_set(op->exec_instance, op))
 		return -EINVAL;
 
@@ -792,6 +791,10 @@ static int isp_write_instruction(struct isp_obj_op *op,
 
 	dev = isp_entity_driver_data(entity);
 	ret = entity->ops->instance_write(dev, op->exec_instance, insn);
+
+	/* If insn executed in non-deferred context then clear ownership */
+	if (ret != ISP_INSTRUCTION_EXEC_DEFERRED)
+		isp_instance_private_set(op->exec_instance, NULL);
 
 	if (insn->num_buffers)
 		isp_buffers_list_put(insn->num_buffers, buffers_list);
