@@ -733,18 +733,22 @@ static int isp_read_instruction(struct isp_obj_op *op,
 	if (!op->exec_instance)
 		return -EINVAL;
 
+	/* Set exclusive ownership flag */
+	if (!isp_instance_private_set(op->exec_instance, op))
+		return -EINVAL;
+
 	if (insn->num_buffers) {
 		buffers_list = isp_buffers_list_get(pipeline,
 						    insn->num_buffers,
 						    insn->buffers_list);
-		if (!buffers_list)
+		if (!buffers_list) {
+			isp_instance_private_set(op->exec_instance, NULL);
 			return -EINVAL;
+		}
 
 		insn->buffers_list = (u64)buffers_list;
 	}
 
-	/* Set exclusive ownership flag */
-	isp_instance_private_set(op->exec_instance, op);
 	dev = isp_entity_driver_data(entity);
 	ret = entity->ops->instance_read(dev, op->exec_instance, insn);
 	/* Clear ownership flag */
@@ -767,24 +771,25 @@ static int isp_write_instruction(struct isp_obj_op *op,
 	if (!op->exec_instance)
 		return -EINVAL;
 
-	if (WARN_ON(op->exec_instance->private))
+	/*
+	 * Set exclusive ownership flag. It will be cleared only when the
+	 * driver signals that instruction was handled.
+	 */
+	if (!isp_instance_private_set(op->exec_instance, op))
 		return -EINVAL;
 
 	if (insn->num_buffers) {
 		buffers_list = isp_buffers_list_get(pipeline,
 						    insn->num_buffers,
 						    insn->buffers_list);
-		if (!buffers_list)
+		if (!buffers_list) {
+			isp_instance_private_set(op->exec_instance, NULL);
 			return -EINVAL;
+		}
 
 		insn->buffers_list = (u64)buffers_list;
 	}
 
-	/*
-	 * Set exclusive ownership flag. It will be cleared only when the
-	 * driver signals that instruction was handled.
-	 */
-	isp_instance_private_set(op->exec_instance, op);
 	dev = isp_entity_driver_data(entity);
 	ret = entity->ops->instance_write(dev, op->exec_instance, insn);
 
