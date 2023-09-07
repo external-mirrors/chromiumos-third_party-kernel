@@ -1058,15 +1058,8 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 				      int error)
 {
 	struct isp_op_signal *sig, *safe;
+	struct isp_pipeline *pipeline;
 	struct isp_obj_op *op;
-
-	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
-		if (sig->instance != isp_obj_id(&instance->nsobj))
-			continue;
-
-		list_del_init(&sig->entry);
-		sig->fire(sig);
-	}
 
 	/*
 	 * This synchronizes with instance drain. If instance has ->private
@@ -1077,27 +1070,43 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 	 */
 	spin_lock(&instance->lock);
 	op = instance->private;
-	if (op) {
-		struct isp_pipeline *pipeline = op->pipeline;
+	instance->private = NULL;
 
-		op->exec_error = error;
-		instance->private = NULL;
-
-		/*
-		 * Instances can fire signals from atomic context (e.g. driver
-		 * IRQ), while operation completion in general requires a
-		 * non-atomic context: we need to cleanup namespace, notify
-		 * dependencies, notify exported objects, etc.
-		 *
-		 * Handle operation completion in a deferred context.
-		 */
-		spin_lock(&pipeline->io_comp_queue_lock);
-		list_add_tail(&op->io_queue_entry, &pipeline->io_comp_queue);
-		spin_unlock(&pipeline->io_comp_queue_lock);
-
-		if (isp_pipeline_is_active(pipeline))
-			wake_up(&pipeline->io_queue_wait);
+	/*
+	 * If instance has no OP then we raised with pipeline destruction
+	 * and there is nothing left to do (signaled are deactivated during
+	 * OP drain)
+	 */
+	if (!op) {
+		spin_unlock(&instance->lock);
+		return;
 	}
+
+	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+		if (sig->instance != isp_obj_id(&instance->nsobj))
+			continue;
+
+		list_del_init(&sig->entry);
+		sig->fire(sig);
+	}
+
+	pipeline = op->pipeline;
+	op->exec_error = error;
+
+	/*
+	 * Instances can fire signals from atomic context (e.g. driver
+	 * IRQ), while operation completion in general requires a
+	 * non-atomic context: we need to cleanup namespace, notify
+	 * dependencies, notify exported objects, etc.
+	 *
+	 * Handle operation completion in a deferred context.
+	 */
+	spin_lock(&pipeline->io_comp_queue_lock);
+	list_add_tail(&op->io_queue_entry, &pipeline->io_comp_queue);
+	spin_unlock(&pipeline->io_comp_queue_lock);
+
+	if (isp_pipeline_is_active(pipeline))
+		wake_up(&pipeline->io_queue_wait);
 	spin_unlock(&instance->lock);
 }
 
