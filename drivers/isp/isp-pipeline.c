@@ -1081,6 +1081,8 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 		struct isp_pipeline *pipeline = op->pipeline;
 
 		op->exec_error = error;
+		instance->private = NULL;
+
 		/*
 		 * Instances can fire signals from atomic context (e.g. driver
 		 * IRQ), while operation completion in general requires a
@@ -1095,8 +1097,6 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 
 		if (isp_pipeline_is_active(pipeline))
 			wake_up(&pipeline->io_queue_wait);
-
-		instance->private = NULL;
 	}
 	spin_unlock(&instance->lock);
 }
