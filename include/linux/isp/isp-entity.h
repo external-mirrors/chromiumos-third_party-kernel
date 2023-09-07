@@ -186,8 +186,7 @@ int isp_enum_events(struct isp_device *isp,
 		    struct isp_query_events *query,
 		    struct isp_koutput *output);
 
-void isp_instance_private_set(struct isp_obj_instance *instance,
-			      void *private);
+bool isp_instance_private_set(struct isp_obj_instance *instance, void *priv);
 int isp_instance_destroy(struct isp_ns *ns, u32 id);
 struct isp_obj_instance *isp_instance_create(struct isp_ns *ns,
 					     struct isp_obj_entity *entity,

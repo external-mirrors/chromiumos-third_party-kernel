@@ -900,13 +900,27 @@ int isp_enum_events(struct isp_device *isp,
 	return ret;
 }
 
-void isp_instance_private_set(struct isp_obj_instance *instance, void *private)
+bool isp_instance_private_set(struct isp_obj_instance *instance, void *priv)
 {
 	unsigned long flags;
+	bool xchg = false;
+	void *prev;
 
 	spin_lock_irqsave(&instance->lock, flags);
-	instance->private = private;
+	prev = instance->private;
+	if (!(prev && priv)) {
+		instance->private = priv;
+		xchg = true;
+	}
 	spin_unlock_irqrestore(&instance->lock, flags);
+
+	/*
+	 * Overwriting a non-NULL pointer with another non-NULL pointer
+	 * is not permitted. It should be: NULL -> ptr -> NULL -> ptr -> ...
+	 */
+	WARN_ON(prev && priv);
+
+	return xchg;
 }
 
 /**
