@@ -386,8 +386,10 @@ static int test_query_entities(struct libisp *isp)
 {
 	struct libisp_query *liq;
 	int ret;
+	const uint32_t entity_output_size =
+		sizeof(struct isp_query_entity_entry) * VISP_ENTITIES_COUNT;
 
-	liq = libisp_query_get(1, ISP_DEFAULT_OUT_SZ);
+	liq = libisp_query_get(1, entity_output_size);
 	if (!liq)
 		return -EINVAL;
 
