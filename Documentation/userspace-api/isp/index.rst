@@ -180,20 +180,17 @@ output entry is summarized in the table below.
 
 The result of a query command is stored in an output buffer attached to
 the query. The output buffer should be allocated in the user-space. If
-the command contains more than one queries, the outputs are written in
-the same order as the queries. The number of result entries per query is
+the command contains more than one query, the outputs are written in the
+same order as the queries. The number of result entries per query is
 returned in each query data structure, so the user can use this
 information to parse the output buffer from the top.
 
 If the size of the buffer happens to be insufficient to hold all the
-result, only the ones that fit in the given buffer are returned. The
-user also gets the size of output buffer needed to store all the
-matching objects. This information can be used to check whether the
-buffer was sufficient to hold all the entries. It can also be used to
-allocate a buffer large enough to get all the results in the next
-request. It is also possible to not attach any buffer to a query
-command. In that case, the details are not returned but the user still
-gets the size of an output buffer required to store the results.
+result, the query command returns with an error. To calculate the size
+of the output buffer, the user can post a preliminary query command
+without attaching a buffer. For this case, the kernel returns the number
+of entries for each query. Then, the user can calculate the size of the
+output buffer, allocate it, and attach it to another query command.
 
 ``ISP_IOC_OPERATION(size)``
 ---------------------------

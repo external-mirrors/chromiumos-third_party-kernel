@@ -23,8 +23,6 @@ struct isp_koutput {
 	void __user	*base;
 	/** @end: The end of the memory buffer */
 	void __user	*end;
-	/** @length: Length of the data available (may be larger than size) */
-	__u32		length;
 	/** @num_entries: The number of written entries */
 	__u32		num_entries;
 };

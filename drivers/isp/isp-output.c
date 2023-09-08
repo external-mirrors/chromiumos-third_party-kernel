@@ -36,7 +36,6 @@ void *__isp_output_next_entry(struct isp_koutput *output, size_t sz)
 {
 	void *ptr;
 
-	output->length += sz;
 	if (output->base + sz >= output->end)
 		return NULL;
 
