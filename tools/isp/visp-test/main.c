@@ -385,11 +385,12 @@ out:
 static int test_query_entities(struct libisp *isp)
 {
 	struct libisp_query *liq;
+	unsigned int output_sz;
 	int ret;
-	const uint32_t entity_output_size =
-		sizeof(struct isp_query_entity_entry) * VISP_ENTITIES_COUNT;
 
-	liq = libisp_query_get(1, entity_output_size);
+	/* Exact buffer size */
+	output_sz = sizeof(struct isp_query_entity_entry) * VISP_ENTITIES_COUNT;
+	liq = libisp_query_get(1, output_sz);
 	if (!liq)
 		return -EINVAL;
 
@@ -412,7 +413,10 @@ static int test_query_entities(struct libisp *isp)
 	}
 
 	libisp_query_put(liq);
-	liq = libisp_query_get(3, 0);
+
+	/* Zero buffer size for num-entries test */
+	output_sz = 0;
+	liq = libisp_query_get(3, output_sz);
 	if (!liq)
 		return -EINVAL;
 
@@ -2121,7 +2125,6 @@ static int test_create_entity_instance(struct libisp *isp,
 	struct libisp_operation *lio = NULL;
 	struct isp_rw_instruction *insn;
 	struct obj_entity *entity;
-	struct obj_event *event;
 	struct isp_operation *op;
 	int ret, op_idx, rw_idx;
 
@@ -2130,12 +2133,6 @@ static int test_create_entity_instance(struct libisp *isp,
 	entity = libisp_entity_lookup_by_name(isp, entity_name);
 	if (!entity) {
 		pr_err("Unable to lookup `%s` entity\n", entity_name);
-		return -EINVAL;
-	}
-
-	event = libisp_entity_first_event(entity);
-	if (!event) {
-		pr_err("Unable to find event\n");
 		return -EINVAL;
 	}
 
@@ -2717,7 +2714,6 @@ static int test_perf_benchmark(struct libisp *isp)
 	struct libisp_operation *lio;
 	struct obj_entity *entity;
 	struct isp_operation *op;
-	struct obj_event *event;
 	int saved_log_level;
 	double elapsed_time;
 	int idx;
@@ -2737,12 +2733,6 @@ static int test_perf_benchmark(struct libisp *isp)
 					      VISP_BM_IRQ_ENTITY_NAME);
 	if (!entity) {
 		pr_err("Entity lookup has failed\n");
-		return -EINVAL;
-	}
-
-	event = libisp_entity_first_event(entity);
-	if (!event) {
-		pr_err("Unable to find event\n");
 		return -EINVAL;
 	}
 
