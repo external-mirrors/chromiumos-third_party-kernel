@@ -64,6 +64,16 @@ struct drm_virtgpu_map {
 	__u32 pad;
 };
 
+#define VIRTGPU_EXECBUF_SYNCOBJ_RESET		0x01
+#define VIRTGPU_EXECBUF_SYNCOBJ_FLAGS ( \
+		VIRTGPU_EXECBUF_SYNCOBJ_RESET | \
+		0)
+struct drm_virtgpu_execbuffer_syncobj {
+	__u32 handle;
+	__u32 flags;
+	__u64 point;
+};
+
 /* fence_fd is modified on success if VIRTGPU_EXECBUF_FENCE_FD_OUT flag is set. */
 struct drm_virtgpu_execbuffer {
 	__u32 flags;
@@ -73,7 +83,11 @@ struct drm_virtgpu_execbuffer {
 	__u32 num_bo_handles;
 	__s32 fence_fd; /* in/out fence fd (see VIRTGPU_EXECBUF_FENCE_FD_IN/OUT) */
 	__u32 ring_idx; /* command ring index (see VIRTGPU_EXECBUF_RING_IDX) */
-	__u32 pad;
+	__u32 syncobj_stride; /* size of @drm_virtgpu_execbuffer_syncobj */
+	__u32 num_in_syncobjs;
+	__u32 num_out_syncobjs;
+	__u64 in_syncobjs;
+	__u64 out_syncobjs;
 };
 
 #define VIRTGPU_PARAM_3D_FEATURES 1 /* do we have 3D features in the hw */
@@ -113,6 +127,34 @@ struct drm_virtgpu_resource_info {
 	__u32 res_handle;
 	__u32 size;
 	__u32 blob_mem;
+};
+
+/* CHROMIUM */
+struct drm_virtgpu_resource_info_cros {
+	__u32 bo_handle;
+	__u32 res_handle;
+	__u32 size;
+
+/* Always returns res_handle, size, and blob_mem.
+ * !! RETURN SEMANTICS ARE CHANGED BY THIS COMMIT.
+ * !! User space changes are likely required for anything relying on
+ * !! getting extended info from VIRTGPU_RESOURCE_INFO_TYPE_DEFAULT.
+ */
+#define VIRTGPU_RESOURCE_INFO_TYPE_DEFAULT 0
+/* Always returns res_handle, size, and "extended info".
+ * !! Produces an error (EINVAL) for blob resources created with blob_mem ==
+ * !! VIRTGPU_BLOB_MEM_GUEST, which doesn't use host storage.
+ */
+#define VIRTGPU_RESOURCE_INFO_TYPE_EXTENDED 1
+	union {
+		__u32 type; /* in, VIRTGPU_RESOURCE_INFO_TYPE_* */
+		__u32 blob_mem;
+		__u32 stride;
+		__u32 strides[4]; /* strides[0] is accessible with stride. */
+	};
+	__u32 num_planes;
+	__u32 offsets[4];
+	__u64 format_modifier;
 };
 
 struct drm_virtgpu_3d_box {
@@ -222,6 +264,11 @@ struct drm_virtgpu_context_init {
 #define DRM_IOCTL_VIRTGPU_RESOURCE_INFO \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_INFO, \
 		 struct drm_virtgpu_resource_info)
+
+/* same ioctl number as DRM_IOCTL_VIRTGPU_RESOURCE_INFO */
+#define DRM_IOCTL_VIRTGPU_RESOURCE_INFO_CROS \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_INFO, \
+		 struct drm_virtgpu_resource_info_cros)
 
 #define DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_TRANSFER_FROM_HOST,	\
