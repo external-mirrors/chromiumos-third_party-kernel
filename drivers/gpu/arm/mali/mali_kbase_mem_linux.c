@@ -3276,8 +3276,6 @@ static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_
 	/* no real access */
 	vm_flags_clear(vma, VM_READ | VM_MAYREAD | VM_WRITE | VM_MAYWRITE | VM_EXEC | VM_MAYEXEC);
 	vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
-	vma->vm_ops = &kbase_vm_special_ops;
-	vma->vm_private_data = kctx;
 
 	return 0;
 }
