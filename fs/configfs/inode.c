@@ -185,7 +185,7 @@ struct inode *configfs_create(struct dentry *dentry, umode_t mode)
 			sd->s_iattr->ia_uid = GLOBAL_ROOT_UID;
 			sd->s_iattr->ia_gid = GLOBAL_ROOT_GID;
 		}
-		if (sd_parent->s_dentry && d_inode(sd_parent->s_dentry))
+		if (sd_parent && sd_parent->s_dentry && d_inode(sd_parent->s_dentry))
 			sd->s_iattr->ia_ctime = current_time(d_inode(sd_parent->s_dentry));
 		else
 			ktime_get_coarse_real_ts64(&sd->s_iattr->ia_ctime);
