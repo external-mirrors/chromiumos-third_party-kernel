@@ -124,7 +124,7 @@ static int isp_ioctl_parse_query(struct isp_fh *fh, unsigned int cmd,
 		struct isp_query query;
 
 		if (copy_from_user(&query, payload, sizeof(query))) {
-			hdr->error = num_query;
+			hdr->error_idx = num_query;
 			return -EFAULT;
 		}
 
@@ -168,7 +168,7 @@ static int isp_ioctl_parse_query(struct isp_fh *fh, unsigned int cmd,
 		}
 
 		if (ret || isp_ioctl_query_result_copy(payload, &query)) {
-			hdr->error = num_query;
+			hdr->error_idx = num_query;
 			return ret;
 		}
 
@@ -190,7 +190,7 @@ ALLOW_ERROR_INJECTION(isp_ioctl_parse_query, ERRNO);
 static int isp_ioctl_operation_cancel(struct isp_fh *fh,
 				      struct isp_header *hdr,
 				      struct isp_operation __user *payload,
-				      u32 error_num)
+				      u32 error_idx)
 {
 	u32 num_op;
 
@@ -211,7 +211,7 @@ static int isp_ioctl_operation_cancel(struct isp_fh *fh,
 			break;
 		}
 
-		if (num_op == error_num)
+		if (num_op == error_idx)
 			break;
 
 		payload--;
@@ -258,7 +258,7 @@ static int isp_ioctl_operation_prepare(struct isp_fh *fh,
 		}
 
 		if (ret) {
-			hdr->error = num_op;
+			hdr->error_idx = num_op;
 			return ret;
 		}
 
@@ -307,7 +307,7 @@ static int isp_ioctl_operation_submit(struct isp_fh *fh,
 		}
 
 		if (ret) {
-			hdr->error = num_op - 1;
+			hdr->error_idx = num_op - 1;
 			return ret;
 		}
 
