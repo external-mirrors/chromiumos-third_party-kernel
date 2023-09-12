@@ -37,13 +37,11 @@ struct isp_query_desc {
  * struct isp_header - A set of ISP queries/operations
  *
  * @num_requests:	Number of requests
- * @error_idx:		Index of the first failed request (in case of an error)
  * @qd:			Query header descriptor (only for ISP_IOC_QUERY calls)
  * @reserved:		Reserved for alignment and future extension
  */
 struct isp_header {
 	__u32			num_requests;
-	__u32			error_idx;
 	union {
 		struct isp_query_desc	qd;
 		__u8			reserved[64];

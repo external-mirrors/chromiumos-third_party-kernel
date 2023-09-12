@@ -123,10 +123,8 @@ static int isp_ioctl_parse_query(struct isp_fh *fh, unsigned int cmd,
 	for (num_query = 0; num_query < hdr->num_requests; num_query++) {
 		struct isp_query query;
 
-		if (copy_from_user(&query, payload, sizeof(query))) {
-			hdr->error_idx = num_query;
+		if (copy_from_user(&query, payload, sizeof(query)))
 			return -EFAULT;
-		}
 
 		switch (query.query_type) {
 		case ISP_QUERY_TYPE_ENTITIES:
@@ -167,10 +165,12 @@ static int isp_ioctl_parse_query(struct isp_fh *fh, unsigned int cmd,
 			ret = -EINVAL;
 		}
 
-		if (ret || isp_ioctl_query_result_copy(payload, &query)) {
-			hdr->error_idx = num_query;
+		if (ret)
 			return ret;
-		}
+
+		ret = isp_ioctl_query_result_copy(payload, &query);
+		if (ret)
+			return ret;
 
 		output.num_entries = 0;
 		payload++;
@@ -257,10 +257,8 @@ static int isp_ioctl_operation_prepare(struct isp_fh *fh,
 			ret = -EINVAL;
 		}
 
-		if (ret) {
-			hdr->error_idx = num_op;
+		if (ret)
 			return ret;
-		}
 
 		payload++;
 	}
@@ -306,10 +304,8 @@ static int isp_ioctl_operation_submit(struct isp_fh *fh,
 			ret = -EINVAL;
 		}
 
-		if (ret) {
-			hdr->error_idx = num_op - 1;
+		if (ret)
 			return ret;
-		}
 
 		payload--;
 	}
@@ -381,11 +377,6 @@ static long isp_ioctl(struct file *filp, unsigned int cmd, unsigned long __uarg)
 	}
 
 	ret = isp_ioctl_parse(fh, cmd, &hdr, uarg);
-
-	if (copy_to_user(uarg, &hdr, sizeof(hdr))) {
-		ret = -EFAULT;
-		goto done;
-	}
 
 done:
 	isp_device_uapi_call_exit(fh->isp);
