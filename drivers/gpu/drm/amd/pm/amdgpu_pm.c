@@ -3694,6 +3694,9 @@ static umode_t fan_curve_visible(struct amdgpu_device *adev)
  * When you have finished the editing, write "c" (commit) to the file to commit
  * your changes.
  *
+ * If you want to reset to the default value, write "r" (reset) to the file to
+ * reset them
+ *
  * This setting works under auto fan control mode only. It adjusts the PMFW's
  * behavior about the maximum speed in RPM the fan can spin. Setting via this
  * interface will switch the fan control to auto mode implicitly.
@@ -3748,6 +3751,9 @@ static umode_t acoustic_limit_threshold_visible(struct amdgpu_device *adev)
  *
  * When you have finished the editing, write "c" (commit) to the file to commit
  * your changes.
+ *
+ * If you want to reset to the default value, write "r" (reset) to the file to
+ * reset them
  *
  * This setting works under auto fan control mode only. It can co-exist with
  * other settings which can work also under auto mode. It adjusts the PMFW's
@@ -3806,6 +3812,9 @@ static umode_t acoustic_target_threshold_visible(struct amdgpu_device *adev)
  * When you have finished the editing, write "c" (commit) to the file to commit
  * your changes.
  *
+ * If you want to reset to the default value, write "r" (reset) to the file to
+ * reset them
+ *
  * This setting works under auto fan control mode only. It can co-exist with
  * other settings which can work also under auto mode. Paring with the
  * acoustic_target_rpm_threshold setting, they define the maximum speed in
@@ -3863,6 +3872,9 @@ static umode_t fan_target_temperature_visible(struct amdgpu_device *adev)
  *
  * When you have finished the editing, write "c" (commit) to the file to commit
  * your changes.
+ *
+ * If you want to reset to the default value, write "r" (reset) to the file to
+ * reset them
  *
  * This setting works under auto fan control mode only. It can co-exist with
  * other settings which can work also under auto mode. It adjusts the PMFW's
