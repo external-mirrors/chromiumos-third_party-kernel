@@ -551,21 +551,23 @@ event_filter_pid_sched_switch_probe_pre(void *data, bool preempt,
 	struct trace_array *tr = data;
 	struct trace_pid_list *no_pid_list;
 	struct trace_pid_list *pid_list;
+	struct pid_namespace *filtered_ns;
 	bool ret;
 
 	pid_list = rcu_dereference_sched(tr->filtered_pids);
 	no_pid_list = rcu_dereference_sched(tr->filtered_no_pids);
+	filtered_ns = rcu_dereference_sched(tr->filtered_ns);
 
 	/*
 	 * Sched switch is funny, as we only want to ignore it
 	 * in the notrace case if both prev and next should be ignored.
 	 */
-	ret = trace_ignore_this_task(NULL, no_pid_list, prev) &&
-		trace_ignore_this_task(NULL, no_pid_list, next);
+	ret = trace_ignore_this_task(NULL, no_pid_list, filtered_ns, prev) &&
+		trace_ignore_this_task(NULL, no_pid_list, filtered_ns, next);
 
 	this_cpu_write(tr->array_buffer.data->ignore_pid, ret ||
-		       (trace_ignore_this_task(pid_list, NULL, prev) &&
-			trace_ignore_this_task(pid_list, NULL, next)));
+		       (trace_ignore_this_task(pid_list, NULL, filtered_ns, prev) &&
+			trace_ignore_this_task(pid_list, NULL, filtered_ns, next)));
 }
 
 static void
@@ -575,12 +577,14 @@ event_filter_pid_sched_switch_probe_post(void *data, bool preempt,
 	struct trace_array *tr = data;
 	struct trace_pid_list *no_pid_list;
 	struct trace_pid_list *pid_list;
+	struct pid_namespace *filtered_ns;
 
 	pid_list = rcu_dereference_sched(tr->filtered_pids);
 	no_pid_list = rcu_dereference_sched(tr->filtered_no_pids);
+	filtered_ns = rcu_dereference_sched(tr->filtered_ns);
 
 	this_cpu_write(tr->array_buffer.data->ignore_pid,
-		       trace_ignore_this_task(pid_list, no_pid_list, next));
+		       trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, next));
 }
 
 static void
@@ -589,6 +593,7 @@ event_filter_pid_sched_wakeup_probe_pre(void *data, struct task_struct *task)
 	struct trace_array *tr = data;
 	struct trace_pid_list *no_pid_list;
 	struct trace_pid_list *pid_list;
+	struct pid_namespace *filtered_ns;
 
 	/* Nothing to do if we are already tracing */
 	if (!this_cpu_read(tr->array_buffer.data->ignore_pid))
@@ -596,9 +601,10 @@ event_filter_pid_sched_wakeup_probe_pre(void *data, struct task_struct *task)
 
 	pid_list = rcu_dereference_sched(tr->filtered_pids);
 	no_pid_list = rcu_dereference_sched(tr->filtered_no_pids);
+	filtered_ns = rcu_dereference_sched(tr->filtered_ns);
 
 	this_cpu_write(tr->array_buffer.data->ignore_pid,
-		       trace_ignore_this_task(pid_list, no_pid_list, task));
+		       trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, task));
 }
 
 static void
@@ -607,6 +613,7 @@ event_filter_pid_sched_wakeup_probe_post(void *data, struct task_struct *task)
 	struct trace_array *tr = data;
 	struct trace_pid_list *no_pid_list;
 	struct trace_pid_list *pid_list;
+	struct pid_namespace *filtered_ns;
 
 	/* Nothing to do if we are not tracing */
 	if (this_cpu_read(tr->array_buffer.data->ignore_pid))
@@ -614,10 +621,11 @@ event_filter_pid_sched_wakeup_probe_post(void *data, struct task_struct *task)
 
 	pid_list = rcu_dereference_sched(tr->filtered_pids);
 	no_pid_list = rcu_dereference_sched(tr->filtered_no_pids);
+	filtered_ns = rcu_dereference_sched(tr->filtered_ns);
 
 	/* Set tracing if current is enabled */
 	this_cpu_write(tr->array_buffer.data->ignore_pid,
-		       trace_ignore_this_task(pid_list, no_pid_list, current));
+		       trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, current));
 }
 
 static void unregister_pid_events(struct trace_array *tr)
@@ -1663,6 +1671,7 @@ static void ignore_task_cpu(void *data)
 	struct trace_array *tr = data;
 	struct trace_pid_list *pid_list;
 	struct trace_pid_list *no_pid_list;
+	struct pid_namespace *filtered_ns;
 
 	/*
 	 * This function is called by on_each_cpu() while the
@@ -1672,9 +1681,11 @@ static void ignore_task_cpu(void *data)
 					     mutex_is_locked(&event_mutex));
 	no_pid_list = rcu_dereference_protected(tr->filtered_no_pids,
 					     mutex_is_locked(&event_mutex));
+	filtered_ns = rcu_dereference_protected(tr->filtered_ns,
+					     mutex_is_locked(&event_mutex));
 
 	this_cpu_write(tr->array_buffer.data->ignore_pid,
-		       trace_ignore_this_task(pid_list, no_pid_list, current));
+		       trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, current));
 }
 
 static void register_pid_events(struct trace_array *tr)
@@ -1704,6 +1715,76 @@ static void register_pid_events(struct trace_array *tr)
 					 tr, INT_MAX);
 	register_trace_prio_sched_waking(event_filter_pid_sched_wakeup_probe_post,
 					 tr, 0);
+}
+
+static ssize_t
+ftrace_set_trace_pidns_write(struct file *filp, const char __user *ubuf,
+		size_t cnt, loff_t *ppos)
+{
+	struct trace_array *tr = filp->private_data;
+	unsigned long pid;
+	struct task_struct *tsk;
+	char buf[16];
+	struct pid_namespace *filtered_ns = NULL;
+
+	if (cnt >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, ubuf, cnt))
+		return -EFAULT;
+	buf[cnt] = '\0';
+	if (cnt && buf[cnt-1] == '\n')
+		buf[cnt-1] = '\0';
+
+	if (!strcmp(buf, "self")) {
+		filtered_ns = task_active_pid_ns(current);
+		if (!filtered_ns)
+			return -EINVAL;
+	} else {
+		if (kstrtoul(buf, 0, &pid))
+			return -EINVAL;
+
+		if (pid) {
+			tsk = find_task_by_vpid((pid_t)pid);
+			if (!tsk)
+				return -EINVAL;
+
+			filtered_ns = task_active_pid_ns(tsk);
+			if (!filtered_ns)
+				return -EINVAL;
+		}
+	}
+
+	mutex_lock(&event_mutex);
+
+	if (tr->filtered_ns)
+		put_pid_ns(tr->filtered_ns);
+
+	tr->filtered_ns = filtered_ns;
+	if (tr->filtered_ns)
+		get_pid_ns(tr->filtered_ns);
+
+	mutex_unlock(&event_mutex);
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static ssize_t
+ftrace_set_trace_pidns_read(struct file *filp, char __user *ubuf, size_t cnt,
+		  loff_t *ppos)
+{
+	struct trace_array *tr = filp->private_data;
+	char buf[32];
+
+	mutex_lock(&event_mutex);
+	if (tr->filtered_ns)
+		snprintf(buf, sizeof(buf), "pid:%lu", tr->filtered_ns->ns.inum);
+	else
+		strcpy(buf, "not set");
+	mutex_unlock(&event_mutex);
+
+	return simple_read_from_buffer(ubuf, cnt, ppos, buf, strlen(buf));
 }
 
 static ssize_t
@@ -1836,6 +1917,13 @@ static const struct file_operations ftrace_set_event_fops = {
 	.write = ftrace_event_write,
 	.llseek = seq_lseek,
 	.release = ftrace_event_release,
+};
+
+static const struct file_operations ftrace_set_trace_pidns_fops = {
+	.open = tracing_open_generic,
+	.read = ftrace_set_trace_pidns_read,
+	.write = ftrace_set_trace_pidns_write,
+	.llseek = generic_file_llseek,
 };
 
 static const struct file_operations ftrace_set_event_pid_fops = {
@@ -3250,6 +3338,10 @@ create_event_toplevel_files(struct dentry *parent, struct trace_array *tr)
 	}
 
 	/* There are not as crucial, just warn if they are not created */
+	entry = tracefs_create_file("set_trace_pidns", 0644, parent,
+				    tr, &ftrace_set_trace_pidns_fops);
+	if (!entry)
+		pr_warn("Could not create tracefs 'set_trace_pidns' entry\n");
 
 	entry = tracefs_create_file("set_event_pid", 0644, parent,
 				    tr, &ftrace_set_event_pid_fops);

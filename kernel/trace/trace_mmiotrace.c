@@ -303,7 +303,8 @@ static void __trace_mmiotrace_rw(struct trace_array *tr,
 	int pc = preempt_count();
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_MMIO_RW,
-					  sizeof(*entry), 0, pc);
+					  sizeof(*entry), 0, tr->trace_flags,
+					  pc);
 	if (!event) {
 		atomic_inc(&dropped_count);
 		return;
@@ -333,7 +334,8 @@ static void __trace_mmiotrace_map(struct trace_array *tr,
 	int pc = preempt_count();
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_MMIO_MAP,
-					  sizeof(*entry), 0, pc);
+					  sizeof(*entry), 0, tr->trace_flags,
+					  pc);
 	if (!event) {
 		atomic_inc(&dropped_count);
 		return;

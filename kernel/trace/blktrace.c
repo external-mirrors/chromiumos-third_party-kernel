@@ -82,7 +82,7 @@ static void trace_note(struct blk_trace *bt, pid_t pid, int action,
 		pc = preempt_count();
 		event = trace_buffer_lock_reserve(buffer, TRACE_BLK,
 						  sizeof(*t) + len + cgid_len,
-						  0, pc);
+						  0, blk_tr->trace_flags, pc);
 		if (!event)
 			return;
 		t = ring_buffer_event_data(event);
@@ -255,7 +255,7 @@ static void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 		pc = preempt_count();
 		event = trace_buffer_lock_reserve(buffer, TRACE_BLK,
 						  sizeof(*t) + pdu_len + cgid_len,
-						  0, pc);
+						  0, blk_tr->trace_flags, pc);
 		if (!event)
 			return;
 		t = ring_buffer_event_data(event);

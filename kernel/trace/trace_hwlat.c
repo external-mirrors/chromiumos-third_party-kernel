@@ -115,7 +115,7 @@ static void trace_hwlat_sample(struct hwlat_sample *sample)
 	local_save_flags(flags);
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_HWLAT, sizeof(*entry),
-					  flags, pc);
+					  flags, tr->trace_flags, pc);
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);

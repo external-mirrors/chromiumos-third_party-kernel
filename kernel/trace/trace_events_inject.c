@@ -205,7 +205,7 @@ static int parse_entry(char *str, struct trace_event_call *call, void **pentry)
 
 	local_save_flags(irq_flags);
 	tracing_generic_entry_update(entry, call->event.type, irq_flags,
-				     preempt_count());
+				     0, preempt_count());
 
 	while ((len = parse_field(str, call, &field, &val)) > 0) {
 		if (is_function_field(field))
