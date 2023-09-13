@@ -1807,7 +1807,7 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 
 		op = isp_op_lookup(&pipeline->ops, query->id);
 		if (!op)
-			return -EINVAL;
+			return -ENOENT;
 
 		isp_op_enum(op, output);
 		isp_op_put(op);
