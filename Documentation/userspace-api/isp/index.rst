@@ -192,6 +192,13 @@ without attaching a buffer. For this case, the kernel returns the number
 of entries for each query. Then, the user can calculate the size of the
 output buffer, allocate it, and attach it to another query command.
 
+If an error occurred, the ``errno`` variable is set to indicate the
+reason. There are a few errors that can be returned.
+
+* ``EINVAL`` -- when the arguments to ``ioctl()`` was invalid.
+* ``EFAULT`` -- when a user buffer could not be accessed.
+* ``ENOENT`` -- when an ID in the query could not be resolved to an object.
+
 ``ISP_IOC_OPERATION(size)``
 ---------------------------
 
@@ -226,6 +233,24 @@ driver specific data structure . For example, if an instruction type
 (enum isp_rw_instruction_type) is ``ISP_READ_INSTRUCTION`` or
 ``ISP_WRITE_INSTRUCTION``, it could have a driver specific data
 structure.
+
+If an error occurred, it becomes available to the user-space either when
+``ioctl()`` returns or when the operation's completion is read out. For
+the first case where ``ioctl()`` returns with an error, the ``errno``
+variable is set to indicate the reason. If the operation that caused the
+error had an instruction (struct isp_rw_instruction), its error field is
+also set. For the second case, the error reason is returned from the
+driver and it only becomes available to the user-space in the
+instruction error field on its completion. The errors that are not
+specific to drivers are listed below.
+
+* ``EINVAL`` -- when the arguments to ``ioctl()`` was invalid.
+* ``EFAULT`` -- when a user buffer could not be accessed.
+* ``ENOMEM`` -- when the kernel failed to allocate memory needed to
+  perform the operation.
+
+It is up to the user space whether to cancel other in-flight opertions
+when one of the operations in the same set failed with an error.
 
 Data Structure Reference
 ========================
