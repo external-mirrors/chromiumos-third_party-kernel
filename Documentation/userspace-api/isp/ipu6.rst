@@ -30,7 +30,8 @@ internally and operations should not explicitly depend on it.
 Requests
 ^^^^^^^^
 
-The PSYS entity accepts a few types of ISP read/write requests.
+The PSYS entity accepts a few types of ISP read/write requests. This
+driver does not support premature termination of queued commands.
 
 +-------------------+---------------+
 | request           | direction     |

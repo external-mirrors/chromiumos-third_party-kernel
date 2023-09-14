@@ -250,7 +250,15 @@ specific to drivers are listed below.
   perform the operation.
 
 It is up to the user space whether to cancel other in-flight opertions
-when one of the operations in the same set failed with an error.
+when one of the operations in the same set failed with an error. An
+operation can be canceled by submitting a removal request (struct
+isp_operation_remove). However, an operation can only be removed before
+its dependency is satisfied. Once all the dependencies have been
+satisfied, the operation may be started at any moment by the target
+device and thus cannot be removed. It may be possible to terminate the
+execution prematurely depending on the driver or hardware, but this is
+not commonly supported. Please refer to specific driver documentation
+for such premature termination.
 
 Data Structure Reference
 ========================
@@ -258,7 +266,7 @@ Data Structure Reference
 .. kernel-doc:: include/uapi/linux/isp.h
 
 ISP Driver Documentation
-------------------------
+========================
 
 .. toctree::
    :maxdepth: 2
