@@ -2887,6 +2887,7 @@ static void *thread_fn(void *arg)
 	struct obj_buffer *buf;
 	struct libisp *isp;
 	const char *isp_path = "/dev/isp";
+	int *status = arg;
 	int ret;
 
 	isp = libisp_open(isp_path);
@@ -3088,6 +3089,7 @@ out:
 	else
 		pr_info("Thread terminates\n");
 
+	*status = ret;
 	return NULL;
 }
 
@@ -3095,7 +3097,8 @@ out:
 
 static int multi_threaded_test(void)
 {
-	pthread_t threads[NUM_THREADS];
+	pthread_t threads[NUM_THREADS] = {};
+	int status[NUM_THREADS] = {};
 	int i;
 
 	pr_info("--- MULTI THREADED TEST ---\n");
@@ -3104,7 +3107,7 @@ static int multi_threaded_test(void)
 		int ret;
 
 		pr_info("Starting thread %d\n", i);
-		ret = pthread_create(&threads[i], NULL, thread_fn, NULL);
+		ret = pthread_create(&threads[i], NULL, thread_fn, &status[i]);
 		if (ret) {
 			pr_err("FATAL: failed to create thread: %d\n", ret);
 			return ret;
@@ -3113,6 +3116,13 @@ static int multi_threaded_test(void)
 
 	for (i = 0; i < NUM_THREADS; i++)
 		pthread_join(threads[i], NULL);
+
+	for (i = 0; i < NUM_THREADS; i++) {
+		if (status[i]) {
+			pr_err("Error %d at thread %d\n", status[i], i);
+			return status[i];
+		}
+	}
 
 	return 0;
 }
