@@ -98,6 +98,9 @@ static int isp_ioctl_query_result_copy(struct isp_query __user *payload,
 		ret = put_user(query->query_operations.num_ops,
 			       &payload->query_operations.num_ops);
 		break;
+	case ISP_QUERY_TYPE_DMABUF:
+		ret = 0;
+		break;
 	default:
 		ret = -EINVAL;
 	}
