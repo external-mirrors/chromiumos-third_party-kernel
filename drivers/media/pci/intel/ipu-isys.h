@@ -202,6 +202,7 @@ struct ipu_isys {
 	struct list_head framebuflist;
 	struct list_head framebuflist_fw;
 	struct v4l2_async_notifier notifier;
+	struct v4l2_async_connection connection;
 	struct isys_iwake_watermark *iwake_watermark;
 
 };
