@@ -580,7 +580,7 @@ static int isys_iwake_watermark_cleanup(struct ipu_isys *isys)
 /* The .bound() notifier callback when a match is found */
 static int isys_notifier_bound(struct v4l2_async_notifier *notifier,
 			       struct v4l2_subdev *sd,
-			       struct v4l2_async_subdev *asd)
+			       struct v4l2_async_connection *asd)
 {
 	struct ipu_isys *isys = container_of(notifier,
 					struct ipu_isys, notifier);
@@ -596,7 +596,7 @@ static int isys_notifier_bound(struct v4l2_async_notifier *notifier,
 
 static void isys_notifier_unbind(struct v4l2_async_notifier *notifier,
 				 struct v4l2_subdev *sd,
-				 struct v4l2_async_subdev *asd)
+				 struct v4l2_async_connection *asd)
 {
 	struct ipu_isys *isys = container_of(notifier,
 					struct ipu_isys, notifier);
@@ -622,7 +622,7 @@ static const struct v4l2_async_notifier_operations isys_async_ops = {
 
 static int isys_fwnode_parse(struct device *dev,
 			     struct v4l2_fwnode_endpoint *vep,
-			     struct v4l2_async_subdev *asd)
+			     struct v4l2_async_connection *asd)
 {
 	struct sensor_async_subdev *s_asd =
 			container_of(asd, struct sensor_async_subdev, asd);
@@ -639,7 +639,7 @@ static int isys_notifier_init(struct ipu_isys *isys)
 	size_t asd_struct_size = sizeof(struct sensor_async_subdev);
 	int ret;
 
-	v4l2_async_nf_init(&isys->notifier);
+	v4l2_async_nf_init(&isys->notifier, &isys->v4l2_dev);
 	ret = v4l2_async_nf_parse_fwnode_endpoints(&isp->pdev->dev,
 							 &isys->notifier,
 							 asd_struct_size,
@@ -651,14 +651,14 @@ static int isys_notifier_init(struct ipu_isys *isys)
 		return ret;
 	}
 
-	if (list_empty(&isys->notifier.asd_list)) {
+	if (list_empty(&isys->connection.asc_entry)) {
 		/* isys probe could continue with async subdevs missing */
 		dev_warn(&isys->adev->dev, "no subdev found in graph\n");
 		return 0;
 	}
 
 	isys->notifier.ops = &isys_async_ops;
-	ret = v4l2_async_nf_register(&isys->v4l2_dev, &isys->notifier);
+	ret = v4l2_async_nf_register(&isys->notifier);
 	if (ret) {
 		dev_err(&isys->adev->dev,
 			"failed to register async notifier : %d\n", ret);
