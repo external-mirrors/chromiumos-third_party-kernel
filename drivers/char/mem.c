@@ -712,7 +712,7 @@ static const struct memdev {
 	[11] = { "kmsg", &kmsg_fops, 0, 0644 },
 #endif
 #ifdef CONFIG_LOW_MEM_NOTIFY
-	[12] = { "chromeos-low-mem", 0666, &low_mem_notify_fops, 0 },
+	[12] = { "chromeos-low-mem", &low_mem_notify_fops, 0, 0666 },
 #endif
 };
 
