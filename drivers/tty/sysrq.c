@@ -477,7 +477,7 @@ static void sysrq_x_cros_signal_process(char *comm, char *parent, int sig)
 /* how many seconds do we wait for subsequent keypresses after the first */
 #define CROS_SYSRQ_WAIT 20
 
-static void sysrq_handle_cros_xkey(int key)
+static void sysrq_handle_cros_xkey(u8 key)
 {
 	static unsigned long first_jiffies = INITIAL_JIFFIES - CROS_SYSRQ_WAIT * HZ;
 	static unsigned int xkey_iteration;
