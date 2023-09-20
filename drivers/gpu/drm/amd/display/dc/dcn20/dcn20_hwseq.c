@@ -2749,8 +2749,7 @@ void dcn20_enable_stream(struct pipe_ctx *pipe_ctx)
 
 		phyd32clk = get_phyd32clk_src(link);
 		dccg->funcs->enable_symclk32_se(dccg, dp_hpo_inst, phyd32clk);
-	} else {
-		}
+	}
 	if (hws->funcs.calculate_dccg_k1_k2_values && dc->res_pool->dccg->funcs->set_pixel_rate_div) {
 		hws->funcs.calculate_dccg_k1_k2_values(pipe_ctx, &k1_div, &k2_div);
 
