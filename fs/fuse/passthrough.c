@@ -170,10 +170,10 @@ ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma)
 
 	if ((!timespec64_equal(&fuse_inode->i_mtime,
 			       &passthrough_inode->i_mtime) ||
-	     !timespec64_equal(&fuse_inode->i_ctime,
-			       &passthrough_inode->i_ctime))) {
+	     !timespec64_equal(&fuse_inode->__i_ctime,
+			       &passthrough_inode->__i_ctime))) {
 		fuse_inode->i_mtime = passthrough_inode->i_mtime;
-		fuse_inode->i_ctime = passthrough_inode->i_ctime;
+		fuse_inode->__i_ctime = passthrough_inode->__i_ctime;
 	}
 	touch_atime(&file->f_path);
 
