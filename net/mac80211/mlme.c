@@ -5428,6 +5428,7 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 	struct ieee80211_mgd_auth_data *auth_data;
+	const struct element *csa_elem, *ecsa_elem;
 	u16 auth_alg;
 	int err;
 	bool cont_auth;
@@ -5467,6 +5468,22 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 
 	if (ifmgd->assoc_data)
 		return -EBUSY;
+
+	rcu_read_lock();
+	csa_elem = ieee80211_bss_get_elem(req->bss, WLAN_EID_CHANNEL_SWITCH);
+	ecsa_elem = ieee80211_bss_get_elem(req->bss,
+					   WLAN_EID_EXT_CHANSWITCH_ANN);
+	if ((csa_elem &&
+	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie) &&
+	     ((struct ieee80211_channel_sw_ie *)csa_elem->data)->count != 0) ||
+	    (ecsa_elem &&
+	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie) &&
+	     ((struct ieee80211_ext_chansw_ie *)ecsa_elem->data)->count != 0)) {
+		rcu_read_unlock();
+		sdata_info(sdata, "AP is in CSA process, reject auth\n");
+		return -EINVAL;
+	}
+	rcu_read_unlock();
 
 	auth_data = kzalloc(sizeof(*auth_data) + req->auth_data_len +
 			    req->ie_len, GFP_KERNEL);
@@ -5586,6 +5603,7 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_bss_conf *bss_conf = &sdata->vif.bss_conf;
 	const u8 *ssidie, *ht_ie, *vht_ie;
+	const struct element *csa_elem, *ecsa_elem;
 	int i, err;
 	bool override = false;
 
@@ -5600,6 +5618,21 @@ int ieee80211_mgd_assoc(struct ieee80211_sub_if_data *sdata,
 		kfree(assoc_data);
 		return -EINVAL;
 	}
+
+	csa_elem = ieee80211_bss_get_elem(cbss, WLAN_EID_CHANNEL_SWITCH);
+	ecsa_elem = ieee80211_bss_get_elem(cbss, WLAN_EID_EXT_CHANSWITCH_ANN);
+	if ((csa_elem &&
+	     csa_elem->datalen == sizeof(struct ieee80211_channel_sw_ie) &&
+	     ((struct ieee80211_channel_sw_ie *)csa_elem->data)->count != 0) ||
+	    (ecsa_elem &&
+	     ecsa_elem->datalen == sizeof(struct ieee80211_ext_chansw_ie) &&
+	     ((struct ieee80211_ext_chansw_ie *)ecsa_elem->data)->count != 0)) {
+		sdata_info(sdata, "AP is in CSA process, reject assoc\n");
+		rcu_read_unlock();
+		kfree(assoc_data);
+		return -EINVAL;
+	}
+
 	memcpy(assoc_data->ssid, ssidie + 2, ssidie[1]);
 	assoc_data->ssid_len = ssidie[1];
 	memcpy(bss_conf->ssid, assoc_data->ssid, assoc_data->ssid_len);
