@@ -149,6 +149,9 @@ __read_mostly int sysctl_resched_latency_warn_once = 1;
  */
 const_debug unsigned int sysctl_sched_nr_migrate = SCHED_NR_MIGRATE_BREAK;
 
+unsigned int sysctl_iowait_reset_ticks = 20;
+unsigned int sysctl_iowait_apply_ticks = 10;
+
 __read_mostly int scheduler_running;
 
 #ifdef CONFIG_SCHED_CORE
@@ -411,11 +414,14 @@ static void __sched_core_disable(void)
 	static_branch_disable(&__sched_core_enabled);
 }
 
+DEFINE_STATIC_KEY_TRUE(sched_coresched_supported);
+
 void sched_core_get(void)
 {
 	if (atomic_inc_not_zero(&sched_core_count))
 		return;
-
+	if (!static_branch_likely(&sched_coresched_supported))
+		return;
 	mutex_lock(&sched_core_mutex);
 	if (!atomic_read(&sched_core_count))
 		__sched_core_enable();
@@ -427,6 +433,8 @@ void sched_core_get(void)
 
 static void __sched_core_put(struct work_struct *work)
 {
+	if (!static_branch_likely(&sched_coresched_supported))
+		return;
 	if (atomic_dec_and_mutex_lock(&sched_core_count, &sched_core_mutex)) {
 		__sched_core_disable();
 		mutex_unlock(&sched_core_mutex);
@@ -2063,6 +2071,22 @@ static inline void uclamp_fork(struct task_struct *p) { }
 static inline void uclamp_post_fork(struct task_struct *p) { }
 static inline void init_uclamp(void) { }
 #endif /* CONFIG_UCLAMP_TASK */
+
+#ifdef CONFIG_SMP
+static void __setscheduler_task_util(struct task_struct *p,
+				  const struct sched_attr *attr)
+{
+
+	if (likely(!(attr->sched_flags & SCHED_FLAG_UTIL_GUEST)))
+		return;
+
+	p->se.avg.util_guest = attr->sched_util_min;
+}
+#else
+static void __setscheduler_task_util(struct task_struct *p,
+				  const struct sched_attr *attr)
+{ }
+#endif
 
 bool sched_task_on_rq(struct task_struct *p)
 {
@@ -4260,6 +4284,9 @@ int try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		if (READ_ONCE(p->on_rq) && ttwu_runnable(p, wake_flags))
 			break;
 
+	if (READ_ONCE(p->__state) & TASK_UNINTERRUPTIBLE)
+		trace_sched_blocked_reason(p);
+
 #ifdef CONFIG_SMP
 		/*
 		 * Ensure we load p->on_cpu _after_ p->on_rq, otherwise it would be
@@ -4755,6 +4782,10 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 		p->prio = p->normal_prio = p->static_prio;
 		set_load_weight(p, false);
+
+#ifdef CONFIG_PROC_LATSENSE
+		p->proc_latency_sensitive = 0;
+#endif
 
 		/*
 		 * We don't need the reset flag anymore after the fork. It has
@@ -7645,7 +7676,7 @@ recheck:
 			return -EINVAL;
 	}
 
-	if (attr->sched_flags & ~(SCHED_FLAG_ALL | SCHED_FLAG_SUGOV))
+	if (attr->sched_flags & ~(SCHED_FLAG_ALL | SCHED_FLAG_SUGOV | SCHED_FLAG_UTIL_GUEST))
 		return -EINVAL;
 
 	/*
@@ -7665,6 +7696,9 @@ recheck:
 			return retval;
 
 		if (attr->sched_flags & SCHED_FLAG_SUGOV)
+			return -EINVAL;
+
+		if (attr->sched_flags & SCHED_FLAG_UTIL_GUEST)
 			return -EINVAL;
 
 		retval = security_task_setscheduler(p);
@@ -7718,6 +7752,8 @@ recheck:
 		if (dl_policy(policy) && dl_param_changed(p, attr))
 			goto change;
 		if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP)
+			goto change;
+		if (attr->sched_flags & SCHED_FLAG_UTIL_GUEST)
 			goto change;
 
 		p->sched_reset_on_fork = reset_on_fork;
@@ -7808,6 +7844,7 @@ change:
 		__setscheduler_prio(p, newprio);
 	}
 	__setscheduler_uclamp(p, attr);
+	__setscheduler_task_util(p, attr);
 
 	if (queued) {
 		/*
@@ -10797,6 +10834,27 @@ static int cpu_uclamp_max_show(struct seq_file *sf, void *v)
 	cpu_uclamp_print(sf, UCLAMP_MAX);
 	return 0;
 }
+
+static int cpu_uclamp_ls_write_u64(struct cgroup_subsys_state *css,
+				   struct cftype *cftype, u64 ls)
+{
+	struct task_group *tg;
+
+	if (ls > 1)
+		return -EINVAL;
+	tg = css_tg(css);
+	tg->latency_sensitive = (unsigned int) ls;
+
+	return 0;
+}
+
+static u64 cpu_uclamp_ls_read_u64(struct cgroup_subsys_state *css,
+				  struct cftype *cft)
+{
+	struct task_group *tg = css_tg(css);
+
+	return (u64) tg->latency_sensitive;
+}
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -11269,6 +11327,12 @@ static struct cftype cpu_legacy_files[] = {
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
 	},
+	{
+		.name = "uclamp.latency_sensitive",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_uclamp_ls_read_u64,
+		.write_u64 = cpu_uclamp_ls_write_u64,
+	},
 #endif
 	{ }	/* Terminate */
 };
@@ -11484,6 +11548,12 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
+	},
+	{
+		.name = "uclamp.latency_sensitive",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_uclamp_ls_read_u64,
+		.write_u64 = cpu_uclamp_ls_write_u64,
 	},
 #endif
 	{ }	/* terminate */
