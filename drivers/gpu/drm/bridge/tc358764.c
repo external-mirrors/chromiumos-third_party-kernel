@@ -176,7 +176,7 @@ static void tc358764_read(struct tc358764 *ctx, u16 addr, u32 *val)
 	if (ret >= 0)
 		le32_to_cpus(val);
 
-	dev_dbg(ctx->dev, "read: %d, addr: %d\n", addr, *val);
+	dev_dbg(ctx->dev, "read: addr=0x%04x data=0x%08x\n", addr, *val);
 }
 
 static void tc358764_write(struct tc358764 *ctx, u16 addr, u32 val)
@@ -381,14 +381,12 @@ static int tc358764_probe(struct mipi_dsi_device *dsi)
 	return ret;
 }
 
-static int tc358764_remove(struct mipi_dsi_device *dsi)
+static void tc358764_remove(struct mipi_dsi_device *dsi)
 {
 	struct tc358764 *ctx = mipi_dsi_get_drvdata(dsi);
 
 	mipi_dsi_detach(dsi);
 	drm_bridge_remove(&ctx->bridge);
-
-	return 0;
 }
 
 static const struct of_device_id tc358764_of_match[] = {

@@ -177,6 +177,8 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 {
 	int i;
 
+	kvm_free_stage2_pgd(&kvm->arch.mmu);
+
 	bitmap_free(kvm->arch.pmu_filter);
 
 	kvm_vgic_destroy(kvm);
@@ -215,7 +217,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_SET_GUEST_DEBUG:
 	case KVM_CAP_VCPU_ATTRIBUTES:
 	case KVM_CAP_PTP_KVM:
-	case KVM_CAP_UCLAMP_SYNC:
+	case KVM_CAP_GET_CUR_CPUFREQ:
+	case KVM_CAP_UTIL_HINT:
+	case KVM_CAP_GET_CPUFREQ_TBL:
 		r = 1;
 		break;
 	case KVM_CAP_SET_GUEST_DEBUG2:
@@ -1070,7 +1074,8 @@ static int kvm_vcpu_set_target(struct kvm_vcpu *vcpu,
 	unsigned int i, ret;
 	u32 phys_target = kvm_target_cpu();
 
-	if (init->target != phys_target)
+	if (init->target != KVM_ARM_TARGET_GENERIC_V8 &&
+	    init->target != phys_target)
 		return -EINVAL;
 
 	/*
@@ -1402,12 +1407,9 @@ long kvm_arch_vm_ioctl(struct file *filp,
 		return kvm_vm_ioctl_set_device_addr(kvm, &dev_addr);
 	}
 	case KVM_ARM_PREFERRED_TARGET: {
-		int err;
-		struct kvm_vcpu_init init;
-
-		err = kvm_vcpu_preferred_target(&init);
-		if (err)
-			return err;
+		struct kvm_vcpu_init init = {
+			.target = KVM_ARM_TARGET_GENERIC_V8,
+		};
 
 		if (copy_to_user(argp, &init, sizeof(init)))
 			return -EFAULT;

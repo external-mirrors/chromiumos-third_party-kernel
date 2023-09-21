@@ -11,6 +11,7 @@
  * negotiation messages to ME FW command payloads and vice versa.
  */
 
+#include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uuid.h>
@@ -64,16 +65,38 @@ mei_pxp_receive_message(struct device *dev, void *buffer, size_t size, u8 vtag)
 {
 	struct mei_cl_device *cldev;
 	ssize_t byte;
+	bool retry = false;
 
 	if (!dev || !buffer)
 		return -EINVAL;
 
 	cldev = to_mei_cl_device(dev);
 
+retry:
 	byte = mei_cldev_recv_vtag(cldev, buffer, size, &vtag);
 	if (byte < 0) {
 		dev_dbg(dev, "mei_cldev_recv failed. %zd\n", byte);
-		return byte;
+		if (byte != -ENOMEM)
+			return byte;
+
+		/* Retry the read when pages are reclaimed */
+		msleep(20);
+		if (!retry) {
+			retry = true;
+			goto retry;
+		} else {
+			dev_warn(dev, "No memory on data receive after retry, trying to reset the channel...\n");
+			byte = mei_cldev_disable(cldev);
+			if (byte < 0)
+				dev_warn(dev, "mei_cldev_disable failed. %zd\n", byte);
+			/*
+			 * Exlicitely ignoring disable failure,
+			 * enable may fix the states and succeed
+			 */
+			byte = mei_cldev_enable(cldev);
+			if (byte < 0)
+				dev_err(dev, "mei_cldev_enable failed. %zd\n", byte);
+		}
 	}
 
 	return byte;
@@ -208,8 +231,8 @@ static void mei_pxp_remove(struct mei_cl_device *cldev)
 }
 
 /* fbf6fcf1-96cf-4e2e-a6a6-1bab8cbe36b1 : PAVP GUID*/
-#define MEI_GUID_PXP GUID_INIT(0xfbf6fcf1, 0x96cf, 0x4e2e, 0xA6, \
-			       0xa6, 0x1b, 0xab, 0x8c, 0xbe, 0x36, 0xb1)
+#define MEI_GUID_PXP UUID_LE(0xfbf6fcf1, 0x96cf, 0x4e2e, 0xA6, \
+			     0xa6, 0x1b, 0xab, 0x8c, 0xbe, 0x36, 0xb1)
 
 static struct mei_cl_device_id mei_pxp_tbl[] = {
 	{ .uuid = MEI_GUID_PXP, .version = MEI_CL_VERSION_ANY },

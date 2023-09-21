@@ -24,6 +24,7 @@
 #include "intel_modeset_setup.h"
 #include "intel_pch_display.h"
 #include "intel_pm.h"
+#include "intel_vblank.h"
 #include "skl_watermark.h"
 
 static void intel_crtc_disable_noatomic(struct intel_crtc *crtc,
@@ -96,7 +97,6 @@ static void intel_crtc_disable_noatomic(struct intel_crtc *crtc,
 
 	intel_fbc_disable(crtc);
 	intel_update_watermarks(i915);
-	intel_disable_shared_dpll(crtc_state);
 
 	intel_display_power_put_all_in_set(i915, &crtc->enabled_power_domains);
 
@@ -155,6 +155,12 @@ static void intel_crtc_copy_hw_to_uapi_state(struct intel_crtc_state *crtc_state
 
 	crtc_state->uapi.adjusted_mode = crtc_state->hw.adjusted_mode;
 	crtc_state->uapi.scaling_filter = crtc_state->hw.scaling_filter;
+
+	/* assume 1:1 mapping */
+	drm_property_replace_blob(&crtc_state->hw.degamma_lut,
+				  crtc_state->pre_csc_lut);
+	drm_property_replace_blob(&crtc_state->hw.gamma_lut,
+				  crtc_state->post_csc_lut);
 
 	drm_property_replace_blob(&crtc_state->uapi.degamma_lut,
 				  crtc_state->hw.degamma_lut);
@@ -555,7 +561,8 @@ static void intel_modeset_readout_hw_state(struct drm_i915_private *i915)
 			 */
 			crtc_state->inherited = true;
 
-			intel_crtc_update_active_timings(crtc_state);
+			intel_crtc_update_active_timings(crtc_state,
+							 crtc_state->vrr.enable);
 
 			intel_crtc_copy_hw_to_uapi_state(crtc_state);
 		}
@@ -684,8 +691,10 @@ void intel_modeset_setup_hw_state(struct drm_i915_private *i915,
 
 		drm_crtc_vblank_reset(&crtc->base);
 
-		if (crtc_state->hw.active)
+		if (crtc_state->hw.active) {
+			intel_dmc_enable_pipe(i915, crtc->pipe);
 			intel_crtc_vblank_on(crtc_state);
+		}
 	}
 
 	intel_fbc_sanitize(i915);

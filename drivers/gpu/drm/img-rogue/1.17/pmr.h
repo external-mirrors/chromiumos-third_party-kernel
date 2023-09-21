@@ -469,14 +469,19 @@ PMR_WriteBytes(PMR *psPMR,
                 address space. The caller does not need to call
                 PMRLockSysPhysAddresses before calling this function.
 
-@Input          psPMR           PMR to map.
+@Input          psPMR            PMR to map.
 
-@Input          pOSMMapData     OS specific data needed to create a mapping.
+@Input          pOSMMapData      OS specific data needed to create a mapping.
+
+@Input          uiCpuAccessFlags Flags to indicate if the mapping request
+                                 requires read, write or both access.
 
 @Return         PVRSRV_ERROR:   PVRSRV_OK on success or an error otherwise.
 */ /**************************************************************************/
 PVRSRV_ERROR
-PMRMMapPMR(PMR *psPMR, PMR_MMAP_DATA pOSMMapData);
+PMRMMapPMR(PMR *psPMR,
+           PMR_MMAP_DATA pOSMMapData,
+           PVRSRV_MEMALLOCFLAGS_T uiCpuAccessFlags);
 
 /*
  * PMRRefPMR()
@@ -506,6 +511,24 @@ PMRUnrefPMR(PMR *psPMR);
  */
 PVRSRV_ERROR
 PMRUnrefUnlockPMR(PMR *psPMR);
+
+/*
+ * PMRCpuMapCountIncr()
+ *
+ * Increment count of the number of current CPU mappings of the PMR.
+ *
+ */
+void
+PMRCpuMapCountIncr(PMR *psPMR);
+
+/*
+ * PMRCpuMapCountDecr()
+ *
+ * Decrement count of the number of current CPU mappings of the PMR.
+ *
+ */
+void
+PMRCpuMapCountDecr(PMR *psPMR);
 
 PPVRSRV_DEVICE_NODE
 PMR_DeviceNode(const PMR *psPMR);

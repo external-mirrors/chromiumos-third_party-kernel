@@ -140,14 +140,14 @@ struct drm_master *drm_master_create(struct drm_device *dev)
 
 	kref_init(&master->refcount);
 	drm_master_legacy_init(master);
-	idr_init(&master->magic_map);
+	idr_init_base(&master->magic_map, 1);
 	master->dev = dev;
 
 	/* initialize the tree of output resource lessees */
 	INIT_LIST_HEAD(&master->lessees);
 	INIT_LIST_HEAD(&master->lessee_list);
 	idr_init(&master->leases);
-	idr_init(&master->lessee_idr);
+	idr_init_base(&master->lessee_idr, 1);
 
 	return master;
 }
@@ -240,7 +240,7 @@ drm_master_check_perm(struct drm_device *dev, struct drm_file *file_priv)
 	 * drm_master_relax. With frecon, the was_master flag is true, but the
 	 * file pid and the task pid pointers (and the actual PIDs) don't match.
 	 */
-	if ((drm_master_relax || file_priv->pid == task_pid(current)) && file_priv->was_master)
+	if ((drm_master_relax || rcu_access_pointer(file_priv->pid) == task_pid(current)) && file_priv->was_master)
 		return 0;
 
 	if (!capable(CAP_SYS_ADMIN))

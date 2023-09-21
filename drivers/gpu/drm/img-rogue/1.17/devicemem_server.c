@@ -66,6 +66,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define DEVMEMCTX_FLAGS_FAULT_ADDRESS_AVAILABLE (1 << 0)
 #define DEVMEMHEAP_REFCOUNT_MIN 1
 #define DEVMEMHEAP_REFCOUNT_MAX IMG_INT32_MAX
+#define DEVMEMRESERVATION_REFCOUNT_MIN 0
+#define DEVMEMRESERVATION_REFCOUNT_MAX IMG_INT32_MAX
 
 struct _DEVMEMINT_CTX_
 {
@@ -121,6 +123,9 @@ struct _DEVMEMINT_RESERVATION_
 	struct _DEVMEMINT_HEAP_ *psDevmemHeap;
 	IMG_DEV_VIRTADDR sBase;
 	IMG_DEVMEM_SIZE_T uiLength;
+	/* lock used to guard against potential race when freeing reservation */
+	POS_LOCK hLock;
+	IMG_INT32 i32RefCount;
 };
 
 struct _DEVMEMINT_MAPPING_
@@ -258,6 +263,69 @@ DevmemIntPinValidate(DEVMEMINT_MAPPING *psDevmemMapping, PMR *psPMR)
 	PVR_UNREFERENCED_PARAMETER(psDevmemMapping);
 	PVR_UNREFERENCED_PARAMETER(psPMR);
 	return PVRSRV_ERROR_NOT_IMPLEMENTED;
+}
+
+/*************************************************************************/ /*!
+@Function       DevmemIntReservationAcquire
+@Description    Acquire a reference to the provided device memory reservation.
+@Return         IMG_TRUE if referenced and IMG_FALSE in case of error
+*/ /**************************************************************************/
+IMG_BOOL DevmemIntReservationAcquire(DEVMEMINT_RESERVATION *psDevmemReservation)
+{
+	IMG_BOOL bSuccess;
+
+	OSLockAcquire(psDevmemReservation->hLock);
+
+	bSuccess = (psDevmemReservation->i32RefCount < DEVMEMRESERVATION_REFCOUNT_MAX);
+
+	if (!bSuccess)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s(): Failed to acquire the device memory "
+		         "reservation, reference count has overflowed.", __func__));
+	}
+	else
+	{
+		psDevmemReservation->i32RefCount++;
+	}
+
+	OSLockRelease(psDevmemReservation->hLock);
+	return bSuccess;
+}
+
+/*************************************************************************/ /*!
+@Function       DevmemIntReservationRelease
+@Description    Release the reference to the provided device memory reservation.
+                If this is the last reference which was taken then the
+                reservation will be freed.
+@Return         None.
+*/ /**************************************************************************/
+void DevmemIntReservationRelease(DEVMEMINT_RESERVATION *psDevmemReservation)
+{
+	OSLockAcquire(psDevmemReservation->hLock);
+
+	if (psDevmemReservation->i32RefCount == DEVMEMRESERVATION_REFCOUNT_MIN)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s(): Failed to release the device memory "
+		         "reservation, reference count has underflowed.", __func__));
+	}
+	else
+	{
+		/* Decrement reservation reference count and free it
+		 * if this was the final reference
+		 */
+		if (--psDevmemReservation->i32RefCount == DEVMEMRESERVATION_REFCOUNT_MIN)
+		{
+			/* Destroy lock */
+			OSLockRelease(psDevmemReservation->hLock);
+			OSLockDestroy(psDevmemReservation->hLock);
+			OSFreeMem(psDevmemReservation);
+			goto exit_noderef;
+		}
+	}
+
+	OSLockRelease(psDevmemReservation->hLock);
+exit_noderef:
+	return;
 }
 
 /*************************************************************************/ /*!
@@ -448,6 +516,17 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
                     DEVMEMINT_HEAP **ppsDevmemHeapPtr)
 {
 	DEVMEMINT_HEAP *psDevmemHeap;
+	PVRSRV_ERROR eError;
+	IMG_DEV_VIRTADDR sBlueprintHeapBaseAddr;
+	IMG_DEVMEM_SIZE_T uiBlueprintHeapLength;
+	IMG_DEVMEM_SIZE_T uiBlueprintResRgnLength;
+	IMG_UINT32 ui32BlueprintLog2DataPageSize;
+	IMG_UINT32 ui32BlueprintLog2ImportAlignment;
+	IMG_UINT32 ui32NumHeapConfigsOut;
+	IMG_UINT32 ui32NumHeapsOut;
+	IMG_BOOL bHeapParamsValidated = IMG_FALSE;
+
+	IMG_INT uiHeapConfigIndex, uiHeapIndex;
 
 	PVR_DPF((PVR_DBG_MESSAGE, "%s", __func__));
 
@@ -461,11 +540,81 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 
 	OSAtomicWrite(&psDevmemHeap->uiRefCount, 1);
 
+	/* getting number of heaps and heap configs */
+	eError = HeapCfgHeapConfigCount(NULL, psDevmemHeap->psDevmemCtx->psDevNode, &ui32NumHeapConfigsOut);
+
+	if (eError != PVRSRV_OK)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: Cannot retrieve the number of heap configs.\n", __func__));
+		eError = PVRSRV_ERROR_FAILED_TO_RETRIEVE_HEAPINFO;
+		goto ErrorCtxRelease;
+	}
+
+	for(uiHeapConfigIndex = 0; uiHeapConfigIndex < ui32NumHeapConfigsOut; uiHeapConfigIndex++)
+	{
+		eError = HeapCfgHeapCount(NULL, psDevmemHeap->psDevmemCtx->psDevNode, uiHeapConfigIndex, &ui32NumHeapsOut);
+		if (eError != PVRSRV_OK)
+		{
+			PVR_DPF((PVR_DBG_ERROR, "%s: Failed to retrieve the number of heaps for heap config index %d.\n",
+					 __func__, uiHeapConfigIndex));
+			eError = PVRSRV_ERROR_FAILED_TO_RETRIEVE_HEAPINFO;
+			goto ErrorCtxRelease;
+		}
+		else
+		{
+			for(uiHeapIndex = 0; uiHeapIndex < ui32NumHeapsOut; uiHeapIndex++)
+			{
+				/* Check page size and base addr match the heap blueprint */
+				eError = HeapCfgHeapDetails(NULL,
+											psDevmemHeap->psDevmemCtx->psDevNode,
+											uiHeapConfigIndex,
+											uiHeapIndex,
+											0, NULL,
+											&sBlueprintHeapBaseAddr,
+											&uiBlueprintHeapLength,
+											&uiBlueprintResRgnLength,
+											&ui32BlueprintLog2DataPageSize,
+											&ui32BlueprintLog2ImportAlignment);
+				if (eError == PVRSRV_OK)
+				{
+					if ((ui32BlueprintLog2DataPageSize == uiLog2DataPageSize) &&
+						(sHeapBaseAddr.uiAddr == sBlueprintHeapBaseAddr.uiAddr) &&
+						(uiBlueprintHeapLength == uiHeapLength))
+					{
+						bHeapParamsValidated = IMG_TRUE;
+						break;
+					}
+				}
+				else
+				{
+					PVR_DPF((PVR_DBG_ERROR, "%s: HeapCfgHeapDetails call fail with Heap Config Index: %d, and Heap Index: %d.\n"
+							,__func__, uiHeapConfigIndex, uiHeapIndex));
+					eError = PVRSRV_ERROR_FAILED_TO_RETRIEVE_HEAPINFO;
+					goto ErrorCtxRelease;
+				}
+			}
+		}
+	}
+
+	if (bHeapParamsValidated != IMG_TRUE)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s:The passed parameters do not match with any heap blueprint.\n",
+					 __func__));
+		eError = PVRSRV_ERROR_INVALID_PARAMS;
+		goto ErrorCtxRelease;
+	}
+
 	psDevmemHeap->uiLog2PageSize = uiLog2DataPageSize;
 
 	*ppsDevmemHeapPtr = psDevmemHeap;
 
 	return PVRSRV_OK;
+
+ErrorCtxRelease:
+	DevmemIntCtxRelease(psDevmemHeap->psDevmemCtx);
+	OSFreeMem(psDevmemHeap);
+
+	return eError;
 }
 
 PVRSRV_ERROR DevmemIntAllocDefBackingPage(PVRSRV_DEVICE_NODE *psDevNode,
@@ -647,10 +796,7 @@ DevmemIntMapPMR(DEVMEMINT_HEAP *psDevmemHeap,
 	}
 	psDevNode = psDevmemHeap->psDevmemCtx->psDevNode;
 
-	/* Don't bother with refcount on reservation, as a reservation
-	   only ever holds one mapping, so we directly increment the
-	   refcount on the heap instead */
-	if (!DevmemIntHeapAcquire(psDevmemHeap))
+	if (!DevmemIntReservationAcquire(psReservation))
 	{
 		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_REFCOUNT_OVERFLOW, ErrorReturnError);
 	}
@@ -766,7 +912,7 @@ ErrorFreeMapping:
 
 ErrorUnreference:
 	/* if fails there's not much to do (the function will print an error) */
-	DevmemIntHeapRelease(psDevmemHeap);
+	DevmemIntReservationRelease(psReservation);
 
 ErrorReturnError:
 	PVR_ASSERT (eError != PVRSRV_OK);
@@ -819,7 +965,7 @@ DevmemIntUnmapPMR(DEVMEMINT_MAPPING *psMapping)
 				sAllocationDevVAddr,
 				ui32NumDevPages,
 				NULL,
-				psMapping->psReservation->psDevmemHeap->uiLog2PageSize,
+				psDevmemHeap->uiLog2PageSize,
 				0);
 	}
 	else
@@ -827,17 +973,13 @@ DevmemIntUnmapPMR(DEVMEMINT_MAPPING *psMapping)
 		MMU_UnmapPMRFast(psDevmemHeap->psDevmemCtx->psMMUContext,
 		                 sAllocationDevVAddr,
 		                 ui32NumDevPages,
-		                 psMapping->psReservation->psDevmemHeap->uiLog2PageSize);
+		                 psDevmemHeap->uiLog2PageSize);
 	}
 
 	eError = PMRUnlockSysPhysAddresses(psMapping->psPMR);
 	PVR_ASSERT(eError == PVRSRV_OK);
 
-	/* Don't bother with refcount on reservation, as a reservation only ever
-	 * holds one mapping, so we directly decrement the refcount on the heap
-	 * instead.
-	 * Function will print an error if the heap could not be unreferenced. */
-	DevmemIntHeapRelease(psDevmemHeap);
+	DevmemIntReservationRelease(psMapping->psReservation);
 
 	OSFreeMem(psMapping);
 
@@ -863,6 +1005,12 @@ DevmemIntReserveRange(DEVMEMINT_HEAP *psDevmemHeap,
 	/* allocate memory to record the reservation info */
 	psReservation = OSAllocMem(sizeof(*psReservation));
 	PVR_LOG_GOTO_IF_NOMEM(psReservation, eError, ErrorUnreference);
+
+	/* Create lock */
+	eError = OSLockCreate(&psReservation->hLock);
+
+	/* Initialise refcount */
+	psReservation->i32RefCount = 1;
 
 	psReservation->sBase = sAllocationDevVAddr;
 	psReservation->uiLength = uiAllocationSize;
@@ -906,20 +1054,16 @@ DevmemIntUnreserveRange(DEVMEMINT_RESERVATION *psReservation)
 {
 	IMG_DEV_VIRTADDR sBase        = psReservation->sBase;
 	IMG_UINT32 uiLength           = psReservation->uiLength;
-	IMG_UINT32 uiLog2DataPageSize = psReservation->psDevmemHeap->uiLog2PageSize;
+	DEVMEMINT_HEAP *psDevmemHeap  = psReservation->psDevmemHeap;
+	IMG_UINT32 uiLog2DataPageSize = psDevmemHeap->uiLog2PageSize;
 
-	MMU_Free(psReservation->psDevmemHeap->psDevmemCtx->psMMUContext,
+	MMU_Free(psDevmemHeap->psDevmemCtx->psMMUContext,
 	         sBase,
 	         uiLength,
 	         uiLog2DataPageSize);
 
-	/* Don't bother with refcount on reservation, as a reservation only ever
-	 * holds one mapping, so we directly decrement the refcount on the heap
-	 * instead.
-	 * Function will print an error if the heap could not be unreferenced. */
-	DevmemIntHeapRelease(psReservation->psDevmemHeap);
-
-	OSFreeMem(psReservation);
+	DevmemIntReservationRelease(psReservation);
+	DevmemIntHeapRelease(psDevmemHeap);
 
 	return PVRSRV_OK;
 }
@@ -1363,10 +1507,11 @@ DevmemIntAcquireRemoteCtx(PMR *psPMR,
 		psCtxExport = IMG_CONTAINER_OF(psListNode, DEVMEMINT_CTX_EXPORT, sNode);
 		if (psCtxExport->psPMR == psPMR)
 		{
-			OSWRLockReleaseRead(g_hExportCtxListLock);
 			DevmemIntCtxAcquire(psCtxExport->psDevmemCtx);
 			*ppsContext = psCtxExport->psDevmemCtx;
 			*phPrivData = psCtxExport->psDevmemCtx->hPrivData;
+
+			OSWRLockReleaseRead(g_hExportCtxListLock);
 
 			/* PMR should have been already exported to import it
 			 * If a PMR is exported, its immutable and the same is

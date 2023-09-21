@@ -44,6 +44,8 @@ MODULE_FIRMWARE("amdgpu/psp_13_0_0_sos.bin");
 MODULE_FIRMWARE("amdgpu/psp_13_0_0_ta.bin");
 MODULE_FIRMWARE("amdgpu/psp_13_0_7_sos.bin");
 MODULE_FIRMWARE("amdgpu/psp_13_0_7_ta.bin");
+MODULE_FIRMWARE("amdgpu/psp_13_0_10_sos.bin");
+MODULE_FIRMWARE("amdgpu/psp_13_0_10_ta.bin");
 
 /* For large FW files the time to complete can be very long */
 #define USBC_PD_POLLING_LIMIT_S 240
@@ -109,6 +111,7 @@ static int psp_v13_0_init_microcode(struct psp_context *psp)
 		break;
 	case IP_VERSION(13, 0, 0):
 	case IP_VERSION(13, 0, 7):
+	case IP_VERSION(13, 0, 10):
 		err = psp_init_sos_microcode(psp, chip_name);
 		if (err)
 			return err;
@@ -141,14 +144,15 @@ static int psp_v13_0_wait_for_bootloader(struct psp_context *psp)
 	int ret;
 	int retry_loop;
 
+	/* Wait for bootloader to signify that it is ready having bit 31 of
+	 * C2PMSG_35 set to 1. All other bits are expected to be cleared.
+	 * If there is an error in processing command, bits[7:0] will be set.
+	 * This is applicable for PSP v13.0.6 and newer.
+	 */
 	for (retry_loop = 0; retry_loop < 10; retry_loop++) {
-		/* Wait for bootloader to signify that is
-		    ready having bit 31 of C2PMSG_35 set to 1 */
-		ret = psp_wait_for(psp,
-				   SOC15_REG_OFFSET(MP0, 0, regMP0_SMN_C2PMSG_35),
-				   0x80000000,
-				   0x80000000,
-				   false);
+		ret = psp_wait_for(
+			psp, SOC15_REG_OFFSET(MP0, 0, regMP0_SMN_C2PMSG_35),
+			0x80000000, 0xffffffff, false);
 
 		if (ret == 0)
 			return 0;
@@ -221,6 +225,12 @@ static int psp_v13_0_bootloader_load_dbg_drv(struct psp_context *psp)
 {
 	return psp_v13_0_bootloader_load_component(psp, &psp->dbg_drv, PSP_BL__LOAD_DBGDRV);
 }
+
+static int psp_v13_0_bootloader_load_ras_drv(struct psp_context *psp)
+{
+	return psp_v13_0_bootloader_load_component(psp, &psp->ras_drv, PSP_BL__LOAD_RASDRV);
+}
+
 
 static int psp_v13_0_bootloader_load_sos(struct psp_context *psp)
 {
@@ -718,6 +728,7 @@ static const struct psp_funcs psp_v13_0_funcs = {
 	.bootloader_load_soc_drv = psp_v13_0_bootloader_load_soc_drv,
 	.bootloader_load_intf_drv = psp_v13_0_bootloader_load_intf_drv,
 	.bootloader_load_dbg_drv = psp_v13_0_bootloader_load_dbg_drv,
+	.bootloader_load_ras_drv = psp_v13_0_bootloader_load_ras_drv,
 	.bootloader_load_sos = psp_v13_0_bootloader_load_sos,
 	.ring_init = psp_v13_0_ring_init,
 	.ring_create = psp_v13_0_ring_create,

@@ -877,7 +877,6 @@ static inline void vmw_user_resource_noref_release(void)
 /**
  * Buffer object helper functions - vmwgfx_bo.c
  */
-extern bool vmw_bo_is_vmw_bo(struct ttm_buffer_object *bo);
 extern int vmw_bo_pin_in_placement(struct vmw_private *vmw_priv,
 				   struct vmw_buffer_object *bo,
 				   struct ttm_placement *placement,
@@ -1696,6 +1695,18 @@ static inline bool vmw_has_fences(struct vmw_private *vmw)
 				  SVGA_CAP_CMD_BUFFERS_2)) != 0)
 		return true;
 	return (vmw_fifo_caps(vmw) & SVGA_FIFO_CAP_FENCE) != 0;
+}
+
+static inline bool vmw_shadertype_is_valid(enum vmw_sm_type shader_model,
+					   u32 shader_type)
+{
+	SVGA3dShaderType max_allowed = SVGA3D_SHADERTYPE_PREDX_MAX;
+
+	if (shader_model >= VMW_SM_5)
+		max_allowed = SVGA3D_SHADERTYPE_MAX;
+	else if (shader_model >= VMW_SM_4)
+		max_allowed = SVGA3D_SHADERTYPE_DX10_MAX;
+	return shader_type >= SVGA3D_SHADERTYPE_MIN && shader_type < max_allowed;
 }
 
 #endif

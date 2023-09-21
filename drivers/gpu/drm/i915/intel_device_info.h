@@ -127,6 +127,7 @@ enum intel_platform {
  * bit set
  */
 #define INTEL_SUBPLATFORM_N    1
+#define INTEL_SUBPLATFORM_RPLU  2
 
 /* MTL */
 #define INTEL_SUBPLATFORM_M	0
@@ -191,7 +192,6 @@ enum intel_ppgtt_type {
 	func(has_hotplug); \
 	func(has_hti); \
 	func(has_ipc); \
-	func(has_modular_fia); \
 	func(has_overlay); \
 	func(has_psr); \
 	func(has_psr_hw_tracking); \
