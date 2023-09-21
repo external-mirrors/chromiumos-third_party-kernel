@@ -234,7 +234,10 @@ const struct htt_rx_ring_tlv_filter ath11k_mac_mon_status_filter_default = {
 #define ath11k_a_rates (ath11k_legacy_rates + 4)
 #define ath11k_a_rates_size (ARRAY_SIZE(ath11k_legacy_rates) - 4)
 
-#define ATH11K_MAC_SCAN_TIMEOUT_MSECS 200 /* in msecs */
+#define ATH11K_MAC_SCAN_CMD_EVT_OVERHEAD		200 /* in msecs */
+
+/* Overhead due to the processing of channel switch events from FW */
+#define ATH11K_SCAN_CHANNEL_SWITCH_WMI_EVT_OVERHEAD	10 /* in msecs */
 
 static const u32 ath11k_smps_map[] = {
 	[WLAN_HT_CAP_SM_PS_STATIC] = WMI_PEER_SMPS_STATIC,
@@ -3551,9 +3554,22 @@ static int ath11k_mac_op_hw_scan(struct ieee80211_hw *hw,
 	struct ath11k *ar = hw->priv;
 	struct ath11k_vif *arvif = ath11k_vif_to_arvif(vif);
 	struct cfg80211_scan_request *req = &hw_req->req;
-	struct scan_req_params arg;
+	struct scan_req_params *arg = NULL;
 	int ret = 0;
 	int i;
+	u32 scan_timeout;
+
+	/* Firmwares advertising the support of triggering 11D algorithm
+	 * on the scan results of a regular scan expects driver to send
+	 * WMI_11D_SCAN_START_CMDID before sending WMI_START_SCAN_CMDID.
+	 * With this feature, separate 11D scan can be avoided since
+	 * regdomain can be determined with the scan results of the
+	 * regular scan.
+	 */
+	if (ar->state_11d == ATH11K_11D_PREPARING &&
+	    test_bit(WMI_TLV_SERVICE_SUPPORT_11D_FOR_HOST_SCAN,
+		     ar->ab->wmi_ab.svc_map))
+		ath11k_mac_11d_scan_start(ar, arvif->vdev_id);
 
 	mutex_lock(&ar->conf_mutex);
 
@@ -3578,52 +3594,99 @@ static int ath11k_mac_op_hw_scan(struct ieee80211_hw *hw,
 	if (ret)
 		goto exit;
 
-	memset(&arg, 0, sizeof(arg));
-	ath11k_wmi_start_scan_init(ar, &arg);
-	arg.vdev_id = arvif->vdev_id;
-	arg.scan_id = ATH11K_SCAN_ID;
+	arg = kzalloc(sizeof(*arg), GFP_KERNEL);
+
+	if (!arg) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	ath11k_wmi_start_scan_init(ar, arg);
+	arg->vdev_id = arvif->vdev_id;
+	arg->scan_id = ATH11K_SCAN_ID;
 
 	if (req->ie_len) {
-		arg.extraie.ptr = kmemdup(req->ie, req->ie_len, GFP_KERNEL);
-		if (!arg.extraie.ptr) {
+		arg->extraie.ptr = kmemdup(req->ie, req->ie_len, GFP_KERNEL);
+		if (!arg->extraie.ptr) {
 			ret = -ENOMEM;
 			goto exit;
 		}
-		arg.extraie.len = req->ie_len;
+		arg->extraie.len = req->ie_len;
 	}
 
 	if (req->n_ssids) {
-		arg.num_ssids = req->n_ssids;
-		for (i = 0; i < arg.num_ssids; i++) {
-			arg.ssid[i].length  = req->ssids[i].ssid_len;
-			memcpy(&arg.ssid[i].ssid, req->ssids[i].ssid,
+		arg->num_ssids = req->n_ssids;
+		for (i = 0; i < arg->num_ssids; i++) {
+			arg->ssid[i].length  = req->ssids[i].ssid_len;
+			memcpy(&arg->ssid[i].ssid, req->ssids[i].ssid,
 			       req->ssids[i].ssid_len);
 		}
 	} else {
-		arg.scan_flags |= WMI_SCAN_FLAG_PASSIVE;
+		arg->scan_flags |= WMI_SCAN_FLAG_PASSIVE;
 	}
 
 	if (req->n_channels) {
-		arg.num_chan = req->n_channels;
-		arg.chan_list = kcalloc(arg.num_chan, sizeof(*arg.chan_list),
-					GFP_KERNEL);
+		arg->num_chan = req->n_channels;
+		arg->chan_list = kcalloc(arg->num_chan, sizeof(*arg->chan_list),
+					 GFP_KERNEL);
 
-		if (!arg.chan_list) {
+		if (!arg->chan_list) {
 			ret = -ENOMEM;
 			goto exit;
 		}
 
-		for (i = 0; i < arg.num_chan; i++)
-			arg.chan_list[i] = req->channels[i]->center_freq;
+		for (i = 0; i < arg->num_chan; i++) {
+			if (test_bit(WMI_TLV_SERVICE_SCAN_CONFIG_PER_CHANNEL,
+				     ar->ab->wmi_ab.svc_map)) {
+				arg->chan_list[i] =
+					u32_encode_bits(req->channels[i]->center_freq,
+							WMI_SCAN_CONFIG_PER_CHANNEL_MASK);
+
+				/* If NL80211_SCAN_FLAG_COLOCATED_6GHZ is set in scan
+				 * flags, then scan all PSC channels in 6 GHz band and
+				 * those non-PSC channels where RNR IE is found during
+				 * the legacy 2.4/5 GHz scan.
+				 * If NL80211_SCAN_FLAG_COLOCATED_6GHZ is not set,
+				 * then all channels in 6 GHz will be scanned.
+				 */
+				if (req->channels[i]->band == NL80211_BAND_6GHZ &&
+				    req->flags & NL80211_SCAN_FLAG_COLOCATED_6GHZ &&
+				    !cfg80211_channel_is_psc(req->channels[i]))
+					arg->chan_list[i] |=
+						WMI_SCAN_CH_FLAG_SCAN_ONLY_IF_RNR_FOUND;
+			} else {
+				arg->chan_list[i] = req->channels[i]->center_freq;
+			}
+		}
 	}
 
 	if (req->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
-		arg.scan_f_add_spoofed_mac_in_probe = 1;
-		ether_addr_copy(arg.mac_addr.addr, req->mac_addr);
-		ether_addr_copy(arg.mac_mask.addr, req->mac_addr_mask);
+		arg->scan_f_add_spoofed_mac_in_probe = 1;
+		ether_addr_copy(arg->mac_addr.addr, req->mac_addr);
+		ether_addr_copy(arg->mac_mask.addr, req->mac_addr_mask);
 	}
 
-	ret = ath11k_start_scan(ar, &arg);
+	/* if duration is set, default dwell times will be overwritten */
+	if (req->duration) {
+		arg->dwell_time_active = req->duration;
+		arg->dwell_time_active_2g = req->duration;
+		arg->dwell_time_active_6g = req->duration;
+		arg->dwell_time_passive = req->duration;
+		arg->dwell_time_passive_6g = req->duration;
+		arg->burst_duration = req->duration;
+
+		scan_timeout = min_t(u32, arg->max_rest_time *
+				(arg->num_chan - 1) + (req->duration +
+				ATH11K_SCAN_CHANNEL_SWITCH_WMI_EVT_OVERHEAD) *
+				arg->num_chan, arg->max_scan_time);
+	} else {
+		scan_timeout = arg->max_scan_time;
+	}
+
+	/* Add a margin to account for event/command processing */
+	scan_timeout += ATH11K_MAC_SCAN_CMD_EVT_OVERHEAD;
+
+	ret = ath11k_start_scan(ar, arg);
 	if (ret) {
 		ath11k_warn(ar->ab, "failed to start hw scan: %d\n", ret);
 		spin_lock_bh(&ar->data_lock);
@@ -3631,16 +3694,15 @@ static int ath11k_mac_op_hw_scan(struct ieee80211_hw *hw,
 		spin_unlock_bh(&ar->data_lock);
 	}
 
-	/* Add a 200ms margin to account for event/command processing */
 	ieee80211_queue_delayed_work(ar->hw, &ar->scan.timeout,
-				     msecs_to_jiffies(arg.max_scan_time +
-						      ATH11K_MAC_SCAN_TIMEOUT_MSECS));
+				     msecs_to_jiffies(scan_timeout));
 
 exit:
-	kfree(arg.chan_list);
-
-	if (req->ie_len)
-		kfree(arg.extraie.ptr);
+	if (arg) {
+		kfree(arg->chan_list);
+		kfree(arg->extraie.ptr);
+		kfree(arg);
+	}
 
 	mutex_unlock(&ar->conf_mutex);
 
@@ -8366,6 +8428,7 @@ ath11k_mac_op_reconfig_complete(struct ieee80211_hw *hw,
 	struct ath11k *ar = hw->priv;
 	struct ath11k_base *ab = ar->ab;
 	int recovery_count;
+	struct ath11k_vif *arvif;
 
 	if (reconfig_type != IEEE80211_RECONFIG_TYPE_RESTART)
 		return;
@@ -8391,6 +8454,12 @@ ath11k_mac_op_reconfig_complete(struct ieee80211_hw *hw,
 				ab->is_reset = false;
 				atomic_set(&ab->fail_cont_count, 0);
 				ath11k_dbg(ab, ATH11K_DBG_BOOT, "reset success\n");
+			}
+		}
+		if (ar->ab->hw_params.support_fw_mac_sequence) {
+			list_for_each_entry(arvif, &ar->arvifs, list) {
+				if (arvif->is_up && arvif->vdev_type == WMI_VDEV_TYPE_STA)
+					ieee80211_hw_restart_disconnect(arvif->vif);
 			}
 		}
 	}
@@ -8750,7 +8819,7 @@ static int ath11k_mac_setup_channels_rates(struct ath11k *ar,
 	}
 
 	if (supported_bands & WMI_HOST_WLAN_5G_CAP) {
-		if (reg_cap->high_5ghz_chan >= ATH11K_MAX_6G_FREQ) {
+		if (reg_cap->high_5ghz_chan >= ATH11K_MIN_6G_FREQ) {
 			channels = kmemdup(ath11k_6ghz_channels,
 					   sizeof(ath11k_6ghz_channels), GFP_KERNEL);
 			if (!channels) {
@@ -8814,13 +8883,25 @@ static int ath11k_mac_setup_iface_combinations(struct ath11k *ar)
 	struct ath11k_base *ab = ar->ab;
 	struct ieee80211_iface_combination *combinations;
 	struct ieee80211_iface_limit *limits;
-	int n_limits;
+	int n_limits, max_interfaces;
+	bool ap, mesh;
+
+	ap = ab->hw_params.interface_modes & BIT(NL80211_IFTYPE_AP);
+
+	mesh = IS_ENABLED(CONFIG_MAC80211_MESH) &&
+		ab->hw_params.interface_modes & BIT(NL80211_IFTYPE_MESH_POINT);
 
 	combinations = kzalloc(sizeof(*combinations), GFP_KERNEL);
 	if (!combinations)
 		return -ENOMEM;
 
-	n_limits = 2;
+	if (ap || mesh) {
+		n_limits = 2;
+		max_interfaces = 16;
+	} else {
+		n_limits = 1;
+		max_interfaces = 1;
+	}
 
 	limits = kcalloc(n_limits, sizeof(*limits), GFP_KERNEL);
 	if (!limits) {
@@ -8831,12 +8912,15 @@ static int ath11k_mac_setup_iface_combinations(struct ath11k *ar)
 	limits[0].max = 1;
 	limits[0].types |= BIT(NL80211_IFTYPE_STATION);
 
-	limits[1].max = 16;
-	limits[1].types |= BIT(NL80211_IFTYPE_AP);
+	if (ap) {
+		limits[1].max = max_interfaces;
+		limits[1].types |= BIT(NL80211_IFTYPE_AP);
+	}
 
-	if (IS_ENABLED(CONFIG_MAC80211_MESH) &&
-	    ab->hw_params.interface_modes & BIT(NL80211_IFTYPE_MESH_POINT))
+	if (mesh) {
+		limits[1].max = max_interfaces;
 		limits[1].types |= BIT(NL80211_IFTYPE_MESH_POINT);
+	}
 
 	combinations[0].limits = limits;
 	combinations[0].n_limits = n_limits;
@@ -8854,7 +8938,7 @@ static int ath11k_mac_setup_iface_combinations(struct ath11k *ar)
 	    ath11k_hw_supports_6g_cc_ext(ar))
 		combinations[0].max_interfaces = 1;
 	else
-		combinations[0].max_interfaces = 16;
+		combinations[0].max_interfaces = max_interfaces;
 
 	combinations[0].num_different_channels = 1;
 	combinations[0].beacon_int_infra_match = true;
@@ -9080,6 +9164,9 @@ static int __ath11k_mac_register(struct ath11k *ar)
 		wiphy_ext_feature_set(ar->hw->wiphy,
 				      NL80211_EXT_FEATURE_UNSOL_BCAST_PROBE_RESP);
 	}
+
+	wiphy_ext_feature_set(ar->hw->wiphy,
+			      NL80211_EXT_FEATURE_SET_SCAN_DWELL);
 
 	ath11k_reg_init(ar);
 

@@ -3038,9 +3038,9 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_SAE_PWE,
 
-	NL80211_ATTR_SAR_SPEC = 300 /* this is the upstream number */,
-
 	NL80211_ATTR_RECONNECT_REQUESTED,
+
+	NL80211_ATTR_SAR_SPEC = 300 /* this is the upstream number */,
 
 	/* add attributes here, update the policy in nl80211.c */
 

@@ -556,24 +556,23 @@ static int validate_av1_segmentation(struct v4l2_av1_segmentation *s)
 {
 	u32 i;
 	u32 j;
-	s32 limit;
 
 	if (s->flags > GENMASK(4, 0))
 		return -EINVAL;
 
 	for (i = 0; i < ARRAY_SIZE(s->feature_data); i++) {
-		const int segmentation_feature_signed[] = { 1, 1, 1, 1, 1, 0, 0, 0 };
-		const int segmentation_feature_max[] = { 255, 63, 63, 63, 63, 7, 0, 0};
+		static const int segmentation_feature_signed[] = { 1, 1, 1, 1, 1, 0, 0, 0 };
+		static const int segmentation_feature_max[] = { 255, 63, 63, 63, 63, 7, 0, 0};
 
 		for (j = 0; j < ARRAY_SIZE(s->feature_data[j]); j++) {
-			if (segmentation_feature_signed[j]) {
-				limit = segmentation_feature_max[j];
+			s32 limit = segmentation_feature_max[j];
 
+			if (segmentation_feature_signed[j]) {
 				if (s->feature_data[i][j] < -limit ||
 				    s->feature_data[i][j] > limit)
 					return -EINVAL;
 			} else {
-				if (s->feature_data[i][j] > limit)
+				if (s->feature_data[i][j] < 0 || s->feature_data[i][j] > limit)
 					return -EINVAL;
 			}
 		}
@@ -586,7 +585,7 @@ static int validate_av1_loop_filter(struct v4l2_av1_loop_filter *lf)
 {
 	u32 i;
 
-	if (lf->flags > GENMASK(2, 0))
+	if (lf->flags > GENMASK(3, 0))
 		return -EINVAL;
 
 	for (i = 0; i < ARRAY_SIZE(lf->level); i++) {
@@ -705,7 +704,6 @@ static int validate_av1_frame(struct v4l2_ctrl_av1_frame *f)
 	  V4L2_AV1_FRAME_FLAG_IS_MOTION_MODE_SWITCHABLE |
 	  V4L2_AV1_FRAME_FLAG_USE_REF_FRAME_MVS |
 	  V4L2_AV1_FRAME_FLAG_DISABLE_FRAME_END_UPDATE_CDF |
-	  V4L2_AV1_FRAME_FLAG_UNIFORM_TILE_SPACING |
 	  V4L2_AV1_FRAME_FLAG_ALLOW_WARPED_MOTION |
 	  V4L2_AV1_FRAME_FLAG_REFERENCE_SELECT |
 	  V4L2_AV1_FRAME_FLAG_REDUCED_TX_SET |
@@ -1121,7 +1119,6 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 
 	case V4L2_CTRL_TYPE_VP9_FRAME:
 		return validate_vp9_frame(p);
-
 	case V4L2_CTRL_TYPE_AV1_FRAME:
 		return validate_av1_frame(p);
 	case V4L2_CTRL_TYPE_AV1_SEQUENCE:
@@ -1130,6 +1127,7 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 		break;
 	case V4L2_CTRL_TYPE_AV1_FILM_GRAIN:
 		return validate_av1_film_grain(p);
+
 	case V4L2_CTRL_TYPE_AREA:
 		area = p;
 		if (!area->width || !area->height)

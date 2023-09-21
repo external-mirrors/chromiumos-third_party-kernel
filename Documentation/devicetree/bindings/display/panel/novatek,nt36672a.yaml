@@ -49,7 +49,7 @@ properties:
 required:
   - compatible
   - reg
-  - vddi0-supply
+  - vddio-supply
   - vddpos-supply
   - vddneg-supply
   - reset-gpios
@@ -68,7 +68,7 @@ examples:
         panel@0 {
             compatible = "tianma,fhd-video", "novatek,nt36672a";
             reg = <0>;
-            vddi0-supply = <&vreg_l14a_1p88>;
+            vddio-supply = <&vreg_l14a_1p88>;
             vddpos-supply = <&lab>;
             vddneg-supply = <&ibb>;
 

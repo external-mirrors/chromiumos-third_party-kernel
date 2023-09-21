@@ -44,6 +44,8 @@
 #include <net/inet_ecn.h>
 #include <net/dst_metadata.h>
 
+#include <trace/events/cros_net.h>
+
 void udp_v6_early_demux(struct sk_buff *);
 void tcp_v6_early_demux(struct sk_buff *);
 static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
@@ -464,6 +466,7 @@ discard:
 
 static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	trace_cros_ip6_input_finish_enter(net, sk, skb);
 	rcu_read_lock();
 	ip6_protocol_deliver_rcu(net, skb, 0, false);
 	rcu_read_unlock();

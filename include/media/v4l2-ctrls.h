@@ -51,11 +51,11 @@ struct video_device;
  * @p_hevc_slice_params:	Pointer to an HEVC slice parameters structure.
  * @p_hdr10_cll:		Pointer to an HDR10 Content Light Level structure.
  * @p_hdr10_mastering:		Pointer to an HDR10 Mastering Display structure.
- * @p_av1_sequence:		Pointer to an AV1 sequence.
- * @p_av1_tile_group_entry:	Pointer to an AV1 tile group entry.
- * @p_av1_frame:		Pointer to an AV1 frame.
- * @p_av1_film_grain:		Pointer to an AV1 film grain.
  * @p_area:			Pointer to an area.
+ * @p_av1_sequence:		Pointer to an AV1 sequence structure.
+ * @p_av1_tile_group_entry:	Pointer to an AV1 tile group entry structure.
+ * @p_av1_frame:		Pointer to an AV1 frame structure.
+ * @p_av1_film_grain:		Pointer to an AV1 film grain structure.
  * @p:				Pointer to a compound value.
  * @p_const:			Pointer to a constant compound value.
  */

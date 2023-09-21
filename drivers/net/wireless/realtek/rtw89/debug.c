@@ -614,6 +614,7 @@ rtw89_debug_priv_mac_reg_dump_select(struct file *filp,
 	struct seq_file *m = (struct seq_file *)filp->private_data;
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
+	const struct rtw89_chip_info *chip = rtwdev->chip;
 	char buf[32];
 	size_t buf_size;
 	int sel;
@@ -630,6 +631,12 @@ rtw89_debug_priv_mac_reg_dump_select(struct file *filp,
 
 	if (sel < RTW89_DBG_SEL_MAC_00 || sel > RTW89_DBG_SEL_RFC) {
 		rtw89_info(rtwdev, "invalid args: %d\n", sel);
+		return -EINVAL;
+	}
+
+	if (sel == RTW89_DBG_SEL_MAC_30 && chip->chip_id != RTL8852C) {
+		rtw89_info(rtwdev, "sel %d is address hole on chip %d\n", sel,
+			   chip->chip_id);
 		return -EINVAL;
 	}
 
@@ -2990,17 +2997,18 @@ static ssize_t rtw89_debug_priv_send_h2c_set(struct file *filp,
 	struct rtw89_debugfs_priv *debugfs_priv = filp->private_data;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
 	u8 *h2c;
+	int ret;
 	u16 h2c_len = count / 2;
 
 	h2c = rtw89_hex2bin_user(rtwdev, user_buf, count);
 	if (IS_ERR(h2c))
 		return -EFAULT;
 
-	rtw89_fw_h2c_raw(rtwdev, h2c, h2c_len);
+	ret = rtw89_fw_h2c_raw(rtwdev, h2c, h2c_len);
 
 	kfree(h2c);
 
-	return count;
+	return ret ? ret : count;
 }
 
 static int
@@ -3161,12 +3169,14 @@ static ssize_t rtw89_debug_priv_btc_manual_set(struct file *filp,
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
 	struct rtw89_btc *btc = &rtwdev->btc;
 	bool btc_manual;
+	int ret;
 
-	if (kstrtobool_from_user(user_buf, count, &btc_manual))
-		goto out;
+	ret = kstrtobool_from_user(user_buf, count, &btc_manual);
+	if (ret)
+		return ret;
 
 	btc->ctrl.manual = btc_manual;
-out:
+
 	return count;
 }
 
@@ -3346,6 +3356,31 @@ static void rtw89_dump_addr_cam(struct seq_file *m,
 	}
 }
 
+__printf(3, 4)
+static void rtw89_dump_pkt_offload(struct seq_file *m, struct list_head *pkt_list,
+				   const char *fmt, ...)
+{
+	struct rtw89_pktofld_info *info;
+	struct va_format vaf;
+	va_list args;
+
+	if (list_empty(pkt_list))
+		return;
+
+	va_start(args, fmt);
+	vaf.va = &args;
+	vaf.fmt = fmt;
+
+	seq_printf(m, "%pV", &vaf);
+
+	va_end(args);
+
+	list_for_each_entry(info, pkt_list, list)
+		seq_printf(m, "%d ", info->id);
+
+	seq_puts(m, "\n");
+}
+
 static
 void rtw89_vif_ids_get_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 {
@@ -3356,6 +3391,7 @@ void rtw89_vif_ids_get_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 	seq_printf(m, "VIF [%d] %pM\n", rtwvif->mac_id, rtwvif->mac_addr);
 	seq_printf(m, "\tbssid_cam_idx=%u\n", bssid_cam->bssid_cam_idx);
 	rtw89_dump_addr_cam(m, &rtwvif->addr_cam);
+	rtw89_dump_pkt_offload(m, &rtwvif->general_pkt_list, "\tpkt_ofld[GENERAL]: ");
 }
 
 static void rtw89_dump_ba_cam(struct seq_file *m, struct rtw89_sta *rtwsta)
@@ -3394,6 +3430,7 @@ static int rtw89_debug_priv_stations_get(struct seq_file *m, void *v)
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
 	struct rtw89_cam_info *cam_info = &rtwdev->cam_info;
+	u8 idx;
 
 	mutex_lock(&rtwdev->mutex);
 
@@ -3408,6 +3445,15 @@ static int rtw89_debug_priv_stations_get(struct seq_file *m, void *v)
 		   cam_info->sec_cam_map);
 	seq_printf(m, "\tba_cam:    %*ph\n", (int)sizeof(cam_info->ba_cam_map),
 		   cam_info->ba_cam_map);
+	seq_printf(m, "\tpkt_ofld:  %*ph\n", (int)sizeof(rtwdev->pkt_offload),
+		   rtwdev->pkt_offload);
+
+	for (idx = NL80211_BAND_2GHZ; idx < NUM_NL80211_BANDS; idx++) {
+		if (!(rtwdev->chip->support_bands & BIT(idx)))
+			continue;
+		rtw89_dump_pkt_offload(m, &rtwdev->scan_info.pkt_list[idx],
+				       "\t\t[SCAN %u]: ", idx);
+	}
 
 	ieee80211_iterate_active_interfaces_atomic(rtwdev->hw,
 		IEEE80211_IFACE_ITER_NORMAL, rtw89_vif_ids_get_iter, m);

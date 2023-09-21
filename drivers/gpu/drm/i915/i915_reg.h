@@ -2433,6 +2433,10 @@
 #define GEN11_VEBOX2_RING_BASE		0x1d8000
 #define XEHP_VEBOX3_RING_BASE		0x1e8000
 #define XEHP_VEBOX4_RING_BASE		0x1f8000
+#define GEN12_COMPUTE0_RING_BASE	0x1a000
+#define GEN12_COMPUTE1_RING_BASE	0x1c000
+#define GEN12_COMPUTE2_RING_BASE	0x1e000
+#define GEN12_COMPUTE3_RING_BASE	0x26000
 #define BLT_RING_BASE		0x22000
 #define RING_TAIL(base)		_MMIO((base) + 0x30)
 #define RING_HEAD(base)		_MMIO((base) + 0x34)
@@ -2549,6 +2553,9 @@
 #define   RING_WAIT_I8XX	(1 << 0) /* gen2, PRBx_HEAD */
 #define   RING_WAIT		(1 << 11) /* gen3+, PRBx_CTL */
 #define   RING_WAIT_SEMAPHORE	(1 << 10) /* gen6+ */
+
+#define MISC_STATUS0		_MMIO(0xA500)
+#define MISC_STATUS1		_MMIO(0xA504)
 
 /* There are 16 64-bit CS General Purpose Registers per-engine on Gen8+ */
 #define GEN8_RING_CS_GPR(base, n)	_MMIO((base) + 0x600 + (n) * 8)
@@ -8069,6 +8076,10 @@ enum {
 #define  GEN11_KCR			(19)
 #define  GEN11_GTPM			(16)
 #define  GEN11_BCS			(15)
+#define   GEN12_CCS3				(7)
+#define   GEN12_CCS2				(6)
+#define   GEN12_CCS1				(5)
+#define   GEN12_CCS0				(4)
 #define  GEN11_RCS0			(0)
 
 #define GEN11_GT_INTR_DW1		_MMIO(0x19001c)
@@ -11366,8 +11377,8 @@ enum skl_power_gate {
 
 #define _PLANE_CSC_RY_GY_1(pipe)	_PIPE(pipe, _PLANE_CSC_RY_GY_1_A, \
 					      _PLANE_CSC_RY_GY_1_B)
-#define _PLANE_CSC_RY_GY_2(pipe)	_PIPE(pipe, _PLANE_INPUT_CSC_RY_GY_2_A, \
-					      _PLANE_INPUT_CSC_RY_GY_2_B)
+#define _PLANE_CSC_RY_GY_2(pipe)	_PIPE(pipe, _PLANE_CSC_RY_GY_2_A, \
+					      _PLANE_CSC_RY_GY_2_B)
 #define PLANE_CSC_COEFF(pipe, plane, index)	_MMIO_PLANE(plane, \
 							    _PLANE_CSC_RY_GY_1(pipe) +  (index) * 4, \
 							    _PLANE_CSC_RY_GY_2(pipe) + (index) * 4)

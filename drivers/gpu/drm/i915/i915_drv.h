@@ -48,7 +48,6 @@
 #include <linux/dma-resv.h>
 #include <linux/shmem_fs.h>
 #include <linux/stackdepot.h>
-#include <linux/xarray.h>
 
 #include <drm/intel-gtt.h>
 #include <drm/drm_gem.h>
@@ -89,6 +88,7 @@
 #include "gt/intel_workarounds.h"
 #include "gt/uc/intel_uc.h"
 
+#include "i915_drm_client.h"
 #include "intel_device_info.h"
 #include "intel_memory_region.h"
 #include "intel_pch.h"
@@ -99,7 +99,6 @@
 #include "intel_wakeref.h"
 #include "intel_wopcm.h"
 
-#include "i915_drm_client.h"
 #include "i915_gem.h"
 #include "i915_gem_gtt.h"
 #include "i915_gpu_error.h"
@@ -191,100 +190,6 @@ struct i915_hotplug {
 	 I915_GEM_DOMAIN_COMMAND | \
 	 I915_GEM_DOMAIN_INSTRUCTION | \
 	 I915_GEM_DOMAIN_VERTEX)
-
-struct drm_i915_file_private {
-	struct drm_i915_private *dev_priv;
-
-	union {
-		struct drm_file *file;
-		struct rcu_head rcu;
-	};
-
-	/** @proto_context_lock: Guards all struct i915_gem_proto_context
-	 * operations
-	 *
-	 * This not only guards @proto_context_xa, but is always held
-	 * whenever we manipulate any struct i915_gem_proto_context,
-	 * including finalizing it on first actual use of the GEM context.
-	 *
-	 * See i915_gem_proto_context.
-	 */
-	struct mutex proto_context_lock;
-
-	/** @proto_context_xa: xarray of struct i915_gem_proto_context
-	 *
-	 * Historically, the context uAPI allowed for two methods of
-	 * setting context parameters: SET_CONTEXT_PARAM and
-	 * CONTEXT_CREATE_EXT_SETPARAM.  The former is allowed to be called
-	 * at any time while the later happens as part of
-	 * GEM_CONTEXT_CREATE.  Everything settable via one was settable
-	 * via the other.  While some params are fairly simple and setting
-	 * them on a live context is harmless such as the context priority,
-	 * others are far trickier such as the VM or the set of engines.
-	 * In order to swap out the VM, for instance, we have to delay
-	 * until all current in-flight work is complete, swap in the new
-	 * VM, and then continue.  This leads to a plethora of potential
-	 * race conditions we'd really rather avoid.
-	 *
-	 * We have since disallowed setting these more complex parameters
-	 * on active contexts.  This works by delaying the creation of the
-	 * actual context until after the client is done configuring it
-	 * with SET_CONTEXT_PARAM.  From the perspective of the client, it
-	 * has the same u32 context ID the whole time.  From the
-	 * perspective of i915, however, it's a struct i915_gem_proto_context
-	 * right up until the point where we attempt to do something which
-	 * the proto-context can't handle.  Then the struct i915_gem_context
-	 * gets created.
-	 *
-	 * This is accomplished via a little xarray dance.  When
-	 * GEM_CONTEXT_CREATE is called, we create a struct
-	 * i915_gem_proto_context, reserve a slot in @context_xa but leave
-	 * it NULL, and place the proto-context in the corresponding slot
-	 * in @proto_context_xa.  Then, in i915_gem_context_lookup(), we
-	 * first check @context_xa.  If it's there, we return the struct
-	 * i915_gem_context and we're done.  If it's not, we look in
-	 * @proto_context_xa and, if we find it there, we create the actual
-	 * context and kill the proto-context.
-	 *
-	 * In order for this dance to work properly, everything which ever
-	 * touches a struct i915_gem_proto_context is guarded by
-	 * @proto_context_lock, including context creation.  Yes, this
-	 * means context creation now takes a giant global lock but it
-	 * can't really be helped and that should never be on any driver's
-	 * fast-path anyway.
-	 */
-	struct xarray proto_context_xa;
-
-	/** @context_xa: xarray of fully created i915_gem_context
-	 *
-	 * Write access to this xarray is guarded by @proto_context_lock.
-	 * Otherwise, writers may race with finalize_create_context_locked().
-	 *
-	 * See @proto_context_xa.
-	 */
-	struct xarray context_xa;
-	struct xarray vm_xa;
-
-	unsigned int bsd_engine;
-
-/*
- * Every context ban increments per client ban score. Also
- * hangs in short succession increments ban score. If ban threshold
- * is reached, client is considered banned and submitting more work
- * will fail. This is a stop gap measure to limit the badly behaving
- * clients access to gpu. Note that unbannable contexts never increment
- * the client ban score.
- */
-#define I915_CLIENT_SCORE_HANG_FAST	1
-#define   I915_CLIENT_FAST_HANG_JIFFIES (60 * HZ)
-#define I915_CLIENT_SCORE_CONTEXT_BAN   3
-#define I915_CLIENT_SCORE_BANNED	9
-	/** ban_score: Accumulated score of all ctx bans and fast hangs. */
-	atomic_t ban_score;
-	unsigned long hang_timestamp;
-
-	struct i915_drm_client *client;
-};
 
 /* Interface history:
  *
@@ -597,6 +502,7 @@ struct drm_i915_private {
 	struct pci_dev *bridge_dev;
 
 	struct rb_root uabi_engines;
+	unsigned int engine_uabi_class_count[I915_LAST_UABI_ENGINE_CLASS + 1];
 
 	struct resource mch_res;
 
@@ -737,8 +643,6 @@ struct drm_i915_private {
 	 * sufficient, for writing must hold all of them.
 	 */
 	u8 active_pipes;
-
-	struct i915_wa_list gt_wa_list;
 
 	struct i915_frontbuffer_tracking fb_tracking;
 
@@ -1478,16 +1382,7 @@ intel_vm_no_concurrent_access_wa(struct drm_i915_private *i915)
 	return IS_CHERRYVIEW(i915) || intel_ggtt_update_needs_vtd_wa(i915);
 }
 
-/* i915_drv.c */
-extern const struct dev_pm_ops i915_pm_ops;
-
-int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent);
-void i915_driver_remove(struct drm_i915_private *i915);
-void i915_driver_shutdown(struct drm_i915_private *i915);
-
-int i915_resume_switcheroo(struct drm_i915_private *i915);
-int i915_suspend_switcheroo(struct drm_i915_private *i915, pm_message_t state);
-
+/* i915_getparam.c */
 int i915_getparam_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 
@@ -1592,20 +1487,6 @@ struct drm_gem_object *i915_gem_prime_import(struct drm_device *dev,
 				struct dma_buf *dma_buf);
 
 struct dma_buf *i915_gem_prime_export(struct drm_gem_object *gem_obj, int flags);
-
-static inline struct i915_address_space *
-i915_gem_vm_lookup(struct drm_i915_file_private *file_priv, u32 id)
-{
-	struct i915_address_space *vm;
-
-	rcu_read_lock();
-	vm = xa_load(&file_priv->vm_xa, id);
-	if (vm && !kref_get_unless_zero(&vm->ref))
-		vm = NULL;
-	rcu_read_unlock();
-
-	return vm;
-}
 
 /* i915_gem_evict.c */
 int __must_check i915_gem_evict_something(struct i915_address_space *vm,

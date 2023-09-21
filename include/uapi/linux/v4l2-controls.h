@@ -802,27 +802,28 @@ enum v4l2_mpeg_video_frame_skip_mode {
 #define V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY		(V4L2_CID_CODEC_BASE + 653)
 #define V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE	(V4L2_CID_CODEC_BASE + 654)
 
+#define V4L2_CID_MPEG_VIDEO_AV1_PROFILE (V4L2_CID_CODEC_BASE + 655)
 /**
  * enum v4l2_mpeg_video_av1_profile - AV1 profiles
  *
  * @V4L2_MPEG_VIDEO_AV1_PROFILE_MAIN: compliant decoders must be able to decode
  * streams with seq_profile equal to 0.
- * @V4L2_MPEG_VIDEO_PROFILE_HIGH: compliant decoders must be able to decode
- * streams with seq_profile equal to 0.
- * @V4L2_MPEG_VIDEO_PROFILE_PROFESSIONAL: compliant decoders must be able to
- * decode streams with seq_profile equal to 0.
+ * @V4L2_MPEG_VIDEO_AV1_PROFILE_HIGH: compliant decoders must be able to decode
+ * streams with seq_profile equal less than or equal to 1.
+ * @V4L2_MPEG_VIDEO_AV1_PROFILE_PROFESSIONAL: compliant decoders must be able to
+ * decode streams with seq_profile less than or equal to 2.
  *
  * Conveys the highest profile a decoder can work with.
  */
-#define V4L2_CID_MPEG_VIDEO_AV1_PROFILE (V4L2_CID_CODEC_BASE + 655)
 enum v4l2_mpeg_video_av1_profile {
 	V4L2_MPEG_VIDEO_AV1_PROFILE_MAIN = 0,
 	V4L2_MPEG_VIDEO_AV1_PROFILE_HIGH = 1,
 	V4L2_MPEG_VIDEO_AV1_PROFILE_PROFESSIONAL = 2,
 };
 
+#define V4L2_CID_MPEG_VIDEO_AV1_LEVEL (V4L2_CID_CODEC_BASE + 656)
 /**
- * enum v4l2_stateless_av1_level - AV1 levels
+ * enum v4l2_mpeg_video_av1_level - AV1 levels
  *
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_2_0: Level 2.0.
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_2_1: Level 2.1.
@@ -845,12 +846,12 @@ enum v4l2_mpeg_video_av1_profile {
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_6_2: Level 6.2.
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_6_3: Level 6.3.
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_7_0: Level 7.0.
+ * @V4L2_MPEG_VIDEO_AV1_LEVEL_7_1: Level 7.1.
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_7_2: Level 7.2.
  * @V4L2_MPEG_VIDEO_AV1_LEVEL_7_3: Level 7.3.
  *
  * Conveys the highest level a decoder can work with.
  */
-#define V4L2_CID_MPEG_VIDEO_AV1_LEVEL (V4L2_CID_CODEC_BASE+ 656)
 enum v4l2_mpeg_video_av1_level {
 	V4L2_MPEG_VIDEO_AV1_LEVEL_2_0 = 0,
 	V4L2_MPEG_VIDEO_AV1_LEVEL_2_1 = 1,
@@ -2476,6 +2477,9 @@ struct v4l2_ctrl_hevc_slice_params {
  * @poc_st_curr_after: provides the index of the short term after references
  *		       in DPB array
  * @poc_lt_curr: provides the index of the long term references in DPB array
+ * @num_delta_pocs_of_ref_rps_idx: same as the derived value NumDeltaPocs[RefRpsIdx],
+ *				   can be used to parse the RPS data in slice headers
+ *				   instead of skipping it with @short_term_ref_pic_set_size.
  * @reserved: padding field. Should be zeroed by applications.
  * @dpb: the decoded picture buffer, for meta-data about reference frames
  * @flags: see V4L2_HEVC_DECODE_PARAM_FLAG_{}
@@ -2491,7 +2495,8 @@ struct v4l2_ctrl_hevc_decode_params {
 	__u8	poc_st_curr_before[V4L2_HEVC_DPB_ENTRIES_NUM_MAX];
 	__u8	poc_st_curr_after[V4L2_HEVC_DPB_ENTRIES_NUM_MAX];
 	__u8	poc_lt_curr[V4L2_HEVC_DPB_ENTRIES_NUM_MAX];
-	__u8	reserved[4];
+	__u8	num_delta_pocs_of_ref_rps_idx;
+	__u8	reserved[3];
 	struct	v4l2_hevc_dpb_entry dpb[V4L2_HEVC_DPB_ENTRIES_NUM_MAX];
 	__u64	flags;
 };
@@ -2856,7 +2861,7 @@ struct v4l2_ctrl_vp9_compressed_hdr {
 #define V4L2_AV1_MAX_NUM_Y_POINTS	(1 << 4) /* 4 bits to encode */
 #define V4L2_AV1_MAX_NUM_CB_POINTS	(1 << 4) /* 4 bits to encode */
 #define V4L2_AV1_MAX_NUM_CR_POINTS	(1 << 4) /* 4 bits to encode */
-#define V4L2_AV1_MAX_NUM_POS_LUMA	25 /* (2 * 3 * (3 + 1)) + 1 */
+#define V4L2_AV1_AR_COEFFS_SIZE		25 /* (2 * 3 * (3 + 1)) + 1 */
 #define V4L2_AV1_MAX_NUM_PLANES		3
 #define V4L2_AV1_MAX_TILE_COLS		64
 #define V4L2_AV1_MAX_TILE_ROWS		64
@@ -2887,7 +2892,7 @@ struct v4l2_ctrl_vp9_compressed_hdr {
 /**
  * struct v4l2_ctrl_av1_sequence - AV1 Sequence
  *
- * Represents an AV1 Sequence OBU. See section 5.5. "Sequence header OBU syntax"
+ * Represents an AV1 Sequence OBU. See section 5.5 "Sequence header OBU syntax"
  * for more details.
  *
  * @flags: See V4L2_AV1_SEQUENCE_FLAG_{}.
@@ -2897,6 +2902,7 @@ struct v4l2_ctrl_vp9_compressed_hdr {
  * at each frame.
  * @bit_depth: the bitdepth to use for the sequence as described in section
  * 5.5.2 "Color config syntax".
+ * @reserved: padding field. Should be zeroed by applications.
  * @max_frame_width_minus_1: specifies the maximum frame width minus 1 for the
  * frames represented by this sequence header.
  * @max_frame_height_minus_1: specifies the maximum frame height minus 1 for the
@@ -2907,6 +2913,7 @@ struct v4l2_ctrl_av1_sequence {
 	__u8 seq_profile;
 	__u8 order_hint_bits;
 	__u8 bit_depth;
+	__u8 reserved;
 	__u16 max_frame_width_minus_1;
 	__u16 max_frame_height_minus_1;
 };
@@ -2917,7 +2924,7 @@ struct v4l2_ctrl_av1_sequence {
  *
  * Represents a single AV1 tile inside an AV1 Tile Group. Note that MiRowStart,
  * MiRowEnd, MiColStart and MiColEnd can be retrieved from struct
- * v4l2_av1_tile_info in struct v4l2_ctrl_av1_frame_header using tile_row and
+ * v4l2_av1_tile_info in struct v4l2_ctrl_av1_frame using tile_row and
  * tile_col. See section 6.10.1 "General tile group OBU semantics" for more
  * details.
  *
@@ -2992,9 +2999,10 @@ enum v4l2_av1_reference_frame {
  * @params: this field has the same meaning as "gm_params" in the AV1
  * specification.
  * @invalid: bitfield indicating whether the global motion params are invalid
- * for a given reference frame. See section 7.11.3.6. Setup shear process and
+ * for a given reference frame. See section 7.11.3.6 Setup shear process and
  * the variable "warpValid". Use V4L2_AV1_GLOBAL_MOTION_IS_INVALID(ref) to
  * create a suitable mask.
+ * @reserved: padding field. Should be zeroed by applications.
  */
 
 struct v4l2_av1_global_motion {
@@ -3002,6 +3010,7 @@ struct v4l2_av1_global_motion {
 	enum v4l2_av1_warp_model type[V4L2_AV1_TOTAL_REFS_PER_FRAME];
 	__s32 params[V4L2_AV1_TOTAL_REFS_PER_FRAME][6];
 	__u8 invalid;
+	__u8 reserved[3];
 };
 
 /**
@@ -3026,24 +3035,26 @@ enum v4l2_av1_frame_restoration_type {
  * section 6.10.15 "Loop restoration params semantics" of the AV1 specification.
  *
  * @flags: See V4L2_AV1_LOOP_RESTORATION_FLAG_{}.
- * @frame_restoration_type: specifies the type of restoration used for each
- * plane. See enum v4l2_av1_frame_restoration_type.
  * @lr_unit_shift: specifies if the luma restoration size should be halved.
  * @lr_uv_shift: specifies if the chroma size should be half the luma size.
+ * @reserved: padding field. Should be zeroed by applications.
+ * @frame_restoration_type: specifies the type of restoration used for each
+ * plane. See enum v4l2_av1_frame_restoration_type.
  * @loop_restoration_size: specifies the size of loop restoration units in units
  * of samples in the current plane.
  */
 struct v4l2_av1_loop_restoration {
 	__u8 flags;
-	enum v4l2_av1_frame_restoration_type frame_restoration_type[V4L2_AV1_NUM_PLANES_MAX];
 	__u8 lr_unit_shift;
 	__u8 lr_uv_shift;
+	__u8 reserved;
+	enum v4l2_av1_frame_restoration_type frame_restoration_type[V4L2_AV1_NUM_PLANES_MAX];
 	__u32 loop_restoration_size[V4L2_AV1_MAX_NUM_PLANES];
 };
 
 /**
  * struct v4l2_av1_cdef - AV1 CDEF params semantics as described in section
- * 6.10.14. "CDEF params semantics" of the AV1 specification
+ * 6.10.14 "CDEF params semantics" of the AV1 specification
  *
  * @damping_minus_3: controls the amount of damping in the deringing filter.
  * @bits: specifies the number of bits needed to specify which CDEF filter to
@@ -3076,8 +3087,8 @@ struct v4l2_av1_cdef {
  * @V4L2_AV1_SEG_LVL_ALT_LF_Y_V: Index for vertical luma loop filter segment
  * feature.
  * @V4L2_AV1_SEG_LVL_REF_FRAME: Index for reference frame segment feature.
- * @V4L2_AV1_SEG_LVL_SKIP: Index for skip segment feature.
- * @V4L2_AV1_SEG_LVL_GLOBALMV: Index for global mv feature.
+ * @V4L2_AV1_SEG_LVL_REF_SKIP: Index for skip segment feature.
+ * @V4L2_AV1_SEG_LVL_REF_GLOBALMV: Index for global mv feature.
  * @V4L2_AV1_SEG_LVL_MAX: Number of segment features.
  */
 enum v4l2_av1_segment_feature {
@@ -3093,22 +3104,22 @@ enum v4l2_av1_segment_feature {
 
 /**
  * struct v4l2_av1_segmentation - AV1 Segmentation params as defined in section
- * 6.8.13. "Segmentation params semantics" of the AV1 specification.
+ * 6.8.13 "Segmentation params semantics" of the AV1 specification.
  *
  * @flags: see V4L2_AV1_SEGMENTATION_FLAG_{}.
- * @feature_enabled: bitmask defining which features are enabled in each segment.
- * Use V4L2_AV1_SEGMENT_FEATURE_ENABLED to build a suitable mask.
- * @feature_data: data attached to each feature. Data entry is only valid if the
- * feature is enabled
  * @last_active_seg_id: indicates the highest numbered segment id that has some
  * enabled feature. This is used when decoding the segment id to only decode
  * choices corresponding to used segments.
+ * @feature_enabled: bitmask defining which features are enabled in each
+ * segment. Use V4L2_AV1_SEGMENT_FEATURE_ENABLED to build a suitable mask.
+ * @feature_data: data attached to each feature. Data entry is only valid if the
+ * feature is enabled
  */
 struct v4l2_av1_segmentation {
 	__u8 flags;
+	__u8 last_active_seg_id;
 	__u8 feature_enabled[V4L2_AV1_MAX_SEGMENTS];
 	__s16 feature_data[V4L2_AV1_MAX_SEGMENTS][V4L2_AV1_SEG_LVL_MAX];
-	__u8 last_active_seg_id;
 };
 
 #define V4L2_AV1_LOOP_FILTER_FLAG_DELTA_ENABLED    0x1
@@ -3118,7 +3129,7 @@ struct v4l2_av1_segmentation {
 
 /**
  * struct v4l2_av1_loop_filter - AV1 Loop filter params as defined in section
- * 6.8.10. "Loop filter semantics" and "6.8.16. Loop filter delta parameters
+ * 6.8.10 "Loop filter semantics" and 6.8.16 "Loop filter delta parameters
  * semantics" of the AV1 specification.
  *
  * @flags: see V4L2_AV1_LOOP_FILTER_FLAG_{}
@@ -3190,10 +3201,13 @@ struct v4l2_av1_quantization {
 #define V4L2_AV1_TILE_INFO_FLAG_UNIFORM_TILE_SPACING	0x1
 
 /**
- * struct v4l2_av1_tile_info - AV1 Tile info as defined in section 6.8.14. "Tile
+ * struct v4l2_av1_tile_info - AV1 Tile info as defined in section 6.8.14 "Tile
  * info semantics" of the AV1 specification.
  *
  * @flags: see V4L2_AV1_TILE_INFO_FLAG_{}
+ * @context_update_tile_id: specifies which tile to use for the CDF update.
+ * @tile_rows: specifies the number of tiles down the frame.
+ * @tile_cols: specifies the number of tiles across the frame.
  * @mi_col_starts: an array specifying the start column (in units of 4x4 luma
  * samples) for each tile across the image.
  * @mi_row_starts: an array specifying the start row (in units of 4x4 luma
@@ -3204,20 +3218,19 @@ struct v4l2_av1_quantization {
  * superblocks.
  * @tile_size_bytes: specifies the number of bytes needed to code each tile
  * size.
- * @context_update_tile_id: specifies which tile to use for the CDF update.
- * @tile_rows: specifies the number of tiles down the frame.
- * @tile_cols: specifies the number of tiles across the frame.
+ * @reserved: padding field. Should be zeroed by applications.
  */
 struct v4l2_av1_tile_info {
 	__u8 flags;
+	__u8 context_update_tile_id;
+	__u8 tile_cols;
+	__u8 tile_rows;
 	__u32 mi_col_starts[V4L2_AV1_MAX_TILE_COLS + 1];
 	__u32 mi_row_starts[V4L2_AV1_MAX_TILE_ROWS + 1];
 	__u32 width_in_sbs_minus_1[V4L2_AV1_MAX_TILE_COLS];
 	__u32 height_in_sbs_minus_1[V4L2_AV1_MAX_TILE_ROWS];
 	__u8 tile_size_bytes;
-	__u8 context_update_tile_id;
-	__u8 tile_cols;
-	__u8 tile_rows;
+	__u8 reserved[3];
 };
 
 /**
@@ -3284,15 +3297,14 @@ enum v4l2_av1_tx_mode {
 #define V4L2_AV1_FRAME_FLAG_IS_MOTION_MODE_SWITCHABLE	 0x00000200
 #define V4L2_AV1_FRAME_FLAG_USE_REF_FRAME_MVS		 0x00000400
 #define V4L2_AV1_FRAME_FLAG_DISABLE_FRAME_END_UPDATE_CDF 0x00000800
-#define V4L2_AV1_FRAME_FLAG_UNIFORM_TILE_SPACING	 0x00001000
-#define V4L2_AV1_FRAME_FLAG_ALLOW_WARPED_MOTION		 0x00002000
-#define V4L2_AV1_FRAME_FLAG_REFERENCE_SELECT		 0x00004000
-#define V4L2_AV1_FRAME_FLAG_REDUCED_TX_SET		 0x00008000
-#define V4L2_AV1_FRAME_FLAG_SKIP_MODE_ALLOWED		 0x00010000
-#define V4L2_AV1_FRAME_FLAG_SKIP_MODE_PRESENT		 0x00020000
-#define V4L2_AV1_FRAME_FLAG_FRAME_SIZE_OVERRIDE		 0x00040000
-#define V4L2_AV1_FRAME_FLAG_BUFFER_REMOVAL_TIME_PRESENT	 0x00080000
-#define V4L2_AV1_FRAME_FLAG_FRAME_REFS_SHORT_SIGNALING	 0x00100000
+#define V4L2_AV1_FRAME_FLAG_ALLOW_WARPED_MOTION		 0x00001000
+#define V4L2_AV1_FRAME_FLAG_REFERENCE_SELECT		 0x00002000
+#define V4L2_AV1_FRAME_FLAG_REDUCED_TX_SET		 0x00004000
+#define V4L2_AV1_FRAME_FLAG_SKIP_MODE_ALLOWED		 0x00008000
+#define V4L2_AV1_FRAME_FLAG_SKIP_MODE_PRESENT		 0x00010000
+#define V4L2_AV1_FRAME_FLAG_FRAME_SIZE_OVERRIDE		 0x00020000
+#define V4L2_AV1_FRAME_FLAG_BUFFER_REMOVAL_TIME_PRESENT	 0x00040000
+#define V4L2_AV1_FRAME_FLAG_FRAME_REFS_SHORT_SIGNALING	 0x00080000
 
 #define V4L2_CID_STATELESS_AV1_FRAME (V4L2_CID_CODEC_STATELESS_BASE + 502)
 /**
@@ -3301,15 +3313,19 @@ enum v4l2_av1_tx_mode {
  * @tile_info: tile info
  * @quantization: quantization params
  * @segmentation: segmentation params
+ * @superres_denom: the denominator for the upscaling ratio.
  * @loop_filter: loop filter params
  * @cdef: cdef params
+ * @skip_mode_frame: specifies the frames to use for compound prediction when
+ * skip_mode is equal to 1.
+ * @primary_ref_frame: specifies which reference frame contains the CDF values
+ * and other state that should be loaded at the start of the frame.
  * @loop_restoration: loop restoration params
  * @global_motion: global motion params
- * @flags: see V4L2_AV1_FRAME_HEADER_FLAG_{}
+ * @flags: see V4L2_AV1_FRAME_FLAG_{}
  * @frame_type: specifies the AV1 frame type
  * @order_hint: specifies OrderHintBits least significant bits of the expected
  * output order for this frame.
- * @superres_denom: the denominator for the upscaling ratio.
  * @upscaled_width: the upscaled width.
  * @interpolation_filter: specifies the filter selection used for performing
  * inter prediction.
@@ -3324,16 +3340,13 @@ enum v4l2_av1_tx_mode {
  * id numbers are additional information that do not affect the decoding
  * process, but provide decoders with a way of detecting missing reference
  * frames so that appropriate action can be taken.
- * @primary_ref_frame: specifies which reference frame contains the CDF values
- * and other state that should be loaded at the start of the frame.
- * @buf_removal_time: specifies the frame removal time in units of DecCT clock
+ * @buffer_removal_time: specifies the frame removal time in units of DecCT clock
  * ticks counted from the removal time of the last random access point for
  * operating point opNum.
- * @refresh_frame_flags: contains a bitmask that specifies which reference frame
- * slots will be updated with the current frame after it is decoded.
+ * @reserved: padding field. Should be zeroed by applications.
  * @order_hints: specifies the expected output order hint for each reference
  * frame. This field corresponds to the OrderHints variable from the
- * specification (section 5.9.2. Uncompressed header syntax). As such, this is
+ * specification (section 5.9.2 "Uncompressed header syntax"). As such, this is
  * only used for non-intra frames and ignored otherwise. order_hints[0] is
  * always ignored.
  * @reference_frame_ts: the V4L2 timestamp of the reference frame slots.
@@ -3341,21 +3354,23 @@ enum v4l2_av1_tx_mode {
  * inter-frames. The meaning of this array is the same as in the specification.
  * The timestamp refers to the timestamp field in struct v4l2_buffer. Use
  * v4l2_timeval_to_ns() to convert the struct timeval to a __u64.
- * @skip_mode_frame: specifies the frames to use for compound prediction when
- * skip_mode is equal to 1.
+ * @refresh_frame_flags: contains a bitmask that specifies which reference frame
+ * slots will be updated with the current frame after it is decoded.
  */
 struct v4l2_ctrl_av1_frame {
 	struct v4l2_av1_tile_info tile_info;
 	struct v4l2_av1_quantization quantization;
+	__u8 superres_denom;
 	struct v4l2_av1_segmentation segmentation;
-	struct v4l2_av1_loop_filter  loop_filter;
+	struct v4l2_av1_loop_filter loop_filter;
 	struct v4l2_av1_cdef cdef;
+	__u8 skip_mode_frame[2];
+	__u8 primary_ref_frame;
 	struct v4l2_av1_loop_restoration loop_restoration;
 	struct v4l2_av1_global_motion global_motion;
 	__u32 flags;
 	enum v4l2_av1_frame_type frame_type;
 	__u32 order_hint;
-	__u8 superres_denom;
 	__u32 upscaled_width;
 	enum v4l2_av1_interpolation_filter interpolation_filter;
 	enum v4l2_av1_tx_mode tx_mode;
@@ -3365,13 +3380,12 @@ struct v4l2_ctrl_av1_frame {
 	__u16 render_height_minus_1;
 
 	__u32 current_frame_id;
-	__u8 primary_ref_frame;
 	__u32 buffer_removal_time[V4L2_AV1_MAX_OPERATING_POINTS];
-	__u8 refresh_frame_flags;
+	__u8 reserved[4];
 	__u32 order_hints[V4L2_AV1_TOTAL_REFS_PER_FRAME];
 	__u64 reference_frame_ts[V4L2_AV1_TOTAL_REFS_PER_FRAME];
 	__s8 ref_frame_idx[V4L2_AV1_REFS_PER_FRAME];
-	__u8 skip_mode_frame[2];
+	__u8 refresh_frame_flags;
 };
 
 #define V4L2_AV1_FILM_GRAIN_FLAG_APPLY_GRAIN 0x1
@@ -3380,13 +3394,15 @@ struct v4l2_ctrl_av1_frame {
 #define V4L2_AV1_FILM_GRAIN_FLAG_OVERLAP 0x8
 #define V4L2_AV1_FILM_GRAIN_FLAG_CLIP_TO_RESTRICTED_RANGE 0x10
 
+#define V4L2_CID_STATELESS_AV1_FILM_GRAIN (V4L2_CID_CODEC_STATELESS_BASE + 505)
 /**
  * struct v4l2_ctrl_av1_film_grain - AV1 Film Grain parameters.
  *
- * Film grain parameters as specified by section 6.8.20 of the AV1
-   Specification.
+ * Film grain parameters as specified by section 6.8.20 of the AV1 Specification.
  *
  * @flags: see V4L2_AV1_FILM_GRAIN_{}.
+ * @cr_mult: represents a multiplier for the cr component used in derivation of
+ * the input index to the cr component scaling function.
  * @grain_seed: specifies the starting value for the pseudo-random numbers used
  * during film grain synthesis.
  * @film_grain_params_ref_idx: indicates which reference frame contains the
@@ -3395,9 +3411,9 @@ struct v4l2_ctrl_av1_frame {
  * scaling function of the luma component.
  * @point_y_value: represents the x (luma value) coordinate for the i-th point
  * of the piecewise linear scaling function for luma component. The values are
- * signaled on the scale of 0..255. (In case of 10 bit video, these values
+ * signaled on the scale of 0..255. In case of 10 bit video, these values
  * correspond to luma values divided by 4. In case of 12 bit video, these values
- * correspond to luma values divided by 16.).
+ * correspond to luma values divided by 16.
  * @point_y_scaling:  represents the scaling (output) value for the i-th point
  * of the piecewise linear scaling function for luma component.
  * @num_cb_points: specifies the number of points for the piece-wise linear
@@ -3414,7 +3430,7 @@ struct v4l2_ctrl_av1_frame {
  * on the scale of 0..255.
  * @point_cr_scaling:  represents the scaling (output) value for the i-th point
  * of the piecewise linear scaling function for cr component.
- * @grain_scaling_minus_8: represents the shift - 8 applied to the values of the
+ * @grain_scaling_minus_8: represents the shift – 8 applied to the values of the
  * chroma component. The grain_scaling_minus_8 can take values of 0..3 and
  * determines the range and quantization step of the standard deviation of film
  * grain.
@@ -3436,18 +3452,17 @@ struct v4l2_ctrl_av1_frame {
  * the input index to the cb component scaling function.
  * @cb_luma_mult: represents a multiplier for the average luma component used in
  * derivation of the input index to the cb component scaling function.
- * @cb_offset: represents an offset used in derivation of the input index to the
- * cb component scaling function.
- * @cr_mult: represents a multiplier for the cr component used in derivation of
- * the input index to the cr component scaling function.
  * @cr_luma_mult: represents a multiplier for the average luma component used in
  * derivation of the input index to the cr component scaling function.
+ * @cb_offset: represents an offset used in derivation of the input index to the
+ * cb component scaling function.
  * @cr_offset: represents an offset used in derivation of the input index to the
  * cr component scaling function.
+ * @reserved: padding field. Should be zeroed by applications.
  */
-#define V4L2_CID_STATELESS_AV1_FILM_GRAIN (V4L2_CID_CODEC_STATELESS_BASE + 505)
 struct v4l2_ctrl_av1_film_grain {
 	__u8 flags;
+	__u8 cr_mult;
 	__u16 grain_seed;
 	__u8 film_grain_params_ref_idx;
 	__u8 num_y_points;
@@ -3461,17 +3476,17 @@ struct v4l2_ctrl_av1_film_grain {
 	__u8 point_cr_scaling[V4L2_AV1_MAX_NUM_CR_POINTS];
 	__u8 grain_scaling_minus_8;
 	__u8 ar_coeff_lag;
-	__u8 ar_coeffs_y_plus_128[V4L2_AV1_MAX_NUM_POS_LUMA];
-	__u8 ar_coeffs_cb_plus_128[V4L2_AV1_MAX_NUM_POS_LUMA];
-	__u8 ar_coeffs_cr_plus_128[V4L2_AV1_MAX_NUM_POS_LUMA];
+	__u8 ar_coeffs_y_plus_128[V4L2_AV1_AR_COEFFS_SIZE];
+	__u8 ar_coeffs_cb_plus_128[V4L2_AV1_AR_COEFFS_SIZE];
+	__u8 ar_coeffs_cr_plus_128[V4L2_AV1_AR_COEFFS_SIZE];
 	__u8 ar_coeff_shift_minus_6;
 	__u8 grain_scale_shift;
 	__u8 cb_mult;
 	__u8 cb_luma_mult;
-	__u16 cb_offset;
-	__u8 cr_mult;
 	__u8 cr_luma_mult;
+	__u16 cb_offset;
 	__u16 cr_offset;
+	__u8 reserved[4];
 };
 
 /* MPEG-compression definitions kept for backwards compatibility */

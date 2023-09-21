@@ -382,6 +382,10 @@
 	};
 };
 
+&gic {
+	mediatek,broken-save-restore-fw;
+};
+
 &gpu {
 	supply-names = "mali","sram";
 	mali-supply = <&mt6315_7_vbuck1>;

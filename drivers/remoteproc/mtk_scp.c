@@ -810,14 +810,14 @@ static int scp_probe(struct platform_device *pdev)
 	struct mtk_scp *scp;
 	struct rproc *rproc;
 	struct resource *res;
-	char *fw_name = "scp.img";
+	const char *fw_name = "scp.img";
 	int ret, i;
 
-	rproc = rproc_alloc(dev,
-			    np->name,
-			    &scp_ops,
-			    fw_name,
-			    sizeof(*scp));
+	ret = rproc_of_parse_firmware(dev, 0, &fw_name);
+	if (ret < 0 && ret != -EINVAL)
+		return ret;
+
+	rproc = devm_rproc_alloc(dev, np->name, &scp_ops, fw_name, sizeof(*scp));
 	if (!rproc) {
 		dev_err(dev, "unable to allocate remoteproc\n");
 		return -ENOMEM;
@@ -833,8 +833,7 @@ static int scp_probe(struct platform_device *pdev)
 	scp->sram_base = devm_ioremap_resource(dev, res);
 	if (IS_ERR((__force void *)scp->sram_base)) {
 		dev_err(dev, "Failed to parse and map sram memory\n");
-		ret = PTR_ERR((__force void *)scp->sram_base);
-		goto free_rproc;
+		return PTR_ERR((__force void *)scp->sram_base);
 	}
 	scp->sram_size = resource_size(res);
 	scp->sram_phys = res->start;
@@ -846,7 +845,7 @@ static int scp_probe(struct platform_device *pdev)
 		ret = PTR_ERR((__force void *)scp->l1tcm_base);
 		if (ret != -EINVAL) {
 			dev_err(dev, "Failed to map l1tcm memory\n");
-			goto free_rproc;
+			return ret;
 		}
 	} else {
 		scp->l1tcm_size = resource_size(res);
@@ -908,8 +907,6 @@ destroy_mutex:
 	for (i = 0; i < SCP_IPI_MAX; i++)
 		mutex_destroy(&scp->ipi_desc[i].lock);
 	mutex_destroy(&scp->send_lock);
-free_rproc:
-	rproc_free(rproc);
 
 	return ret;
 }
@@ -926,7 +923,6 @@ static int scp_remove(struct platform_device *pdev)
 	for (i = 0; i < SCP_IPI_MAX; i++)
 		mutex_destroy(&scp->ipi_desc[i].lock);
 	mutex_destroy(&scp->send_lock);
-	rproc_free(scp->rproc);
 
 	return 0;
 }

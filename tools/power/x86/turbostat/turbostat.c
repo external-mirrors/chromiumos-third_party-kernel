@@ -1838,12 +1838,15 @@ int get_mp(int cpu, struct msr_counter *mp, unsigned long long *counterp)
 int get_epb(int cpu)
 {
 	char path[128 + PATH_BYTES];
+	unsigned long long msr;
 	int ret, epb = -1;
 	FILE *fp;
 
 	sprintf(path, "/sys/devices/system/cpu/cpu%d/power/energy_perf_bias", cpu);
 
-	fp = fopen_or_die(path, "r");
+	fp = fopen(path, "r");
+	if (!fp)
+		goto msr_fallback;
 
 	ret = fscanf(fp, "%d", &epb);
 	if (ret != 1)
@@ -1852,6 +1855,11 @@ int get_epb(int cpu)
 	fclose(fp);
 
 	return epb;
+
+msr_fallback:
+	get_msr(cpu, MSR_IA32_ENERGY_PERF_BIAS, &msr);
+
+	return msr & 0xf;
 }
 
 void get_apic_id(struct thread_data *t)
@@ -5025,7 +5033,7 @@ void print_dev_latency(void)
 
 	retval = read(fd, (void *)&value, sizeof(int));
 	if (retval != sizeof(int)) {
-		warn("read %s\n", path);
+		warn("read failed %s\n", path);
 		close(fd);
 		return;
 	}

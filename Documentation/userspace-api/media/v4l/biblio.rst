@@ -423,7 +423,6 @@ VP9
 AV1
 ===
 
-
 :title:     AV1 Bitstream & Decoding Process Specification
 
 :author:    Peter de Rivaz, Argon Design Ltd, Jack Haughton, Argon Design Ltd

@@ -46,6 +46,15 @@ struct intel_guc {
 	 * submitted until the stalled request is processed.
 	 */
 	struct i915_request *stalled_request;
+	/**
+	 * @submission_stall_reason: reason why submission is stalled
+	 */
+	enum {
+		STALL_NONE,
+		STALL_REGISTER_CONTEXT,
+		STALL_MOVE_LRC_TAIL,
+		STALL_ADD_REQUEST,
+	} submission_stall_reason;
 
 	/* intel_guc_recv interrupt related state */
 	/** @irq_lock: protects GuC irq state */
@@ -71,16 +80,46 @@ struct intel_guc {
 	} interrupts;
 
 	/**
-	 * @contexts_lock: protects guc_ids, guc_id_list, ce->guc_id.id, and
-	 * ce->guc_id.ref when transitioning in and out of zero
+	 * @submission_state: sub-structure for submission state protected by
+	 * single lock
 	 */
-	spinlock_t contexts_lock;
-	/** @guc_ids: used to allocate unique ce->guc_id.id values */
-	struct ida guc_ids;
-	/**
-	 * @guc_id_list: list of intel_context with valid guc_ids but no refs
-	 */
-	struct list_head guc_id_list;
+	struct {
+		/**
+		 * @lock: protects everything in submission_state,
+		 * ce->guc_id.id, and ce->guc_id.ref when transitioning in and
+		 * out of zero
+		 */
+		spinlock_t lock;
+		/**
+		 * @guc_ids: used to allocate new guc_ids, single-lrc
+		 */
+		struct ida guc_ids;
+		/**
+		 * @num_guc_ids: Number of guc_ids, selftest feature to be able
+		 * to reduce this number while testing.
+		 */
+		int num_guc_ids;
+		/**
+		 * @guc_ids_bitmap: used to allocate new guc_ids, multi-lrc
+		 */
+		unsigned long *guc_ids_bitmap;
+		/**
+		 * @guc_id_list: list of intel_context with valid guc_ids but no
+		 * refs
+		 */
+		struct list_head guc_id_list;
+		/**
+		 * @destroyed_contexts: list of contexts waiting to be destroyed
+		 * (deregistered with the GuC)
+		 */
+		struct list_head destroyed_contexts;
+		/**
+		 * @destroyed_worker: worker to deregister contexts, need as we
+		 * need to take a GT PM reference and can't from destroy
+		 * function as it might be in an atomic context (no sleeping)
+		 */
+		struct work_struct destroyed_worker;
+	} submission_state;
 
 	/**
 	 * @submission_supported: tracks whether we support GuC submission on
@@ -104,6 +143,8 @@ struct intel_guc {
 	u32 ads_regset_size;
 	/** @ads_golden_ctxt_size: size of the golden contexts in the ADS */
 	u32 ads_golden_ctxt_size;
+	/** @ads_engine_usage_size: size of engine usage in the ADS */
+	u32 ads_engine_usage_size;
 
 	/** @lrc_desc_pool: object allocated to hold the GuC LRC descriptor pool */
 	struct i915_vma *lrc_desc_pool;
@@ -138,6 +179,46 @@ struct intel_guc {
 
 	/** @send_mutex: used to serialize the intel_guc_send actions */
 	struct mutex send_mutex;
+
+	/**
+	 * @timestamp: GT timestamp object that stores a copy of the timestamp
+	 * and adjusts it for overflow using a worker.
+	 */
+	struct {
+		/**
+		 * @lock: Lock protecting the below fields and the engine stats.
+		 */
+		spinlock_t lock;
+
+		/**
+		 * @gt_stamp: 64 bit extended value of the GT timestamp.
+		 */
+		u64 gt_stamp;
+
+		/**
+		 * @ping_delay: Period for polling the GT timestamp for
+		 * overflow.
+		 */
+		unsigned long ping_delay;
+
+		/**
+		 * @work: Periodic work to adjust GT timestamp, engine and
+		 * context usage for overflows.
+		 */
+		struct delayed_work work;
+
+		/**
+		 * @shift: Right shift value for the gpm timestamp
+		 */
+		u32 shift;
+	} timestamp;
+
+#ifdef CONFIG_DRM_I915_SELFTEST
+	/**
+	 * @number_guc_id_stolen: The number of guc_ids that have been stolen
+	 */
+	int number_guc_id_stolen;
+#endif
 };
 
 static inline struct intel_guc *log_to_guc(struct intel_guc_log *log)
@@ -336,10 +417,12 @@ int intel_guc_global_policies_update(struct intel_guc *guc);
 void intel_guc_context_ban(struct intel_context *ce, struct i915_request *rq);
 
 void intel_guc_submission_reset_prepare(struct intel_guc *guc);
-void intel_guc_submission_reset(struct intel_guc *guc, bool stalled);
+void intel_guc_submission_reset(struct intel_guc *guc, intel_engine_mask_t stalled);
 void intel_guc_submission_reset_finish(struct intel_guc *guc);
 void intel_guc_submission_cancel_requests(struct intel_guc *guc);
 
 void intel_guc_load_status(struct intel_guc *guc, struct drm_printer *p);
+
+void intel_guc_write_barrier(struct intel_guc *guc);
 
 #endif

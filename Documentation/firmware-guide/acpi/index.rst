@@ -28,3 +28,4 @@ ACPI Support
    non-d0-probe
    extcon-intel-int3496
    intel-pmc-mux
+   chromeos-acpi-device

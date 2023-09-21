@@ -51,9 +51,9 @@
 #include "gt/intel_workarounds.h"
 
 #include "i915_drv.h"
+#include "i915_file_private.h"
 #include "i915_trace.h"
 #include "i915_vgpu.h"
-
 #include "intel_pm.h"
 
 static int
@@ -1139,11 +1139,10 @@ void i915_gem_driver_release(struct drm_i915_private *dev_priv)
 {
 	intel_gt_driver_release(&dev_priv->gt);
 
-	intel_wa_list_free(&dev_priv->gt_wa_list);
-
 	intel_uc_cleanup_firmwares(&dev_priv->gt.uc);
 
-	i915_gem_drain_freed_objects(dev_priv);
+	/* Flush any outstanding work, including i915_gem_context.release_work. */
+	i915_gem_drain_workqueue(dev_priv);
 
 	drm_WARN_ON(&dev_priv->drm, !list_empty(&dev_priv->gem.contexts.list));
 }
@@ -1188,14 +1187,14 @@ int i915_gem_open(struct drm_i915_private *i915, struct drm_file *file)
 	if (!file_priv)
 		goto err_alloc;
 
-	client = i915_drm_client_add(&i915->clients, current);
+	client = i915_drm_client_add(&i915->clients);
 	if (IS_ERR(client)) {
 		ret = PTR_ERR(client);
 		goto err_client;
 	}
 
 	file->driver_priv = file_priv;
-	file_priv->dev_priv = i915;
+	file_priv->i915 = i915;
 	file_priv->file = file;
 	file_priv->client = client;
 
@@ -1209,7 +1208,7 @@ int i915_gem_open(struct drm_i915_private *i915, struct drm_file *file)
 	return 0;
 
 err_context:
-	i915_drm_client_close(client);
+	i915_drm_client_put(client);
 err_client:
 	kfree(file_priv);
 err_alloc:

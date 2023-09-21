@@ -531,7 +531,7 @@ void intel_dvo_init(struct drm_i915_private *dev_priv)
 			intel_panel_add_encoder_fixed_mode(intel_connector,
 							   intel_encoder);
 
-			intel_panel_init(intel_connector);
+			intel_panel_init(intel_connector, NULL);
 
 			intel_dvo->panel_wants_dither = true;
 		}

@@ -785,6 +785,8 @@ static int qcom_pcie_get_resources_2_4_0(struct qcom_pcie *pcie)
 			return PTR_ERR(res->phy_ahb_reset);
 	}
 
+	dw_pcie_dbi_ro_wr_dis(pci);
+
 	return 0;
 }
 
@@ -1255,11 +1257,9 @@ static int qcom_pcie_init_2_7_0(struct qcom_pcie *pcie)
 	val |= BIT(4);
 	writel(val, pcie->parf + PCIE20_PARF_MHI_CLOCK_RESET_CTRL);
 
-	if (IS_ENABLED(CONFIG_PCI_MSI)) {
-		val = readl(pcie->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
-		val |= BIT(31);
-		writel(val, pcie->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
-	}
+	val = readl(pcie->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT_V2);
+	val |= BIT(31);
+	writel(val, pcie->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT_V2);
 
 	return 0;
 err_disable_clocks:
@@ -1534,6 +1534,12 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	const struct qcom_pcie_cfg *pcie_cfg;
 	int ret;
 
+	pcie_cfg = of_device_get_match_data(dev);
+	if (!pcie_cfg || !pcie_cfg->ops) {
+		dev_err(dev, "Invalid platform data\n");
+		return -EINVAL;
+	}
+
 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
 		return -ENOMEM;
@@ -1552,12 +1558,6 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	pp = &pci->pp;
 
 	pcie->pci = pci;
-
-	pcie_cfg = of_device_get_match_data(dev);
-	if (!pcie_cfg || !pcie_cfg->ops) {
-		dev_err(dev, "Invalid platform data\n");
-		return -EINVAL;
-	}
 
 	pcie->ops = pcie_cfg->ops;
 	pcie->pipe_clk_need_muxing = pcie_cfg->pipe_clk_need_muxing;

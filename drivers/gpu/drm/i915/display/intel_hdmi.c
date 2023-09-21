@@ -2343,7 +2343,7 @@ intel_hdmi_unset_edid(struct drm_connector *connector)
 }
 
 static void
-intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector, bool has_edid)
+intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector)
 {
 	struct drm_i915_private *dev_priv = to_i915(connector->dev);
 	struct intel_hdmi *hdmi = intel_attached_hdmi(to_intel_connector(connector));
@@ -2359,16 +2359,10 @@ intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector, bool has_edid)
 	 * CONFIG1 pin, but no such luck on our hardware.
 	 *
 	 * The only method left to us is to check the VBT to see
-	 * if the port is a dual mode capable DP port. But let's
-	 * only do that when we sucesfully read the EDID, to avoid
-	 * confusing log messages about DP dual mode adaptors when
-	 * there's nothing connected to the port.
+	 * if the port is a dual mode capable DP port.
 	 */
 	if (type == DRM_DP_DUAL_MODE_UNKNOWN) {
-		/* An overridden EDID imply that we want this port for testing.
-		 * Make sure not to set limits for that port.
-		 */
-		if (has_edid && !connector->override_edid &&
+		if (!connector->force &&
 		    intel_bios_is_port_dp_dual_mode(dev_priv, port)) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "Assuming DP dual mode adaptor presence based on VBT\n");
@@ -2416,11 +2410,8 @@ intel_hdmi_set_edid(struct drm_connector *connector)
 		intel_gmbus_force_bit(i2c, false);
 	}
 
+	/* Below we depend on display info having been updated */
 	drm_edid_connector_update(connector, drm_edid);
-
-	intel_hdmi_dp_dual_mode_detect(connector, drm_edid != NULL);
-
-	intel_display_power_put(dev_priv, POWER_DOMAIN_GMBUS, wakeref);
 
 	to_intel_connector(connector)->detect_edid = drm_edid;
 
@@ -2430,8 +2421,12 @@ intel_hdmi_set_edid(struct drm_connector *connector)
 		intel_hdmi->has_audio = drm_detect_monitor_audio(edid);
 		intel_hdmi->has_hdmi_sink = drm_detect_hdmi_monitor(edid);
 
+		intel_hdmi_dp_dual_mode_detect(connector);
+
 		connected = true;
 	}
+
+	intel_display_power_put(dev_priv, POWER_DOMAIN_GMBUS, wakeref);
 
 	cec_notifier_set_phys_addr_from_edid(intel_hdmi->cec_notifier, edid);
 
@@ -2497,11 +2492,8 @@ intel_hdmi_force(struct drm_connector *connector)
 
 static int intel_hdmi_get_modes(struct drm_connector *connector)
 {
-	const struct drm_edid *drm_edid;
-
-	drm_edid = to_intel_connector(connector)->detect_edid;
-
-	return drm_edid_connector_update(connector, drm_edid);
+	/* drm_edid_connector_update() done in ->detect() or ->force() */
+	return drm_edid_connector_add_modes(connector);
 }
 
 static struct i2c_adapter *

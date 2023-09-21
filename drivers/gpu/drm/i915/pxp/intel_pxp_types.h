@@ -103,6 +103,7 @@ struct intel_pxp {
 	u32 session_events;
 #define PXP_TERMINATION_REQUEST  BIT(0)
 #define PXP_TERMINATION_COMPLETE BIT(1)
+#define PXP_INVAL_REQUIRED       BIT(2)
 
 	/**
 	* @last_tee_msg_interrupted: tracks if the last tee msg transaction was

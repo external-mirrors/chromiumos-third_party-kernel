@@ -175,14 +175,13 @@ static bool intel_hpd_irq_storm_detect(struct drm_i915_private *dev_priv,
 static void
 intel_hpd_irq_storm_switch_to_polling(struct drm_i915_private *dev_priv)
 {
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_connector_list_iter conn_iter;
 	struct intel_connector *connector;
 	bool hpd_disabled = false;
 
 	lockdep_assert_held(&dev_priv->irq_lock);
 
-	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_connector_list_iter_begin(&dev_priv->drm, &conn_iter);
 	for_each_intel_connector_iter(connector, &conn_iter) {
 		enum hpd_pin pin;
 
@@ -208,7 +207,7 @@ intel_hpd_irq_storm_switch_to_polling(struct drm_i915_private *dev_priv)
 
 	/* Enable polling and queue hotplug re-enabling. */
 	if (hpd_disabled) {
-		drm_kms_helper_poll_enable(dev);
+		drm_kms_helper_poll_enable(&dev_priv->drm);
 		mod_delayed_work(system_wq, &dev_priv->hotplug.reenable_work,
 				 msecs_to_jiffies(HPD_STORM_REENABLE_DELAY));
 	}
@@ -219,7 +218,6 @@ static void intel_hpd_irq_storm_reenable_work(struct work_struct *work)
 	struct drm_i915_private *dev_priv =
 		container_of(work, typeof(*dev_priv),
 			     hotplug.reenable_work.work);
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_connector_list_iter conn_iter;
 	struct intel_connector *connector;
 	intel_wakeref_t wakeref;
@@ -229,7 +227,7 @@ static void intel_hpd_irq_storm_reenable_work(struct work_struct *work)
 
 	spin_lock_irq(&dev_priv->irq_lock);
 
-	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_connector_list_iter_begin(&dev_priv->drm, &conn_iter);
 	for_each_intel_connector_iter(connector, &conn_iter) {
 		pin = intel_connector_hpd_pin(connector);
 		if (pin == HPD_NONE ||
@@ -367,14 +365,13 @@ static void i915_hotplug_work_func(struct work_struct *work)
 	struct drm_i915_private *dev_priv =
 		container_of(work, struct drm_i915_private,
 			     hotplug.hotplug_work.work);
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_connector_list_iter conn_iter;
 	struct intel_connector *connector;
 	u32 changed = 0, retry = 0;
 	u32 hpd_event_bits;
 	u32 hpd_retry_bits;
 
-	mutex_lock(&dev->mode_config.mutex);
+	mutex_lock(&dev_priv->drm.mode_config.mutex);
 	drm_dbg_kms(&dev_priv->drm, "running encoder hotplug functions\n");
 
 	spin_lock_irq(&dev_priv->irq_lock);
@@ -389,7 +386,7 @@ static void i915_hotplug_work_func(struct work_struct *work)
 
 	spin_unlock_irq(&dev_priv->irq_lock);
 
-	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_connector_list_iter_begin(&dev_priv->drm, &conn_iter);
 	for_each_intel_connector_iter(connector, &conn_iter) {
 		enum hpd_pin pin;
 		u32 hpd_bit;
@@ -426,10 +423,10 @@ static void i915_hotplug_work_func(struct work_struct *work)
 		}
 	}
 	drm_connector_list_iter_end(&conn_iter);
-	mutex_unlock(&dev->mode_config.mutex);
+	mutex_unlock(&dev_priv->drm.mode_config.mutex);
 
 	if (changed)
-		drm_kms_helper_hotplug_event(dev);
+		drm_kms_helper_hotplug_event(&dev_priv->drm);
 
 	/* Remove shared HPD pins that have changed */
 	retry &= ~changed;
@@ -612,16 +609,15 @@ static void i915_hpd_poll_init_work(struct work_struct *work)
 	struct drm_i915_private *dev_priv =
 		container_of(work, struct drm_i915_private,
 			     hotplug.poll_init_work);
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_connector_list_iter conn_iter;
 	struct intel_connector *connector;
 	bool enabled;
 
-	mutex_lock(&dev->mode_config.mutex);
+	mutex_lock(&dev_priv->drm.mode_config.mutex);
 
 	enabled = READ_ONCE(dev_priv->hotplug.poll_enabled);
 
-	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_connector_list_iter_begin(&dev_priv->drm, &conn_iter);
 	for_each_intel_connector_iter(connector, &conn_iter) {
 		enum hpd_pin pin;
 
@@ -638,16 +634,16 @@ static void i915_hpd_poll_init_work(struct work_struct *work)
 	drm_connector_list_iter_end(&conn_iter);
 
 	if (enabled)
-		drm_kms_helper_poll_enable(dev);
+		drm_kms_helper_poll_enable(&dev_priv->drm);
 
-	mutex_unlock(&dev->mode_config.mutex);
+	mutex_unlock(&dev_priv->drm.mode_config.mutex);
 
 	/*
 	 * We might have missed any hotplugs that happened while we were
 	 * in the middle of disabling polling
 	 */
 	if (!enabled)
-		drm_helper_hpd_irq_event(dev);
+		drm_helper_hpd_irq_event(&dev_priv->drm);
 }
 
 /**

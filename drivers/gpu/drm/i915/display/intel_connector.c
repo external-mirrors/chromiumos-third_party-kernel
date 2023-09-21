@@ -54,7 +54,7 @@ int intel_connector_init(struct intel_connector *connector)
 	__drm_atomic_helper_connector_reset(&connector->base,
 					    &conn_state->base);
 
-	INIT_LIST_HEAD(&connector->panel.fixed_modes);
+	intel_panel_init_alloc(connector);
 
 	return 0;
 }
@@ -98,9 +98,6 @@ void intel_connector_destroy(struct drm_connector *connector)
 	drm_edid_free(intel_connector->detect_edid);
 
 	intel_hdcp_cleanup(intel_connector);
-
-	if (!IS_ERR_OR_NULL(intel_connector->edid))
-		drm_edid_free(intel_connector->edid);
 
 	intel_panel_fini(intel_connector);
 

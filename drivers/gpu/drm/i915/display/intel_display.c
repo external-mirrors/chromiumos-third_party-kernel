@@ -882,7 +882,6 @@ static bool gpu_reset_clobbers_display(struct drm_i915_private *dev_priv)
 
 void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 {
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_modeset_acquire_ctx *ctx = &dev_priv->reset_ctx;
 	struct drm_atomic_state *state;
 	int ret;
@@ -910,10 +909,10 @@ void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 	 * Need mode_config.mutex so that we don't
 	 * trample ongoing ->detect() and whatnot.
 	 */
-	mutex_lock(&dev->mode_config.mutex);
+	mutex_lock(&dev_priv->drm.mode_config.mutex);
 	drm_modeset_acquire_init(ctx, 0);
 	while (1) {
-		ret = drm_modeset_lock_all_ctx(dev, ctx);
+		ret = drm_modeset_lock_all_ctx(&dev_priv->drm, ctx);
 		if (ret != -EDEADLK)
 			break;
 
@@ -923,7 +922,7 @@ void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 	 * Disabling the crtcs gracefully seems nicer. Also the
 	 * g33 docs say we should at least disable all the planes.
 	 */
-	state = drm_atomic_helper_duplicate_state(dev, ctx);
+	state = drm_atomic_helper_duplicate_state(&dev_priv->drm, ctx);
 	if (IS_ERR(state)) {
 		ret = PTR_ERR(state);
 		drm_err(&dev_priv->drm, "Duplicating state failed with %i\n",
@@ -931,7 +930,7 @@ void intel_display_prepare_reset(struct drm_i915_private *dev_priv)
 		return;
 	}
 
-	ret = drm_atomic_helper_disable_all(dev, ctx);
+	ret = drm_atomic_helper_disable_all(&dev_priv->drm, ctx);
 	if (ret) {
 		drm_err(&dev_priv->drm, "Suspending crtc's failed with %i\n",
 			ret);
@@ -1079,7 +1078,7 @@ intel_get_crtc_new_encoder(const struct intel_atomic_state *state,
 		num_encoders++;
 	}
 
-	drm_WARN(encoder->base.dev, num_encoders != 1,
+	drm_WARN(state->base.dev, num_encoders != 1,
 		 "%d encoders for pipe %c\n",
 		 num_encoders, pipe_name(master_crtc->pipe));
 
@@ -5397,6 +5396,7 @@ intel_crtc_prepare_cleared_state(struct intel_atomic_state *state,
 	 * only fields that are know to not cause problems are preserved. */
 
 	saved_state->uapi = crtc_state->uapi;
+	saved_state->inherited = crtc_state->inherited;
 	saved_state->scaler_state = crtc_state->scaler_state;
 	saved_state->shared_dpll = crtc_state->shared_dpll;
 	saved_state->dpll_hw_state = crtc_state->dpll_hw_state;
