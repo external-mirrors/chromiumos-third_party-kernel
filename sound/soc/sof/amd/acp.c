@@ -95,19 +95,19 @@ static void master_clock_generate(struct acp_dev_data *adata)
 	clk5_pll.bits.gb_mult_frac = 0x26E9;
 
 	snd_sof_dsp_write(sdev, ACP_DSP_BAR, 0x105c, 0x1);
-	smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, &data);
+	data = smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0);
 	smn_write(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_STOP_REQ);
 
-	smn_read(adata->smn_dev, CLK5_SPLL_FIELD_2_N0, &data);
+	data = smn_read(adata->smn_dev, CLK5_SPLL_FIELD_2_N0);
 	if (data & PLL_FRANCE_EN)
 		smn_write(adata->smn_dev, CLK5_SPLL_FIELD_2_N0, data | PLL_FRANCE_EN);
 
 	smn_write(adata->smn_dev, CLK5_CLK_PLL_REQ_N0, clk5_pll.clk5_pll_req_no_reg);
 
-	smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, &data);
+	data = smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0);
 	smn_write(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_START_REQ);
 
-	smn_read(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, &data);
+	data = smn_read(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR);
 	smn_write(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_0);
 	smn_write(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_1);
 
