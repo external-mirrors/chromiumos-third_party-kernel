@@ -160,8 +160,8 @@ void do_el0_svc(struct pt_regs *regs)
 		       ti->sys_call_table);
 #else
 	el0_svc_common(regs, regs->regs[8], __NR_syscalls, sys_call_table);
+#endif
 }
-
 #ifdef CONFIG_COMPAT
 void do_el0_svc_compat(struct pt_regs *regs)
 {
