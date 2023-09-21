@@ -36,6 +36,8 @@
 #define RTL_ROM_LMP_8822B	0x8822
 #define RTL_CONFIG_MAGIC	0x8723ab55
 
+#define RTL_VSC_OP_COREDUMP	0xfcff
+
 #define IC_MATCH_FL_LMPSUBV	(1 << 0)
 #define IC_MATCH_FL_HCIREV	(1 << 1)
 #define IC_MATCH_FL_HCIVER	(1 << 2)
@@ -55,6 +57,7 @@ struct id_table {
 	bool has_rom_version;
 	char *fw_name;
 	char *cfg_name;
+	char *hw_info;
 };
 
 struct btrtl_device_info {
@@ -71,13 +74,15 @@ static const struct id_table ic_id_table[] = {
 	  .config_needed = false,
 	  .has_rom_version = false,
 	  .fw_name = "rtl_bt/rtl8723a_fw.bin",
-	  .cfg_name = NULL },
+	  .cfg_name = NULL,
+	  .hw_info = "rtl8723au" },
 
 	{ IC_MATCH_FL_LMPSUBV, RTL_ROM_LMP_3499, 0x0,
 	  .config_needed = false,
 	  .has_rom_version = false,
 	  .fw_name = "rtl_bt/rtl8723a_fw.bin",
-	  .cfg_name = NULL },
+	  .cfg_name = NULL,
+	  .hw_info = "rtl8723au" },
 
 	/* 8723BS */
 	{ .match_flags = IC_MATCH_FL_LMPSUBV | IC_MATCH_FL_HCIREV |
@@ -89,21 +94,24 @@ static const struct id_table ic_id_table[] = {
 	  .config_needed = true,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8723bs_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8723bs_config" },
+	  .cfg_name = "rtl_bt/rtl8723bs_config",
+	  .hw_info  = "rtl8723bs" },
 
 	/* 8723B */
 	{ IC_INFO(RTL_ROM_LMP_8723B, 0xb),
 	  .config_needed = false,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8723b_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8723b_config" },
+	  .cfg_name = "rtl_bt/rtl8723b_config",
+	  .hw_info  = "rtl8723bu" },
 
 	/* 8723D */
 	{ IC_INFO(RTL_ROM_LMP_8723B, 0xd),
 	  .config_needed = true,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8723d_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8723d_config" },
+	  .cfg_name = "rtl_bt/rtl8723d_config",
+	  .hw_info  = "rtl8723du" },
 
 	/* 8723DS */
 	{ .match_flags = IC_MATCH_FL_LMPSUBV | IC_MATCH_FL_HCIREV |
@@ -115,35 +123,40 @@ static const struct id_table ic_id_table[] = {
 	  .config_needed = true,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8723ds_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8723ds_config" },
+	  .cfg_name = "rtl_bt/rtl8723ds_config",
+	  .hw_info  = "rtl8723ds" },
 
 	/* 8821A */
 	{ IC_INFO(RTL_ROM_LMP_8821A, 0xa),
 	  .config_needed = false,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8821a_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8821a_config" },
+	  .cfg_name = "rtl_bt/rtl8821a_config",
+	  .hw_info  = "rtl8821au" },
 
 	/* 8821C */
 	{ IC_INFO(RTL_ROM_LMP_8821A, 0xc),
 	  .config_needed = false,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8821c_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8821c_config" },
+	  .cfg_name = "rtl_bt/rtl8821c_config",
+	  .hw_info  = "rtl8821cu" },
 
 	/* 8761A */
 	{ IC_MATCH_FL_LMPSUBV, RTL_ROM_LMP_8761A, 0x0,
 	  .config_needed = false,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8761a_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8761a_config" },
+	  .cfg_name = "rtl_bt/rtl8761a_config",
+	  .hw_info  = "rtl8761au" },
 
 	/* 8822B */
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xb),
 	  .config_needed = true,
 	  .has_rom_version = true,
 	  .fw_name  = "rtl_bt/rtl8822b_fw.bin",
-	  .cfg_name = "rtl_bt/rtl8822b_config" },
+	  .cfg_name = "rtl_bt/rtl8822b_config",
+	  .hw_info  = "rtl8822bu" },
 	};
 
 static const struct id_table *btrtl_match_ic(u16 lmp_subver, u16 hci_rev,
@@ -207,6 +220,7 @@ static int rtlbt_parse_firmware(struct hci_dev *hdev,
 				unsigned char **_buf)
 {
 	const u8 extension_sig[] = { 0x51, 0x04, 0xfd, 0x77 };
+	struct btrealtek_data *coredump_info = hci_get_priv(hdev);
 	struct rtl_epatch_header *epatch_info;
 	unsigned char *buf;
 	int i, len;
@@ -302,6 +316,7 @@ static int rtlbt_parse_firmware(struct hci_dev *hdev,
 	num_patches = le16_to_cpu(epatch_info->num_patches);
 	BT_DBG("fw_version=%x, num_patches=%d",
 	       le32_to_cpu(epatch_info->fw_version), num_patches);
+	coredump_info->rtl_dump.fw_version = le32_to_cpu(epatch_info->fw_version);
 
 	/* After the rtl_epatch_header there is a funky patch metadata section.
 	 * Assuming 2 patches, the layout is:
@@ -502,6 +517,53 @@ static struct sk_buff *btrtl_read_local_version(struct hci_dev *hdev)
 	return skb;
 }
 
+static void btrtl_coredump(struct hci_dev *hdev)
+{
+	static const u8 param[] = { 0x00, 0x00 };
+
+	__hci_cmd_send(hdev, RTL_VSC_OP_COREDUMP, sizeof(param), param);
+}
+
+static void btrtl_dmp_hdr(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	struct btrealtek_data *coredump_info = hci_get_priv(hdev);
+	char buf[80];
+
+	if (coredump_info->rtl_dump.controller)
+		snprintf(buf, sizeof(buf), "Controller Name: %s\n",
+			 coredump_info->rtl_dump.controller);
+	else
+		snprintf(buf, sizeof(buf), "Controller Name: Unknown\n");
+	skb_put_data(skb, buf, strlen(buf));
+
+	snprintf(buf, sizeof(buf), "Firmware Version: 0x%X\n",
+		 coredump_info->rtl_dump.fw_version);
+	skb_put_data(skb, buf, strlen(buf));
+
+	snprintf(buf, sizeof(buf), "Driver: %s\n", coredump_info->rtl_dump.driver_name);
+	skb_put_data(skb, buf, strlen(buf));
+
+	snprintf(buf, sizeof(buf), "Vendor: Realtek\n");
+	skb_put_data(skb, buf, strlen(buf));
+}
+
+static int btrtl_register_devcoredump_support(struct hci_dev *hdev)
+{
+	int err;
+
+	err = hci_devcd_register(hdev, btrtl_coredump, btrtl_dmp_hdr, NULL);
+
+	return err;
+}
+
+void btrtl_set_driver_name(struct hci_dev *hdev, const char *driver_name)
+{
+	struct btrealtek_data *coredump_info = hci_get_priv(hdev);
+
+	coredump_info->rtl_dump.driver_name = driver_name;
+}
+EXPORT_SYMBOL_GPL(btrtl_set_driver_name);
+
 void btrtl_free(struct btrtl_device_info *btrtl_dev)
 {
 	kvfree(btrtl_dev->fw_data);
@@ -513,6 +575,7 @@ EXPORT_SYMBOL_GPL(btrtl_free);
 struct btrtl_device_info *btrtl_initialize(struct hci_dev *hdev,
 					   const char *postfix)
 {
+	struct btrealtek_data *coredump_info = hci_get_priv(hdev);
 	struct btrtl_device_info *btrtl_dev;
 	struct sk_buff *skb;
 	struct hci_rp_read_local_version *resp;
@@ -590,6 +653,9 @@ struct btrtl_device_info *btrtl_initialize(struct hci_dev *hdev,
 	 * eliminated. See b/200993792 for more details.
 	 */
 
+	if (btrtl_dev->ic_info)
+		coredump_info->rtl_dump.controller = btrtl_dev->ic_info->hw_info;
+
 	return btrtl_dev;
 
 err_free:
@@ -602,6 +668,8 @@ EXPORT_SYMBOL_GPL(btrtl_initialize);
 int btrtl_download_firmware(struct hci_dev *hdev,
 			    struct btrtl_device_info *btrtl_dev)
 {
+	int err = 0;
+
 	/* Match a set of subver values that correspond to stock firmware,
 	 * which is not compatible with standard btusb.
 	 * If matched, upload an alternative firmware that does conform to
@@ -610,22 +678,31 @@ int btrtl_download_firmware(struct hci_dev *hdev,
 	 */
 	if (!btrtl_dev->ic_info) {
 		rtl_dev_info(hdev, "rtl: assuming no firmware upload needed\n");
-		return 0;
+		err = 0;
+		goto done;
 	}
 
 	switch (btrtl_dev->ic_info->lmp_subver) {
 	case RTL_ROM_LMP_8723A:
 	case RTL_ROM_LMP_3499:
-		return btrtl_setup_rtl8723a(hdev, btrtl_dev);
+		err = btrtl_setup_rtl8723a(hdev, btrtl_dev);
+		break;
 	case RTL_ROM_LMP_8723B:
 	case RTL_ROM_LMP_8821A:
 	case RTL_ROM_LMP_8761A:
 	case RTL_ROM_LMP_8822B:
-		return btrtl_setup_rtl8723b(hdev, btrtl_dev);
+		err = btrtl_setup_rtl8723b(hdev, btrtl_dev);
+		break;
 	default:
 		rtl_dev_info(hdev, "rtl: assuming no firmware upload needed\n");
-		return 0;
+		break;
 	}
+
+done:
+	if (!err)
+		err = btrtl_register_devcoredump_support(hdev);
+
+	return err;
 }
 EXPORT_SYMBOL_GPL(btrtl_download_firmware);
 

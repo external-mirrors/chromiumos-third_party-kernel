@@ -459,6 +459,7 @@ use_default_name:
 		}
 	}
 
+	INIT_WORK(&rdev->disconnect_wk, cfg80211_autodisconnect_wk);
 	INIT_LIST_HEAD(&rdev->wiphy.wdev_list);
 	INIT_LIST_HEAD(&rdev->beacon_registrations);
 	spin_lock_init(&rdev->beacon_registrations_lock);
@@ -975,6 +976,7 @@ void wiphy_unregister(struct wiphy *wiphy)
 	flush_work(&rdev->mlme_unreg_wk);
 	flush_work(&rdev->propagate_radar_detect_wk);
 	flush_work(&rdev->propagate_cac_done_wk);
+	cancel_work_sync(&rdev->disconnect_wk);
 
 #ifdef CONFIG_PM
 	if (rdev->wiphy.wowlan_config && rdev->ops->set_wakeup)
@@ -1222,8 +1224,6 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 		     wdev->iftype == NL80211_IFTYPE_ADHOC) && !wdev->use_4addr)
 			dev->priv_flags |= IFF_DONT_BRIDGE;
 
-		INIT_WORK(&wdev->disconnect_wk, cfg80211_autodisconnect_wk);
-
 		nl80211_notify_iface(rdev, wdev, NL80211_CMD_NEW_INTERFACE);
 		break;
 	case NETDEV_GOING_DOWN:
@@ -1312,7 +1312,6 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 #ifdef CONFIG_CFG80211_WEXT
 			kzfree(wdev->wext.keys);
 #endif
-			flush_work(&wdev->disconnect_wk);
 			cfg80211_cqm_config_free(wdev);
 		}
 		/*

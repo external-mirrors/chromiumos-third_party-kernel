@@ -116,6 +116,14 @@ static void MMapPMROpen(struct vm_area_struct *ps_vma)
 		PVR_DPF((PVR_DBG_ERROR, "%s: Could not lock down physical addresses, aborting.", __func__));
 		PMRUnrefPMR(psPMR);
 	}
+	else
+	{
+		/* MMapPMROpen() is call when a process is forked, but only if
+		 * mappings are to be inherited so increment mapping count of the
+		 * PMR to prevent its layout cannot be changed (if sparse).
+		 */
+		PMRCpuMapCountIncr(psPMR);
+	}
 }
 
 static void MMapPMRClose(struct vm_area_struct *ps_vma)
@@ -144,6 +152,8 @@ static void MMapPMRClose(struct vm_area_struct *ps_vma)
 #endif
 
 	PMRUnlockSysPhysAddresses(psPMR);
+	/* Decrement the mapping count before Unref of PMR (as Unref could destroy the PMR) */
+	PMRCpuMapCountDecr(psPMR);
 	PMRUnrefPMR(psPMR);
 }
 
@@ -345,17 +355,14 @@ OSMMapPMRGeneric(PMR *psPMR, PMR_MMAP_DATA pOSMMapData)
 	IMG_BOOL bUseMixedMap = IMG_FALSE;
 	IMG_BOOL bUseVMInsertPage = IMG_FALSE;
 
+	/* if writeable but not shared mapping is requested then fail */
+	PVR_RETURN_IF_INVALID_PARAM(((ps_vma->vm_flags & VM_WRITE) == 0) ||
+	                            ((ps_vma->vm_flags & VM_SHARED) != 0));
+
 	eError = PMRLockSysPhysAddresses(psPMR);
 	if (eError != PVRSRV_OK)
 	{
 		goto e0;
-	}
-
-	if (((ps_vma->vm_flags & VM_WRITE) != 0) &&
-		((ps_vma->vm_flags & VM_SHARED) == 0))
-	{
-		eError = PVRSRV_ERROR_INVALID_PARAMS;
-		goto e1;
 	}
 
 	sPageProt = vm_get_page_prot(ps_vma->vm_flags);
@@ -575,6 +582,11 @@ OSMMapPMRGeneric(PMR *psPMR, PMR_MMAP_DATA pOSMMapData)
 	/* record the stats */
 	MMapStatsAddOrUpdatePMR(psPMR, uiLength);
 #endif
+
+	/* Increment mapping count of the PMR so that its layout cannot be
+	 * changed (if sparse).
+	 */
+	PMRCpuMapCountIncr(psPMR);
 
 	return PVRSRV_OK;
 

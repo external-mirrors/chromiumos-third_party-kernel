@@ -566,10 +566,49 @@ static void btusb_intel_cmd_timeout(struct hci_dev *hdev)
 	gpiod_set_value_cansleep(reset_gpio, 0);
 }
 
+#define RTK_DEVCOREDUMP_CODE_MEMDUMP		0x01
+#define RTK_DEVCOREDUMP_CODE_HW_ERR		0x02
+#define RTK_DEVCOREDUMP_CODE_CMD_TIMEOUT	0x03
+
+#define RTK_SUB_EVENT_CODE_COREDUMP		0x34
+
+struct rtk_dev_coredump_hdr {
+	u8 type;
+	u8 code;
+	u8 reserved[2];
+} __packed;
+
+static inline void btusb_rtl_alloc_devcoredump(struct hci_dev *hdev,
+		struct rtk_dev_coredump_hdr *hdr, u8 *buf, u32 len)
+{
+	struct sk_buff *skb;
+
+	skb = alloc_skb(len + sizeof(*hdr), GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	skb_put_data(skb, hdr, sizeof(*hdr));
+	if (len)
+		skb_put_data(skb, buf, len);
+
+	if (!hci_devcd_init(hdev, skb->len)) {
+		hci_devcd_append(hdev, skb);
+		hci_devcd_complete(hdev);
+	} else {
+		bt_dev_err(hdev, "RTL: Failed to generate devcoredump");
+		kfree_skb(skb);
+	}
+}
+
 static void btusb_rtl_cmd_timeout(struct hci_dev *hdev)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 	struct gpio_desc *reset_gpio = data->reset_gpio;
+	struct rtk_dev_coredump_hdr hdr = {
+		.type = RTK_DEVCOREDUMP_CODE_CMD_TIMEOUT,
+	};
+
+	btusb_rtl_alloc_devcoredump(hdev, &hdr, NULL, 0);
 
 	if (!reset_gpio) {
 		bt_dev_err(hdev, "No gpio to reset Realtek device, ignoring");
@@ -591,6 +630,18 @@ static void btusb_rtl_cmd_timeout(struct hci_dev *hdev)
 	gpiod_set_value_cansleep(reset_gpio, 1);
 	msleep(200);
 	gpiod_set_value_cansleep(reset_gpio, 0);
+}
+
+static void btusb_rtl_hw_error(struct hci_dev *hdev, u8 code)
+{
+	struct rtk_dev_coredump_hdr hdr = {
+		.type = RTK_DEVCOREDUMP_CODE_HW_ERR,
+		.code = code,
+	};
+
+	bt_dev_err(hdev, "RTL: hw err, trigger devcoredump (%d)", code);
+
+	btusb_rtl_alloc_devcoredump(hdev, &hdr, NULL, 0);
 }
 
 static void btusb_qca_cmd_timeout(struct hci_dev *hdev)
@@ -1908,10 +1959,10 @@ static int btusb_setup_csr(struct hci_dev *hdev)
 		 * These controllers are really messed-up.
 		 *
 		 * 1. Their bulk RX endpoint will never report any data unless
-		 * the device was suspended at least once (yes, really).
+		 *    the device was suspended at least once (yes, really).
 		 * 2. They will not wakeup when autosuspended and receiving data
-		 * on their bulk RX endpoint from e.g. a keyboard or mouse
-		 * (IOW remote-wakeup support is broken for the bulk endpoint).
+		 *    on their bulk RX endpoint from e.g. a keyboard or mouse
+		 *    (IOW remote-wakeup support is broken for the bulk endpoint).
 		 *
 		 * To fix 1. enable runtime-suspend, force-suspend the
 		 * HCI and then wake-it up by disabling runtime-suspend.
@@ -2342,15 +2393,18 @@ static int btusb_intel_diagnostics(struct hci_dev *hdev, struct sk_buff *skb)
 	case INTEL_TLV_SYSTEM_EXCEPTION:
 	case INTEL_TLV_FATAL_EXCEPTION:
 	case INTEL_TLV_DEBUG_EXCEPTION:
+	case INTEL_TLV_TEST_EXCEPTION:
 		/* Generate devcoredump from exception */
-		if (!hci_devcoredump_init(hdev, skb->len)) {
-			hci_devcoredump_append(hdev, skb);
-			hci_devcoredump_complete(hdev);
+		if (!hci_devcd_init(hdev, skb->len)) {
+			hci_devcd_append(hdev, skb);
+			hci_devcd_complete(hdev);
 		} else {
 			bt_dev_err(hdev, "Failed to generate devcoredump");
 			kfree_skb(skb);
 		}
 		return 0;
+	default:
+		bt_dev_err(hdev, "Invalid exception type %02X", tlv->val[0]);
 	}
 
 recv_frame:
@@ -2841,6 +2895,45 @@ static int btusb_shutdown_intel(struct hci_dev *hdev)
 	kfree_skb(skb);
 
 	return 0;
+}
+
+static int btusb_shutdown_intel_new(struct hci_dev *hdev)
+{
+	struct sk_buff *skb;
+
+	/* Send HCI Reset to the controller to stop any BT activity which
+	 * were triggered. This will help to save power and maintain the
+	 * sync b/w Host and controller
+	 */
+	skb = __hci_cmd_sync(hdev, HCI_OP_RESET, 0, NULL, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "HCI reset during shutdown failed");
+		return PTR_ERR(skb);
+	}
+	kfree_skb(skb);
+
+	return 0;
+}
+
+static int btusb_recv_event_realtek(struct btusb_data *data, struct sk_buff *skb)
+{
+	struct hci_dev *hdev = data->hdev;
+
+	if (skb->data[0] == HCI_VENDOR_PKT && skb->data[2] == RTK_SUB_EVENT_CODE_COREDUMP) {
+		struct rtk_dev_coredump_hdr hdr = {
+			.code = RTK_DEVCOREDUMP_CODE_MEMDUMP,
+		};
+
+		bt_dev_dbg(hdev, "RTL: received coredump vendor evt, len %u",
+			skb->len);
+
+		btusb_rtl_alloc_devcoredump(hdev, &hdr, skb->data, skb->len);
+		kfree_skb(skb);
+
+		return 0;
+	}
+
+	return hci_recv_frame(hdev, skb);
 }
 
 #ifdef CONFIG_PM
@@ -3371,6 +3464,13 @@ static bool btusb_wakeup(struct hci_dev *hdev)
 	return device_may_wakeup(&data->udev->dev);
 }
 
+static void btusb_do_wakeup(struct hci_dev *hdev)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+
+	pm_wakeup_event(&data->udev->dev, 0);
+}
+
 static int btusb_recv_evt(struct btusb_data *data, struct sk_buff *skb)
 {
 	if (!enable_interval)
@@ -3388,7 +3488,7 @@ static int btusb_probe(struct usb_interface *intf,
 	struct btusb_data *data;
 	struct hci_dev *hdev;
 	unsigned ifnum_base;
-	int i, err;
+	int i, err, priv_size;
 
 	BT_DBG("intf %p id %p", intf, id);
 
@@ -3478,16 +3578,23 @@ static int btusb_probe(struct usb_interface *intf,
 	init_usb_anchor(&data->diag_anchor);
 	spin_lock_init(&data->rxlock);
 
+	priv_size = 0;
+
+	data->recv_event = btusb_recv_evt;
+	data->recv_bulk = btusb_recv_bulk;
+
 	if (id->driver_info & BTUSB_INTEL_NEW) {
 		data->recv_event = btusb_recv_event_intel;
 		data->recv_bulk = btusb_recv_bulk_intel;
 		set_bit(BTUSB_BOOTLOADER, &data->flags);
-	} else {
-		data->recv_event = btusb_recv_evt;
-		data->recv_bulk = btusb_recv_bulk;
+	} else if (id->driver_info & BTUSB_REALTEK) {
+		/* Allocate extra space for Realtek device */
+		priv_size += sizeof(struct btrealtek_data);
+
+		data->recv_event = btusb_recv_event_realtek;
 	}
 
-	hdev = hci_alloc_dev();
+	hdev = hci_alloc_dev_priv(priv_size);
 	if (!hdev)
 		return -ENOMEM;
 
@@ -3518,6 +3625,7 @@ static int btusb_probe(struct usb_interface *intf,
 	hdev->send   = btusb_send_frame;
 	hdev->notify = btusb_notify;
 	hdev->wakeup = btusb_wakeup;
+	hdev->do_wakeup = btusb_do_wakeup;
 #ifdef CONFIG_DEV_COREDUMP
 	hdev->dump.enabled = btusb_coredump_enabled;
 #endif
@@ -3597,6 +3705,7 @@ static int btusb_probe(struct usb_interface *intf,
 		hdev->manufacturer = 2;
 		hdev->send = btusb_send_frame_intel;
 		hdev->setup = btusb_setup_intel_new;
+		hdev->shutdown = btusb_shutdown_intel_new;
 		hdev->hw_error = btintel_hw_error;
 		hdev->set_diag = btintel_set_diag;
 		hdev->set_bdaddr = btintel_set_bdaddr;
@@ -3646,9 +3755,11 @@ static int btusb_probe(struct usb_interface *intf,
 
 	if (IS_ENABLED(CONFIG_BT_HCIBTUSB_RTL) &&
 	    (id->driver_info & BTUSB_REALTEK)) {
+		btrtl_set_driver_name(hdev, btusb_driver.name);
 		hdev->setup = btrtl_setup_realtek;
 		hdev->shutdown = btrtl_shutdown_realtek;
 		hdev->cmd_timeout = btusb_rtl_cmd_timeout;
+		hdev->hw_error = btusb_rtl_hw_error;
 
 		/* Realtek devices lose their updated firmware over global
 		 * suspend, which happens when host doesn't send SET_FEATURE
