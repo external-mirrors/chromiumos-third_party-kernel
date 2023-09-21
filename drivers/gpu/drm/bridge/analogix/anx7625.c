@@ -2610,7 +2610,7 @@ static int anx7625_typec_mux_set(struct typec_mux_dev *mux,
 {
 	struct anx7625_port_data *data = typec_mux_get_drvdata(mux);
 	struct anx7625_data *ctx = data->ctx;
-	struct device *dev = &ctx->client->dev;
+	struct device *dev = ctx->dev;
 	bool new_dp_connected, old_dp_connected;
 
 	if (ctx->num_typec_switches == 1)
