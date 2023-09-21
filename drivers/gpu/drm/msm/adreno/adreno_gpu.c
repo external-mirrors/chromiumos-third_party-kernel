@@ -191,37 +191,38 @@ int adreno_zap_shader_load(struct msm_gpu *gpu, u32 pasid)
 	return zap_shader_load_mdt(gpu, adreno_gpu->info->zapfw, pasid);
 }
 
-void adreno_set_llc_attributes(struct iommu_domain *iommu)
+struct msm_gem_address_space *
+adreno_create_address_space(struct msm_gpu *gpu,
+			    struct platform_device *pdev)
 {
-	iommu_set_pgtable_quirks(iommu, IO_PGTABLE_QUIRK_ARM_OUTER_WBWA);
+	return adreno_iommu_create_address_space(gpu, pdev, 0);
 }
 
 struct msm_gem_address_space *
 adreno_iommu_create_address_space(struct msm_gpu *gpu,
-		struct platform_device *pdev)
+				  struct platform_device *pdev,
+				  unsigned long quirks)
 {
-	struct iommu_domain *iommu;
+	struct iommu_domain_geometry *geometry;
 	struct msm_mmu *mmu;
 	struct msm_gem_address_space *aspace;
 	u64 start, size;
 
-	iommu = iommu_domain_alloc(&platform_bus_type);
-	if (!iommu)
-		return NULL;
-
-	mmu = msm_iommu_new(&pdev->dev, iommu);
-	if (IS_ERR(mmu)) {
-		iommu_domain_free(iommu);
+	mmu = msm_iommu_new(&pdev->dev, quirks);
+	if (IS_ERR_OR_NULL(mmu))
 		return ERR_CAST(mmu);
-	}
+
+	geometry = msm_iommu_get_geometry(mmu);
+	if (IS_ERR(geometry))
+		return ERR_CAST(geometry);
 
 	/*
 	 * Use the aperture start or SZ_16M, whichever is greater. This will
 	 * ensure that we align with the allocated pagetable range while still
 	 * allowing room in the lower 32 bits for GMEM and whatnot
 	 */
-	start = max_t(u64, SZ_16M, iommu->geometry.aperture_start);
-	size = iommu->geometry.aperture_end - start + 1;
+	start = max_t(u64, SZ_16M, geometry->aperture_start);
+	size = geometry->aperture_end - start + 1;
 
 	aspace = msm_gem_address_space_create(mmu, "gpu",
 		start & GENMASK_ULL(48, 0), size);
@@ -794,38 +795,19 @@ void adreno_show(struct msm_gpu *gpu, struct msm_gpu_state *state,
 			adreno_gpu->rev.major, adreno_gpu->rev.minor,
 			adreno_gpu->rev.patchid);
 	/*
-	 * If this is state collected due to iova fault, show fault related
-	 * info
+	 * If this is state collected due to iova fault, so fault related info
 	 *
-	 * TTBR0 would not be zero in this case, so this is a good way to
-	 * distinguish
+	 * TTBR0 would not be zero, so this is a good way to distinguish
 	 */
-	if (state->fault_info.smmu_info.ttbr0) {
+	if (state->fault_info.ttbr0) {
 		const struct msm_gpu_fault_info *info = &state->fault_info;
-		const struct adreno_smmu_fault_info *smmu_info = &info->smmu_info;
 
 		drm_puts(p, "fault-info:\n");
-		drm_printf(p, "  - far: %.16llx\n", smmu_info->far);
-		drm_printf(p, "  - ttbr0: %.16llx\n", smmu_info->ttbr0);
-		drm_printf(p, "  - contextidr: %.8x\n", smmu_info->contextidr);
-		drm_printf(p, "  - fsr: %.8x\n", smmu_info->fsr);
-		drm_printf(p, "  - fsynr0: %.8x\n", smmu_info->fsynr0);
-		drm_printf(p, "  - fsynr1: %.8x\n", smmu_info->fsynr1);
-		drm_printf(p, "  - cbfrsynra: %.8x\n", smmu_info->cbfrsynra);
-		drm_printf(p, "  - iova: %.16lx\n", info->iova);
-		drm_printf(p, "  - dir: %s\n", info->flags & IOMMU_FAULT_WRITE ? "WRITE" : "READ");
-		drm_printf(p, "  - type: %s\n", info->type);
-		drm_printf(p, "  - source: %s\n", info->block);
-
-		/* Information extracted from what we think are the current
-		 * pgtables.  Hopefully the TTBR0 matches what we've extracted
-		 * from the SMMU registers in smmu_info!
-		 */
-		drm_puts(p, "pgtable-fault-info:\n");
-		drm_printf(p, "  - ttbr0: %.16llx\n", (u64)info->pgtbl_ttbr0);
-		drm_printf(p, "  - asid: %d\n", info->asid);
-		drm_printf(p, "  - ptes: %.16llx %.16llx %.16llx %.16llx\n",
-			   info->ptes[0], info->ptes[1], info->ptes[2], info->ptes[3]);
+		drm_printf(p, "  - ttbr0=%.16llx\n", info->ttbr0);
+		drm_printf(p, "  - iova=%.16lx\n", info->iova);
+		drm_printf(p, "  - dir=%s\n", info->flags & IOMMU_FAULT_WRITE ? "WRITE" : "READ");
+		drm_printf(p, "  - type=%s\n", info->type);
+		drm_printf(p, "  - source=%s\n", info->block);
 	}
 
 	drm_printf(p, "rbbm-status: 0x%08x\n", state->rbbm_status);

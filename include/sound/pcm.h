@@ -378,18 +378,18 @@ struct snd_pcm_runtime {
 	unsigned int rate_den;
 	unsigned int no_period_wakeup: 1;
 
-	/* -- SW params -- */
-	int tstamp_mode;		/* mmap timestamp is updated */
+	/* -- SW params; see struct snd_pcm_sw_params for comments -- */
+	int tstamp_mode;
   	unsigned int period_step;
 	snd_pcm_uframes_t start_threshold;
 	snd_pcm_uframes_t stop_threshold;
-	snd_pcm_uframes_t silence_threshold; /* Silence filling happens when
-						noise is nearest than this */
-	snd_pcm_uframes_t silence_size;	/* Silence filling size */
-	snd_pcm_uframes_t boundary;	/* pointers wrap point */
+	snd_pcm_uframes_t silence_threshold;
+	snd_pcm_uframes_t silence_size;
+	snd_pcm_uframes_t boundary;
 
+	/* internal data of auto-silencer */
 	snd_pcm_uframes_t silence_start; /* starting pointer to silence area */
-	snd_pcm_uframes_t silence_filled; /* size filled with silence */
+	snd_pcm_uframes_t silence_filled; /* already filled part of silence area */
 
 	union snd_pcm_sync_id sync;	/* hardware synchronization ID */
 
@@ -487,6 +487,9 @@ struct snd_pcm_substream {
 	/* misc flags */
 	unsigned int hw_opened: 1;
 	unsigned int managed_buffer_alloc:1;
+#ifdef CONFIG_SND_PCM_XRUN_DEBUG
+	unsigned int xrun_counter; /* number of times xrun happens */
+#endif /* CONFIG_SND_PCM_XRUN_DEBUG */
 };
 
 #define SUBSTREAM_BUSY(substream) ((substream)->ref_count > 0)
@@ -510,7 +513,7 @@ struct snd_pcm_str {
 #endif
 #endif
 	struct snd_kcontrol *chmap_kctl; /* channel-mapping controls */
-	struct device dev;
+	struct device *dev;
 };
 
 struct snd_pcm {

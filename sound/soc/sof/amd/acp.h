@@ -12,6 +12,7 @@
 #define __SOF_AMD_ACP_H
 
 #include "../sof-priv.h"
+#include "../sof-audio.h"
 
 #define ACP_MAX_STREAM	8
 
@@ -53,6 +54,9 @@
 #define ACP_DRAM_PAGE_COUNT			128
 
 #define ACP_DSP_TO_HOST_IRQ			0x04
+
+#define ACP_RN_PCI_ID				0x01
+#define ACP_RMB_PCI_ID				0x6F
 
 #define HOST_BRIDGE_CZN				0x1630
 #define HOST_BRIDGE_RMB				0x14B5
@@ -157,12 +161,10 @@ struct acp_dsp_stream {
 struct sof_amd_acp_desc {
 	unsigned int rev;
 	unsigned int host_bridge_id;
-	unsigned int i2s_mode;
 	u32 pgfsm_base;
 	u32 ext_intr_stat;
 	u32 dsp_intr_base;
 	u32 sram_pte_offset;
-	u32 i2s_pin_config_offset;
 	u32 hw_semaphore_offset;
 	u32 acp_clkmux_sel;
 	u32 fusion_dsp_offset;
@@ -171,6 +173,8 @@ struct sof_amd_acp_desc {
 /* Common device data struct for ACP devices */
 struct acp_dev_data {
 	struct snd_sof_dev  *dev;
+	/* DMIC device */
+	struct platform_device *dmic_dev;
 	unsigned int fw_bin_size;
 	unsigned int fw_data_bin_size;
 	u32 fw_bin_page_count;
@@ -182,19 +186,6 @@ struct acp_dev_data {
 	struct acp_dsp_stream stream_buf[ACP_MAX_STREAM];
 	struct acp_dsp_stream *dtrace_stream;
 	struct pci_dev *smn_dev;
-};
-
-enum acp_pcm_types {
-	I2S_BT = 0,
-	I2S_SP,
-	PDM_DMIC,
-	I2S_HS,
-	PCM_NONE,
-};
-
-struct acp_pcm_table {
-	u8 pcm_index;
-	char *pcm_name;
 };
 
 void memcpy_to_scratch(struct snd_sof_dev *sdev, u32 offset, unsigned int *src, size_t bytes);
@@ -224,10 +215,10 @@ int acp_dsp_block_read(struct snd_sof_dev *sdev, enum snd_sof_fw_blk_type blk_ty
 
 /* IPC callbacks */
 irqreturn_t acp_sof_ipc_irq_thread(int irq, void *context);
-int acp_sof_ipc_msg_data(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+int acp_sof_ipc_msg_data(struct snd_sof_dev *sdev, struct snd_sof_pcm_stream *sps,
 			 void *p, size_t sz);
 int acp_set_stream_data_offset(struct snd_sof_dev *sdev,
-			       struct snd_pcm_substream *substream,
+			       struct snd_sof_pcm_stream *sps,
 			       size_t posn_offset);
 int acp_sof_ipc_send_msg(struct snd_sof_dev *sdev,
 			 struct snd_sof_ipc_msg *msg);
@@ -250,7 +241,8 @@ int acp_pcm_close(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream)
 int acp_pcm_hw_params(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
 		      struct snd_pcm_hw_params *params,
 		      struct snd_sof_platform_stream_params *platform_params);
-snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream);
+snd_pcm_uframes_t acp_pcm_pointer(struct snd_sof_dev *sdev,
+				  struct snd_pcm_substream *substream);
 
 extern struct snd_sof_dsp_ops sof_acp_common_ops;
 
@@ -258,8 +250,9 @@ extern struct snd_sof_dsp_ops sof_renoir_ops;
 int sof_renoir_ops_init(struct snd_sof_dev *sdev);
 extern struct snd_sof_dsp_ops sof_rembrandt_ops;
 int sof_rembrandt_ops_init(struct snd_sof_dev *sdev);
+extern struct snd_sof_dsp_ops sof_phoenix_ops;
+int sof_phoenix_ops_init(struct snd_sof_dev *sdev);
 
-int acp_dai_probe(struct snd_soc_dai *dai);
 struct snd_soc_acpi_mach *amd_sof_machine_select(struct snd_sof_dev *sdev);
 /* Machine configuration */
 int snd_amd_acp_find_config(struct pci_dev *pci);

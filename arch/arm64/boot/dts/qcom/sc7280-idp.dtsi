@@ -483,7 +483,6 @@
 	wcd_rx: codec@0,4 {
 		compatible = "sdw20217010d00";
 		reg = <0 4>;
-		#sound-dai-cells = <1>;
 		qcom,rx-port-mapping = <1 2 3 4 5>;
 	};
 };
@@ -494,7 +493,6 @@
 	wcd_tx: codec@0,3 {
 		compatible = "sdw20217010d00";
 		reg = <0 3>;
-		#sound-dai-cells = <1>;
 		qcom,tx-port-mapping = <1 2 3 4>;
 	};
 };
@@ -640,16 +638,19 @@
 };
 
 &qspi_cs0 {
-	bias-disable;
+	bias-disable;		/* External pullup */
 };
 
 &qspi_clk {
-	bias-disable;
+	bias-pull-down;		/* No external pulls or external pulldown */
 };
 
-&qspi_data01 {
-	/* High-Z when no transfers; nice to park the lines */
-	bias-pull-up;
+&qspi_data0 {
+	bias-pull-down;		/* No external pulls or external pulldown */
+};
+
+&qspi_data1 {
+	bias-pull-down;		/* No external pulls or external pulldown */
 };
 
 &qup_uart5_tx {

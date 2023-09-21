@@ -20,9 +20,28 @@
 #include "acp.h"
 #include "acp-dsp-offset.h"
 
-#define MP1_C2PMSG_69 0x3B10A14
-#define MP1_C2PMSG_85 0x3B10A54
-#define MP1_C2PMSG_93 0x3B10A74
+#define CLK5_CLK_PLL_PWR_REQ_N0		0X0006C2C0
+#define CLK5_SPLL_FIELD_2_N0		0X0006C114
+#define CLK5_CLK_PLL_REQ_N0		0X0006C0DC
+#define CLK5_CLK_DFSBYPASS_CONTR	0X0006C2C8
+#define CLK5_CLK_DFS_CNTL_N0		0X0006C1A4
+
+#define PLL_AUTO_STOP_REQ		BIT(4)
+#define PLL_AUTO_START_REQ		BIT(0)
+#define PLL_FRANCE_EN			BIT(4)
+#define EXIT_DPF_BYPASS_0		BIT(16)
+#define EXIT_DPF_BYPASS_1		BIT(17)
+#define CLK0_DIVIDER			0X30
+
+union clk5_pll_req_no {
+       struct {
+               u32 fb_mult_int : 9;
+               u32 reserved : 3;
+               u32 pll_spine_div : 4;
+               u32 gb_mult_frac : 16;
+       } bitfields, bits;
+       u32 clk5_pll_req_no_reg;
+};
 
 static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
 {
@@ -42,18 +61,33 @@ static int smn_read(struct pci_dev *dev, u32 smn_addr, u32 *data)
 
 static void master_clock_generate(struct acp_dev_data *adata)
 {
-	int data;
-	smn_write(adata->smn_dev, MP1_C2PMSG_93,0);
-	smn_write(adata->smn_dev, MP1_C2PMSG_85, 0xC4);
-	smn_write(adata->smn_dev, MP1_C2PMSG_69, 0x4);
+	struct snd_sof_dev *sdev = adata->dev;
+	union clk5_pll_req_no clk5_pll;
+	u32 data;
 
-	while(1) {
-		smn_read(adata->smn_dev, MP1_C2PMSG_93, &data);
-		if (data == 1){
-			return;
-		}else
-			continue;
-    }
+	/* Clk5 pll register values to get mclk as 196.6MHz*/
+	clk5_pll.bits.fb_mult_int = 0x31;
+	clk5_pll.bits.pll_spine_div = 0;
+	clk5_pll.bits.gb_mult_frac = 0x26E9;
+
+	snd_sof_dsp_write(sdev, ACP_DSP_BAR, 0x105c, 0x1);
+	smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, &data);
+	smn_write(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_STOP_REQ);
+
+	smn_read(adata->smn_dev, CLK5_SPLL_FIELD_2_N0, &data);
+	if (data & PLL_FRANCE_EN)
+		smn_write(adata->smn_dev, CLK5_SPLL_FIELD_2_N0, data | PLL_FRANCE_EN);
+
+	smn_write(adata->smn_dev, CLK5_CLK_PLL_REQ_N0, clk5_pll.clk5_pll_req_no_reg);
+
+	smn_read(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, &data);
+	smn_write(adata->smn_dev, CLK5_CLK_PLL_PWR_REQ_N0, data | PLL_AUTO_START_REQ);
+
+	smn_read(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, &data);
+	smn_write(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_0);
+	smn_write(adata->smn_dev, CLK5_CLK_DFSBYPASS_CONTR, data | EXIT_DPF_BYPASS_1);
+
+	smn_write(adata->smn_dev, CLK5_CLK_DFS_CNTL_N0, CLK0_DIVIDER);
 }
 
 static void init_dma_descriptor(struct acp_dev_data *adata)
@@ -275,6 +309,7 @@ int configure_and_run_sha_dma(struct acp_dev_data *adata, void *image_addr,
 	if (ret)
 		return ret;
 
+	snd_sof_dsp_write(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER, DSP_FW_RUN_ENABLE);
 	ret = snd_sof_dsp_read_poll_timeout(sdev, ACP_DSP_BAR, ACP_SHA_DSP_FW_QUALIFIER,
 					    fw_qualifier, fw_qualifier & DSP_FW_RUN_ENABLE,
 					    ACP_REG_POLL_INTERVAL, ACP_DMA_COMPLETE_TIMEOUT_US);
@@ -371,9 +406,9 @@ static irqreturn_t acp_irq_handler(int irq, void *dev_id)
 	unsigned int val;
 
 	val = snd_sof_dsp_read(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET);
-	if (val) {
-		val |= ACP_DSP_TO_HOST_IRQ;
-		snd_sof_dsp_write(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET, val);
+	if (val & ACP_DSP_TO_HOST_IRQ) {
+		snd_sof_dsp_write(sdev, ACP_DSP_BAR, base + DSP_SW_INTR_STAT_OFFSET,
+				  ACP_DSP_TO_HOST_IRQ);
 		return IRQ_WAKE_THREAD;
 	}
 
@@ -490,33 +525,39 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	unsigned int addr;
 	int ret;
 
+	chip = get_chip_info(sdev->pdata);
+	if (!chip) {
+		dev_err(sdev->dev, "no such device supported, chip id:%x\n", pci->device);
+		return -EIO;
+	}
 	adata = devm_kzalloc(sdev->dev, sizeof(struct acp_dev_data),
 			     GFP_KERNEL);
 	if (!adata)
 		return -ENOMEM;
 
 	adata->dev = sdev;
+	adata->dmic_dev = platform_device_register_data(sdev->dev, "dmic-codec",
+							PLATFORM_DEVID_NONE, NULL, 0);
+	if (IS_ERR(adata->dmic_dev)) {
+		dev_err(sdev->dev, "failed to register platform for dmic codec\n");
+		return PTR_ERR(adata->dmic_dev);
+	}
 	addr = pci_resource_start(pci, ACP_DSP_BAR);
 	sdev->bar[ACP_DSP_BAR] = devm_ioremap(sdev->dev, addr, pci_resource_len(pci, ACP_DSP_BAR));
 	if (!sdev->bar[ACP_DSP_BAR]) {
 		dev_err(sdev->dev, "ioremap error\n");
-		return -ENXIO;
+		ret = -ENXIO;
+		goto unregister_dev;
 	}
 
 	pci_set_master(pci);
 
 	sdev->pdata->hw_pdata = adata;
-
-	chip = get_chip_info(sdev->pdata);
-	if (!chip) {
-		dev_err(sdev->dev, "no such device supported, chip id:%x\n", pci->device);
-		return -EIO;
-	}
-
 	adata->smn_dev = pci_get_device(PCI_VENDOR_ID_AMD, chip->host_bridge_id, NULL);
 	if (!adata->smn_dev) {
 		dev_err(sdev->dev, "Failed to get host bridge device\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto unregister_dev;
 	}
 
 	sdev->ipc_irq = pci->irq;
@@ -525,16 +566,12 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	if (ret < 0) {
 		dev_err(sdev->dev, "failed to register IRQ %d\n",
 			sdev->ipc_irq);
-		pci_dev_put(adata->smn_dev);
-		return ret;
+		goto free_smn_dev;
 	}
 
 	ret = acp_init(sdev);
-	if (ret < 0) {
-		free_irq(sdev->ipc_irq, sdev);
-		pci_dev_put(adata->smn_dev);
-		return ret;
-	}
+	if (ret < 0)
+		goto free_ipc_irq;
 
 	sdev->dsp_box.offset = 0;
 	sdev->dsp_box.size = BOX_SIZE_512;
@@ -550,6 +587,14 @@ int amd_sof_acp_probe(struct snd_sof_dev *sdev)
 	acp_dsp_stream_init(sdev);
 
 	return 0;
+
+free_ipc_irq:
+	free_irq(sdev->ipc_irq, sdev);
+free_smn_dev:
+	pci_dev_put(adata->smn_dev);
+unregister_dev:
+	platform_device_unregister(adata->dmic_dev);
+	return ret;
 }
 EXPORT_SYMBOL_NS(amd_sof_acp_probe, SND_SOC_SOF_AMD_COMMON);
 
@@ -562,6 +607,9 @@ int amd_sof_acp_remove(struct snd_sof_dev *sdev)
 
 	if (sdev->ipc_irq)
 		free_irq(sdev->ipc_irq, sdev);
+
+	if (adata->dmic_dev)
+		platform_device_unregister(adata->dmic_dev);
 
 	return acp_reset(sdev);
 }

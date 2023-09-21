@@ -24,15 +24,15 @@
  *	Eric Anholt <eric@anholt.net>
  */
 
-#include <acpi/video.h>
+#include <linux/dma-resv.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/dma-resv.h>
 #include <linux/slab.h>
 #include <linux/string_helpers.h>
 #include <linux/vga_switcheroo.h>
+#include <acpi/video.h>
 
 #include <drm/display/drm_dp_helper.h>
 #include <drm/drm_atomic.h>
@@ -45,28 +45,6 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_rect.h>
 
-#include "display/intel_audio.h"
-#include "display/intel_crt.h"
-#include "display/intel_ddi.h"
-#include "display/intel_display_debugfs.h"
-#include "display/intel_display_power.h"
-#include "display/intel_dp.h"
-#include "display/intel_dp_mst.h"
-#include "display/intel_dpll.h"
-#include "display/intel_dpll_mgr.h"
-#include "display/intel_drrs.h"
-#include "display/intel_dsi.h"
-#include "display/intel_dvo.h"
-#include "display/intel_fb.h"
-#include "display/intel_gmbus.h"
-#include "display/intel_hdmi.h"
-#include "display/intel_lvds.h"
-#include "display/intel_sdvo.h"
-#include "display/intel_snps_phy.h"
-#include "display/intel_tv.h"
-#include "display/intel_vdsc.h"
-#include "display/intel_vrr.h"
-
 #include "gem/i915_gem_lmem.h"
 #include "gem/i915_gem_object.h"
 
@@ -76,32 +54,49 @@
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "i915_utils.h"
+#include "i9xx_plane.h"
+#include "i9xx_wm.h"
 #include "icl_dsi.h"
 #include "intel_acpi.h"
 #include "intel_atomic.h"
 #include "intel_atomic_plane.h"
+#include "intel_audio.h"
 #include "intel_bw.h"
 #include "intel_cdclk.h"
 #include "intel_color.h"
+#include "intel_crt.h"
 #include "intel_crtc.h"
 #include "intel_crtc_state_dump.h"
+#include "intel_ddi.h"
 #include "intel_de.h"
+#include "intel_display_debugfs.h"
+#include "intel_display_power.h"
 #include "intel_display_types.h"
 #include "intel_dmc.h"
+#include "intel_dp.h"
 #include "intel_dp_link_training.h"
+#include "intel_dp_mst.h"
 #include "intel_dpio_phy.h"
+#include "intel_dpll.h"
+#include "intel_dpll_mgr.h"
 #include "intel_dpt.h"
-#include "intel_dsb.h"
+#include "intel_drrs.h"
+#include "intel_dsi.h"
+#include "intel_dvo.h"
+#include "intel_fb.h"
 #include "intel_fbc.h"
 #include "intel_fbdev.h"
 #include "intel_fdi.h"
 #include "intel_fifo_underrun.h"
 #include "intel_frontbuffer.h"
+#include "intel_gmbus.h"
 #include "intel_hdcp.h"
+#include "intel_hdmi.h"
 #include "intel_hotplug.h"
 #include "intel_hti.h"
-#include "intel_modeset_verify.h"
+#include "intel_lvds.h"
 #include "intel_modeset_setup.h"
+#include "intel_modeset_verify.h"
 #include "intel_overlay.h"
 #include "intel_panel.h"
 #include "intel_pch_display.h"
@@ -110,13 +105,20 @@
 #include "intel_pipe_crc.h"
 #include "intel_plane_initial.h"
 #include "intel_pm.h"
+#include "intel_pmdemand.h"
 #include "intel_pps.h"
 #include "intel_psr.h"
 #include "intel_quirks.h"
+#include "intel_sdvo.h"
+#include "intel_snps_phy.h"
 #include "intel_sprite.h"
 #include "intel_tc.h"
+#include "intel_tv.h"
+#include "intel_vblank.h"
+#include "intel_vdsc.h"
 #include "intel_vga.h"
-#include "i9xx_plane.h"
+#include "intel_vrr.h"
+#include "intel_wm.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 #include "skl_watermark.h"
@@ -130,101 +132,6 @@ static void intel_set_pipe_src_size(const struct intel_crtc_state *crtc_state);
 static void hsw_set_transconf(const struct intel_crtc_state *crtc_state);
 static void bdw_set_pipemisc(const struct intel_crtc_state *crtc_state);
 static void ilk_pfit_enable(const struct intel_crtc_state *crtc_state);
-
-/**
- * intel_update_watermarks - update FIFO watermark values based on current modes
- * @dev_priv: i915 device
- *
- * Calculate watermark values for the various WM regs based on current mode
- * and plane configuration.
- *
- * There are several cases to deal with here:
- *   - normal (i.e. non-self-refresh)
- *   - self-refresh (SR) mode
- *   - lines are large relative to FIFO size (buffer can hold up to 2)
- *   - lines are small relative to FIFO size (buffer can hold more than 2
- *     lines), so need to account for TLB latency
- *
- *   The normal calculation is:
- *     watermark = dotclock * bytes per pixel * latency
- *   where latency is platform & configuration dependent (we assume pessimal
- *   values here).
- *
- *   The SR calculation is:
- *     watermark = (trunc(latency/line time)+1) * surface width *
- *       bytes per pixel
- *   where
- *     line time = htotal / dotclock
- *     surface width = hdisplay for normal plane and 64 for cursor
- *   and latency is assumed to be high, as above.
- *
- * The final value programmed to the register should always be rounded up,
- * and include an extra 2 entries to account for clock crossings.
- *
- * We don't use the sprite, so we can ignore that.  And on Crestline we have
- * to set the non-SR watermarks to 8.
- */
-void intel_update_watermarks(struct drm_i915_private *dev_priv)
-{
-	if (dev_priv->display.funcs.wm->update_wm)
-		dev_priv->display.funcs.wm->update_wm(dev_priv);
-}
-
-static int intel_compute_pipe_wm(struct intel_atomic_state *state,
-				 struct intel_crtc *crtc)
-{
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
-	if (dev_priv->display.funcs.wm->compute_pipe_wm)
-		return dev_priv->display.funcs.wm->compute_pipe_wm(state, crtc);
-	return 0;
-}
-
-static int intel_compute_intermediate_wm(struct intel_atomic_state *state,
-					 struct intel_crtc *crtc)
-{
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
-	if (!dev_priv->display.funcs.wm->compute_intermediate_wm)
-		return 0;
-	if (drm_WARN_ON(&dev_priv->drm,
-			!dev_priv->display.funcs.wm->compute_pipe_wm))
-		return 0;
-	return dev_priv->display.funcs.wm->compute_intermediate_wm(state, crtc);
-}
-
-static bool intel_initial_watermarks(struct intel_atomic_state *state,
-				     struct intel_crtc *crtc)
-{
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
-	if (dev_priv->display.funcs.wm->initial_watermarks) {
-		dev_priv->display.funcs.wm->initial_watermarks(state, crtc);
-		return true;
-	}
-	return false;
-}
-
-static void intel_atomic_update_watermarks(struct intel_atomic_state *state,
-					   struct intel_crtc *crtc)
-{
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
-	if (dev_priv->display.funcs.wm->atomic_update_watermarks)
-		dev_priv->display.funcs.wm->atomic_update_watermarks(state, crtc);
-}
-
-static void intel_optimize_watermarks(struct intel_atomic_state *state,
-				      struct intel_crtc *crtc)
-{
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
-	if (dev_priv->display.funcs.wm->optimize_watermarks)
-		dev_priv->display.funcs.wm->optimize_watermarks(state, crtc);
-}
-
-static int intel_compute_global_watermarks(struct intel_atomic_state *state)
-{
-	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
-	if (dev_priv->display.funcs.wm->compute_global_watermarks)
-		return dev_priv->display.funcs.wm->compute_global_watermarks(state);
-	return 0;
-}
 
 /* returns HPLL frequency in kHz */
 int vlv_get_hpll_vco(struct drm_i915_private *dev_priv)
@@ -384,41 +291,6 @@ struct intel_crtc *intel_master_crtc(const struct intel_crtc_state *crtc_state)
 		return intel_crtc_for_pipe(i915, bigjoiner_master_pipe(crtc_state));
 	else
 		return to_intel_crtc(crtc_state->uapi.crtc);
-}
-
-static bool pipe_scanline_is_moving(struct drm_i915_private *dev_priv,
-				    enum pipe pipe)
-{
-	i915_reg_t reg = PIPEDSL(pipe);
-	u32 line1, line2;
-
-	line1 = intel_de_read(dev_priv, reg) & PIPEDSL_LINE_MASK;
-	msleep(5);
-	line2 = intel_de_read(dev_priv, reg) & PIPEDSL_LINE_MASK;
-
-	return line1 != line2;
-}
-
-static void wait_for_pipe_scanline_moving(struct intel_crtc *crtc, bool state)
-{
-	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	enum pipe pipe = crtc->pipe;
-
-	/* Wait for the display line to settle/start moving */
-	if (wait_for(pipe_scanline_is_moving(dev_priv, pipe) == state, 100))
-		drm_err(&dev_priv->drm,
-			"pipe %c scanline %s wait timed out\n",
-			pipe_name(pipe), str_on_off(state));
-}
-
-static void intel_wait_for_pipe_scanline_stopped(struct intel_crtc *crtc)
-{
-	wait_for_pipe_scanline_moving(crtc, false);
-}
-
-static void intel_wait_for_pipe_scanline_moving(struct intel_crtc *crtc)
-{
-	wait_for_pipe_scanline_moving(crtc, true);
 }
 
 static void
@@ -1089,27 +961,11 @@ intel_get_crtc_new_encoder(const struct intel_atomic_state *state,
 		num_encoders++;
 	}
 
-	drm_WARN(encoder->base.dev, num_encoders != 1,
+	drm_WARN(state->base.dev, num_encoders != 1,
 		 "%d encoders for pipe %c\n",
 		 num_encoders, pipe_name(master_crtc->pipe));
 
 	return encoder;
-}
-
-static void cpt_verify_modeset(struct drm_i915_private *dev_priv,
-			       enum pipe pipe)
-{
-	i915_reg_t dslreg = PIPEDSL(pipe);
-	u32 temp;
-
-	temp = intel_de_read(dev_priv, dslreg);
-	udelay(500);
-	if (wait_for(intel_de_read(dev_priv, dslreg) != temp, 5)) {
-		if (wait_for(intel_de_read(dev_priv, dslreg) != temp, 5))
-			drm_err(&dev_priv->drm,
-				"mode set failed: pipe %c stuck\n",
-				pipe_name(pipe));
-	}
 }
 
 static void ilk_pfit_enable(const struct intel_crtc_state *crtc_state)
@@ -1261,6 +1117,9 @@ static void intel_post_plane_update(struct intel_atomic_state *state,
 	if (needs_cursorclk_wa(old_crtc_state) &&
 	    !needs_cursorclk_wa(new_crtc_state))
 		icl_wa_cursorclkgating(dev_priv, pipe, false);
+
+	if (intel_crtc_needs_color_update(new_crtc_state))
+		intel_color_post_update(new_crtc_state);
 }
 
 static void intel_crtc_enable_flip_done(struct intel_atomic_state *state,
@@ -1462,36 +1321,11 @@ static void intel_crtc_disable_planes(struct intel_atomic_state *state,
 	intel_frontbuffer_flip(dev_priv, fb_bits);
 }
 
-/*
- * intel_connector_primary_encoder - get the primary encoder for a connector
- * @connector: connector for which to return the encoder
- *
- * Returns the primary encoder for a connector. There is a 1:1 mapping from
- * all connectors to their encoder, except for DP-MST connectors which have
- * both a virtual and a primary encoder. These DP-MST primary encoders can be
- * pointed to by as many DP-MST connectors as there are pipes.
- */
-static struct intel_encoder *
-intel_connector_primary_encoder(struct intel_connector *connector)
-{
-	struct intel_encoder *encoder;
-
-	if (connector->mst_port)
-		return &dp_to_dig_port(connector->mst_port)->base;
-
-	encoder = intel_attached_encoder(connector);
-	drm_WARN_ON(connector->base.dev, !encoder);
-
-	return encoder;
-}
-
 static void intel_encoders_update_prepare(struct intel_atomic_state *state)
 {
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
 	struct intel_crtc_state *new_crtc_state, *old_crtc_state;
 	struct intel_crtc *crtc;
-	struct drm_connector_state *new_conn_state;
-	struct drm_connector *connector;
 	int i;
 
 	/*
@@ -1506,57 +1340,6 @@ static void intel_encoders_update_prepare(struct intel_atomic_state *state)
 			new_crtc_state->shared_dpll = old_crtc_state->shared_dpll;
 			new_crtc_state->dpll_hw_state = old_crtc_state->dpll_hw_state;
 		}
-	}
-
-	if (!state->modeset)
-		return;
-
-	for_each_new_connector_in_state(&state->base, connector, new_conn_state,
-					i) {
-		struct intel_connector *intel_connector;
-		struct intel_encoder *encoder;
-		struct intel_crtc *crtc;
-
-		if (!intel_connector_needs_modeset(state, connector))
-			continue;
-
-		intel_connector = to_intel_connector(connector);
-		encoder = intel_connector_primary_encoder(intel_connector);
-		if (!encoder->update_prepare)
-			continue;
-
-		crtc = new_conn_state->crtc ?
-			to_intel_crtc(new_conn_state->crtc) : NULL;
-		encoder->update_prepare(state, encoder, crtc);
-	}
-}
-
-static void intel_encoders_update_complete(struct intel_atomic_state *state)
-{
-	struct drm_connector_state *new_conn_state;
-	struct drm_connector *connector;
-	int i;
-
-	if (!state->modeset)
-		return;
-
-	for_each_new_connector_in_state(&state->base, connector, new_conn_state,
-					i) {
-		struct intel_connector *intel_connector;
-		struct intel_encoder *encoder;
-		struct intel_crtc *crtc;
-
-		if (!intel_connector_needs_modeset(state, connector))
-			continue;
-
-		intel_connector = to_intel_connector(connector);
-		encoder = intel_connector_primary_encoder(intel_connector);
-		if (!encoder->update_complete)
-			continue;
-
-		crtc = new_conn_state->crtc ?
-			to_intel_crtc(new_conn_state->crtc) : NULL;
-		encoder->update_complete(state, encoder, crtc);
 	}
 }
 
@@ -1806,7 +1589,7 @@ static void ilk_crtc_enable(struct intel_atomic_state *state,
 	intel_encoders_enable(state, crtc);
 
 	if (HAS_PCH_CPT(dev_priv))
-		cpt_verify_modeset(dev_priv, pipe);
+		intel_wait_for_pipe_scanline_moving(crtc);
 
 	/*
 	 * Must wait for vblank to avoid spurious PCH FIFO underruns.
@@ -2049,6 +1832,8 @@ static void ilk_crtc_disable(struct intel_atomic_state *state,
 
 	intel_set_cpu_fifo_underrun_reporting(dev_priv, pipe, true);
 	intel_set_pch_fifo_underrun_reporting(dev_priv, pipe, true);
+
+	intel_disable_shared_dpll(old_crtc_state);
 }
 
 static void hsw_crtc_disable(struct intel_atomic_state *state,
@@ -2067,7 +1852,19 @@ static void hsw_crtc_disable(struct intel_atomic_state *state,
 		intel_encoders_post_disable(state, crtc);
 	}
 
-	intel_dmc_disable_pipe(i915, crtc->pipe);
+	intel_disable_shared_dpll(old_crtc_state);
+
+	if (!intel_crtc_is_bigjoiner_slave(old_crtc_state)) {
+		struct intel_crtc *slave_crtc;
+
+		intel_encoders_post_pll_disable(state, crtc);
+
+		intel_dmc_disable_pipe(i915, crtc->pipe);
+
+		for_each_intel_crtc_in_pipe_mask(&i915->drm, slave_crtc,
+						 intel_crtc_bigjoiner_slave_pipes(old_crtc_state))
+			intel_dmc_disable_pipe(i915, slave_crtc->pipe);
+	}
 }
 
 static void i9xx_pfit_enable(const struct intel_crtc_state *crtc_state)
@@ -2121,7 +1918,7 @@ bool intel_phy_is_tc(struct drm_i915_private *dev_priv, enum phy phy)
 	if (IS_DG2(dev_priv))
 		/* DG2's "TC1" output uses a SNPS PHY */
 		return false;
-	else if (IS_ALDERLAKE_P(dev_priv))
+	else if (IS_ALDERLAKE_P(dev_priv) || IS_METEORLAKE(dev_priv))
 		return phy >= PHY_F && phy <= PHY_I;
 	else if (IS_TIGERLAKE(dev_priv))
 		return phy >= PHY_D && phy <= PHY_I;
@@ -3298,7 +3095,7 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 	if (DISPLAY_VER(dev_priv) >= 4) {
 		/* No way to read it out on pipes B and C */
 		if (IS_CHERRYVIEW(dev_priv) && crtc->pipe != PIPE_A)
-			tmp = dev_priv->chv_dpll_md[crtc->pipe];
+			tmp = dev_priv->display.state.chv_dpll_md[crtc->pipe];
 		else
 			tmp = intel_de_read(dev_priv, DPLL_MD(crtc->pipe));
 		pipe_config->pixel_multiplier =
@@ -5144,7 +4941,6 @@ copy_bigjoiner_crtc_state_modeset(struct intel_atomic_state *state,
 	saved_state->uapi = slave_crtc_state->uapi;
 	saved_state->scaler_state = slave_crtc_state->scaler_state;
 	saved_state->shared_dpll = slave_crtc_state->shared_dpll;
-	saved_state->dpll_hw_state = slave_crtc_state->dpll_hw_state;
 	saved_state->crc_enabled = slave_crtc_state->crc_enabled;
 
 	intel_crtc_free_hw_state(slave_crtc_state);
@@ -5197,6 +4993,7 @@ intel_crtc_prepare_cleared_state(struct intel_atomic_state *state,
 	 * only fields that are know to not cause problems are preserved. */
 
 	saved_state->uapi = crtc_state->uapi;
+	saved_state->inherited = crtc_state->inherited;
 	saved_state->scaler_state = crtc_state->scaler_state;
 	saved_state->shared_dpll = crtc_state->shared_dpll;
 	saved_state->dpll_hw_state = crtc_state->dpll_hw_state;
@@ -5435,6 +5232,12 @@ intel_compare_dp_vsc_sdp(const struct drm_dp_vsc_sdp *a,
 	return memcmp(a, b, sizeof(*a)) == 0;
 }
 
+static bool
+intel_compare_buffer(const u8 *a, const u8 *b, size_t len)
+{
+	return memcmp(a, b, len) == 0;
+}
+
 static void
 pipe_config_infoframe_mismatch(struct drm_i915_private *dev_priv,
 			       bool fastset, const char *name,
@@ -5482,6 +5285,30 @@ pipe_config_dp_vsc_sdp_mismatch(struct drm_i915_private *dev_priv,
 		drm_dp_vsc_sdp_log(KERN_ERR, dev_priv->drm.dev, a);
 		drm_err(&dev_priv->drm, "found:\n");
 		drm_dp_vsc_sdp_log(KERN_ERR, dev_priv->drm.dev, b);
+	}
+}
+
+static void
+pipe_config_buffer_mismatch(struct drm_i915_private *dev_priv,
+			    bool fastset, const char *name,
+			    const u8 *a, const u8 *b, size_t len)
+{
+	if (fastset) {
+		if (!drm_debug_enabled(DRM_UT_KMS))
+			return;
+
+		drm_dbg_kms(&dev_priv->drm,
+			    "fastset mismatch in %s buffer\n", name);
+		print_hex_dump(KERN_DEBUG, "expected: ", DUMP_PREFIX_NONE,
+			       16, 0, a, len, false);
+		print_hex_dump(KERN_DEBUG, "found: ", DUMP_PREFIX_NONE,
+			       16, 0, b, len, false);
+	} else {
+		drm_err(&dev_priv->drm, "mismatch in %s buffer\n", name);
+		print_hex_dump(KERN_ERR, "expected: ", DUMP_PREFIX_NONE,
+			       16, 0, a, len, false);
+		print_hex_dump(KERN_ERR, "found: ", DUMP_PREFIX_NONE,
+			       16, 0, b, len, false);
 	}
 }
 
@@ -5683,6 +5510,18 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	} \
 } while (0)
 
+#define PIPE_CONF_CHECK_BUFFER(name, len) do { \
+	BUILD_BUG_ON(sizeof(current_config->name) != (len)); \
+	BUILD_BUG_ON(sizeof(pipe_config->name) != (len)); \
+	if (!intel_compare_buffer(current_config->name, pipe_config->name, (len))) { \
+		pipe_config_buffer_mismatch(dev_priv, fastset, __stringify(name), \
+					    current_config->name, \
+					    pipe_config->name, \
+					    (len)); \
+		ret = false; \
+	} \
+} while (0)
+
 #define PIPE_CONF_CHECK_COLOR_LUT(lut, is_pre_csc_lut) do { \
 	if (current_config->gamma_mode == pipe_config->gamma_mode && \
 	    !intel_color_lut_equal(current_config, \
@@ -5754,6 +5593,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_BOOL(fec_enable);
 
 	PIPE_CONF_CHECK_BOOL_INCOMPLETE(has_audio);
+	PIPE_CONF_CHECK_BUFFER(eld, MAX_ELD_BYTES);
 
 	PIPE_CONF_CHECK_X(gmch_pfit.control);
 	/* pfit ratios are autocomputed by the hw on gen4+ */
@@ -5940,6 +5780,10 @@ int intel_modeset_all_pipes(struct intel_atomic_state *state,
 
 		ret = drm_atomic_add_affected_connectors(&state->base,
 							 &crtc->base);
+		if (ret)
+			return ret;
+
+		ret = intel_dp_mst_add_topology_state_for_crtc(state, crtc);
 		if (ret)
 			return ret;
 
@@ -6700,8 +6544,8 @@ static int intel_bigjoiner_add_affected_crtcs(struct intel_atomic_state *state)
  * @dev: drm device
  * @_state: state to validate
  */
-static int intel_atomic_check(struct drm_device *dev,
-			      struct drm_atomic_state *_state)
+int intel_atomic_check(struct drm_device *dev,
+		       struct drm_atomic_state *_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_atomic_state *state = to_intel_atomic_state(_state);
@@ -6875,6 +6719,10 @@ static int intel_atomic_check(struct drm_device *dev,
 			return ret;
 	}
 
+	ret = intel_pmdemand_atomic_check(state);
+	if (ret)
+		goto fail;
+
 	ret = intel_atomic_check_crtcs(state);
 	if (ret)
 		goto fail;
@@ -6934,7 +6782,7 @@ static int intel_atomic_prepare_commit(struct intel_atomic_state *state)
 
 	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
 		if (intel_crtc_needs_color_update(crtc_state))
-			intel_dsb_prepare(crtc_state);
+			intel_color_prepare_commit(crtc_state);
 	}
 
 	return 0;
@@ -7078,6 +6926,12 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	bool modeset = intel_crtc_needs_modeset(new_crtc_state);
 
+	if (old_crtc_state->inherited ||
+	    intel_crtc_needs_modeset(new_crtc_state)) {
+		if (HAS_DPT(i915))
+			intel_dpt_configure(crtc);
+	}
+
 	if (!modeset) {
 		if (new_crtc_state->preload_luts &&
 		    intel_crtc_needs_color_update(new_crtc_state))
@@ -7139,7 +6993,6 @@ static void intel_old_crtc_state_disables(struct intel_atomic_state *state,
 	dev_priv->display.funcs.display->crtc_disable(state, crtc);
 	crtc->active = false;
 	intel_fbc_disable(crtc);
-	intel_disable_shared_dpll(old_crtc_state);
 
 	if (!new_crtc_state->hw.active)
 		intel_initial_watermarks(state, crtc);
@@ -7385,24 +7238,18 @@ static void intel_atomic_commit_fence_wait(struct intel_atomic_state *intel_stat
 		    &wait_reset);
 }
 
-static void intel_cleanup_dsbs(struct intel_atomic_state *state)
-{
-	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
-	struct intel_crtc *crtc;
-	int i;
-
-	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
-					    new_crtc_state, i)
-		intel_dsb_cleanup(old_crtc_state);
-}
-
 static void intel_atomic_cleanup_work(struct work_struct *work)
 {
 	struct intel_atomic_state *state =
 		container_of(work, struct intel_atomic_state, base.commit_work);
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
+	struct intel_crtc_state *old_crtc_state;
+	struct intel_crtc *crtc;
+	int i;
 
-	intel_cleanup_dsbs(state);
+	for_each_old_intel_crtc_in_state(state, crtc, old_crtc_state, i)
+		intel_color_cleanup_commit(old_crtc_state);
+
 	drm_atomic_helper_cleanup_planes(&i915->drm, &state->base);
 	drm_atomic_helper_commit_cleanup_done(&state->base);
 	drm_atomic_state_put(&state->base);
@@ -7486,6 +7333,14 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i)
 		crtc->config = new_crtc_state;
 
+	/*
+	 * In XE_LPD+ Pmdemand combines many parameters such as voltage index,
+	 * plls, cdclk frequency, QGV point selection parameter etc. Voltage
+	 * index, cdclk/ddiclk frequencies are supposed to be configured before
+	 * the cdclk config is set.
+	 */
+	intel_pmdemand_pre_plane_update(state);
+
 	if (state->modeset) {
 		drm_atomic_helper_update_legacy_modeset_state(dev, &state->base);
 
@@ -7523,8 +7378,6 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 
 	/* Now enable the clocks, plane, pipe, and connectors that we set up. */
 	dev_priv->display.funcs.display->commit_modeset_enables(state);
-
-	intel_encoders_update_complete(state);
 
 	if (state->modeset)
 		intel_set_cdclk_post_plane_update(state);
@@ -7593,6 +7446,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		 * DSB cleanup is done in cleanup_work aligning with framebuffer
 		 * cleanup. So copy and reset the dsb structure to sync with
 		 * commit_done and later do dsb cleanup in cleanup_work.
+		 *
+		 * FIXME get rid of this funny new->old swapping
 		 */
 		old_crtc_state->dsb = fetch_and_zero(&new_crtc_state->dsb);
 	}
@@ -7605,6 +7460,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		intel_verify_planes(state);
 
 	intel_sagv_post_plane_update(state);
+	intel_pmdemand_post_plane_update(state);
 
 	drm_atomic_helper_commit_hw_done(&state->base);
 
@@ -7743,7 +7599,7 @@ static int intel_atomic_commit(struct drm_device *dev,
 		i915_sw_fence_commit(&state->commit_ready);
 
 		for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i)
-			intel_dsb_cleanup(new_crtc_state);
+			intel_color_cleanup_commit(new_crtc_state);
 
 		drm_atomic_helper_cleanup_planes(dev, &state->base);
 		intel_runtime_pm_put(&dev_priv->runtime_pm, state->wakeref);
@@ -7884,7 +7740,14 @@ static void intel_setup_outputs(struct drm_i915_private *dev_priv)
 	if (!HAS_DISPLAY(dev_priv))
 		return;
 
-	if (IS_DG2(dev_priv)) {
+	if (IS_METEORLAKE(dev_priv)) {
+		intel_ddi_init(dev_priv, PORT_A);
+		intel_ddi_init(dev_priv, PORT_B);
+		intel_ddi_init(dev_priv, PORT_TC1);
+		intel_ddi_init(dev_priv, PORT_TC2);
+		intel_ddi_init(dev_priv, PORT_TC3);
+		intel_ddi_init(dev_priv, PORT_TC4);
+	} else if (IS_DG2(dev_priv)) {
 		intel_ddi_init(dev_priv, PORT_A);
 		intel_ddi_init(dev_priv, PORT_B);
 		intel_ddi_init(dev_priv, PORT_C);
@@ -8365,124 +8228,6 @@ void intel_modeset_init_hw(struct drm_i915_private *i915)
 	cdclk_state->logical = cdclk_state->actual = i915->display.cdclk.hw;
 }
 
-static int sanitize_watermarks_add_affected(struct drm_atomic_state *state)
-{
-	struct drm_plane *plane;
-	struct intel_crtc *crtc;
-
-	for_each_intel_crtc(state->dev, crtc) {
-		struct intel_crtc_state *crtc_state;
-
-		crtc_state = intel_atomic_get_crtc_state(state, crtc);
-		if (IS_ERR(crtc_state))
-			return PTR_ERR(crtc_state);
-
-		if (crtc_state->hw.active) {
-			/*
-			 * Preserve the inherited flag to avoid
-			 * taking the full modeset path.
-			 */
-			crtc_state->inherited = true;
-		}
-	}
-
-	drm_for_each_plane(plane, state->dev) {
-		struct drm_plane_state *plane_state;
-
-		plane_state = drm_atomic_get_plane_state(state, plane);
-		if (IS_ERR(plane_state))
-			return PTR_ERR(plane_state);
-	}
-
-	return 0;
-}
-
-/*
- * Calculate what we think the watermarks should be for the state we've read
- * out of the hardware and then immediately program those watermarks so that
- * we ensure the hardware settings match our internal state.
- *
- * We can calculate what we think WM's should be by creating a duplicate of the
- * current state (which was constructed during hardware readout) and running it
- * through the atomic check code to calculate new watermark values in the
- * state object.
- */
-static void sanitize_watermarks(struct drm_i915_private *dev_priv)
-{
-	struct drm_atomic_state *state;
-	struct intel_atomic_state *intel_state;
-	struct intel_crtc *crtc;
-	struct intel_crtc_state *crtc_state;
-	struct drm_modeset_acquire_ctx ctx;
-	int ret;
-	int i;
-
-	/* Only supported on platforms that use atomic watermark design */
-	if (!dev_priv->display.funcs.wm->optimize_watermarks)
-		return;
-
-	state = drm_atomic_state_alloc(&dev_priv->drm);
-	if (drm_WARN_ON(&dev_priv->drm, !state))
-		return;
-
-	intel_state = to_intel_atomic_state(state);
-
-	drm_modeset_acquire_init(&ctx, 0);
-
-retry:
-	state->acquire_ctx = &ctx;
-
-	/*
-	 * Hardware readout is the only time we don't want to calculate
-	 * intermediate watermarks (since we don't trust the current
-	 * watermarks).
-	 */
-	if (!HAS_GMCH(dev_priv))
-		intel_state->skip_intermediate_wm = true;
-
-	ret = sanitize_watermarks_add_affected(state);
-	if (ret)
-		goto fail;
-
-	ret = intel_atomic_check(&dev_priv->drm, state);
-	if (ret)
-		goto fail;
-
-	/* Write calculated watermark values back */
-	for_each_new_intel_crtc_in_state(intel_state, crtc, crtc_state, i) {
-		crtc_state->wm.need_postvbl_update = true;
-		intel_optimize_watermarks(intel_state, crtc);
-
-		to_intel_crtc_state(crtc->base.state)->wm = crtc_state->wm;
-	}
-
-fail:
-	if (ret == -EDEADLK) {
-		drm_atomic_state_clear(state);
-		drm_modeset_backoff(&ctx);
-		goto retry;
-	}
-
-	/*
-	 * If we fail here, it means that the hardware appears to be
-	 * programmed in a way that shouldn't be possible, given our
-	 * understanding of watermark requirements.  This might mean a
-	 * mistake in the hardware readout code or a mistake in the
-	 * watermark calculations for a given platform.  Raise a WARN
-	 * so that this is noticeable.
-	 *
-	 * If this actually happens, we'll have to just leave the
-	 * BIOS-programmed watermarks untouched and hope for the best.
-	 */
-	drm_WARN(&dev_priv->drm, ret,
-		 "Could not determine valid watermarks for inherited state\n");
-
-	drm_atomic_state_put(state);
-
-	drm_modeset_drop_locks(&ctx);
-	drm_modeset_acquire_fini(&ctx);
-}
-
 static int intel_initial_commit(struct drm_device *dev)
 {
 	struct drm_atomic_state *state = NULL;
@@ -8643,12 +8388,18 @@ int intel_modeset_init_noirq(struct drm_i915_private *i915)
 		goto cleanup_bios;
 
 	/* FIXME: completely on the wrong abstraction layer */
+	ret = intel_power_domains_init(i915);
+	if (ret < 0)
+		goto cleanup_vga;
+
+	intel_pmdemand_init_early(i915);
+
 	intel_power_domains_init_hw(i915, false);
 
 	if (!HAS_DISPLAY(i915))
 		return 0;
 
-	intel_dmc_ucode_init(i915);
+	intel_dmc_init(i915);
 
 	i915->display.wq.modeset = alloc_ordered_workqueue("i915_modeset", 0);
 	i915->display.wq.flip = alloc_workqueue("i915_flip", WQ_HIGHPRI |
@@ -8672,6 +8423,10 @@ int intel_modeset_init_noirq(struct drm_i915_private *i915)
 	if (ret)
 		goto cleanup_vga_client_pw_domain_dmc;
 
+	ret = intel_pmdemand_init(i915);
+	if (ret)
+		goto cleanup_vga_client_pw_domain_dmc;
+
 	init_llist_head(&i915->display.atomic_helper.free_list);
 	INIT_WORK(&i915->display.atomic_helper.free_work,
 		  intel_atomic_helper_free_state_worker);
@@ -8683,8 +8438,9 @@ int intel_modeset_init_noirq(struct drm_i915_private *i915)
 	return 0;
 
 cleanup_vga_client_pw_domain_dmc:
-	intel_dmc_ucode_fini(i915);
+	intel_dmc_fini(i915);
 	intel_power_domains_driver_remove(i915);
+cleanup_vga:
 	intel_vga_unregister(i915);
 cleanup_bios:
 	intel_bios_driver_remove(i915);
@@ -8703,7 +8459,7 @@ int intel_modeset_init_nogem(struct drm_i915_private *i915)
 	if (!HAS_DISPLAY(i915))
 		return 0;
 
-	intel_init_pm(i915);
+	intel_wm_init(i915);
 
 	intel_panel_sanitize_ssc(i915);
 
@@ -8759,7 +8515,7 @@ int intel_modeset_init_nogem(struct drm_i915_private *i915)
 	 * since the watermark calculation done here will use pstate->fb.
 	 */
 	if (!HAS_GMCH(i915))
-		sanitize_watermarks(i915);
+		ilk_wm_sanitize(i915);
 
 	return 0;
 }
@@ -9009,7 +8765,7 @@ void intel_modeset_driver_remove_noirq(struct drm_i915_private *i915)
 /* part #3: call after gem init */
 void intel_modeset_driver_remove_nogem(struct drm_i915_private *i915)
 {
-	intel_dmc_ucode_fini(i915);
+	intel_dmc_fini(i915);
 
 	intel_power_domains_driver_remove(i915);
 

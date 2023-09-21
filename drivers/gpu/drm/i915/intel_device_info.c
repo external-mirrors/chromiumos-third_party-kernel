@@ -29,6 +29,7 @@
 
 #include "display/intel_cdclk.h"
 #include "display/intel_de.h"
+#include "display/intel_display.h"
 #include "gt/intel_gt_regs.h"
 #include "i915_drv.h"
 #include "i915_reg.h"
@@ -464,8 +465,6 @@ void intel_device_info_runtime_init(struct drm_i915_private *dev_priv)
 			drm_info(&dev_priv->drm,
 				 "Display fused off, disabling\n");
 			runtime->pipe_mask = 0;
-			runtime->cpu_transcoder_mask = 0;
-			runtime->fbc_mask = 0;
 		} else if (fuse_strap & IVB_PIPE_C_DISABLE) {
 			drm_info(&dev_priv->drm, "PipeC fused off\n");
 			runtime->pipe_mask &= ~BIT(PIPE_C);

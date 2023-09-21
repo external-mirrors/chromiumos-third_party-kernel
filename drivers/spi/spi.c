@@ -360,6 +360,18 @@ const struct spi_device_id *spi_get_device_id(const struct spi_device *sdev)
 }
 EXPORT_SYMBOL_GPL(spi_get_device_id);
 
+const void *spi_get_device_match_data(const struct spi_device *sdev)
+{
+	const void *match;
+
+	match = device_get_match_data(&sdev->dev);
+	if (match)
+		return match;
+
+	return (const void *)spi_get_device_id(sdev)->driver_data;
+}
+EXPORT_SYMBOL_GPL(spi_get_device_match_data);
+
 static int spi_match_device(struct device *dev, struct device_driver *drv)
 {
 	const struct spi_device	*spi = to_spi_device(dev);
@@ -3022,15 +3034,14 @@ static int spi_controller_check_ops(struct spi_controller *ctlr)
 	 * The controller may implement only the high-level SPI-memory like
 	 * operations if it does not support regular SPI transfers, and this is
 	 * valid use case.
-	 * If ->mem_ops is NULL, we request that at least one of the
-	 * ->transfer_xxx() method be implemented.
+	 * If ->mem_ops or ->mem_ops->exec_op is NULL, we request that at least
+	 * one of the ->transfer_xxx() method be implemented.
 	 */
-	if (ctlr->mem_ops) {
-		if (!ctlr->mem_ops->exec_op)
-			return -EINVAL;
-	} else if (!ctlr->transfer && !ctlr->transfer_one &&
+	if (!ctlr->mem_ops || !ctlr->mem_ops->exec_op) {
+		if (!ctlr->transfer && !ctlr->transfer_one &&
 		   !ctlr->transfer_one_message) {
-		return -EINVAL;
+			return -EINVAL;
+		}
 	}
 
 	return 0;
@@ -4370,6 +4381,11 @@ static int of_spi_notify(struct notifier_block *nb, unsigned long action,
 			return NOTIFY_OK;
 		}
 
+		/*
+		 * Clear the flag before adding the device so that fw_devlink
+		 * doesn't skip adding consumers to this device.
+		 */
+		rd->dn->fwnode.flags &= ~FWNODE_FLAG_NOT_DEVICE;
 		spi = of_register_spi_device(ctlr, rd->dn);
 		put_device(&ctlr->dev);
 

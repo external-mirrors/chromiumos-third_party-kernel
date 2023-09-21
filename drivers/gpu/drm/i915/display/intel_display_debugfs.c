@@ -11,6 +11,7 @@
 #include "i915_debugfs.h"
 #include "i915_irq.h"
 #include "i915_reg.h"
+#include "i9xx_wm.h"
 #include "intel_de.h"
 #include "intel_display_debugfs.h"
 #include "intel_display_power.h"
@@ -26,7 +27,6 @@
 #include "intel_hdmi.h"
 #include "intel_hotplug.h"
 #include "intel_panel.h"
-#include "intel_pm.h"
 #include "intel_psr.h"
 #include "intel_sprite.h"
 #include "skl_watermark.h"
@@ -832,10 +832,10 @@ static const struct file_operations crtc_updates_fops = {
 	.write = crtc_updates_write
 };
 
-static void crtc_updates_add(struct drm_crtc *crtc)
+static void crtc_updates_add(struct intel_crtc *crtc)
 {
-	debugfs_create_file("i915_update_info", 0644, crtc->debugfs_entry,
-			    to_intel_crtc(crtc), &crtc_updates_fops);
+	debugfs_create_file("i915_update_info", 0644, crtc->base.debugfs_entry,
+			    crtc, &crtc_updates_fops);
 }
 
 #else
@@ -845,7 +845,7 @@ static void crtc_updates_info(struct seq_file *m,
 {
 }
 
-static void crtc_updates_add(struct drm_crtc *crtc)
+static void crtc_updates_add(struct intel_crtc *crtc)
 {
 }
 #endif
@@ -1286,20 +1286,10 @@ static void wm_latency_show(struct seq_file *m, const u16 wm[8])
 {
 	struct drm_i915_private *dev_priv = m->private;
 	int level;
-	int num_levels;
-
-	if (IS_CHERRYVIEW(dev_priv))
-		num_levels = 3;
-	else if (IS_VALLEYVIEW(dev_priv))
-		num_levels = 1;
-	else if (IS_G4X(dev_priv))
-		num_levels = 3;
-	else
-		num_levels = ilk_wm_max_level(dev_priv) + 1;
 
 	drm_modeset_lock_all(&dev_priv->drm);
 
-	for (level = 0; level < num_levels; level++) {
+	for (level = 0; level < dev_priv->display.wm.num_levels; level++) {
 		unsigned int latency = wm[level];
 
 		/*
@@ -1402,19 +1392,9 @@ static ssize_t wm_latency_write(struct file *file, const char __user *ubuf,
 	struct seq_file *m = file->private_data;
 	struct drm_i915_private *dev_priv = m->private;
 	u16 new[8] = { 0 };
-	int num_levels;
 	int level;
 	int ret;
 	char tmp[32];
-
-	if (IS_CHERRYVIEW(dev_priv))
-		num_levels = 3;
-	else if (IS_VALLEYVIEW(dev_priv))
-		num_levels = 1;
-	else if (IS_G4X(dev_priv))
-		num_levels = 3;
-	else
-		num_levels = ilk_wm_max_level(dev_priv) + 1;
 
 	if (len >= sizeof(tmp))
 		return -EINVAL;
@@ -1427,12 +1407,12 @@ static ssize_t wm_latency_write(struct file *file, const char __user *ubuf,
 	ret = sscanf(tmp, "%hu %hu %hu %hu %hu %hu %hu %hu",
 		     &new[0], &new[1], &new[2], &new[3],
 		     &new[4], &new[5], &new[6], &new[7]);
-	if (ret != num_levels)
+	if (ret != dev_priv->display.wm.num_levels)
 		return -EINVAL;
 
 	drm_modeset_lock_all(&dev_priv->drm);
 
-	for (level = 0; level < num_levels; level++)
+	for (level = 0; level < dev_priv->display.wm.num_levels; level++)
 		wm[level] = new[level];
 
 	drm_modeset_unlock_all(&dev_priv->drm);
@@ -1901,7 +1881,7 @@ static const struct file_operations i915_dsc_bpc_fops = {
  */
 static int i915_current_bpc_show(struct seq_file *m, void *data)
 {
-	struct intel_crtc *crtc = to_intel_crtc(m->private);
+	struct intel_crtc *crtc = m->private;
 	struct intel_crtc_state *crtc_state;
 	int ret;
 
@@ -1917,6 +1897,17 @@ static int i915_current_bpc_show(struct seq_file *m, void *data)
 	return ret;
 }
 DEFINE_SHOW_ATTRIBUTE(i915_current_bpc);
+
+/* Pipe may differ from crtc index if pipes are fused off */
+static int intel_crtc_pipe_show(struct seq_file *m, void *unused)
+{
+	struct intel_crtc *crtc = m->private;
+
+	seq_printf(m, "%c\n", pipe_name(crtc->pipe));
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(intel_crtc_pipe);
 
 /**
  * intel_connector_debugfs_add - add i915 specific connector debugfs files
@@ -1983,15 +1974,19 @@ void intel_connector_debugfs_add(struct intel_connector *intel_connector)
  *
  * Failure to add debugfs entries should generally be ignored.
  */
-void intel_crtc_debugfs_add(struct drm_crtc *crtc)
+void intel_crtc_debugfs_add(struct intel_crtc *crtc)
 {
-	if (!crtc->debugfs_entry)
+	struct dentry *root = crtc->base.debugfs_entry;
+
+	if (!root)
 		return;
 
 	crtc_updates_add(crtc);
-	intel_drrs_crtc_debugfs_add(to_intel_crtc(crtc));
-	intel_fbc_crtc_debugfs_add(to_intel_crtc(crtc));
+	intel_drrs_crtc_debugfs_add(crtc);
+	intel_fbc_crtc_debugfs_add(crtc);
 
-	debugfs_create_file("i915_current_bpc", 0444, crtc->debugfs_entry, crtc,
+	debugfs_create_file("i915_current_bpc", 0444, root, crtc,
 			    &i915_current_bpc_fops);
+	debugfs_create_file("i915_pipe", 0444, root, crtc,
+			    &intel_crtc_pipe_fops);
 }

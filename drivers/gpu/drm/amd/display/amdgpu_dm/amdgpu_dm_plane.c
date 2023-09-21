@@ -67,7 +67,16 @@ static const uint32_t overlay_formats[] = {
 	DRM_FORMAT_RGBA8888,
 	DRM_FORMAT_XBGR8888,
 	DRM_FORMAT_ABGR8888,
-	DRM_FORMAT_RGB565
+	DRM_FORMAT_RGB565,
+	DRM_FORMAT_NV21,
+	DRM_FORMAT_NV12,
+	DRM_FORMAT_P010
+};
+
+static const uint32_t video_formats[] = {
+	DRM_FORMAT_NV21,
+	DRM_FORMAT_NV12,
+	DRM_FORMAT_P010
 };
 
 static const u32 cursor_formats[] = {
@@ -1269,6 +1278,13 @@ void handle_cursor_update(struct drm_plane *plane,
 	attributes.rotation_angle    = 0;
 	attributes.attribute_flags.value = 0;
 
+	/* Enable cursor degamma ROM on DCN3+ for implicit sRGB degamma in DRM
+	 * legacy gamma setup.
+	 */
+	if (crtc_state->cm_is_degamma_srgb &&
+	    adev->dm.dc->caps.color.dpp.gamma_corr)
+		attributes.attribute_flags.bits.ENABLE_CURSOR_DEGAMMA = 1;
+
 	attributes.pitch = afb->base.pitches[0] / afb->base.format->cpp[0];
 
 	if (crtc_state->stream) {
@@ -1600,6 +1616,10 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 		drm_plane_create_rotation_property(plane, DRM_MODE_ROTATE_0,
 						   supported_rotations);
 
+	if (dm->adev->ip_versions[DCE_HWIP][0] > IP_VERSION(3, 0, 1) &&
+	    plane->type != DRM_PLANE_TYPE_CURSOR)
+		drm_plane_enable_fb_damage_clips(plane);
+
 	drm_plane_helper_add(plane, &dm_plane_helper_funcs);
 
 #ifdef CONFIG_DRM_AMD_DC_HDR
@@ -1610,5 +1630,16 @@ int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
 		plane->funcs->reset(plane);
 
 	return 0;
+}
+
+bool is_video_format(uint32_t format)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(video_formats); i++)
+		if (format == video_formats[i])
+			return true;
+
+	return false;
 }
 

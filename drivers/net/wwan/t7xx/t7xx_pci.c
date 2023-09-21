@@ -38,13 +38,16 @@
 #include "t7xx_mhccif.h"
 #include "t7xx_modem_ops.h"
 #include "t7xx_pci.h"
+#include "t7xx_pci_rescan.h"
 #include "t7xx_pcie_mac.h"
+#include "t7xx_port_devlink.h"
 #include "t7xx_reg.h"
 #include "t7xx_state_monitor.h"
 
 #define T7XX_PCI_IREG_BASE		0
 #define T7XX_PCI_EREG_BASE		2
 
+#define T7XX_INIT_TIMEOUT		20
 #define PM_SLEEP_DIS_TIMEOUT_MS		20
 #define PM_ACK_TIMEOUT_MS		1500
 #define PM_AUTOSUSPEND_MS		20000
@@ -96,6 +99,7 @@ static int t7xx_pci_pm_init(struct t7xx_pci_dev *t7xx_dev)
 	spin_lock_init(&t7xx_dev->md_pm_lock);
 	init_completion(&t7xx_dev->sleep_lock_acquire);
 	init_completion(&t7xx_dev->pm_sr_ack);
+	init_completion(&t7xx_dev->init_done);
 	atomic_set(&t7xx_dev->md_pm_state, MTK_PM_INIT);
 
 	device_init_wakeup(&pdev->dev, true);
@@ -106,7 +110,7 @@ static int t7xx_pci_pm_init(struct t7xx_pci_dev *t7xx_dev)
 	pm_runtime_set_autosuspend_delay(&pdev->dev, PM_AUTOSUSPEND_MS);
 	pm_runtime_use_autosuspend(&pdev->dev);
 
-	return t7xx_wait_pm_config(t7xx_dev);
+	return 0;
 }
 
 void t7xx_pci_pm_init_late(struct t7xx_pci_dev *t7xx_dev)
@@ -124,6 +128,7 @@ void t7xx_pci_pm_init_late(struct t7xx_pci_dev *t7xx_dev)
 	pm_runtime_mark_last_busy(&t7xx_dev->pdev->dev);
 	pm_runtime_allow(&t7xx_dev->pdev->dev);
 	pm_runtime_put_noidle(&t7xx_dev->pdev->dev);
+	complete_all(&t7xx_dev->init_done);
 }
 
 static int t7xx_pci_pm_reinit(struct t7xx_pci_dev *t7xx_dev)
@@ -529,6 +534,20 @@ static void t7xx_pci_shutdown(struct pci_dev *pdev)
 	__t7xx_pci_pm_suspend(pdev);
 }
 
+static int t7xx_pci_pm_prepare(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct t7xx_pci_dev *t7xx_dev;
+
+	t7xx_dev = pci_get_drvdata(pdev);
+	if (!wait_for_completion_timeout(&t7xx_dev->init_done, T7XX_INIT_TIMEOUT * HZ)) {
+		dev_warn(dev, "Not ready for system sleep.\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
 static int t7xx_pci_pm_suspend(struct device *dev)
 {
 	return __t7xx_pci_pm_suspend(to_pci_dev(dev));
@@ -555,6 +574,7 @@ static int t7xx_pci_pm_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops t7xx_pci_pm_ops = {
+	.prepare = t7xx_pci_pm_prepare,
 	.suspend = t7xx_pci_pm_suspend,
 	.resume = t7xx_pci_pm_resume,
 	.resume_noirq = t7xx_pci_pm_resume_noirq,
@@ -705,22 +725,31 @@ static int t7xx_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	t7xx_pci_infracfg_ao_calc(t7xx_dev);
 	t7xx_mhccif_init(t7xx_dev);
 
-	ret = t7xx_md_init(t7xx_dev);
+	ret = t7xx_devlink_register(t7xx_dev);
 	if (ret)
 		return ret;
+
+	ret = t7xx_md_init(t7xx_dev);
+	if (ret)
+		goto err_devlink_unregister;
 
 	t7xx_pcie_mac_interrupts_dis(t7xx_dev);
 
 	ret = t7xx_interrupt_init(t7xx_dev);
 	if (ret) {
 		t7xx_md_exit(t7xx_dev);
-		return ret;
+		goto err_devlink_unregister;
 	}
 
+	t7xx_rescan_done();
 	t7xx_pcie_mac_set_int(t7xx_dev, MHCCIF_INT);
 	t7xx_pcie_mac_interrupts_en(t7xx_dev);
 
 	return 0;
+
+err_devlink_unregister:
+	t7xx_devlink_unregister(t7xx_dev);
+	return ret;
 }
 
 static void t7xx_pci_remove(struct pci_dev *pdev)
@@ -730,6 +759,7 @@ static void t7xx_pci_remove(struct pci_dev *pdev)
 
 	t7xx_dev = pci_get_drvdata(pdev);
 	t7xx_md_exit(t7xx_dev);
+	t7xx_devlink_unregister(t7xx_dev);
 
 	for (i = 0; i < EXT_INT_NUM; i++) {
 		if (!t7xx_dev->intr_handler[i])
@@ -756,7 +786,59 @@ static struct pci_driver t7xx_pci_driver = {
 	.shutdown = t7xx_pci_shutdown,
 };
 
-module_pci_driver(t7xx_pci_driver);
+static int __init t7xx_pci_init(void)
+{
+	int ret;
+
+	t7xx_pci_dev_rescan();
+	ret = t7xx_rescan_init();
+	if (ret) {
+		pr_err("Failed to init t7xx rescan work\n");
+		return ret;
+	}
+
+	return pci_register_driver(&t7xx_pci_driver);
+}
+module_init(t7xx_pci_init);
+
+static int t7xx_always_match(struct device *dev, const void *data)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	const struct pci_device_id *id = data;
+
+	if (pci_match_id(id, pdev))
+		return 1;
+
+	return 0;
+}
+
+static void __exit t7xx_pci_cleanup(void)
+{
+	int remove_flag = 0;
+	struct device *dev;
+
+	dev = driver_find_device(&t7xx_pci_driver.driver, NULL, &t7xx_pci_table[0],
+				 t7xx_always_match);
+	if (dev) {
+		pr_debug("unregister t7xx PCIe driver while device is still exist.\n");
+		put_device(dev);
+		remove_flag = 1;
+	} else {
+		pr_debug("no t7xx PCIe driver found.\n");
+	}
+
+	pci_lock_rescan_remove();
+	pci_unregister_driver(&t7xx_pci_driver);
+	pci_unlock_rescan_remove();
+
+	t7xx_rescan_deinit();
+	if (remove_flag) {
+		pr_debug("remove t7xx PCI device\n");
+		pci_stop_and_remove_bus_device_locked(to_pci_dev(dev));
+	}
+}
+
+module_exit(t7xx_pci_cleanup);
 
 MODULE_AUTHOR("MediaTek Inc");
 MODULE_DESCRIPTION("MediaTek PCIe 5G WWAN modem T7xx driver");

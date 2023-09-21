@@ -20,6 +20,7 @@
 
 #define ACP3X_DEV			3
 #define ACP6X_DEV			6
+#define ACP63X_DEV			63
 
 #define DMIC_INSTANCE			0x00
 #define I2S_SP_INSTANCE			0x01
@@ -152,9 +153,9 @@ union acp_i2stdm_mstrclkgen {
 	struct {
 		u32 i2stdm_master_mode : 1;
 		u32 i2stdm_format_mode : 1;
-		u32 i2stdm_lrclk_div_val : 9;
+		u32 i2stdm_lrclk_div_val : 11;
 		u32 i2stdm_bclk_div_val : 11;
-		u32:10;
+		u32:8;
 	} bitfields, bits;
 	u32  u32_all;
 };
@@ -173,7 +174,7 @@ int snd_amd_acp_find_config(struct pci_dev *pci);
 
 static inline u64 acp_get_byte_count(struct acp_dev_data *adata, int dai_id, int direction)
 {
-	u64 byte_count, low = 0, high = 0;
+	u64 byte_count = 0, low = 0, high = 0;
 
 	if (direction == SNDRV_PCM_STREAM_PLAYBACK) {
 		switch (dai_id) {
@@ -191,7 +192,7 @@ static inline u64 acp_get_byte_count(struct acp_dev_data *adata, int dai_id, int
 			break;
 		default:
 			dev_err(adata->dev, "Invalid dai id %x\n", dai_id);
-			return -EINVAL;
+			goto POINTER_RETURN_BYTES;
 		}
 	} else {
 		switch (dai_id) {
@@ -213,12 +214,13 @@ static inline u64 acp_get_byte_count(struct acp_dev_data *adata, int dai_id, int
 			break;
 		default:
 			dev_err(adata->dev, "Invalid dai id %x\n", dai_id);
-			return -EINVAL;
+			goto POINTER_RETURN_BYTES;
 		}
 	}
 	/* Get 64 bit value from two 32 bit registers */
 	byte_count = (high << 32) | low;
 
+POINTER_RETURN_BYTES:
 	return byte_count;
 }
 

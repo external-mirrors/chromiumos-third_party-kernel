@@ -162,10 +162,8 @@ chromiumos_super_block_create(struct super_block *sb)
 	sbm->sb = sb;
 	sbm->fsn_group = fsnotify_alloc_group(&chromiumos_fsn_ops, 0);
 	if (IS_ERR(sbm->fsn_group)) {
-		int ret = PTR_ERR(sbm->fsn_group);
-
 		kfree(sbm);
-		return ERR_PTR(ret);
+		return ERR_CAST(sbm->fsn_group);
 	}
 	sbm->fsn_group->private = sbm;
 	hlist_add_head_rcu(&sbm->node, hlist);
@@ -220,8 +218,7 @@ chromiumos_inode_mark_create(
 		inode_mark->policies[i] = CHROMIUMOS_INODE_POLICY_INHERIT;
 
 	inode_mark->policies[type] = policy;
-	ret = fsnotify_add_mark_locked(&inode_mark->mark, &inode->i_fsnotify_marks,
-				       type, false, NULL);
+	ret = fsnotify_add_inode_mark_locked(&inode_mark->mark, inode, 0);
 	if (ret)
 		goto out;
 

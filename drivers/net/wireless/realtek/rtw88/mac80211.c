@@ -43,7 +43,11 @@ static void rtw_ops_wake_tx_queue(struct ieee80211_hw *hw,
 		list_add_tail(&rtwtxq->list, &rtwdev->txqs);
 	spin_unlock_bh(&rtwdev->txq_lock);
 
-	queue_work(rtwdev->tx_wq, &rtwdev->tx_work);
+	/* ensure to dequeue EAPOL (4/4) at the right time */
+	if (txq->ac == IEEE80211_AC_VO)
+		__rtw_tx_work(rtwdev);
+	else
+		queue_work(rtwdev->tx_wq, &rtwdev->tx_work);
 }
 
 static int rtw_ops_start(struct ieee80211_hw *hw)
@@ -85,15 +89,6 @@ static int rtw_ops_config(struct ieee80211_hw *hw, u32 changed)
 		if (ret) {
 			rtw_err(rtwdev, "failed to leave idle state\n");
 			goto out;
-		}
-	}
-
-	if (changed & IEEE80211_CONF_CHANGE_PS) {
-		if (hw->conf.flags & IEEE80211_CONF_PS) {
-			rtwdev->ps_enabled = true;
-		} else {
-			rtwdev->ps_enabled = false;
-			rtw_leave_lps(rtwdev);
 		}
 	}
 
@@ -206,6 +201,7 @@ static int rtw_ops_add_interface(struct ieee80211_hw *hw,
 	rtwvif->bcn_ctrl = bcn_ctrl;
 	config |= PORT_SET_BCN_CTRL;
 	rtw_vif_port_config(rtwdev, rtwvif, config);
+	rtw_recalc_lps(rtwdev, vif);
 
 	mutex_unlock(&rtwdev->mutex);
 
@@ -236,6 +232,7 @@ static void rtw_ops_remove_interface(struct ieee80211_hw *hw,
 	rtwvif->bcn_ctrl = 0;
 	config |= PORT_SET_BCN_CTRL;
 	rtw_vif_port_config(rtwdev, rtwvif, config);
+	rtw_recalc_lps(rtwdev, NULL);
 
 	mutex_unlock(&rtwdev->mutex);
 }
@@ -427,6 +424,9 @@ static void rtw_ops_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_ERP_SLOT)
 		rtw_conf_tx(rtwdev, rtwvif);
+
+	if (changed & BSS_CHANGED_PS)
+		rtw_recalc_lps(rtwdev, NULL);
 
 	rtw_vif_port_config(rtwdev, rtwvif, config);
 
@@ -891,7 +891,7 @@ static void rtw_ops_sta_rc_update(struct ieee80211_hw *hw,
 	struct rtw_sta_info *si = (struct rtw_sta_info *)sta->drv_priv;
 
 	if (changed & IEEE80211_RC_BW_CHANGED)
-		rtw_update_sta_info(rtwdev, si, true);
+		ieee80211_queue_work(rtwdev->hw, &si->rc_work);
 }
 
 const struct ieee80211_ops rtw_ops = {

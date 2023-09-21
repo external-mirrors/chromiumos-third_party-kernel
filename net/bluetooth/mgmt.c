@@ -861,6 +861,12 @@ static u32 get_supported_settings(struct hci_dev *hdev)
 	    hdev->set_bdaddr)
 		settings |= MGMT_SETTING_CONFIGURATION;
 
+	if (cis_central_capable(hdev))
+		settings |= MGMT_SETTING_CIS_CENTRAL;
+
+	if (cis_peripheral_capable(hdev))
+		settings |= MGMT_SETTING_CIS_PERIPHERAL;
+
 	settings |= MGMT_SETTING_PHY_CONFIGURATION;
 
 	return settings;
@@ -933,6 +939,12 @@ static u32 get_current_settings(struct hci_dev *hdev)
 
 	if (hci_dev_test_flag(hdev, HCI_WIDEBAND_SPEECH_ENABLED))
 		settings |= MGMT_SETTING_WIDEBAND_SPEECH;
+
+	if (cis_central_capable(hdev))
+		settings |= MGMT_SETTING_CIS_CENTRAL;
+
+	if (cis_peripheral_capable(hdev))
+		settings |= MGMT_SETTING_CIS_PERIPHERAL;
 
 	return settings;
 }
@@ -1287,15 +1299,15 @@ static void restart_le_actions(struct hci_dev *hdev)
 		/* Needed for AUTO_OFF case where might not "really"
 		 * have been powered off.
 		 */
-		list_del_init(&p->action);
+		hci_pend_le_list_del_init(p);
 
 		switch (p->auto_connect) {
 		case HCI_AUTO_CONN_DIRECT:
 		case HCI_AUTO_CONN_ALWAYS:
-			list_add(&p->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(p, &hdev->pend_le_conns);
 			break;
 		case HCI_AUTO_CONN_REPORT:
-			list_add(&p->action, &hdev->pend_le_reports);
+			hci_pend_le_list_add(p, &hdev->pend_le_reports);
 			break;
 		default:
 			break;
@@ -4635,12 +4647,6 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 				       MGMT_OP_SET_EXP_FEATURE,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
-	/* Changes can only be made when controller is powered down */
-	if (hdev_is_powered(hdev))
-		return mgmt_cmd_status(sk, hdev->id,
-				       MGMT_OP_SET_EXP_FEATURE,
-				       MGMT_STATUS_REJECTED);
-
 	/* Parameters are limited to a single octet */
 	if (data_len != MGMT_SET_EXP_FEATURE_SIZE + 1)
 		return mgmt_cmd_status(sk, hdev->id,
@@ -5025,22 +5031,6 @@ static int set_exp_feature(struct sock *sk, struct hci_dev *hdev,
 			       MGMT_STATUS_NOT_SUPPORTED);
 }
 
-static u32 get_params_flags(struct hci_dev *hdev,
-			    struct hci_conn_params *params)
-{
-	u32 flags = hdev->conn_flags;
-
-	/* Devices using RPAs can only be programmed in the acceptlist if
-	 * LL Privacy has been enable otherwise they cannot mark
-	 * HCI_CONN_FLAG_REMOTE_WAKEUP.
-	 */
-	if ((flags & HCI_CONN_FLAG_REMOTE_WAKEUP) && !use_ll_privacy(hdev) &&
-	    hci_find_irk_by_addr(hdev, &params->addr, params->addr_type))
-		flags &= ~HCI_CONN_FLAG_REMOTE_WAKEUP;
-
-	return flags;
-}
-
 int mgmt_quality_report(struct hci_dev *hdev, struct sk_buff *skb,
 			u8 quality_spec)
 {
@@ -5094,10 +5084,10 @@ static int get_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 	} else {
 		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
 						le_addr_type(cp->addr.type));
+
 		if (!params)
 			goto done;
 
-		supported_flags = get_params_flags(hdev, params);
 		current_flags = params->flags;
 	}
 
@@ -5165,36 +5155,25 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 			bt_dev_warn(hdev, "No such BR/EDR device %pMR (0x%x)",
 				    &cp->addr.bdaddr, cp->addr.type);
 		}
+	} else {
+		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
+						le_addr_type(cp->addr.type));
+		if (params) {
+			WRITE_ONCE(params->flags, current_flags);
+			status = MGMT_STATUS_SUCCESS;
 
-		goto unlock;
+			/* Update passive scan if HCI_CONN_FLAG_DEVICE_PRIVACY
+			 * has been set.
+			 */
+			if (params->flags & HCI_CONN_FLAG_DEVICE_PRIVACY)
+				hci_update_passive_scan(hdev);
+		} else {
+			bt_dev_warn(hdev, "No such LE device %pMR (0x%x)",
+				    &cp->addr.bdaddr,
+				    le_addr_type(cp->addr.type));
+		}
 	}
 
-	params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
-					le_addr_type(cp->addr.type));
-	if (!params) {
-		bt_dev_warn(hdev, "No such LE device %pMR (0x%x)",
-			    &cp->addr.bdaddr, le_addr_type(cp->addr.type));
-		goto unlock;
-	}
-
-	supported_flags = get_params_flags(hdev, params);
-
-	if ((supported_flags | current_flags) != supported_flags) {
-		bt_dev_warn(hdev, "Bad flag given (0x%x) vs supported (0x%0x)",
-			    current_flags, supported_flags);
-		goto unlock;
-	}
-
-	params->flags = current_flags;
-	status = MGMT_STATUS_SUCCESS;
-
-	/* Update passive scan if HCI_CONN_FLAG_DEVICE_PRIVACY
-	 * has been set.
-	 */
-	if (params->flags & HCI_CONN_FLAG_DEVICE_PRIVACY)
-		hci_update_passive_scan(hdev);
-
-unlock:
 	hci_dev_unlock(hdev);
 
 done:
@@ -7301,7 +7280,7 @@ static void get_conn_info_complete(struct hci_dev *hdev, void *data, int err)
 
 	bt_dev_dbg(hdev, "err %d", err);
 
-	memcpy(&rp.addr, &cp->addr.bdaddr, sizeof(rp.addr));
+	memcpy(&rp.addr, &cp->addr, sizeof(rp.addr));
 
 	status = mgmt_status(err);
 	if (status == MGMT_STATUS_SUCCESS) {
@@ -7597,7 +7576,7 @@ static int hci_conn_params_set(struct hci_dev *hdev, bdaddr_t *addr,
 	if (params->auto_connect == auto_connect)
 		return 0;
 
-	list_del_init(&params->action);
+	hci_pend_le_list_del_init(params);
 
 	switch (auto_connect) {
 	case HCI_AUTO_CONN_DISABLED:
@@ -7606,18 +7585,18 @@ static int hci_conn_params_set(struct hci_dev *hdev, bdaddr_t *addr,
 		 * connect to device, keep connecting.
 		 */
 		if (params->explicit_connect)
-			list_add(&params->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
 		break;
 	case HCI_AUTO_CONN_REPORT:
 		if (params->explicit_connect)
-			list_add(&params->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
 		else
-			list_add(&params->action, &hdev->pend_le_reports);
+			hci_pend_le_list_add(params, &hdev->pend_le_reports);
 		break;
 	case HCI_AUTO_CONN_DIRECT:
 	case HCI_AUTO_CONN_ALWAYS:
 		if (!is_connected(hdev, addr, addr_type))
-			list_add(&params->action, &hdev->pend_le_conns);
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
 		break;
 	}
 
@@ -7840,9 +7819,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 			goto unlock;
 		}
 
-		list_del(&params->action);
-		list_del(&params->list);
-		kfree(params);
+		hci_conn_params_free(params);
 
 		device_removed(sk, hdev, &cp->addr.bdaddr, cp->addr.type);
 	} else {
@@ -7873,9 +7850,7 @@ static int remove_device(struct sock *sk, struct hci_dev *hdev,
 				p->auto_connect = HCI_AUTO_CONN_EXPLICIT;
 				continue;
 			}
-			list_del(&p->action);
-			list_del(&p->list);
-			kfree(p);
+			hci_conn_params_free(p);
 		}
 
 		bt_dev_dbg(hdev, "All LE connection parameters were removed");
@@ -9315,18 +9290,21 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 				total_size += sizeof(struct mgmt_bt_codec);
 			break;
 		case MGMT_SCO_CODEC_MSBC:
-			hci_dev_lock(hdev);
-			list_for_each_entry(c, &hdev->local_codecs, list) {
-				/* 0x01 - HCI Transport (Codec supported over BR/EDR SCO and eSCO)
-				 * 0x05 - mSBC Codec ID
-				 */
-				if (c->transport != 0x01 || c->id != 0x05)
-					continue;
+			if (wbs_supported) {
+				hci_dev_lock(hdev);
+				list_for_each_entry(c, &hdev->local_codecs, list) {
+					/* 0x01 - HCI Transport (Codec supported over
+					 *          BR/EDR SCO and eSCO)
+					 * 0x05 - mSBC Codec ID
+					 */
+					if (c->transport != 0x01 || c->id != 0x05)
+						continue;
 
-				total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
-				break;
+					total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
+					break;
+				}
+				hci_dev_unlock(hdev);
 			}
-			hci_dev_unlock(hdev);
 			break;
 		default:
 			bt_dev_dbg(hdev, "Unknown codec %d", cp->codecs[i]);
@@ -9360,28 +9338,31 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 			}
 			break;
 		case MGMT_SCO_CODEC_MSBC:
-			hci_dev_lock(hdev);
-			list_for_each_entry(c, &hdev->local_codecs, list) {
-				if (c->transport != 0x01 || c->id != 0x05)
-					continue;
+			if (wbs_supported) {
+				hci_dev_lock(hdev);
+				list_for_each_entry(c, &hdev->local_codecs, list) {
+					if (c->transport != 0x01 || c->id != 0x05)
+						continue;
 
-				/* Need to read the support from the controller and then assign
-				 * to TRUE for now by default enable it as TRUE
-				 */
-				rp->offload_capable = true;
+					/* Need to read the support from the controller
+					 * and then assign to TRUE for now by default
+					 * enable it as TRUE
+					 */
+					rp->offload_capable = true;
 
-				if (hdev->get_data_path_id)
-					hdev->get_data_path_id(hdev, &rc->data_path);
+					if (hdev->get_data_path_id)
+						hdev->get_data_path_id(hdev, &rc->data_path);
 
-				rc->codec = cp->codecs[i];
-				rc->packet_size = c->len;
-				rc->data_length = c->caps->len;
-				memcpy(rc->data, c->caps, c->caps->len);
-				ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
-				num_rp_codecs++;
-				break;
+					rc->codec = cp->codecs[i];
+					rc->packet_size = c->len;
+					rc->data_length = c->caps->len;
+					memcpy(rc->data, c->caps, c->caps->len);
+					ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
+					num_rp_codecs++;
+					break;
+				}
+				hci_dev_unlock(hdev);
 			}
-			hci_dev_unlock(hdev);
 			break;
 		default:
 			break;
@@ -9486,6 +9467,37 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 				MGMT_OP_GET_VS_OPCODE,
 				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 	return err;
+}
+
+static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_notify_suspend_state *cp = data;
+	struct hci_dev *found_hdev;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	found_hdev = floss_get_hdev(cp->hci_id);
+	if (found_hdev)
+		hdev = found_hdev;
+
+	// Make sure we have a valid hdev.
+	if (!hdev) {
+		BT_DBG("Cannot find hdev 0x%4.4x", cp->hci_id);
+		return mgmt_cmd_status(sk, 0, MGMT_OP_NOTIFY_SUSPEND_STATE,
+				       MGMT_STATUS_INVALID_INDEX);
+	}
+
+	if (cp->suspended != 0x00 && cp->suspended != 0x01)
+		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_NOTIFY_SUSPEND_STATE,
+				       MGMT_STATUS_INVALID_PARAMS);
+
+	hci_dev_lock(hdev);
+
+	hdev->suspended = cp->suspended;
+
+	hci_dev_unlock(hdev);
+
+	return 0;
 }
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
@@ -9612,7 +9624,8 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ add_ext_adv_data,        MGMT_ADD_EXT_ADV_DATA_SIZE,
 						HCI_MGMT_VAR_LEN },
 	{ add_adv_patterns_monitor_rssi,
-				   MGMT_ADD_ADV_PATTERNS_MONITOR_RSSI_SIZE },
+				   MGMT_ADD_ADV_PATTERNS_MONITOR_RSSI_SIZE,
+						HCI_MGMT_VAR_LEN },
 	{ set_mesh,                MGMT_SET_MESH_RECEIVER_SIZE,
 						HCI_MGMT_VAR_LEN },
 	{ mesh_features,           MGMT_MESH_READ_FEATURES_SIZE },
@@ -9636,6 +9649,10 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 	{ floss_get_vs_opcode,     MGMT_GET_VS_OPCODE_SIZE,
+						HCI_MGMT_NO_HDEV |
+						HCI_MGMT_UNTRUSTED },
+	{ floss_notify_suspend_state,
+				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 };

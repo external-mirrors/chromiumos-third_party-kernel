@@ -20,4 +20,12 @@
 
 #include <uapi/linux/usb/f_accessory.h>
 
+struct usb_composite_dev;
+
+int acc_ctrlrequest(struct usb_composite_dev *cdev,
+		const struct usb_ctrlrequest *ctrl);
+int acc_ctrlrequest_composite(struct usb_composite_dev *cdev,
+		const struct usb_ctrlrequest *ctrl);
+void acc_disconnect(void);
+
 #endif /* __LINUX_USB_F_ACCESSORY_H */

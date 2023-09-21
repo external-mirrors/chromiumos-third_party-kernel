@@ -186,21 +186,11 @@ int msm_iommu_pagetable_params(struct msm_mmu *mmu,
 	return 0;
 }
 
-int msm_iommu_pagetable_walk(struct msm_mmu *mmu, unsigned long iova,
-			     u64 *ptes, int num_ptes)
+struct iommu_domain_geometry *msm_iommu_get_geometry(struct msm_mmu *mmu)
 {
-	struct msm_iommu_pagetable *pagetable;
+	struct msm_iommu *iommu = to_msm_iommu(mmu);
 
-	if (mmu->type != MSM_MMU_IOMMU_PAGETABLE)
-		return -EINVAL;
-
-	pagetable = to_pagetable(mmu);
-
-	if (!pagetable->pgtbl_ops->pgtable_walk)
-		return -EINVAL;
-
-	return pagetable->pgtbl_ops->pgtable_walk(pagetable->pgtbl_ops, iova,
-						  ptes, &num_ptes);
+	return &iommu->domain->geometry;
 }
 
 static const struct msm_mmu_funcs pagetable_funcs = {
@@ -244,7 +234,12 @@ struct msm_mmu *msm_iommu_pagetable_create(struct msm_mmu *parent)
 	/* Get the pagetable configuration from the domain */
 	if (adreno_smmu->cookie)
 		ttbr1_cfg = adreno_smmu->get_ttbr1_cfg(adreno_smmu->cookie);
-	if (!ttbr1_cfg)
+
+	/*
+	 * If you hit this WARN_ONCE() you are probably missing an entry in
+	 * qcom_smmu_impl_of_match[] in arm-smmu-qcom.c
+	 */
+	if (WARN_ONCE(!ttbr1_cfg, "No per-process page tables"))
 		return ERR_PTR(-ENODEV);
 
 	/*
@@ -384,17 +379,23 @@ static const struct msm_mmu_funcs funcs = {
 		.resume_translation = msm_iommu_resume_translation,
 };
 
-struct msm_mmu *msm_iommu_new(struct device *dev, struct iommu_domain *domain)
+struct msm_mmu *msm_iommu_new(struct device *dev, unsigned long quirks)
 {
+	struct iommu_domain *domain;
 	struct msm_iommu *iommu;
 	int ret;
 
+	domain = iommu_domain_alloc(dev->bus);
 	if (!domain)
-		return ERR_PTR(-ENODEV);
+		return NULL;
+
+	iommu_set_pgtable_quirks(domain, quirks);
 
 	iommu = kzalloc(sizeof(*iommu), GFP_KERNEL);
-	if (!iommu)
+	if (!iommu) {
+		iommu_domain_free(domain);
 		return ERR_PTR(-ENOMEM);
+	}
 
 	iommu->domain = domain;
 	msm_mmu_init(&iommu->base, dev, &funcs, MSM_MMU_IOMMU);
@@ -403,6 +404,7 @@ struct msm_mmu *msm_iommu_new(struct device *dev, struct iommu_domain *domain)
 
 	ret = iommu_attach_device(iommu->domain, dev);
 	if (ret) {
+		iommu_domain_free(domain);
 		kfree(iommu);
 		return ERR_PTR(ret);
 	}

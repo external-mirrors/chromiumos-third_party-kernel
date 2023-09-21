@@ -347,6 +347,8 @@ struct hdac_bus {
 	bool corbrp_self_clear:1;	/* CORBRP clears itself after reset */
 	bool polling_mode:1;
 	bool needs_damn_long_delay:1;
+	bool not_use_interrupts:1;	/* prohibiting the RIRB IRQ */
+	bool access_sdnctl_in_dword:1;	/* accessing the sdnctl register by dword */
 
 	int poll_count;
 
@@ -575,7 +577,7 @@ void snd_hdac_stream_cleanup(struct hdac_stream *azx_dev);
 int snd_hdac_stream_setup_periods(struct hdac_stream *azx_dev);
 int snd_hdac_stream_set_params(struct hdac_stream *azx_dev,
 				unsigned int format_val);
-void snd_hdac_stream_start(struct hdac_stream *azx_dev, bool fresh_start);
+void snd_hdac_stream_start(struct hdac_stream *azx_dev);
 void snd_hdac_stream_stop(struct hdac_stream *azx_dev);
 void snd_hdac_stop_streams(struct hdac_bus *bus);
 void snd_hdac_stop_streams_and_chip(struct hdac_bus *bus);
@@ -597,6 +599,7 @@ int snd_hdac_stream_get_spbmaxfifo(struct hdac_bus *bus,
 				   struct hdac_stream *azx_dev);
 void snd_hdac_stream_drsm_enable(struct hdac_bus *bus,
 				 bool enable, int index);
+int snd_hdac_stream_wait_drsm(struct hdac_stream *azx_dev);
 int snd_hdac_stream_set_dpibr(struct hdac_bus *bus,
 			      struct hdac_stream *azx_dev, u32 value);
 int snd_hdac_stream_set_lpib(struct hdac_stream *azx_dev, u32 value);

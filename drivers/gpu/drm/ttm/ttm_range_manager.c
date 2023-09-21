@@ -32,7 +32,7 @@
 #include <drm/ttm/ttm_device.h>
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_range_manager.h>
-#include <drm/ttm/ttm_bo_api.h>
+#include <drm/ttm/ttm_bo.h>
 #include <drm/drm_mm.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -229,7 +229,6 @@ int ttm_range_man_fini_nocheck(struct ttm_device *bdev,
 		return ret;
 
 	spin_lock(&rman->lock);
-	drm_mm_clean(mm);
 	drm_mm_takedown(mm);
 	spin_unlock(&rman->lock);
 

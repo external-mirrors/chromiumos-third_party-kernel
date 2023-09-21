@@ -297,7 +297,6 @@ source "fs/orangefs/Kconfig"
 source "fs/adfs/Kconfig"
 source "fs/affs/Kconfig"
 source "fs/ecryptfs/Kconfig"
-source "fs/esdfs/Kconfig"
 source "fs/hfs/Kconfig"
 source "fs/hfsplus/Kconfig"
 source "fs/befs/Kconfig"
@@ -372,14 +371,7 @@ config NFS_V4_2_SSC_HELPER
 source "net/sunrpc/Kconfig"
 source "fs/ceph/Kconfig"
 
-source "fs/cifs/Kconfig"
-source "fs/ksmbd/Kconfig"
-
-config SMBFS_COMMON
-	tristate
-	default y if CIFS=y || SMB_SERVER=y
-	default m if CIFS=m || SMB_SERVER=m
-
+source "fs/smb/Kconfig"
 source "fs/coda/Kconfig"
 source "fs/afs/Kconfig"
 source "fs/9p/Kconfig"

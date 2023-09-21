@@ -57,5 +57,11 @@ extern void __init init_IRQ(void);
 
 int irq_choose_cpu(const struct cpumask *mask);
 
+#if defined(CONFIG_PPC_BOOK3S_64) && defined(CONFIG_NMI_IPI)
+extern void arch_trigger_cpumask_backtrace(const cpumask_t *mask,
+					   int exclude_cpu);
+#define arch_trigger_cpumask_backtrace arch_trigger_cpumask_backtrace
+#endif
+
 #endif /* _ASM_IRQ_H */
 #endif /* __KERNEL__ */

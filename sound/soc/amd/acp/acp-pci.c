@@ -15,7 +15,6 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
-#include <linux/pm_runtime.h>
 #include <linux/module.h>
 
 #include "amd.h"
@@ -86,6 +85,10 @@ static int acp_pci_probe(struct pci_dev *pci, const struct pci_device_id *pci_id
 	case 0x6f:
 		chip->name = "acp_asoc_rembrandt";
 		chip->acp_rev = ACP6X_DEV;
+		break;
+	case 0x63:
+		chip->name = "acp_asoc_phoenix";
+		chip->acp_rev = ACP63X_DEV;
 		break;
 	default:
 		dev_err(dev, "Unsupported device revision:0x%x\n", pci->revision);

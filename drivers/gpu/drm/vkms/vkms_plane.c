@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 #include <linux/iosys-map.h>
+#include <linux/stdarg.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_blend.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_plane.h>
+#include <drm/drm_plane_helper.h>
 
 #include "vkms_drv.h"
 #include "vkms_formats.h"
 
 static const u32 vkms_formats[] = {
-	DRM_FORMAT_XRGB8888,
-	DRM_FORMAT_XRGB16161616,
-	DRM_FORMAT_RGB565
-};
-
-static const u32 vkms_plane_formats[] = {
 	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_XRGB16161616,
@@ -70,6 +68,20 @@ static void vkms_plane_destroy_state(struct drm_plane *plane,
 	kfree(vkms_state);
 }
 
+static void vkms_plane_destroy(struct drm_plane *plane)
+{
+	struct vkms_plane *vkms_plane =
+		container_of(plane, struct vkms_plane, base);
+
+	if (plane->state) {
+		vkms_plane_destroy_state(plane, plane->state);
+		plane->state = NULL;
+	}
+
+	drm_plane_cleanup(plane);
+	memset(vkms_plane, 0, sizeof(struct vkms_plane));
+}
+
 static void vkms_plane_reset(struct drm_plane *plane)
 {
 	struct vkms_plane_state *vkms_state;
@@ -91,9 +103,10 @@ static void vkms_plane_reset(struct drm_plane *plane)
 static const struct drm_plane_funcs vkms_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
+	.destroy = vkms_plane_destroy,
 	.reset			= vkms_plane_reset,
 	.atomic_duplicate_state = vkms_plane_duplicate_state,
-	.atomic_destroy_state	= vkms_plane_destroy_state,
+	.atomic_destroy_state = vkms_plane_destroy_state,
 };
 
 static void vkms_plane_atomic_update(struct drm_plane *plane,
@@ -117,13 +130,23 @@ static void vkms_plane_atomic_update(struct drm_plane *plane,
 	frame_info = vkms_plane_state->frame_info;
 	memcpy(&frame_info->src, &new_state->src, sizeof(struct drm_rect));
 	memcpy(&frame_info->dst, &new_state->dst, sizeof(struct drm_rect));
+	memcpy(&frame_info->rotated, &new_state->dst, sizeof(struct drm_rect));
 	frame_info->fb = fb;
 	memcpy(&frame_info->map, &shadow_plane_state->data, sizeof(frame_info->map));
 	drm_framebuffer_get(frame_info->fb);
+	frame_info->rotation = drm_rotation_simplify(new_state->rotation, DRM_MODE_ROTATE_0 |
+						     DRM_MODE_ROTATE_90 |
+						     DRM_MODE_ROTATE_270 |
+						     DRM_MODE_REFLECT_X |
+						     DRM_MODE_REFLECT_Y);
+
+	drm_rect_rotate(&frame_info->rotated, drm_rect_width(&frame_info->rotated),
+			drm_rect_height(&frame_info->rotated), frame_info->rotation);
+
 	frame_info->offset = fb->offsets[0];
 	frame_info->pitch = fb->pitches[0];
 	frame_info->cpp = fb->format->cpp[0];
-	vkms_plane_state->plane_read = get_frame_to_line_function(fmt);
+	vkms_plane_state->pixel_read = get_pixel_conversion_function(fmt);
 }
 
 static int vkms_plane_atomic_check(struct drm_plane *plane,
@@ -132,7 +155,6 @@ static int vkms_plane_atomic_check(struct drm_plane *plane,
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state,
 										 plane);
 	struct drm_crtc_state *crtc_state;
-	bool can_position = false;
 	int ret;
 
 	if (!new_plane_state->fb || WARN_ON(!new_plane_state->crtc))
@@ -143,65 +165,83 @@ static int vkms_plane_atomic_check(struct drm_plane *plane,
 	if (IS_ERR(crtc_state))
 		return PTR_ERR(crtc_state);
 
-	if (plane->type != DRM_PLANE_TYPE_PRIMARY)
-		can_position = true;
-
 	ret = drm_atomic_helper_check_plane_state(new_plane_state, crtc_state,
 						  DRM_PLANE_NO_SCALING,
 						  DRM_PLANE_NO_SCALING,
-						  can_position, true);
+						  true, true);
 	if (ret != 0)
 		return ret;
-
-	/* for now primary plane must be visible and full screen */
-	if (!new_plane_state->visible && !can_position)
-		return -EINVAL;
 
 	return 0;
 }
 
-static const struct drm_plane_helper_funcs vkms_primary_helper_funcs = {
+static int vkms_prepare_fb(struct drm_plane *plane,
+			   struct drm_plane_state *state)
+{
+	struct drm_shadow_plane_state *shadow_plane_state;
+	struct drm_framebuffer *fb = state->fb;
+	int ret;
+
+	if (!fb)
+		return 0;
+
+	shadow_plane_state = to_drm_shadow_plane_state(state);
+
+	ret = drm_gem_plane_helper_prepare_fb(plane, state);
+	if (ret)
+		return ret;
+
+	return drm_gem_fb_vmap(fb, shadow_plane_state->map, shadow_plane_state->data);
+}
+
+static void vkms_cleanup_fb(struct drm_plane *plane,
+			    struct drm_plane_state *state)
+{
+	struct drm_shadow_plane_state *shadow_plane_state;
+	struct drm_framebuffer *fb = state->fb;
+
+	if (!fb)
+		return;
+
+	shadow_plane_state = to_drm_shadow_plane_state(state);
+
+	drm_gem_fb_vunmap(fb, shadow_plane_state->map);
+}
+
+static const struct drm_plane_helper_funcs vkms_plane_helper_funcs = {
 	.atomic_update		= vkms_plane_atomic_update,
 	.atomic_check		= vkms_plane_atomic_check,
-	DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
+	.prepare_fb		= vkms_prepare_fb,
+	.cleanup_fb		= vkms_cleanup_fb,
 };
 
 struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
-				   enum drm_plane_type type, int index)
+				   enum drm_plane_type type, char *name, ...)
 {
 	struct drm_device *dev = &vkmsdev->drm;
-	const struct drm_plane_helper_funcs *funcs;
+	struct vkms_output *output = &vkmsdev->output;
 	struct vkms_plane *plane;
-	const u32 *formats;
-	int nformats;
+	va_list va;
+	int ret;
 
-	switch (type) {
-	case DRM_PLANE_TYPE_PRIMARY:
-		formats = vkms_formats;
-		nformats = ARRAY_SIZE(vkms_formats);
-		funcs = &vkms_primary_helper_funcs;
-		break;
-	case DRM_PLANE_TYPE_CURSOR:
-	case DRM_PLANE_TYPE_OVERLAY:
-		formats = vkms_plane_formats;
-		nformats = ARRAY_SIZE(vkms_plane_formats);
-		funcs = &vkms_primary_helper_funcs;
-		break;
-	default:
-		formats = vkms_formats;
-		nformats = ARRAY_SIZE(vkms_formats);
-		funcs = &vkms_primary_helper_funcs;
-		break;
-	}
+	if (output->num_planes >= VKMS_MAX_PLANES)
+		return ERR_PTR(-ENOMEM);
 
-	plane = drmm_universal_plane_alloc(dev, struct vkms_plane, base, 1 << index,
-					   &vkms_plane_funcs,
-					   formats, nformats,
-					   NULL, type, NULL);
-	if (IS_ERR(plane))
-		return plane;
+	plane = &output->planes[output->num_planes++];
 
-	drm_plane_helper_add(&plane->base, funcs);
+	va_start(va, name);
+	ret = drm_universal_plane_init(dev, &plane->base, 0, &vkms_plane_funcs,
+				       vkms_formats, ARRAY_SIZE(vkms_formats),
+				       NULL, type, name, va);
+	va_end(va);
+
+	if (ret)
+		return ERR_PTR(ret);
+
+	drm_plane_helper_add(&plane->base, &vkms_plane_helper_funcs);
+
+	drm_plane_create_rotation_property(&plane->base, DRM_MODE_ROTATE_0,
+					   DRM_MODE_ROTATE_MASK | DRM_MODE_REFLECT_MASK);
 
 	return plane;
 }

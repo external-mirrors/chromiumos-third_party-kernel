@@ -499,7 +499,7 @@ int tpm2_probe(struct tpm_chip *chip)
 	if (rc)
 		return rc;
 	tpm_buf_append_u32(&buf, TPM2_CAP_TPM_PROPERTIES);
-	tpm_buf_append_u32(&buf, TPM_PT_TOTAL_COMMANDS);
+	tpm_buf_append_u32(&buf, TPM2_PT_TOTAL_COMMANDS);
 	tpm_buf_append_u32(&buf, 1);
 	rc = tpm_transmit_cmd(chip, &buf, 0, NULL);
 	/* We ignore TPM return codes on purpose. */
@@ -633,7 +633,7 @@ int tpm2_get_cc_attrs_tbl(struct tpm_chip *chip)
 	int i;
 	int rc;
 
-	rc = tpm2_get_tpm_pt(chip, TPM_PT_TOTAL_COMMANDS, &nr_commands, NULL);
+	rc = tpm2_get_tpm_pt(chip, TPM2_PT_TOTAL_COMMANDS, &nr_commands, NULL);
 	if (rc)
 		goto out;
 

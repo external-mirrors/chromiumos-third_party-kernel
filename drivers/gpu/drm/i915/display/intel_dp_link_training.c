@@ -637,6 +637,38 @@ static bool intel_dp_link_max_vswing_reached(struct intel_dp *intel_dp,
 	return true;
 }
 
+static void
+intel_dp_update_downspread_ctrl(struct intel_dp *intel_dp,
+				const struct intel_crtc_state *crtc_state)
+{
+	u8 link_config[2];
+
+	link_config[0] = crtc_state->vrr.flipline ? DP_MSA_TIMING_PAR_IGNORE_EN : 0;
+	link_config[1] = intel_dp_is_uhbr(crtc_state) ?
+			 DP_SET_ANSI_128B132B : DP_SET_ANSI_8B10B;
+	drm_dp_dpcd_write(&intel_dp->aux, DP_DOWNSPREAD_CTRL, link_config, 2);
+}
+
+static void
+intel_dp_update_link_bw_set(struct intel_dp *intel_dp,
+			    const struct intel_crtc_state *crtc_state,
+			    u8 link_bw, u8 rate_select)
+{
+	u8 link_config[2];
+
+	/* Write the link configuration data */
+	link_config[0] = link_bw;
+	link_config[1] = crtc_state->lane_count;
+	if (drm_dp_enhanced_frame_cap(intel_dp->dpcd))
+		link_config[1] |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
+	drm_dp_dpcd_write(&intel_dp->aux, DP_LINK_BW_SET, link_config, 2);
+
+	/* eDP 1.4 rate select method. */
+	if (!link_bw)
+		drm_dp_dpcd_write(&intel_dp->aux, DP_LINK_RATE_SET,
+				  &rate_select, 1);
+}
+
 /*
  * Prepare link training by configuring the link parameters. On DDI platforms
  * also enable the port here.
@@ -647,7 +679,6 @@ intel_dp_prepare_link_train(struct intel_dp *intel_dp,
 {
 	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
-	u8 link_config[2];
 	u8 link_bw, rate_select;
 
 	if (intel_dp->prepare_link_retrain)
@@ -686,23 +717,13 @@ intel_dp_prepare_link_train(struct intel_dp *intel_dp,
 		drm_dbg_kms(&i915->drm,
 			    "[ENCODER:%d:%s] Using LINK_RATE_SET value %02x\n",
 			    encoder->base.base.id, encoder->base.name, rate_select);
-
-	/* Write the link configuration data */
-	link_config[0] = link_bw;
-	link_config[1] = crtc_state->lane_count;
-	if (drm_dp_enhanced_frame_cap(intel_dp->dpcd))
-		link_config[1] |= DP_LANE_COUNT_ENHANCED_FRAME_EN;
-	drm_dp_dpcd_write(&intel_dp->aux, DP_LINK_BW_SET, link_config, 2);
-
-	/* eDP 1.4 rate select method. */
-	if (!link_bw)
-		drm_dp_dpcd_write(&intel_dp->aux, DP_LINK_RATE_SET,
-				  &rate_select, 1);
-
-	link_config[0] = crtc_state->vrr.enable ? DP_MSA_TIMING_PAR_IGNORE_EN : 0;
-	link_config[1] = intel_dp_is_uhbr(crtc_state) ?
-		DP_SET_ANSI_128B132B : DP_SET_ANSI_8B10B;
-	drm_dp_dpcd_write(&intel_dp->aux, DP_DOWNSPREAD_CTRL, link_config, 2);
+	/*
+	 * Spec DP2.1 Section 3.5.2.16
+	 * Prior to LT DPTX should set 128b/132b DP Channel coding and then set link rate
+	 */
+	intel_dp_update_downspread_ctrl(intel_dp, crtc_state);
+	intel_dp_update_link_bw_set(intel_dp, crtc_state, link_bw,
+				    rate_select);
 
 	return true;
 }
@@ -1453,4 +1474,24 @@ void intel_dp_start_link_train(struct intel_dp *intel_dp,
 
 	if (!passed)
 		intel_dp_schedule_fallback_link_training(intel_dp, crtc_state);
+}
+
+void intel_dp_128b132b_sdp_crc16(struct intel_dp *intel_dp,
+				 const struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *i915 = dp_to_i915(intel_dp);
+
+	/*
+	 * VIDEO_DIP_CTL register bit 31 should be set to '0' to not
+	 * disable SDP CRC. This is applicable for Display version 13.
+	 * Default value of bit 31 is '0' hence discarding the write
+	 * TODO: Corrective actions on SDP corruption yet to be defined
+	 */
+	if (intel_dp_is_uhbr(crtc_state))
+		/* DP v2.0 SCR on SDP CRC16 for 128b/132b Link Layer */
+		drm_dp_dpcd_writeb(&intel_dp->aux,
+				   DP_SDP_ERROR_DETECTION_CONFIGURATION,
+				   DP_SDP_CRC16_128B132B_EN);
+
+	drm_dbg_kms(&i915->drm, "DP2.0 SDP CRC16 for 128b/132b enabled\n");
 }

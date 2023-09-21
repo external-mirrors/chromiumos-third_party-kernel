@@ -53,6 +53,7 @@
 #include <linux/tboot.h>
 #include <linux/gfp.h>
 #include <linux/cpuidle.h>
+#include <linux/kexec.h>
 #include <linux/numa.h>
 #include <linux/pgtable.h>
 #include <linux/overflow.h>
@@ -98,6 +99,20 @@ EXPORT_PER_CPU_SYMBOL(cpu_die_map);
 /* Per CPU bogomips and other parameters */
 DEFINE_PER_CPU_READ_MOSTLY(struct cpuinfo_x86, cpu_info);
 EXPORT_PER_CPU_SYMBOL(cpu_info);
+
+struct mwait_cpu_dead {
+	unsigned int	control;
+	unsigned int	status;
+};
+
+#define CPUDEAD_MWAIT_WAIT	0xDEADBEEF
+#define CPUDEAD_MWAIT_KEXEC_HLT	0x4A17DEAD
+
+/*
+ * Cache line aligned data for mwait_play_dead(). Separate on purpose so
+ * that it's unlikely to be touched by other CPUs.
+ */
+static DEFINE_PER_CPU_ALIGNED(struct mwait_cpu_dead, mwait_cpu_dead);
 
 /* Logical package management. We might want to allocate that dynamically */
 unsigned int __max_logical_packages __read_mostly;
@@ -154,6 +169,10 @@ static inline void smpboot_restore_warm_reset_vector(void)
 static void smp_callin(void)
 {
 	int cpuid;
+
+	/* Mop up eventual mwait_play_dead() wreckage */
+	this_cpu_write(mwait_cpu_dead.status, 0);
+	this_cpu_write(mwait_cpu_dead.control, 0);
 
 	/*
 	 * If waken up by an INIT in an 82489DX configuration
@@ -530,7 +549,6 @@ static bool match_llc(struct cpuinfo_x86 *c, struct cpuinfo_x86 *o)
 }
 
 
-#if defined(CONFIG_SCHED_SMT) || defined(CONFIG_SCHED_CLUSTER) || defined(CONFIG_SCHED_MC)
 static inline int x86_sched_itmt_flags(void)
 {
 	return sysctl_sched_itmt_enabled ? SD_ASYM_PACKING : 0;
@@ -545,7 +563,7 @@ static int x86_core_flags(void)
 #ifdef CONFIG_SCHED_SMT
 static int x86_smt_flags(void)
 {
-	return cpu_smt_flags() | x86_sched_itmt_flags();
+	return cpu_smt_flags();
 }
 #endif
 #ifdef CONFIG_SCHED_CLUSTER
@@ -554,45 +572,14 @@ static int x86_cluster_flags(void)
 	return cpu_cluster_flags() | x86_sched_itmt_flags();
 }
 #endif
-#endif
 
-static struct sched_domain_topology_level x86_numa_in_package_topology[] = {
-#ifdef CONFIG_SCHED_SMT
-	{ cpu_smt_mask, x86_smt_flags, SD_INIT_NAME(SMT) },
-#endif
-#ifdef CONFIG_SCHED_CLUSTER
-	{ cpu_clustergroup_mask, x86_cluster_flags, SD_INIT_NAME(CLS) },
-#endif
-#ifdef CONFIG_SCHED_MC
-	{ cpu_coregroup_mask, x86_core_flags, SD_INIT_NAME(MC) },
-#endif
-	{ NULL, },
-};
+static int x86_die_flags(void)
+{
+	if (cpu_feature_enabled(X86_FEATURE_HYBRID_CPU))
+	       return x86_sched_itmt_flags();
 
-static struct sched_domain_topology_level x86_hybrid_topology[] = {
-#ifdef CONFIG_SCHED_SMT
-	{ cpu_smt_mask, x86_smt_flags, SD_INIT_NAME(SMT) },
-#endif
-#ifdef CONFIG_SCHED_MC
-	{ cpu_coregroup_mask, x86_core_flags, SD_INIT_NAME(MC) },
-#endif
-	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
-	{ NULL, },
-};
-
-static struct sched_domain_topology_level x86_topology[] = {
-#ifdef CONFIG_SCHED_SMT
-	{ cpu_smt_mask, x86_smt_flags, SD_INIT_NAME(SMT) },
-#endif
-#ifdef CONFIG_SCHED_CLUSTER
-	{ cpu_clustergroup_mask, x86_cluster_flags, SD_INIT_NAME(CLS) },
-#endif
-#ifdef CONFIG_SCHED_MC
-	{ cpu_coregroup_mask, x86_core_flags, SD_INIT_NAME(MC) },
-#endif
-	{ cpu_cpu_mask, SD_INIT_NAME(DIE) },
-	{ NULL, },
-};
+	return 0;
+}
 
 /*
  * Set if a package/die has multiple NUMA nodes inside.
@@ -600,6 +587,46 @@ static struct sched_domain_topology_level x86_topology[] = {
  * Sub-NUMA Clustering have this.
  */
 static bool x86_has_numa_in_package;
+
+static struct sched_domain_topology_level x86_topology[6];
+
+static void __init build_sched_topology(void)
+{
+	int i = 0;
+
+#ifdef CONFIG_SCHED_SMT
+	x86_topology[i++] = (struct sched_domain_topology_level){
+		cpu_smt_mask, x86_smt_flags, SD_INIT_NAME(SMT)
+	};
+#endif
+#ifdef CONFIG_SCHED_CLUSTER
+	x86_topology[i++] = (struct sched_domain_topology_level){
+		cpu_clustergroup_mask, x86_cluster_flags, SD_INIT_NAME(CLS)
+	};
+#endif
+#ifdef CONFIG_SCHED_MC
+	x86_topology[i++] = (struct sched_domain_topology_level){
+		cpu_coregroup_mask, x86_core_flags, SD_INIT_NAME(MC)
+	};
+#endif
+	/*
+	 * When there is NUMA topology inside the package skip the DIE domain
+	 * since the NUMA domains will auto-magically create the right spanning
+	 * domains based on the SLIT.
+	 */
+	if (!x86_has_numa_in_package) {
+		x86_topology[i++] = (struct sched_domain_topology_level){
+			cpu_cpu_mask, x86_die_flags, SD_INIT_NAME(DIE)
+		};
+	}
+
+	/*
+	 * There must be one trailing NULL entry left.
+	 */
+	BUG_ON(i >= ARRAY_SIZE(x86_topology)-1);
+
+	set_sched_topology(x86_topology);
+}
 
 void set_cpu_sibling_map(int cpu)
 {
@@ -1380,15 +1407,6 @@ void __init smp_prepare_cpus_common(void)
 		zalloc_cpumask_var(&per_cpu(cpu_l2c_shared_map, i), GFP_KERNEL);
 	}
 
-	/*
-	 * Set 'default' x86 topology, this matches default_topology() in that
-	 * it has NUMA nodes as a topology level. See also
-	 * native_smp_cpus_done().
-	 *
-	 * Must be done before set_cpus_sibling_map() is ran.
-	 */
-	set_sched_topology(x86_topology);
-
 	set_cpu_sibling_map(0);
 }
 
@@ -1478,13 +1496,7 @@ void __init native_smp_cpus_done(unsigned int max_cpus)
 	pr_debug("Boot done\n");
 
 	calculate_max_logical_packages();
-
-	/* XXX for now assume numa-in-package and hybrid don't overlap */
-	if (x86_has_numa_in_package)
-		set_sched_topology(x86_numa_in_package_topology);
-	if (cpu_feature_enabled(X86_FEATURE_HYBRID_CPU))
-		set_sched_topology(x86_hybrid_topology);
-
+	build_sched_topology();
 	nmi_selftest();
 	impress_friends();
 	mtrr_aps_init();
@@ -1746,10 +1758,10 @@ EXPORT_SYMBOL_GPL(cond_wakeup_cpu0);
  */
 static inline void mwait_play_dead(void)
 {
+	struct mwait_cpu_dead *md = this_cpu_ptr(&mwait_cpu_dead);
 	unsigned int eax, ebx, ecx, edx;
 	unsigned int highest_cstate = 0;
 	unsigned int highest_subcstate = 0;
-	void *mwait_ptr;
 	int i;
 
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
@@ -1784,12 +1796,9 @@ static inline void mwait_play_dead(void)
 			(highest_subcstate - 1);
 	}
 
-	/*
-	 * This should be a memory location in a cache line which is
-	 * unlikely to be touched by other processors.  The actual
-	 * content is immaterial as it is not actually modified in any way.
-	 */
-	mwait_ptr = &current_thread_info()->flags;
+	/* Set up state for the kexec() hack below */
+	md->status = CPUDEAD_MWAIT_WAIT;
+	md->control = CPUDEAD_MWAIT_WAIT;
 
 	wbinvd();
 
@@ -1802,13 +1811,60 @@ static inline void mwait_play_dead(void)
 		 * case where we return around the loop.
 		 */
 		mb();
-		clflush(mwait_ptr);
+		clflush(md);
 		mb();
-		__monitor(mwait_ptr, 0, 0);
+		__monitor(md, 0, 0);
 		mb();
 		__mwait(eax, 0);
 
+		if (READ_ONCE(md->control) == CPUDEAD_MWAIT_KEXEC_HLT) {
+			/*
+			 * Kexec is about to happen. Don't go back into mwait() as
+			 * the kexec kernel might overwrite text and data including
+			 * page tables and stack. So mwait() would resume when the
+			 * monitor cache line is written to and then the CPU goes
+			 * south due to overwritten text, page tables and stack.
+			 *
+			 * Note: This does _NOT_ protect against a stray MCE, NMI,
+			 * SMI. They will resume execution at the instruction
+			 * following the HLT instruction and run into the problem
+			 * which this is trying to prevent.
+			 */
+			WRITE_ONCE(md->status, CPUDEAD_MWAIT_KEXEC_HLT);
+			while(1)
+				native_halt();
+		}
+
 		cond_wakeup_cpu0();
+	}
+}
+
+/*
+ * Kick all "offline" CPUs out of mwait on kexec(). See comment in
+ * mwait_play_dead().
+ */
+void smp_kick_mwait_play_dead(void)
+{
+	u32 newstate = CPUDEAD_MWAIT_KEXEC_HLT;
+	struct mwait_cpu_dead *md;
+	unsigned int cpu, i;
+
+	for_each_cpu_andnot(cpu, cpu_present_mask, cpu_online_mask) {
+		md = per_cpu_ptr(&mwait_cpu_dead, cpu);
+
+		/* Does it sit in mwait_play_dead() ? */
+		if (READ_ONCE(md->status) != CPUDEAD_MWAIT_WAIT)
+			continue;
+
+		/* Wait up to 5ms */
+		for (i = 0; READ_ONCE(md->status) != newstate && i < 1000; i++) {
+			/* Bring it out of mwait */
+			WRITE_ONCE(md->control, newstate);
+			udelay(5);
+		}
+
+		if (READ_ONCE(md->status) != newstate)
+			pr_err_once("CPU%u is stuck in mwait_play_dead()\n", cpu);
 	}
 }
 

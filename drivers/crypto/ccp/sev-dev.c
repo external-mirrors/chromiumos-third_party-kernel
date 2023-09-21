@@ -7,6 +7,7 @@
  * Author: Brijesh Singh <brijesh.singh@amd.com>
  */
 
+#include <linux/bitfield.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
@@ -24,8 +25,10 @@
 #include <linux/cpufeature.h>
 #include <linux/fs.h>
 #include <linux/fs_struct.h>
+#include <linux/psp.h>
 
 #include <asm/smp.h>
+#include <asm/cacheflush.h>
 
 #include "psp-dev.h"
 #include "sev-dev.h"
@@ -100,7 +103,7 @@ static void sev_irq_handler(int irq, void *data, unsigned int status)
 
 	/* Check if it is SEV command completion: */
 	reg = ioread32(sev->io_regs + sev->vdata->cmdresp_reg);
-	if (reg & PSP_CMDRESP_RESP) {
+	if (FIELD_GET(PSP_CMDRESP_RESP, reg)) {
 		sev->int_rcvd = 1;
 		wake_up(&sev->int_queue);
 	}
@@ -344,9 +347,7 @@ static int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 
 	sev->int_rcvd = 0;
 
-	reg = cmd;
-	reg <<= SEV_CMDRESP_CMD_SHIFT;
-	reg |= SEV_CMDRESP_IOC;
+	reg = FIELD_PREP(SEV_CMDRESP_CMD, cmd) | SEV_CMDRESP_IOC;
 	iowrite32(reg, sev->io_regs + sev->vdata->cmdresp_reg);
 
 	/* wait for command completion */
@@ -364,11 +365,11 @@ static int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 	psp_timeout = psp_cmd_timeout;
 
 	if (psp_ret)
-		*psp_ret = reg & PSP_CMDRESP_ERR_MASK;
+		*psp_ret = FIELD_GET(PSP_CMDRESP_STS, reg);
 
-	if (reg & PSP_CMDRESP_ERR_MASK) {
-		dev_dbg(sev->dev, "sev command %#x failed (%#010x)\n",
-			cmd, reg & PSP_CMDRESP_ERR_MASK);
+	if (FIELD_GET(PSP_CMDRESP_STS, reg)) {
+		dev_dbg(sev->dev, "sev command %#x failed (%#010lx)\n",
+			cmd, FIELD_GET(PSP_CMDRESP_STS, reg));
 		ret = -EIO;
 	} else {
 		ret = sev_write_init_ex_file_if_required(cmd);
@@ -881,7 +882,14 @@ static int sev_ioctl_do_get_id2(struct sev_issue_cmd *argp)
 	input_address = (void __user *)input.address;
 
 	if (input.address && input.length) {
-		id_blob = kzalloc(input.length, GFP_KERNEL);
+		/*
+		 * The length of the ID shouldn't be assumed by software since
+		 * it may change in the future.  The allocation size is limited
+		 * to 1 << (PAGE_SHIFT + MAX_ORDER - 1) by the page allocator.
+		 * If the allocation fails, simply return ENOMEM rather than
+		 * warning in the kernel log.
+		 */
+		id_blob = kzalloc(input.length, GFP_KERNEL | __GFP_NOWARN);
 		if (!id_blob)
 			return -ENOMEM;
 
@@ -1327,7 +1335,10 @@ void sev_pci_init(void)
 
 	/* Obtain the TMR memory area for SEV-ES use */
 	sev_es_tmr = sev_fw_alloc(SEV_ES_TMR_SIZE);
-	if (!sev_es_tmr)
+	if (sev_es_tmr)
+		/* Must flush the cache before giving it to the firmware */
+		clflush_cache_range(sev_es_tmr, SEV_ES_TMR_SIZE);
+	else
 		dev_warn(sev->dev,
 			 "SEV: TMR allocation failed, SEV-ES support unavailable\n");
 

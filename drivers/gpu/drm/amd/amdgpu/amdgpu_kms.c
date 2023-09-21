@@ -29,6 +29,7 @@
 #include "amdgpu.h"
 #include <drm/amdgpu_drm.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_fb_helper.h>
 #include "amdgpu_uvd.h"
 #include "amdgpu_vce.h"
 #include "atom.h"
@@ -42,6 +43,7 @@
 #include "amdgpu_gem.h"
 #include "amdgpu_display.h"
 #include "amdgpu_ras.h"
+#include "amd_pcie.h"
 
 void amdgpu_unregister_gpu_instance(struct amdgpu_device *adev)
 {
@@ -430,7 +432,7 @@ static int amdgpu_hw_ip_info(struct amdgpu_device *adev,
 	case AMDGPU_HW_IP_VCN_DEC:
 		type = AMD_IP_BLOCK_TYPE_VCN;
 		for (i = 0; i < adev->vcn.num_vcn_inst; i++) {
-			if (adev->uvd.harvest_config & (1 << i))
+			if (adev->vcn.harvest_config & (1 << i))
 				continue;
 
 			if (adev->vcn.inst[i].ring_dec.sched.ready)
@@ -442,7 +444,7 @@ static int amdgpu_hw_ip_info(struct amdgpu_device *adev,
 	case AMDGPU_HW_IP_VCN_ENC:
 		type = AMD_IP_BLOCK_TYPE_VCN;
 		for (i = 0; i < adev->vcn.num_vcn_inst; i++) {
-			if (adev->uvd.harvest_config & (1 << i))
+			if (adev->vcn.harvest_config & (1 << i))
 				continue;
 
 			for (j = 0; j < adev->vcn.num_enc_rings; j++)
@@ -554,6 +556,7 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 			crtc = (struct drm_crtc *)minfo->crtcs[i];
 			if (crtc && crtc->base.id == info->mode_crtc.id) {
 				struct amdgpu_crtc *amdgpu_crtc = to_amdgpu_crtc(crtc);
+
 				ui32 = amdgpu_crtc->crtc_id;
 				found = 1;
 				break;
@@ -572,7 +575,7 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		if (ret)
 			return ret;
 
-		ret = copy_to_user(out, &ip, min((size_t)size, sizeof(ip)));
+		ret = copy_to_user(out, &ip, min_t(size_t, size, sizeof(ip)));
 		return ret ? -EFAULT : 0;
 	}
 	case AMDGPU_INFO_HW_IP_COUNT: {
@@ -718,17 +721,18 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 				    ? -EFAULT : 0;
 	}
 	case AMDGPU_INFO_READ_MMR_REG: {
-		unsigned n, alloc_size;
+		unsigned int n, alloc_size;
 		uint32_t *regs;
-		unsigned se_num = (info->read_mmr_reg.instance >>
+		unsigned int se_num = (info->read_mmr_reg.instance >>
 				   AMDGPU_INFO_MMR_SE_INDEX_SHIFT) &
 				  AMDGPU_INFO_MMR_SE_INDEX_MASK;
-		unsigned sh_num = (info->read_mmr_reg.instance >>
+		unsigned int sh_num = (info->read_mmr_reg.instance >>
 				   AMDGPU_INFO_MMR_SH_INDEX_SHIFT) &
 				  AMDGPU_INFO_MMR_SH_INDEX_MASK;
 
 		/* set full masks if the userspace set all bits
-		 * in the bitfields */
+		 * in the bitfields
+		 */
 		if (se_num == AMDGPU_INFO_MMR_SE_INDEX_MASK)
 			se_num = 0xffffffff;
 		else if (se_num >= AMDGPU_GFX_MAX_SE)
@@ -766,6 +770,7 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	case AMDGPU_INFO_DEV_INFO: {
 		struct drm_amdgpu_info_device *dev_info;
 		uint64_t vm_size;
+		uint32_t pcie_gen_mask;
 		int ret;
 
 		dev_info = kzalloc(sizeof(*dev_info), GFP_KERNEL);
@@ -784,22 +789,29 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		if (adev->pm.dpm_enabled) {
 			dev_info->max_engine_clock = amdgpu_dpm_get_sclk(adev, false) * 10;
 			dev_info->max_memory_clock = amdgpu_dpm_get_mclk(adev, false) * 10;
+			dev_info->min_engine_clock = amdgpu_dpm_get_sclk(adev, true) * 10;
+			dev_info->min_memory_clock = amdgpu_dpm_get_mclk(adev, true) * 10;
 		} else {
-			dev_info->max_engine_clock = adev->clock.default_sclk * 10;
-			dev_info->max_memory_clock = adev->clock.default_mclk * 10;
+			dev_info->max_engine_clock =
+				dev_info->min_engine_clock =
+					adev->clock.default_sclk * 10;
+			dev_info->max_memory_clock =
+				dev_info->min_memory_clock =
+					adev->clock.default_mclk * 10;
 		}
 		dev_info->enabled_rb_pipes_mask = adev->gfx.config.backend_enable_mask;
 		dev_info->num_rb_pipes = adev->gfx.config.max_backends_per_se *
 			adev->gfx.config.max_shader_engines;
 		dev_info->num_hw_gfx_contexts = adev->gfx.config.max_hw_contexts;
-		dev_info->_pad = 0;
 		dev_info->ids_flags = 0;
 		if (adev->flags & AMD_IS_APU)
 			dev_info->ids_flags |= AMDGPU_IDS_FLAGS_FUSION;
-		if (amdgpu_mcbp || amdgpu_sriov_vf(adev))
+		if (amdgpu_mcbp)
 			dev_info->ids_flags |= AMDGPU_IDS_FLAGS_PREEMPTION;
 		if (amdgpu_is_tmz(adev))
 			dev_info->ids_flags |= AMDGPU_IDS_FLAGS_TMZ;
+		if (adev->gfx.config.ta_cntl2_truncate_coord_mode)
+			dev_info->ids_flags |= AMDGPU_IDS_FLAGS_CONFORMANT_TRUNC_COORD;
 
 		vm_size = adev->vm_manager.max_pfn * AMDGPU_GPU_PAGE_SIZE;
 		vm_size -= AMDGPU_VA_RESERVED_SIZE;
@@ -846,13 +858,33 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 
 		dev_info->tcc_disabled_mask = adev->gfx.config.tcc_disabled_mask;
 
+		/* Combine the chip gen mask with the platform (CPU/mobo) mask. */
+		pcie_gen_mask = adev->pm.pcie_gen_mask & (adev->pm.pcie_gen_mask >> 16);
+		dev_info->pcie_gen = fls(pcie_gen_mask);
+		dev_info->pcie_num_lanes =
+			adev->pm.pcie_mlw_mask & CAIL_PCIE_LINK_WIDTH_SUPPORT_X32 ? 32 :
+			adev->pm.pcie_mlw_mask & CAIL_PCIE_LINK_WIDTH_SUPPORT_X16 ? 16 :
+			adev->pm.pcie_mlw_mask & CAIL_PCIE_LINK_WIDTH_SUPPORT_X12 ? 12 :
+			adev->pm.pcie_mlw_mask & CAIL_PCIE_LINK_WIDTH_SUPPORT_X8 ? 8 :
+			adev->pm.pcie_mlw_mask & CAIL_PCIE_LINK_WIDTH_SUPPORT_X4 ? 4 :
+			adev->pm.pcie_mlw_mask & CAIL_PCIE_LINK_WIDTH_SUPPORT_X2 ? 2 : 1;
+
+		dev_info->tcp_cache_size = adev->gfx.config.gc_tcp_l1_size;
+		dev_info->num_sqc_per_wgp = adev->gfx.config.gc_num_sqc_per_wgp;
+		dev_info->sqc_data_cache_size = adev->gfx.config.gc_l1_data_cache_size_per_sqc;
+		dev_info->sqc_inst_cache_size = adev->gfx.config.gc_l1_instruction_cache_size_per_sqc;
+		dev_info->gl1c_cache_size = adev->gfx.config.gc_gl1c_size_per_instance *
+					    adev->gfx.config.gc_gl1c_per_sa;
+		dev_info->gl2c_cache_size = adev->gfx.config.gc_gl2c_per_gpu;
+		dev_info->mall_size = adev->gmc.mall_size;
+
 		ret = copy_to_user(out, dev_info,
 				   min((size_t)size, sizeof(*dev_info))) ? -EFAULT : 0;
 		kfree(dev_info);
 		return ret;
 	}
 	case AMDGPU_INFO_VCE_CLOCK_TABLE: {
-		unsigned i;
+		unsigned int i;
 		struct drm_amdgpu_info_vce_clock_table vce_clk_table = {};
 		struct amd_vce_state *vce_state;
 
@@ -1008,6 +1040,24 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 			/* get stable pstate mclk in Mhz */
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_STABLE_PSTATE_MCLK,
+						   (void *)&ui32, &ui32_size)) {
+				return -EINVAL;
+			}
+			ui32 /= 100;
+			break;
+		case AMDGPU_INFO_SENSOR_PEAK_PSTATE_GFX_SCLK:
+			/* get peak pstate sclk in Mhz */
+			if (amdgpu_dpm_read_sensor(adev,
+						   AMDGPU_PP_SENSOR_PEAK_PSTATE_SCLK,
+						   (void *)&ui32, &ui32_size)) {
+				return -EINVAL;
+			}
+			ui32 /= 100;
+			break;
+		case AMDGPU_INFO_SENSOR_PEAK_PSTATE_GFX_MCLK:
+			/* get peak pstate mclk in Mhz */
+			if (amdgpu_dpm_read_sensor(adev,
+						   AMDGPU_PP_SENSOR_PEAK_PSTATE_MCLK,
 						   (void *)&ui32, &ui32_size)) {
 				return -EINVAL;
 			}
@@ -1172,7 +1222,7 @@ int amdgpu_driver_open_kms(struct drm_device *dev, struct drm_file *file_priv)
 		goto error_vm;
 	}
 
-	if (amdgpu_mcbp || amdgpu_sriov_vf(adev)) {
+	if (amdgpu_mcbp) {
 		uint64_t csa_addr = amdgpu_csa_vaddr(adev) & AMDGPU_GMC_HOLE_MASK;
 
 		r = amdgpu_map_static_csa(adev, &fpriv->vm, adev->virt.csa_obj,
@@ -1236,7 +1286,7 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 	if (amdgpu_device_ip_get_ip_block(adev, AMD_IP_BLOCK_TYPE_VCE) != NULL)
 		amdgpu_vce_free_handles(adev, file_priv);
 
-	if (amdgpu_mcbp || amdgpu_sriov_vf(adev)) {
+	if (amdgpu_mcbp) {
 		/* TODO: how to handle reserve failure */
 		BUG_ON(amdgpu_bo_reserve(adev->virt.csa_obj, true));
 		amdgpu_vm_bo_del(adev, fpriv->csa_va);
