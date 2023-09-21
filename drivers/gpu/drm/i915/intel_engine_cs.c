@@ -49,6 +49,8 @@ struct engine_class_info {
 	const char *name;
 	int (*init_legacy)(struct intel_engine_cs *engine);
 	int (*init_execlists)(struct intel_engine_cs *engine);
+
+	u8 uabi_class;
 };
 
 static const struct engine_class_info intel_engine_classes[] = {
@@ -56,21 +58,25 @@ static const struct engine_class_info intel_engine_classes[] = {
 		.name = "rcs",
 		.init_execlists = logical_render_ring_init,
 		.init_legacy = intel_init_render_ring_buffer,
+		.uabi_class = I915_ENGINE_CLASS_RENDER,
 	},
 	[COPY_ENGINE_CLASS] = {
 		.name = "bcs",
 		.init_execlists = logical_xcs_ring_init,
 		.init_legacy = intel_init_blt_ring_buffer,
+		.uabi_class = I915_ENGINE_CLASS_COPY,
 	},
 	[VIDEO_DECODE_CLASS] = {
 		.name = "vcs",
 		.init_execlists = logical_xcs_ring_init,
 		.init_legacy = intel_init_bsd_ring_buffer,
+		.uabi_class = I915_ENGINE_CLASS_VIDEO,
 	},
 	[VIDEO_ENHANCEMENT_CLASS] = {
 		.name = "vecs",
 		.init_execlists = logical_xcs_ring_init,
 		.init_legacy = intel_init_vebox_ring_buffer,
+		.uabi_class = I915_ENGINE_CLASS_VIDEO_ENHANCE,
 	},
 };
 
@@ -202,6 +208,15 @@ intel_engine_setup(struct drm_i915_private *dev_priv,
 	GEM_BUG_ON(info->class >= ARRAY_SIZE(intel_engine_classes));
 	class_info = &intel_engine_classes[info->class];
 
+	if (GEM_WARN_ON(info->class > MAX_ENGINE_CLASS))
+		return -EINVAL;
+
+	if (GEM_WARN_ON(info->instance > MAX_ENGINE_INSTANCE))
+		return -EINVAL;
+
+	if (GEM_WARN_ON(dev_priv->engine_class[info->class][info->instance]))
+		return -EINVAL;
+
 	GEM_BUG_ON(dev_priv->engine[id]);
 	engine = kzalloc(sizeof(*engine), GFP_KERNEL);
 	if (!engine)
@@ -212,12 +227,14 @@ intel_engine_setup(struct drm_i915_private *dev_priv,
 	WARN_ON(snprintf(engine->name, sizeof(engine->name), "%s%u",
 			 class_info->name, info->instance) >=
 		sizeof(engine->name));
-	engine->uabi_id = info->uabi_id;
 	engine->hw_id = engine->guc_id = info->hw_id;
 	engine->mmio_base = info->mmio_base;
 	engine->irq_shift = info->irq_shift;
 	engine->class = info->class;
 	engine->instance = info->instance;
+
+	engine->uabi_id = info->uabi_id;
+	engine->uabi_class = class_info->uabi_class;
 
 	engine->context_size = __intel_engine_context_size(dev_priv,
 							   engine->class);
@@ -229,6 +246,7 @@ intel_engine_setup(struct drm_i915_private *dev_priv,
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&engine->context_status_notifier);
 
+	dev_priv->engine_class[info->class][info->instance] = engine;
 	dev_priv->engine[id] = engine;
 	return 0;
 }
@@ -993,7 +1011,7 @@ gen9_wa_init_mcr(struct drm_i915_private *dev_priv)
 	 * on s/ss combo, the read should be done with read_subslice_reg.
 	 */
 	slice = ffs(sseu->slice_mask) - 1;
-	subslice = ffs(sseu->subslice_mask);
+	subslice = ffs(sseu->subslice_mask[slice]);
 	GEM_BUG_ON(!subslice);
 	subslice--;
 
@@ -1872,6 +1890,29 @@ void intel_engine_dump(struct intel_engine_cs *engine, struct drm_printer *m)
 	spin_unlock_irq(&b->rb_lock);
 
 	drm_printf(m, "\n");
+}
+
+static u8 user_class_map[] = {
+	[I915_ENGINE_CLASS_RENDER] = RENDER_CLASS,
+	[I915_ENGINE_CLASS_COPY] = COPY_ENGINE_CLASS,
+	[I915_ENGINE_CLASS_VIDEO] = VIDEO_DECODE_CLASS,
+	[I915_ENGINE_CLASS_VIDEO_ENHANCE] = VIDEO_ENHANCEMENT_CLASS,
+};
+
+struct intel_engine_cs *
+intel_engine_lookup_user(struct drm_i915_private *i915, u8 class, u8 instance)
+{
+	if (class >= ARRAY_SIZE(user_class_map))
+		return NULL;
+
+	class = user_class_map[class];
+
+	GEM_BUG_ON(class > MAX_ENGINE_CLASS);
+
+	if (instance > MAX_ENGINE_INSTANCE)
+		return NULL;
+
+	return i915->engine_class[class][instance];
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

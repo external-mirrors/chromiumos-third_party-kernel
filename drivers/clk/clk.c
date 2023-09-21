@@ -106,7 +106,11 @@ static int clk_pm_runtime_get(struct clk_core *core)
 		return 0;
 
 	ret = pm_runtime_get_sync(core->dev);
-	return ret < 0 ? ret : 0;
+	if (ret < 0) {
+		pm_runtime_put_noidle(core->dev);
+		return ret;
+	}
+	return 0;
 }
 
 static void clk_pm_runtime_put(struct clk_core *core)
@@ -233,7 +237,8 @@ static bool clk_core_is_enabled(struct clk_core *core)
 
 	ret = core->ops->is_enabled(core->hw);
 done:
-	clk_pm_runtime_put(core);
+	if (core->dev)
+		pm_runtime_put(core->dev);
 
 	return ret;
 }
@@ -700,10 +705,9 @@ static void clk_core_unprepare(struct clk_core *core)
 	if (core->ops->unprepare)
 		core->ops->unprepare(core->hw);
 
-	clk_pm_runtime_put(core);
-
 	trace_clk_unprepare_complete(core);
 	clk_core_unprepare(core->parent);
+	clk_pm_runtime_put(core);
 }
 
 static void clk_core_unprepare_lock(struct clk_core *core)
@@ -1140,8 +1144,10 @@ static int clk_core_round_rate_nolock(struct clk_core *core,
 {
 	lockdep_assert_held(&prepare_lock);
 
-	if (!core)
+	if (!core) {
+		req->rate = 0;
 		return 0;
+	}
 
 	clk_core_init_rate_req(core, req);
 
@@ -1771,6 +1777,9 @@ static void clk_change_rate(struct clk_core *core)
 		best_parent_rate = core->parent->rate;
 	}
 
+	if (clk_pm_runtime_get(core))
+		return;
+
 	if (core->flags & CLK_SET_RATE_UNGATE) {
 		unsigned long flags;
 
@@ -1841,6 +1850,8 @@ static void clk_change_rate(struct clk_core *core)
 	/* handle the new child who might not be in core->children yet */
 	if (core->new_child)
 		clk_change_rate(core->new_child);
+
+	clk_pm_runtime_put(core);
 }
 
 static unsigned long clk_core_req_round_rate_nolock(struct clk_core *core,
@@ -2316,8 +2327,11 @@ static int clk_core_set_phase_nolock(struct clk_core *core, int degrees)
 
 	trace_clk_set_phase(core, degrees);
 
-	if (core->ops->set_phase)
+	if (core->ops->set_phase) {
 		ret = core->ops->set_phase(core->hw, degrees);
+		if (!ret)
+			core->phase = degrees;
+	}
 
 	trace_clk_set_phase_complete(core, degrees);
 

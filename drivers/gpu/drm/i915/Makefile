@@ -27,6 +27,7 @@ i915-y := i915_drv.o \
 
 i915-$(CONFIG_COMPAT)   += i915_ioc32.o
 i915-$(CONFIG_DEBUG_FS) += i915_debugfs.o intel_pipe_crc.o
+i915-$(CONFIG_PERF_EVENTS) += i915_pmu.o
 
 # GEM code
 i915-y += i915_cmd_parser.o \
@@ -48,6 +49,7 @@ i915-y += i915_cmd_parser.o \
 	  i915_gem_tiling.o \
 	  i915_gem_timeline.o \
 	  i915_gem_userptr.o \
+	  i915_query.o \
 	  i915_trace_points.o \
 	  i915_vma.o \
 	  intel_breadcrumbs.o \
@@ -60,6 +62,7 @@ i915-y += i915_cmd_parser.o \
 
 # general-purpose microcontroller (GuC) support
 i915-y += intel_uc.o \
+	  intel_uc_fw.o \
 	  intel_guc_ct.o \
 	  intel_guc_log.o \
 	  intel_guc_loader.o \
