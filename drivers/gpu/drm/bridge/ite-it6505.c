@@ -2862,7 +2862,7 @@ static int it6505_audio_hw_params(struct device *dev, void *data,
 static int it6505_audio_setup_trigger(struct it6505 *it6505,
 						     int event)
 {
-	struct device *dev = &it6505->client->dev;
+	struct device *dev = it6505->dev;
 
 	DRM_DEV_DEBUG_DRIVER(dev, "event: %d", event);
 
@@ -3460,7 +3460,7 @@ static int it6505_typec_mux_set(struct typec_mux_dev *mux,
 {
 	struct it6505_port_data *data = typec_mux_get_drvdata(mux);
 	struct it6505 *it6505 = data->it6505;
-	struct device *dev = &it6505->client->dev;
+	struct device *dev = it6505->dev;
 	bool old_dp_connected, new_dp_connected;
 
 	if (it6505->num_typec_switches == 1)
