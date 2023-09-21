@@ -39,7 +39,6 @@
 #define ACP_POWER_OFF_IN_PROGRESS		0x03
 
 #define ACP_ERROR_MASK				0x20000000
-#define ACP_EXT_INTR_STAT_CLEAR_MASK		0xFFFFFFFF
 
 #define CLK5_CLK_PLL_PWR_REQ_N0         0X0006C2C0
 #define CLK5_SPLL_FIELD_2_N0            0X0006C114
@@ -124,7 +123,6 @@ static struct snd_soc_dai_driver acp_phx_dai[] = {
 		.rate_max = 48000,
 	},
 	.ops = &asoc_acp_cpu_dai_ops,
-	.probe = &asoc_acp_i2s_probe,
 },
 {
 	.name = "acp-i2s-bt",
@@ -150,7 +148,6 @@ static struct snd_soc_dai_driver acp_phx_dai[] = {
 		.rate_max = 48000,
 	},
 	.ops = &asoc_acp_cpu_dai_ops,
-	.probe = &asoc_acp_i2s_probe,
 },
 {
 	.name = "acp-i2s-hs",
@@ -176,7 +173,6 @@ static struct snd_soc_dai_driver acp_phx_dai[] = {
 		.rate_max = 48000,
 	},
 	.ops = &asoc_acp_cpu_dai_ops,
-	.probe = &asoc_acp_i2s_probe,
 },
 {
 	.name = "acp-pdm-dmic",
@@ -256,22 +252,6 @@ static int acp6x_reset(void __iomem *base)
 		cpu_relax();
 	}
 	return -ETIMEDOUT;
-}
-static int smn_write(struct pci_dev *dev, u32 smn_addr, u32 data)
-{
-	pci_write_config_dword(dev, 0x60, smn_addr);
-	pci_write_config_dword(dev, 0x64, data);
-
-	return 0;
-}
-
-static int smn_read(struct pci_dev *dev, u32 smn_addr)
-{
-	u32 data;
-	pci_write_config_dword(dev, 0x60, smn_addr);
-	pci_read_config_dword(dev, 0x64, &data);
-
-	return data;
 }
 
 static void acp63_master_clock_generate(struct acp_dev_data *adata)
