@@ -78,12 +78,6 @@ static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
-/*
- * The minimum load balance interval in jiffies that must pass before a
- * a periodic or nohz-idle balance happens.
- */
-static unsigned long __read_mostly sysctl_sched_min_load_balance_interval = 1UL;
-
 int sched_thermal_decay_shift;
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
@@ -136,6 +130,16 @@ static unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
 static unsigned int sysctl_numa_balancing_promote_rate_limit = 65536;
 #endif
 
+#ifdef CONFIG_SMP
+/*
+ * The minimum load balance interval in jiffies that must pass before a
+ * a periodic or nohz-idle balance happens.
+ */
+static unsigned long __read_mostly sysctl_sched_min_load_balance_interval = 1UL;
+
+DEFINE_STATIC_KEY_TRUE(sched_aggressive_next_balance);
+#endif
+
 #ifdef CONFIG_SYSCTL
 static struct ctl_table sched_fair_sysctls[] = {
 #ifdef CONFIG_CFS_BANDWIDTH
@@ -158,6 +162,8 @@ static struct ctl_table sched_fair_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 	},
 #endif /* CONFIG_NUMA_BALANCING */
+
+#ifdef CONFIG_SMP
 	{
 		.procname	= "sched_min_load_balance_interval",
 		.data		= &sysctl_sched_min_load_balance_interval,
@@ -165,6 +171,13 @@ static struct ctl_table sched_fair_sysctls[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_doulongvec_minmax,
 	},
+	{
+		.procname       = "sched_aggressive_next_balance",
+		.data           = &sched_aggressive_next_balance.key,
+		.mode           = 0644,
+		.proc_handler   = proc_do_static_key,
+	},
+#endif
 };
 
 static int __init sched_fair_sysctl_init(void)
@@ -12468,7 +12481,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	if (!get_rd_overloaded(this_rq->rd) ||
 	    (sd && this_rq->avg_idle < sd->max_newidle_lb_cost)) {
 
-		if (sd)
+		if (static_branch_likely(&sched_aggressive_next_balance) && sd)
 			update_next_balance(sd, &next_balance);
 		rcu_read_unlock();
 
@@ -12485,7 +12498,8 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	for_each_domain(this_cpu, sd) {
 		u64 domain_cost;
 
-		update_next_balance(sd, &next_balance);
+		if (static_branch_likely(&sched_aggressive_next_balance))
+			update_next_balance(sd, &next_balance);
 
 		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
 			break;
@@ -12499,6 +12513,10 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 			t1 = sched_clock_cpu(this_cpu);
 			domain_cost = t1 - t0;
 			update_newidle_cost(sd, domain_cost);
+			if (!static_branch_likely(&sched_aggressive_next_balance)) {
+				sd->last_balance = jiffies;
+				update_next_balance(sd, &next_balance);
+			}
 
 			curr_cost += domain_cost;
 			t0 = t1;
