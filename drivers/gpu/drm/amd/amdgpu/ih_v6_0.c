@@ -647,8 +647,6 @@ static void ih_v6_0_update_clockgating_state(struct amdgpu_device *adev,
 		if (def != data)
 			WREG32_SOC15(OSSSYS, 0, regIH_CLK_CTRL, data);
 	}
-
-	return;
 }
 
 static int ih_v6_0_set_clockgating_state(void *handle,
@@ -732,8 +730,6 @@ static void ih_v6_0_get_clockgating_state(void *handle, u64 *flags)
 
 	if (!RREG32_SOC15(OSSSYS, 0, regIH_CLK_CTRL))
 		*flags |= AMD_CG_SUPPORT_IH_CG;
-
-	return;
 }
 
 static const struct amd_ip_funcs ih_v6_0_ip_funcs = {
