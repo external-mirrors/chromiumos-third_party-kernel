@@ -78,6 +78,13 @@ static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
+/*
+ * The minimum load balance interval in jiffies that must pass before a
+ * a periodic or nohz-idle balance happens.
+ */
+static unsigned long __read_mostly sysctl_sched_min_load_balance_interval = 1UL;
+
+int sched_thermal_decay_shift;
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
 	pr_warn("Ignoring the deprecated sched_thermal_decay_shift= option\n");
@@ -151,6 +158,13 @@ static struct ctl_table sched_fair_sysctls[] = {
 		.extra1		= SYSCTL_ZERO,
 	},
 #endif /* CONFIG_NUMA_BALANCING */
+	{
+		.procname	= "sched_min_load_balance_interval",
+		.data		= &sysctl_sched_min_load_balance_interval,
+		.maxlen		= sizeof(unsigned long),
+		.mode		= 0644,
+		.proc_handler	= proc_doulongvec_minmax,
+	},
 };
 
 static int __init sched_fair_sysctl_init(void)
@@ -9667,7 +9681,8 @@ void update_group_capacity(struct sched_domain *sd, int cpu)
 	unsigned long interval;
 
 	interval = msecs_to_jiffies(sd->balance_interval);
-	interval = clamp(interval, 1UL, max_load_balance_interval);
+	interval = clamp(interval, sysctl_sched_min_load_balance_interval,
+			 max_load_balance_interval);
 	sdg->sgc->next_update = jiffies + interval;
 
 	if (!child) {
