@@ -2196,4 +2196,38 @@ static __always_inline void alloc_tag_restore(struct alloc_tag *tag, struct allo
 #define alloc_tag_restore(_tag, _old)		do {} while (0)
 #endif
 
+#ifdef CONFIG_PARAVIRT_SCHED
+DECLARE_STATIC_KEY_FALSE(__pv_sched_enabled);
+
+extern unsigned long pv_sched_pa(void);
+
+static inline bool pv_sched_enabled(void)
+{
+	return static_branch_unlikely(&__pv_sched_enabled);
+}
+
+static inline void pv_sched_enable(void)
+{
+	static_branch_enable(&__pv_sched_enabled);
+}
+
+extern void pv_sched_vcpu_update(int policy, int prio, int nice, bool lazy);
+extern void pv_sched_vcpu_kerncs_unboost(int boost_type, bool lazy);
+extern void pv_sched_vcpu_kerncs_boost_lazy(int boost_type);
+#else
+static inline bool pv_sched_enabled(void)
+{
+	return false;
+}
+
+static inline void pv_sched_enable(void) { }
+
+static inline void pv_sched_vcpu_update(int policy, int prio,
+		int nice, bool lazy)
+{
+}
+static inline void pv_sched_vcpu_kerncs_unboost(int boost_type, bool lazy) { }
+static inline void pv_sched_vcpu_kerncs_boost_lazy(int boost_type) { }
+#endif
+
 #endif
