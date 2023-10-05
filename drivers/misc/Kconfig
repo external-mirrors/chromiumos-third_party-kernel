@@ -493,6 +493,17 @@ config HISI_HIKEY_USB
 	  switching between the dual-role USB-C port and the USB-A host ports
 	  using only one USB controller.
 
+config NXP_UWB
+	tristate "NXP UCI(Uwb Command Interface) protocol driver support"
+	depends on SPI
+	help
+	  This option enables the UWB driver for NXP sr1xx device.
+	  Such device supports UCI packet structure, FiRa compliant.
+
+	  Say Y here to compile support for nxp-sr1xx into the kernel or
+	  say M to compile it as a module. The module will be called
+	  nxp-sr1xx.ko
+
 config OPEN_DICE
 	tristate "Open Profile for DICE driver"
 	depends on OF_RESERVED_MEM
