@@ -57,6 +57,10 @@
 #include <linux/khugepaged.h>
 #include <linux/rculist_nulls.h>
 #include <linux/random.h>
+#include <linux/mmu_notifier.h>
+#ifdef CONFIG_KVM
+#include <linux/kvm_host.h>
+#endif
 
 #include <asm/tlbflush.h>
 #include <asm/div64.h>
@@ -187,6 +191,30 @@ struct scan_control {
  * From 0 .. 200.  Higher means more swappy.
  */
 int vm_swappiness = 60;
+
+struct kernfs_node *lru_gen_admin_node;
+
+int min_filelist_kbytes_handler(struct ctl_table *table, int write,
+				void *buf, size_t *len, loff_t *pos)
+{
+	size_t written;
+
+	if (!lru_gen_enabled() || write)
+		return proc_dointvec(table, write, buf, len, pos);
+
+	if (!*len || *pos) {
+		*len = 0;
+		return 0;
+	}
+
+	written = min_t(size_t, 2, *len);
+	memcpy(buf, "0\n", written);
+
+	*len = written;
+	*pos = written;
+
+	return 0;
+}
 
 LIST_HEAD(shrinker_list);
 DECLARE_RWSEM(shrinker_rwsem);
@@ -3016,6 +3044,28 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 }
 
 /*
+ * Low watermark used to prevent fscache thrashing during low memory.
+ */
+int min_filelist_kbytes;
+
+/*
+ * Check low watermark used to prevent fscache thrashing during low memory.
+ */
+static int file_is_low(struct lruvec *lruvec)
+{
+	unsigned long size;
+
+	if (!mem_cgroup_disabled())
+		return false;
+
+	size = node_page_state(lruvec_pgdat(lruvec), NR_ACTIVE_FILE);
+	size += node_page_state(lruvec_pgdat(lruvec), NR_INACTIVE_FILE);
+	size <<= (PAGE_SHIFT - 10);
+
+	return size < min_filelist_kbytes;
+}
+
+/*
  * Determine how aggressively the anon and file LRU lists should be
  * scanned.
  *
@@ -3050,6 +3100,15 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	 */
 	if (cgroup_reclaim(sc) && !swappiness) {
 		scan_balance = SCAN_FILE;
+		goto out;
+	}
+
+	/*
+	 * Do not scan file pages when swap is allowed by __GFP_IO and
+	 * file page count is low.
+	 */
+	if ((sc->gfp_mask & __GFP_IO) && file_is_low(lruvec)) {
+		scan_balance = SCAN_ANON;
 		goto out;
 	}
 
@@ -3992,6 +4051,59 @@ static struct folio *get_pfn_folio(unsigned long pfn, struct mem_cgroup *memcg,
 	return folio;
 }
 
+#ifndef kvm_arch_has_test_clear_young
+#define kvm_arch_has_test_clear_young() 0
+#endif
+
+static bool test_spte_young(struct mm_struct *mm, unsigned long addr, unsigned long end,
+			    unsigned long *bitmap, unsigned long *last)
+{
+	if (!kvm_arch_has_test_clear_young() || !get_cap(LRU_GEN_SPTE_WALK))
+		return false;
+
+	if (*last > addr)
+		goto done;
+
+	*last = end - addr > MIN_LRU_BATCH * PAGE_SIZE ?
+		addr + MIN_LRU_BATCH * PAGE_SIZE - 1 : end - 1;
+	bitmap_zero(bitmap, MIN_LRU_BATCH);
+
+	mmu_notifier_test_clear_young(mm, addr, *last + 1, false, bitmap);
+done:
+	return test_bit((*last - addr) / PAGE_SIZE, bitmap);
+}
+
+static void clear_spte_young(struct mm_struct *mm, unsigned long addr,
+			     unsigned long *bitmap, unsigned long *last)
+{
+	int i;
+	unsigned long start, end = *last + 1;
+
+	if (addr + PAGE_SIZE != end)
+		return;
+
+	i = find_last_bit(bitmap, MIN_LRU_BATCH);
+	if (i == MIN_LRU_BATCH)
+		return;
+
+	start = end - (i + 1) * PAGE_SIZE;
+
+	i = find_first_bit(bitmap, MIN_LRU_BATCH);
+
+	end -= i * PAGE_SIZE;
+
+	mmu_notifier_test_clear_young(mm, start, end, false, bitmap);
+}
+
+static void skip_spte_young(struct mm_struct *mm, unsigned long addr,
+			    unsigned long *bitmap, unsigned long *last)
+{
+	if (*last > addr)
+		__clear_bit((*last - addr) / PAGE_SIZE, bitmap);
+
+	clear_spte_young(mm, addr, bitmap, last);
+}
+
 static bool suitable_to_scan(int total, int young)
 {
 	int n = clamp_t(int, cache_line_size() / sizeof(pte_t), 2, 8);
@@ -4007,6 +4119,8 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 	pte_t *pte;
 	spinlock_t *ptl;
 	unsigned long addr;
+	unsigned long bitmap[BITS_TO_LONGS(MIN_LRU_BATCH)];
+	unsigned long last = 0;
 	int total = 0;
 	int young = 0;
 	struct lru_gen_mm_walk *walk = args->private;
@@ -4025,6 +4139,7 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 	arch_enter_lazy_mmu_mode();
 restart:
 	for (i = pte_index(start), addr = start; addr != end; i++, addr += PAGE_SIZE) {
+		bool success;
 		unsigned long pfn;
 		struct folio *folio;
 		pte_t ptent = ptep_get(pte + i);
@@ -4033,20 +4148,27 @@ restart:
 		walk->mm_stats[MM_LEAF_TOTAL]++;
 
 		pfn = get_pte_pfn(ptent, args->vma, addr);
-		if (pfn == -1)
+		if (pfn == -1) {
+			skip_spte_young(args->vma->vm_mm, addr, bitmap, &last);
 			continue;
+		}
 
-		if (!pte_young(ptent)) {
+		success = test_spte_young(args->vma->vm_mm, addr, end, bitmap, &last);
+		if (!success && !pte_young(ptent)) {
+			skip_spte_young(args->vma->vm_mm, addr, bitmap, &last);
 			walk->mm_stats[MM_LEAF_OLD]++;
 			continue;
 		}
 
 		folio = get_pfn_folio(pfn, memcg, pgdat, walk->can_swap);
-		if (!folio)
+		if (!folio) {
+			skip_spte_young(args->vma->vm_mm, addr, bitmap, &last);
 			continue;
+		}
 
-		if (!ptep_test_and_clear_young(args->vma, addr, pte + i))
-			VM_WARN_ON_ONCE(true);
+		clear_spte_young(args->vma->vm_mm, addr, bitmap, &last);
+		if (pte_young(ptent))
+			ptep_test_and_clear_young(args->vma, addr, pte + i);
 
 		young++;
 		walk->mm_stats[MM_LEAF_YOUNG]++;
@@ -4536,8 +4658,10 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 			walk_mm(lruvec, mm, walk);
 	} while (mm);
 done:
-	if (success)
+	if (success) {
 		inc_max_seq(lruvec, can_swap, force_scan);
+		kernfs_notify(lru_gen_admin_node);
+	}
 
 	return success;
 }
@@ -4636,6 +4760,32 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 	}
 }
 
+static bool should_look_around(struct vm_area_struct *vma, unsigned long addr,
+			       pte_t *pte, int *young)
+{
+	unsigned long old = true;
+
+	if (!get_cap(LRU_GEN_SPTE_WALK)) {
+		old = !pte_young(*pte);
+		*young = ptep_clear_flush_young_notify(vma, addr, pte);
+
+		return !old;
+	}
+
+	*young = mmu_notifier_test_clear_young(vma->vm_mm, addr, addr + PAGE_SIZE, true, &old);
+
+	if (!old)
+		*young = true;
+
+	if (pte_young(*pte)) {
+		ptep_test_and_clear_young(vma, addr, pte);
+		*young = true;
+		return true;
+	}
+
+	return !old && get_cap(LRU_GEN_SPTE_WALK);
+}
+
 /******************************************************************************
  *                          rmap/PT walk feedback
  ******************************************************************************/
@@ -4647,12 +4797,14 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
  * the PTE table to the Bloom filter. This forms a feedback loop between the
  * eviction and the aging.
  */
-void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
+bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 {
 	int i;
 	unsigned long start;
 	unsigned long end;
 	struct lru_gen_mm_walk *walk;
+	unsigned long bitmap[BITS_TO_LONGS(MIN_LRU_BATCH)];
+	unsigned long last = 0;
 	int young = 0;
 	pte_t *pte = pvmw->pte;
 	unsigned long addr = pvmw->address;
@@ -4667,14 +4819,20 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	lockdep_assert_held(pvmw->ptl);
 	VM_WARN_ON_ONCE_FOLIO(folio_test_lru(folio), folio);
 
+	if (!should_look_around(pvmw->vma, addr, pte, &young))
+		return young;
+
 	if (spin_is_contended(pvmw->ptl))
-		return;
+		return young;
 
 	/* avoid taking the LRU lock under the PTL when possible */
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
 
 	start = max(addr & PMD_MASK, pvmw->vma->vm_start);
 	end = min(addr | ~PMD_MASK, pvmw->vma->vm_end - 1) + 1;
+
+	if (end - start == PAGE_SIZE)
+		return young;
 
 	if (end - start > MIN_LRU_BATCH * PAGE_SIZE) {
 		if (addr - start < MIN_LRU_BATCH * PAGE_SIZE / 2)
@@ -4689,29 +4847,38 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 
 	/* folio_update_gen() requires stable folio_memcg() */
 	if (!mem_cgroup_trylock_pages(memcg))
-		return;
+		return young;
 
 	arch_enter_lazy_mmu_mode();
 
 	pte -= (addr - start) / PAGE_SIZE;
 
 	for (i = 0, addr = start; addr != end; i++, addr += PAGE_SIZE) {
+		bool success;
 		unsigned long pfn;
 		pte_t ptent = ptep_get(pte + i);
 
 		pfn = get_pte_pfn(ptent, pvmw->vma, addr);
-		if (pfn == -1)
+		if (pfn == -1) {
+			skip_spte_young(pvmw->vma->vm_mm, addr, bitmap, &last);
 			continue;
+		}
 
-		if (!pte_young(ptent))
+		success = test_spte_young(pvmw->vma->vm_mm, addr, end, bitmap, &last);
+		if (!success && !pte_young(ptent)) {
+			skip_spte_young(pvmw->vma->vm_mm, addr, bitmap, &last);
 			continue;
+		}
 
 		folio = get_pfn_folio(pfn, memcg, pgdat, can_swap);
-		if (!folio)
+		if (!folio) {
+			skip_spte_young(pvmw->vma->vm_mm, addr, bitmap, &last);
 			continue;
+		}
 
-		if (!ptep_test_and_clear_young(pvmw->vma, addr, pte + i))
-			VM_WARN_ON_ONCE(true);
+		clear_spte_young(pvmw->vma->vm_mm, addr, bitmap, &last);
+		if (pte_young(ptent))
+			ptep_test_and_clear_young(pvmw->vma, addr, pte + i);
 
 		young++;
 
@@ -4741,6 +4908,8 @@ void lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	/* feedback from rmap walkers to page table walkers */
 	if (suitable_to_scan(i, young))
 		update_bloom_filter(lruvec, max_seq, pvmw->pmd);
+
+	return young;
 }
 
 /******************************************************************************
@@ -5772,6 +5941,9 @@ static ssize_t enabled_show(struct kobject *kobj, struct kobj_attribute *attr, c
 	if (should_clear_pmd_young())
 		caps |= BIT(LRU_GEN_NONLEAF_YOUNG);
 
+	if (kvm_arch_has_test_clear_young() && get_cap(LRU_GEN_SPTE_WALK))
+		caps |= BIT(LRU_GEN_SPTE_WALK);
+
 	return sysfs_emit(buf, "0x%04x\n", caps);
 }
 
@@ -5805,9 +5977,165 @@ static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 static struct kobj_attribute lru_gen_enabled_attr = __ATTR_RW(enabled);
 
+static int print_node_mglru(struct lruvec *lruvec, char *buf, int orig_pos)
+{
+	unsigned long seq;
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+
+	DEFINE_MAX_SEQ(lruvec);
+	DEFINE_MIN_SEQ(lruvec);
+
+	int print_pos = orig_pos;
+
+	seq = min(min_seq[0], min_seq[1]);
+
+	for (; seq <= max_seq; seq++) {
+		int gen, type, zone;
+		unsigned int msecs;
+
+		gen = lru_gen_from_seq(seq);
+		msecs = jiffies_to_msecs(jiffies - READ_ONCE(lrugen->timestamps[gen]));
+
+		print_pos += snprintf(buf + print_pos, PAGE_SIZE - print_pos,
+			" %10lu %10u", seq, msecs);
+
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			long size = 0;
+
+			if (seq < min_seq[type]) {
+				print_pos += snprintf(buf + print_pos,
+					PAGE_SIZE - print_pos, "         -0 ");
+				continue;
+			}
+
+			for (zone = 0; zone < MAX_NR_ZONES; zone++)
+				size += READ_ONCE(lrugen->nr_pages[gen][type][zone]);
+
+			print_pos += snprintf(buf + print_pos,
+				PAGE_SIZE - print_pos, " %10lu ", max(size, 0L));
+		}
+
+		print_pos += snprintf(buf + print_pos, PAGE_SIZE - print_pos, "\n");
+
+	}
+
+	return print_pos - orig_pos;
+}
+
+static ssize_t show_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct lruvec *lruvec;
+	struct mem_cgroup *memcg;
+
+	char *path = kvmalloc(PATH_MAX, GFP_KERNEL);
+	int buf_len = 0;
+
+	if (!path)
+		return -EINVAL;
+	path[0] = 0;
+	buf[0] = 0;
+	memcg = mem_cgroup_iter(NULL, NULL, NULL);
+	do {
+		int nid;
+
+		for_each_node_state(nid, N_MEMORY) {
+			lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(nid));
+			if (lruvec) {
+				if (nid == first_memory_node) {
+#ifdef CONFIG_MEMCG
+					if (memcg)
+						cgroup_path(memcg->css.cgroup, path, PATH_MAX);
+					else
+						path[0] = 0;
+#endif
+					buf_len += snprintf(buf + buf_len, PAGE_SIZE - buf_len,
+						"memcg %5hu %s\n", mem_cgroup_id(memcg), path);
+				}
+
+				buf_len += snprintf(buf + buf_len, PAGE_SIZE - buf_len,
+					" node %5d\n", nid);
+				buf_len += print_node_mglru(lruvec, buf, buf_len);
+			}
+		}
+	} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)));
+
+	if (buf_len >= PAGE_SIZE)
+		buf_len = PAGE_SIZE - 1;
+	buf[buf_len] = 0;
+
+	kvfree(path);
+
+	return buf_len;
+}
+
+static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
+		   struct scan_control *sc, int swappiness, unsigned long opt);
+
+static ssize_t store_lru_gen_admin(struct kobject *kobj, struct kobj_attribute *attr,
+				const char *src, size_t len)
+{
+	void *buf;
+	char *cur, *next;
+	int err = 0;
+	struct scan_control sc = {
+		.may_writepage = true,
+		.may_unmap = true,
+		.may_swap = true,
+		.reclaim_idx = MAX_NR_ZONES - 1,
+		.gfp_mask = GFP_KERNEL,
+	};
+
+	buf = kvmalloc(len + 1, GFP_USER);
+	if (!buf)
+		return -ENOMEM;
+
+	memcpy(buf, src, len);
+
+	next = buf;
+	next[len] = '\0';
+
+	set_task_reclaim_state(current, &sc.reclaim_state);
+
+	while ((cur = strsep(&next, ",;\n"))) {
+		int n;
+		int end;
+		char cmd;
+		unsigned int memcg_id;
+		unsigned int nid;
+		unsigned long seq;
+		unsigned int swappiness = -1;
+		unsigned long nr_to_reclaim = -1;
+
+		cur = skip_spaces(cur);
+		if (!*cur)
+			continue;
+
+		n = sscanf(cur, "%c %u %u %lu %n %u %n %lu %n", &cmd, &memcg_id, &nid,
+			   &seq, &end, &swappiness, &end, &nr_to_reclaim, &end);
+		if (n < 4 || cur[end]) {
+			err = -EINVAL;
+			break;
+		}
+
+		err = run_cmd(cmd, memcg_id, nid, seq, &sc, swappiness, nr_to_reclaim);
+		if (err)
+			break;
+	}
+
+	set_task_reclaim_state(current, NULL);
+	kvfree(buf);
+
+	return err ? : len;
+}
+
+static struct kobj_attribute lru_gen_admin_attr = __ATTR(
+	admin, 0644, show_lru_gen_admin, store_lru_gen_admin
+);
+
 static struct attribute *lru_gen_attrs[] = {
 	&lru_gen_min_ttl_attr.attr,
 	&lru_gen_enabled_attr.attr,
+	&lru_gen_admin_attr.attr,
 	NULL
 };
 
@@ -6241,11 +6569,14 @@ void lru_gen_exit_memcg(struct mem_cgroup *memcg)
 
 static int __init init_lru_gen(void)
 {
+	struct kernfs_node *tmp;
 	BUILD_BUG_ON(MIN_NR_GENS + 1 >= MAX_NR_GENS);
 	BUILD_BUG_ON(BIT(LRU_GEN_WIDTH) <= MAX_NR_GENS);
 
 	if (sysfs_create_group(mm_kobj, &lru_gen_attr_group))
 		pr_err("lru_gen: failed to create sysfs group\n");
+	tmp = kernfs_find_and_get(mm_kobj->sd, "lru_gen");
+	lru_gen_admin_node = kernfs_find_and_get(tmp, "admin");
 
 	debugfs_create_file("lru_gen", 0644, NULL, NULL, &lru_gen_rw_fops);
 	debugfs_create_file("lru_gen_full", 0444, NULL, NULL, &lru_gen_ro_fops);
