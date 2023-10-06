@@ -810,9 +810,9 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 		return -ENODEV;
 	}
 
-	/* CHROMIUM: Can't do devfreq without this table */
-	if (!kbdev->opp_table) {
-		dev_err(kbdev->dev, "Uninitialized devfreq opp table\n");
+	/* CHROMIUM: Can't do devfreq without OPP */
+	if (kbdev->opp_token <= 0) {
+		dev_err(kbdev->dev, "Uninitialized devfreq opp token\n");
 		return -ENODEV;
 	}
 

@@ -4584,16 +4584,10 @@ int power_control_init(struct kbase_device *kbdev)
 #if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
 	if (kbdev->nr_regulators > 0) {
-		kbdev->opp_table = dev_pm_opp_set_regulators(kbdev->dev,
-#if (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE)
-			regulator_names
-#else
-			regulator_names, BASE_MAX_NR_CLOCKS_REGULATORS
-#endif /* (KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE) */
-			);
-
-		if (IS_ERR(kbdev->opp_table)) {
-			err = PTR_ERR(kbdev->opp_table);
+		kbdev->opp_token = dev_pm_opp_set_regulators(kbdev->dev,
+							     regulator_names);
+		if (kbdev->opp_token < 0) {
+			err = kbdev->opp_token;
 			goto regulators_probe_defer;
 		}
 	}
@@ -4628,8 +4622,7 @@ void power_control_term(struct kbase_device *kbdev)
 	dev_pm_opp_of_remove_table(kbdev->dev);
 #if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
-	if (!IS_ERR_OR_NULL(kbdev->opp_table))
-		dev_pm_opp_put_regulators(kbdev->opp_table);
+	dev_pm_opp_put_regulators(kbdev->opp_token);
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 #endif /* CONFIG_PM_OPP */
 
