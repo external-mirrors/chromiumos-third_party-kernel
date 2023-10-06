@@ -131,7 +131,6 @@ endif
 
 ccflags-y += \
     -I$(srctree)/include/linux \
-    -I$(srctree)/drivers/staging/android \
     -I$(src) \
     -I$(src)/include \
     -I$(src)/platform/$(MALI_PLATFORM_DIR) \
