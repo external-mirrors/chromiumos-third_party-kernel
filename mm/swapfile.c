@@ -2770,14 +2770,11 @@ static struct swap_info_struct *alloc_swap_info(void)
 	return p;
 }
 
-/* This sysctl is only exposed when CONFIG_DISK_BASED_SWAP is enabled. */
-int sysctl_disk_based_swap;
-
 static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 {
 	int error;
+	bool disk_based_swap_enabled = IS_ENABLED(CONFIG_DISK_BASED_SWAP);
 
-	/* On Chromium OS, we only support zram swap devices. */
 	if (S_ISBLK(inode->i_mode)) {
 		char name[BDEVNAME_SIZE];
 
@@ -2789,7 +2786,7 @@ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 			return error;
 		}
 		snprintf(name, sizeof(name), "%pg", p->bdev);
-		if (strncmp(name, "zram", strlen("zram"))) {
+		if (!disk_based_swap_enabled && strncmp(name, "zram", strlen("zram"))) {
 			iput(p->bdev->bd_inode);
 			p->bdev = NULL;
 			return -EINVAL;
@@ -2807,7 +2804,7 @@ static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 			return -EINVAL;
 		p->flags |= SWP_BLKDEV;
 	} else if (S_ISREG(inode->i_mode)) {
-		if (!sysctl_disk_based_swap)
+		if (!disk_based_swap_enabled)
 			return -EINVAL;
 		p->bdev = inode->i_sb->s_bdev;
 	}
