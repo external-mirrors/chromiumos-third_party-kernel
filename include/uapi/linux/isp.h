@@ -258,11 +258,11 @@ enum isp_op_instance_id {
 };
 
 /**
- * struct isp_out_fence_instruction - Export fence instruction
+ * struct isp_export_fence_instruction - Export fence instruction
  *
  * @id:		ID of the exported fence
  */
-struct isp_out_fence_instruction {
+struct isp_export_fence_instruction {
 	__u32		id;
 };
 
@@ -318,7 +318,7 @@ struct isp_write_instruction {
  * @ISP_WRITE_INSTRUCTION:		Write instruction
  * @ISP_DMABUF_INSTRUCTION:		DMA buffer instruction
  * @ISP_INSTANCE_INSTRUCTION:		Entity instance instruction
- * @ISP_OUT_FENCE_INSTRUCTION:		Export fence instruction
+ * @ISP_EXPORT_FENCE_INSTRUCTION:	Export fence instruction
  * @ISP_SIGNAL_FENCE_INSTRUCTION:	Signal and destroy exported fence
  */
 enum isp_rw_instruction_type {
@@ -326,7 +326,7 @@ enum isp_rw_instruction_type {
 	ISP_WRITE_INSTRUCTION,
 	ISP_DMABUF_INSTRUCTION,
 	ISP_INSTANCE_INSTRUCTION,
-	ISP_OUT_FENCE_INSTRUCTION,
+	ISP_EXPORT_FENCE_INSTRUCTION,
 	ISP_SIGNAL_FENCE_INSTRUCTION,
 };
 
@@ -339,7 +339,7 @@ enum isp_rw_instruction_type {
  * @wr:		Used when type is ISP_WRITE_INSTRUCTION
  * @db:		Used when type is ISP_DMABUF_INSTRUCTION
  * @in:		Used when type is ISP_INSTANCE_INSTRUCTION
- * @of:		Used when type is ISP_OUT_FENCE_INSTRUCTION
+ * @of:		Used when type is ISP_EXPORT_FENCE_INSTRUCTION
  * @sf:		User when type is ISP_SIGNAL_FENCE_INSTRUCTION
  * @reserved:	Reserved for alignment and future extension
  */
@@ -351,7 +351,7 @@ struct isp_rw_instruction {
 		struct isp_write_instruction		wr;
 		struct isp_dmabuf_instruction		db;
 		struct isp_instance_instruction		in;
-		struct isp_out_fence_instruction	of;
+		struct isp_export_fence_instruction	ef;
 		struct isp_signal_fence_instruction	sf;
 		__u8					reserved[128];
 	};

@@ -1417,7 +1417,7 @@ static int test_dma_fence(struct libisp *isp)
 
 	op->operation_add.instruction	= (uint64_t)insn;
 
-	insn->type			= ISP_OUT_FENCE_INSTRUCTION;
+	insn->type			= ISP_EXPORT_FENCE_INSTRUCTION;
 	insn->error			= 0;
 
 	ret = libisp_operation_ioctl(isp, lio);
@@ -1435,14 +1435,14 @@ static int test_dma_fence(struct libisp *isp)
 		ret = 0;
 	}
 
-	if (insn->of.id == ISP_OP_NO_FENCE) {
-		pr_err("Unexpected fence out fd value: %d\n", insn->of.id);
+	if (insn->ef.id == ISP_OP_NO_FENCE) {
+		pr_err("Unexpected fence out fd value: %d\n", insn->ef.id);
 		ret = -EINVAL;
 		goto out;
 	}
 
-	pr_info("Exported DMA fence ID: %d\n", insn->of.id);
-	fence_out = insn->of.id;
+	pr_info("Exported DMA fence ID: %d\n", insn->ef.id);
+	fence_out = insn->ef.id;
 
 	libisp_operation_put(lio);
 

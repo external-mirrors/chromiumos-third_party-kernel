@@ -1262,14 +1262,15 @@ static int isp_fence_in_dependency_add(struct isp_pipeline *pipeline,
 }
 
 /**
- * isp_out_fence_instruction() - Create Out-Fence-to-OP
+ * isp_export_fence_instruction() - Export fence (out-fence)
  * @op: pointer to the dependent operation
  * @insn: struct that will hold ID of exported fence
  *
  * Return: 0 on success or a negative error code otherwise.
  */
-static int isp_out_fence_instruction(struct isp_obj_op *op,
-				     struct isp_out_fence_instruction *insn)
+static int
+isp_export_fence_instruction(struct isp_obj_op *op,
+			     struct isp_export_fence_instruction *insn)
 {
 	struct isp_pipeline *pipeline = op->pipeline;
 	struct isp_obj_fence *sf;
@@ -1450,8 +1451,8 @@ static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 	case ISP_INSTANCE_INSTRUCTION:
 		ret = isp_prepare_instance_instruction(op, &insn.in);
 		break;
-	case ISP_OUT_FENCE_INSTRUCTION:
-		ret = isp_out_fence_instruction(op, &insn.of);
+	case ISP_EXPORT_FENCE_INSTRUCTION:
+		ret = isp_export_fence_instruction(op, &insn.ef);
 		ret |= copy_to_user(payload, &insn, sizeof(insn));
 		break;
 	}
