@@ -1383,7 +1383,6 @@ static int test_operations(struct libisp *isp)
 
 static int test_dma_fence(struct libisp *isp)
 {
-	struct libisp_notifier_list *no_list;
 	struct isp_rw_instruction *insn;
 	struct libisp_operation *lio;
 	struct obj_entity *entity;
@@ -1464,7 +1463,7 @@ static int test_dma_fence(struct libisp *isp)
 	if (!event)
 		return -EINVAL;
 
-	lio = libisp_operation_get(2);
+	lio = libisp_operation_get(3);
 	if (!lio)
 		return -EINVAL;
 
@@ -1479,21 +1478,32 @@ static int test_dma_fence(struct libisp *isp)
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_EVENT;
 	op->operation_add.deps[0].id	= event->id;
 
-	no_list = libisp_notifier_list_get(1);
-	if (!no_list) {
+	op = libisp_operation_at(lio, 1);
+	op->operation_type		= ISP_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 2;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.instruction	= ISP_OP_NULL_PTR;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
+	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.deps[0].type	= ISP_DEPENDENCY_OP;
+	op->operation_add.deps[0].id	= 1;
+
+	insn = libisp_rw_instruction_get();
+	if (!insn) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	op->operation_add.notifier_list	= (uint64_t)no_list;
-	no = libisp_notifier_at(no_list, 0);
+	op->operation_add.instruction	= (uint64_t)insn;
 
-	no->type	= ISP_FENCE_NOTIFIER;
-	no->fn.id	= fence_out;
+	insn->type			= ISP_SIGNAL_FENCE_INSTRUCTION;
+	insn->error			= 0;
+	insn->sf.id			= fence_out;
 
-	op = libisp_operation_at(lio, 1);
+	op = libisp_operation_at(lio, 2);
 	op->operation_type		= ISP_OPERATION_TYPE_ADD;
-	op->operation_add.id		= 2;
+	op->operation_add.id		= 3;
 	op->operation_add.delay_ns	= 0;
 	op->operation_add.instruction	= ISP_OP_NULL_PTR;
 	op->operation_add.notifier_list	= ISP_OP_NULL_PTR;
@@ -1511,8 +1521,8 @@ static int test_dma_fence(struct libisp *isp)
 
 	MAY_EXIT_AT();
 
-	ret = read_operations_completion_events(isp, 2);
-	if (ret != 2) {
+	ret = read_operations_completion_events(isp, 3);
+	if (ret != 3) {
 		pr_err("FATAL: unexpected completion read error: %d\n", ret);
 		ret = -EINVAL;
 		goto out;

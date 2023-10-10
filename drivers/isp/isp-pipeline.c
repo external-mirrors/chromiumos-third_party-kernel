@@ -598,6 +598,23 @@ static int isp_run_instance_instruction(struct isp_obj_op *op,
 	return -EINVAL;
 }
 
+static int
+isp_run_signal_fence_instruction(struct isp_obj_op *op,
+				 struct isp_signal_fence_instruction *insn)
+{
+	struct isp_pipeline *pipeline = op->pipeline;
+	struct isp_obj_fence *fence;
+
+	fence = isp_out_fence_lookup(&pipeline->objs, insn->id);
+	if (!fence)
+		return -ENOENT;
+
+	isp_fire_out_fence_signal(&fence->nsobj);
+	isp_out_fence_unregister(&fence->nsobj);
+	isp_fence_put(fence);
+	return 0;
+}
+
 /*
  * isp_read_instruction() and isp_write_instruction() hold the reference of
  * DMA-buf objects only through out corresponding entity call. If the driver
@@ -880,6 +897,9 @@ static int isp_op_run_rw_instructions(struct isp_obj_op *op)
 		break;
 	case ISP_INSTANCE_INSTRUCTION:
 		ret = isp_run_instance_instruction(op, &insn.in);
+		break;
+	case ISP_SIGNAL_FENCE_INSTRUCTION:
+		ret = isp_run_signal_fence_instruction(op, &insn.sf);
 		break;
 	}
 
