@@ -2672,6 +2672,12 @@ static int test_instances(struct libisp *isp)
 		return ret;
 	}
 
+	ret = wait_for_slow_entity_timer(isp);
+	if (ret) {
+		pr_err("FATAL: can't sync with slow entity timer\n");
+		return ret;
+	}
+
 	ret = test_compound_instance_operations(isp);
 	if (ret) {
 		pr_err("FATAL: failure test_compound_instance_operations()\n");
