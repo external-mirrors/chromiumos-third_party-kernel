@@ -674,7 +674,7 @@ static int add_single_invalid_operation(struct libisp *isp,
 	}
 
 	if (fence_in != ISP_OP_NO_FENCE) {
-		op->operation_add.deps[d].type	= ISP_DEPENDENCY_FENCE_IN;
+		op->operation_add.deps[d].type	= ISP_DEPENDENCY_FENCE;
 		op->operation_add.deps[d].id	= fence_in;
 		d++;
 	}
@@ -734,7 +734,7 @@ static int add_many_invalid_operations(struct libisp *isp,
 			op->operation_add.deps[1].type	= ISP_DEPENDENCY_OP;
 			op->operation_add.deps[1].id	= i - 1;
 
-			op->operation_add.deps[2].type	= ISP_DEPENDENCY_FENCE_IN;
+			op->operation_add.deps[2].type	= ISP_DEPENDENCY_FENCE;
 			op->operation_add.deps[2].id	= 255;
 		}
 	}
@@ -1500,7 +1500,7 @@ static int test_dma_fence(struct libisp *isp)
 	op->operation_add.entity	= entity->id;
 	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
 	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
-	op->operation_add.deps[0].type	= ISP_DEPENDENCY_FENCE_IN;
+	op->operation_add.deps[0].type	= ISP_DEPENDENCY_FENCE;
 	op->operation_add.deps[0].id	= fence_out;
 
 	ret = libisp_operation_ioctl(isp, lio);

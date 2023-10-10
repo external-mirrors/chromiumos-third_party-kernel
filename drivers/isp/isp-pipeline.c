@@ -1544,7 +1544,7 @@ int isp_pipeline_enqueue_prepare(struct isp_pipeline *pipeline,
 		case ISP_DEPENDENCY_EVENT:
 			ret = isp_event_dependency_add(pipeline, dep, op);
 			break;
-		case ISP_DEPENDENCY_FENCE_IN:
+		case ISP_DEPENDENCY_FENCE:
 			ret = isp_fence_in_dependency_add(pipeline, dep, op);
 			break;
 		}

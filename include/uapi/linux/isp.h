@@ -363,13 +363,13 @@ struct isp_rw_instruction {
  * @ISP_DEPENDENCY_NONE:	Empty entry (no dependency)
  * @ISP_DEPENDENCY_OP:		Operation dependency
  * @ISP_DEPENDENCY_EVENT:	Event dependency
- * @ISP_DEPENDENCY_FENCE_IN:	Fence IN (imported fence) dependency
+ * @ISP_DEPENDENCY_FENCE:	Fence (imported fence) dependency
  */
 enum isp_dependency_type {
 	ISP_DEPENDENCY_NONE,
 	ISP_DEPENDENCY_OP,
 	ISP_DEPENDENCY_EVENT,
-	ISP_DEPENDENCY_FENCE_IN,
+	ISP_DEPENDENCY_FENCE,
 };
 
 /**
