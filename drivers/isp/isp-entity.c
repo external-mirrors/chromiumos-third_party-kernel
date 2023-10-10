@@ -58,7 +58,7 @@ static void root_entity_dmabuf_remove(void *dev,
 	WARN_ON(1);
 }
 
-static struct isp_entity_ops root_entity_ops = {
+static const struct isp_entity_ops root_entity_ops = {
 	.instance_read		= root_entity_instance_read,
 	.instance_write		= root_entity_instance_write,
 	.instance_create	= root_entity_instance_create,
@@ -182,7 +182,7 @@ __printf(6, 7)
 struct isp_obj_entity *isp_entity_register(struct isp_device *isp,
 					   u32 parent_id,
 					   void *driver_data,
-					   struct isp_entity_ops *ops,
+					   const struct isp_entity_ops *ops,
 					   s32 num_instances,
 					   const char *namefmt,
 					   ...)
@@ -199,18 +199,10 @@ struct isp_obj_entity *isp_entity_register(struct isp_device *isp,
 	if (WARN_ON(!ops))
 		return NULL;
 
-	if (!ops->instance_read)
-		ops->instance_read = root_entity_instance_read;
-	if (!ops->instance_write)
-		ops->instance_write = root_entity_instance_write;
-	if (!ops->instance_create)
-		ops->instance_create = root_entity_instance_create;
-	if (!ops->instance_destroy)
-		ops->instance_destroy = root_entity_instance_destroy;
-	if (!ops->dmabuf_add)
-		ops->dmabuf_add = root_entity_dmabuf_add;
-	if (!ops->dmabuf_remove)
-		ops->dmabuf_remove = root_entity_dmabuf_remove;
+	if (!ops->instance_read || !ops->instance_write ||
+	    !ops->instance_create || !ops->instance_destroy ||
+	    !ops->dmabuf_add || !ops->dmabuf_remove)
+		return NULL;
 
 	entity = kzalloc(sizeof(*entity), GFP_KERNEL);
 	if (!entity)

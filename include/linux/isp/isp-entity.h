@@ -89,17 +89,17 @@ struct isp_entity_ops {
  */
 struct isp_obj_entity {
 	/** @nsobj: namespace object */
-	struct isp_obj		nsobj;
+	struct isp_obj			nsobj;
 	/** @ops: Read/Write execution callbacks */
-	struct isp_entity_ops	*ops;
+	const struct isp_entity_ops	*ops;
 	/** @instances_avail: number of instances an entity can have */
-	atomic_t		instances_avail;
+	atomic_t			instances_avail;
 	/** @flags: Entity flags */
-	u32			flags;
+	u32				flags;
 	/** @driver_data: Driver specific data */
-	void			*driver_data;
+	void				*driver_data;
 	/** @name: entity name */
-	char			name[ISP_ENTITY_NAME_SZ];
+	char				name[ISP_ENTITY_NAME_SZ];
 };
 
 /**
@@ -142,7 +142,7 @@ struct isp_obj_entity *isp_root_entity_register(struct isp_device *isp);
 struct isp_obj_entity *isp_entity_register(struct isp_device *isp,
 					   u32 parent_id,
 					   void *driver_data,
-					   struct isp_entity_ops *ops,
+					   const struct isp_entity_ops *ops,
 					   s32 num_instances,
 					   const char *namefmt,
 					   ...);

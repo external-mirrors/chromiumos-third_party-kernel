@@ -385,7 +385,7 @@ error:
 	return NULL;
 }
 
-static struct isp_entity_ops entity_ops = {
+static const struct isp_entity_ops entity_ops = {
 	.instance_read		= entity_instance_read,
 	.instance_write		= entity_instance_write,
 	.instance_create	= entity_instance_create,
@@ -394,7 +394,7 @@ static struct isp_entity_ops entity_ops = {
 	.dmabuf_remove		= dmabuf_remove,
 };
 
-static struct isp_entity_ops bm_entity_ops = {
+static const struct isp_entity_ops bm_entity_ops = {
 	.instance_read		= bm_entity_instance_read,
 	.instance_write		= bm_entity_instance_write,
 	.instance_create	= entity_instance_create,
@@ -484,7 +484,7 @@ static int visp_probe(struct platform_device *pdev)
 
 	idx = 1;
 	for (obj = 0; obj < ARRAY_SIZE(visp->entities); obj++) {
-		static struct isp_entity_ops *ops;
+		static const struct isp_entity_ops *ops;
 		struct isp_obj_entity *entity;
 
 		if (obj != ENTITY_BM_IRQ)
