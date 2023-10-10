@@ -358,50 +358,6 @@ struct isp_rw_instruction {
 } __attribute__((packed));
 
 /**
- * enum isp_notifier_type - Operation execution notifier type
- *
- * @ISP_FENCE_NOTIFIER:	Exported fence (out fence) notifier
- */
-enum isp_notifier_type {
-	ISP_FENCE_NOTIFIER,
-};
-
-/**
- * struct isp_fence_notifier - Notify exported fence (out fence)
- *
- * @id:		ID of the exported fence
- */
-struct isp_fence_notifier {
-	__u32		id;
-} __attribute__((packed));
-
-/**
- * struct isp_notifier - Operation execution notifier entry
- *
- * @type:	Type of the notifier entry (one of isp_notifier_type)
- * @fn:		Used when type is ISP_FENCE_NOTIFIER
- * @reserved:	Reserved for alignment and future extension
- */
-struct isp_notifier {
-	__u32		type;
-	union {
-		struct isp_fence_notifier	fn;
-		__u8				reserved[32];
-	};
-} __attribute__((packed));
-
-/**
- * struct isp_notifier_list - List of operation execution notifiers
- *
- * @num_entries:	Number of notifiers
- * @notifiers:		Array of notifiers' descriptors
- */
-struct isp_notifier_list {
-	__u32			num_entries;
-	struct isp_notifier	notifiers[];
-} __attribute__((packed));
-
-/**
  * enum isp_dependency_type - Operation dependency entry type
  *
  * @ISP_DEPENDENCY_NONE:	Empty entry (no dependency)
@@ -479,8 +435,6 @@ enum isp_op_payload {
  *			are ready
  * @instruction:	Pointer to the operation's read/write instruction or
  *			ISP_OP_NULL_PTR
- * @notifier_list:	Pointer to the list of execution notifiers or
- *			ISP_OP_NULL_PTR
  * @entity:		ID of the entity operation is executed on or
  *			ISP_OP_NO_ENTITY
  * @instance:		ID of the entity instance (context) operation is
@@ -498,7 +452,6 @@ struct isp_operation_add {
 	 */
 	__u64			delay_ns;
 	__u64			instruction;
-	__u64			notifier_list;
 	__u32			entity;
 	__u32			instance;
 } __attribute__((packed));

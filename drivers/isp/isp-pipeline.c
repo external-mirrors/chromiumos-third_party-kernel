@@ -688,56 +688,6 @@ error:
 	return NULL;
 }
 
-static void isp_fence_notifier(struct isp_obj_op *op,
-			       struct isp_fence_notifier *fn)
-{
-	struct isp_pipeline *pipeline = op->pipeline;
-	struct isp_obj_fence *fence;
-
-	fence = isp_out_fence_lookup(&pipeline->objs, fn->id);
-	if (!fence)
-		return;
-
-	isp_fire_out_fence_signal(&fence->nsobj);
-	isp_out_fence_unregister(&fence->nsobj);
-	isp_fence_put(fence);
-}
-
-static void isp_op_process_notifiers(struct isp_obj_op *op)
-{
-	struct isp_notifier_list notifier_list;
-	struct isp_notifier __user *payload;
-	int i;
-
-	if (op->exec_notifier_list_addr == ISP_OP_NULL_PTR)
-		return;
-
-	if (copy_from_user(&notifier_list, op->exec_notifier_list_addr,
-			   sizeof(notifier_list))) {
-		pr_err("Unable to access operation notifier list\n");
-		return;
-	}
-
-	payload = op->exec_notifier_list_addr +
-		offsetof(struct isp_notifier_list, notifiers);
-
-	for (i = 0; i < notifier_list.num_entries; i++) {
-		struct isp_notifier no;
-
-		if (copy_from_user(&no, payload, sizeof(no))) {
-			pr_err("Unable to access notifier\n");
-			break;
-		}
-
-		switch (no.type) {
-		case ISP_FENCE_NOTIFIER:
-			isp_fence_notifier(op, &no.fn);
-			break;
-		}
-		payload++;
-	}
-}
-
 static int isp_read_instruction(struct isp_obj_op *op,
 				struct isp_read_instruction *insn)
 {
@@ -838,9 +788,6 @@ static void isp_op_run_complete(struct isp_obj_op *op)
 
 	if (op->exec_error)
 		isp_op_set_rw_instruction_error(op, op->exec_error);
-
-	/* Notify exported (external) objects of operation completion */
-	isp_op_process_notifiers(op);
 
 	/*
 	 * Remove operation from the namespace, so that its ID can be
@@ -1435,7 +1382,6 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 {
 	op->delay_ns			= req->delay_ns;
 	op->exec_instruction_addr	= (void *)ISP_OP_NULL_PTR;
-	op->exec_notifier_list_addr	= (void *)ISP_OP_NULL_PTR;
 	op->exec_entity			= NULL;
 	op->exec_instance		= NULL;
 	op->exec_error			= 0;
@@ -1452,21 +1398,6 @@ static int isp_op_instruction_add(struct isp_pipeline *pipeline,
 		op->exec_instruction_addr = addr;
 		/* Make sure we can access instruction */
 		if (copy_from_user(&insn, addr, sizeof(insn)))
-			goto error;
-	}
-
-	if (req->notifier_list != ISP_OP_NULL_PTR) {
-		struct isp_notifier_list notifiers;
-		uintptr_t __user *addr;
-		size_t size;
-
-		addr = u64_to_user_ptr(req->notifier_list);
-		op->exec_notifier_list_addr = addr;
-		size = sizeof(notifiers);
-		if (copy_from_user(&notifiers, addr, size))
-			goto error;
-
-		if (notifiers.num_entries == 0)
 			goto error;
 	}
 

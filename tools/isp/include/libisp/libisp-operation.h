@@ -22,20 +22,12 @@ struct libisp_rw_list {
 	struct isp_rw_instruction	ents[];
 } __attribute__((packed));
 
-struct libisp_notifier_list {
-	u32				num_ents;
-	struct isp_notifier		ents[];
-} __attribute__((packed));
-
 struct libisp_operation *libisp_operation_get(uint32_t num_operations);
 int libisp_operation_ioctl(struct libisp *isp, struct libisp_operation *lio);
 void libisp_operation_put(struct libisp_operation *lio);
 
 struct isp_rw_instruction *libisp_rw_instruction_get(void);
 void libisp_rw_instruction_put(struct isp_rw_instruction *insn);
-
-struct libisp_notifier_list *libisp_notifier_list_get(uint32_t num_rw_entries);
-void libisp_notifier_list_put(struct libisp_notifier_list *nl);
 
 struct isp_operation *libisp_operation_at(struct libisp_operation *lio,
 					  u32 idx);
@@ -46,6 +38,4 @@ struct isp_operation *libisp_operation_at(struct libisp_operation *lio,
 	     ((e) = libisp_operation_at((q), (i)));			\
 	     (i)++)
 
-struct isp_notifier *libisp_notifier_at(struct libisp_notifier_list *nl,
-					u32 idx);
 #endif /* LIBISP_OPERATION_H_ */
