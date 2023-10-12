@@ -132,7 +132,8 @@ struct isp_query_events {
  * @ISP_OP_QUERY_ALL:		Query all operations
  */
 enum isp_operation_query_mode {
-	ISP_OP_QUERY_UNIQUE,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_OP_QUERY_UNIQUE		= 1,
 	ISP_OP_QUERY_ALL,
 };
 
@@ -166,7 +167,8 @@ struct isp_query_dmabuf {
  * @ISP_QUERY_TYPE_DMABUF:	Query DMA buffer object
  */
 enum query_type {
-	ISP_QUERY_TYPE_ENTITIES,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_QUERY_TYPE_ENTITIES		= 1,
 	ISP_QUERY_TYPE_EVENTS,
 	ISP_QUERY_TYPE_OPERATIONS,
 	ISP_QUERY_TYPE_DMABUF,
@@ -209,7 +211,8 @@ enum isp_dmabuf_instruction_id {
  * @ISP_OP_DMABUF_REMOVE:	Remove (release) DMA buffer
  */
 enum isp_dmabuf_instruction_op {
-	ISP_OP_DMABUF_ADD,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_OP_DMABUF_ADD		= 1,
 	ISP_OP_DMABUF_REMOVE,
 };
 
@@ -233,7 +236,8 @@ struct isp_dmabuf_instruction {
  * @ISP_OP_INSTANCE_DESTROY:	Destroy entity instance (context)
  */
 enum isp_instance_instruction_op {
-	ISP_OP_INSTANCE_CREATE,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_OP_INSTANCE_CREATE		= 1,
 	ISP_OP_INSTANCE_DESTROY,
 };
 
@@ -322,7 +326,8 @@ struct isp_write_instruction {
  * @ISP_SIGNAL_FENCE_INSTRUCTION:	Signal and destroy exported fence
  */
 enum isp_rw_instruction_type {
-	ISP_READ_INSTRUCTION,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_READ_INSTRUCTION		= 1,
 	ISP_WRITE_INSTRUCTION,
 	ISP_DMABUF_INSTRUCTION,
 	ISP_INSTANCE_INSTRUCTION,
@@ -366,7 +371,8 @@ struct isp_rw_instruction {
  * @ISP_DEPENDENCY_FENCE:	Fence (imported fence) dependency
  */
 enum isp_dependency_type {
-	ISP_DEPENDENCY_NONE,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_DEPENDENCY_NONE		= 1,
 	ISP_DEPENDENCY_OP,
 	ISP_DEPENDENCY_EVENT,
 	ISP_DEPENDENCY_FENCE,
@@ -393,7 +399,8 @@ struct isp_dependency {
  * @ISP_DEPENDENCY_STRICT_ORDER:	Strict dependency execution mode
  */
 enum isp_dependency_mode {
-	ISP_DEPENDENCY_WEAK_ORDER,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_DEPENDENCY_WEAK_ORDER	= 1,
 	ISP_DEPENDENCY_STRICT_ORDER,
 };
 
@@ -500,7 +507,8 @@ enum isp_operation_query_id {
  * @ISP_OPERATION_TYPE_REMOVE:	Remove operation
  */
 enum operation_type {
-	ISP_OPERATION_TYPE_ADD,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_OPERATION_TYPE_ADD		= 1,
 	ISP_OPERATION_TYPE_REMOVE,
 };
 
@@ -538,7 +546,8 @@ enum isp_entity_id {
  * @ISP_COMPLETION_TYPE_DELETED:	Operation deleted
  */
 enum isp_completion_type {
-	ISP_COMPLETION_TYPE_EXECUTED,
+	/* zero is left as invalid value to catch possible errors */
+	ISP_COMPLETION_TYPE_EXECUTED	= 1,
 	ISP_COMPLETION_TYPE_DELETED,
 };
 
