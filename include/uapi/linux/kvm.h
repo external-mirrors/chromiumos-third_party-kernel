@@ -923,6 +923,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_GET_CUR_CPUFREQ 512
 #define KVM_CAP_UTIL_HINT 513
 #define KVM_CAP_GET_CPUFREQ_TBL 514
+#define KVM_CAP_PV_SCHED	600
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
@@ -1553,5 +1554,9 @@ struct kvm_create_guest_memfd {
 	__u64 flags;
 	__u64 reserved[6];
 };
+
+/* Available with KVM_CAP_PV_SCHED */
+#define KVM_SET_PV_SCHED_ENABLED	_IOW(KVMIO, 0xe0, int)
+#define KVM_GET_PV_SCHED_ENABLED	_IOR(KVMIO, 0xe1, int)
 
 #endif /* __LINUX_KVM_H */
