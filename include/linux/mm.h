@@ -3293,6 +3293,24 @@ extern int do_munmap(struct mm_struct *, unsigned long, size_t,
 		     struct list_head *uf);
 extern int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int behavior);
 
+#ifdef CONFIG_PROCESS_RECLAIM
+enum reclaim_type {
+	RECLAIM_FILE = 1,
+	RECLAIM_ANON,
+	RECLAIM_ALL,
+	/*
+	 * For safety and backwards compatibility, shmem reclaim mode
+	 * is only possible by directly using 'shmem', 'all' does not
+	 * inlcude shmem.
+	 */
+	RECLAIM_SHMEM,
+};
+
+extern unsigned long madvise_cold_or_pageout_proc(struct vm_area_struct *vma,
+	unsigned long start_addr, unsigned long end_addr,
+	bool pageout, enum reclaim_type type, unsigned long limit);
+#endif
+
 #ifdef CONFIG_MMU
 extern int do_vma_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 			 unsigned long start, unsigned long end,
