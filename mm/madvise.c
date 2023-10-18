@@ -40,6 +40,8 @@
 struct madvise_walk_private {
 	struct mmu_gather *tlb;
 	bool pageout;
+	enum reclaim_type type;
+	unsigned long limit;
 };
 
 /*
@@ -389,6 +391,9 @@ static int madvise_cold_or_pageout_pte_range(pmd_t *pmd,
 		if (pageout_anon_only_filter && !folio_test_anon(folio))
 			goto huge_unlock;
 
+		if (private->type && !private->limit)
+			goto huge_unlock;
+
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
@@ -422,6 +427,13 @@ static int madvise_cold_or_pageout_pte_range(pmd_t *pmd,
 				else
 					list_add(&folio->lru, &folio_list);
 			}
+			/*
+			 * Reclaim the whole huge page even if it would make us go
+			 * over our limit.
+			 */
+			if (private->type)
+				private->limit -= min_t(unsigned long,
+							private->limit, folio_nr_pages(folio));
 		} else
 			folio_deactivate(folio);
 huge_unlock:
@@ -440,6 +452,9 @@ regular_folio:
 	flush_tlb_batched_pending(mm);
 	arch_enter_lazy_mmu_mode();
 	for (; addr < end; pte++, addr += PAGE_SIZE) {
+		if (private->type && !private->limit)
+			break;
+
 		ptent = ptep_get(pte);
 
 		if (pte_none(ptent))
@@ -521,6 +536,9 @@ regular_folio:
 				else
 					list_add(&folio->lru, &folio_list);
 			}
+
+			if (private->type)
+				private->limit -= 1;
 		} else
 			folio_deactivate(folio);
 	}
@@ -620,6 +638,41 @@ static long madvise_pageout(struct vm_area_struct *vma,
 	tlb_finish_mmu(&tlb);
 
 	return 0;
+}
+
+/*
+ * A custom/combined function of madvise_pageout() + madvise_pageout_page_range().
+ *
+ * Return number of page reclaimed.
+ */
+unsigned long madvise_cold_or_pageout_proc(struct vm_area_struct *vma,
+				unsigned long start_addr, unsigned long end_addr,
+				bool pageout, enum reclaim_type type, unsigned long limit)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	struct mmu_gather tlb;
+	unsigned long ret;
+	struct madvise_walk_private walk_private = {
+		.pageout = pageout,
+		.tlb = &tlb,
+		.type = type,
+		.limit = limit,
+	};
+
+	if (!can_madv_lru_vma(vma) || !can_do_file_pageout(vma))
+		return 0;
+
+	lru_add_drain();
+	tlb_gather_mmu(&tlb, mm);
+
+	tlb_start_vma(&tlb, vma);
+	walk_page_range(mm, start_addr, end_addr, &cold_walk_ops, &walk_private);
+	tlb_end_vma(&tlb, vma);
+	ret = limit - walk_private.limit;
+
+	tlb_finish_mmu(&tlb);
+
+	return ret;
 }
 
 static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
