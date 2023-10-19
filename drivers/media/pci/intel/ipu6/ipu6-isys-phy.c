@@ -508,7 +508,7 @@ int ipu6_isys_phy_common_init(struct ipu_isys *isys)
 	struct sensor_async_subdev *s_asd;
 	unsigned int i;
 
-	list_for_each_entry(asd, &isys->connection.asc_entry, asc_entry) {
+	list_for_each_entry(asd, &isys->notifier.done_list, asc_entry) {
 		s_asd = container_of(asd, struct sensor_async_subdev, asd);
 		phy_id = s_asd->csi2.port / 4;
 		phy_base = isp_base + IPU6_ISYS_PHY_BASE(phy_id);
@@ -567,7 +567,7 @@ int ipu6_isys_phy_config(struct ipu_isys *isys)
 	struct ipu_isys_csi2_config cfg;
 	int i;
 
-	list_for_each_entry(asd, &isys->connection.asc_entry, asc_entry) {
+	list_for_each_entry(asd, &isys->notifier.done_list, asc_entry) {
 		s_asd = container_of(asd, struct sensor_async_subdev, asd);
 		cfg.port = s_asd->csi2.port;
 		cfg.nlanes = s_asd->csi2.nlanes;

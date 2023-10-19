@@ -651,7 +651,7 @@ static int isys_notifier_init(struct ipu_isys *isys)
 		return ret;
 	}
 
-	if (list_empty(&isys->connection.asc_entry)) {
+	if (list_empty(&isys->notifier.waiting_list)) {
 		/* isys probe could continue with async subdevs missing */
 		dev_warn(&isys->adev->dev, "no subdev found in graph\n");
 		return 0;
