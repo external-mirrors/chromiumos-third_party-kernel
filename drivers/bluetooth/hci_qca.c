@@ -1687,6 +1687,14 @@ static bool qca_wakeup(struct hci_dev *hdev)
 	return wakeup;
 }
 
+static void qca_do_wakeup(struct hci_dev *hdev)
+{
+	struct hci_uart *hu = hci_get_drvdata(hdev);
+
+	if (qca_wakeup(hdev))
+		pm_wakeup_event(&hu->serdev->ctrl->dev, 0);
+}
+
 static int qca_port_reopen(struct hci_uart *hu)
 {
 	int ret;
@@ -1973,6 +1981,7 @@ retry:
 			if (device_can_wakeup(hu->serdev->ctrl->dev.parent))
 				hu->hdev->wakeup = qca_wakeup;
 		}
+                hu->hdev->do_wakeup = qca_do_wakeup;
 	} else if (ret == -ENOENT) {
 		/* No patch/nvm-config found, run with original fw/config */
 		set_bit(QCA_ROM_FW, &qca->flags);
