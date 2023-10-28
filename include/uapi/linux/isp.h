@@ -564,7 +564,7 @@ struct isp_completion {
 	__u32		id;
 	__u8		type;
 	union {
-		__u8	reserved[3];
+		__u8		reserved[19];
 	};
 } __attribute__((packed));
 
