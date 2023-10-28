@@ -13,18 +13,14 @@ static void ringbuffer_alloc(struct kunit *test)
 	int ret;
 
 	/* Buffer size is not a power of 2 */
-	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion), PAGE_SIZE - 1);
-	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
-
-	/* Entry size is not a power of 2 */
-	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion) - 1, PAGE_SIZE);
+	ret = isp_ringbuffer_init(&rb, PAGE_SIZE - 1);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
 	/* Buffer size is too small */
-	ret = isp_ringbuffer_init(&rb, PAGE_SIZE, PAGE_SIZE);
+	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion) - 1);
 	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
 
-	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion), PAGE_SIZE);
+	ret = isp_ringbuffer_init(&rb, PAGE_SIZE);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
 	isp_ringbuffer_release(&rb);
@@ -37,7 +33,7 @@ static void ringbuffer_write(struct kunit *test)
 	int i, ret;
 	off_t head;
 
-	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion),
+	ret = isp_ringbuffer_init(&rb,
 				  sizeof(struct isp_completion) * ENTRY_CNT);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
@@ -70,7 +66,7 @@ static void ringbuffer_read(struct kunit *test)
 	struct isp_completion readback;
 	int i, ret;
 
-	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion),
+	ret = isp_ringbuffer_init(&rb,
 				  sizeof(struct isp_completion) * ENTRY_CNT);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 

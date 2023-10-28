@@ -16,14 +16,15 @@
 #include <linux/slab.h>
 
 #define CIRC_ADD(rb, pos)			\
-	(((pos) + (rb)->entry_sz) & ((rb)->buffer_sz - 1))
+	(((pos) + sizeof(struct isp_completion)) & ((rb)->buffer_sz - 1))
 
 bool isp_ringbuffer_has_entry(struct isp_ringbuffer *rb)
 {
+	size_t entry_sz = sizeof(struct isp_completion);
 	bool entries;
 
 	spin_lock(&rb->lock);
-	entries = (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) >= rb->entry_sz);
+	entries = (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) >= entry_sz);
 	spin_unlock(&rb->lock);
 
 	return entries;
@@ -33,8 +34,10 @@ int isp_ringbuffer_read(struct isp_ringbuffer *rb,
 			struct isp_completion *completion,
 			u32 flags)
 {
+	size_t entry_sz = sizeof(struct isp_completion);
+
 	spin_lock(&rb->lock);
-	while (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) < rb->entry_sz) {
+	while (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) < entry_sz) {
 		if (flags & IOCB_NOWAIT) {
 			spin_unlock(&rb->lock);
 			return -EAGAIN;
@@ -47,7 +50,7 @@ int isp_ringbuffer_read(struct isp_ringbuffer *rb,
 		spin_lock(&rb->lock);
 	}
 
-	memcpy(completion, &rb->buffer[rb->tail], rb->entry_sz);
+	memcpy(completion, &rb->buffer[rb->tail], entry_sz);
 	rb->tail = CIRC_ADD(rb, rb->tail);
 	spin_unlock(&rb->lock);
 
@@ -58,11 +61,13 @@ ALLOW_ERROR_INJECTION(isp_ringbuffer_read, ERRNO);
 int isp_ringbuffer_write(struct isp_ringbuffer *rb,
 			 struct isp_completion *completion)
 {
+	size_t entry_sz = sizeof(struct isp_completion);
+
 	spin_lock(&rb->lock);
 	completion->seqno = atomic64_read(&rb->seqno);
 	atomic64_inc(&rb->seqno);
 
-	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) < rb->entry_sz) {
+	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) < entry_sz) {
 		/*
 		 * We just move ahead, user-space should consume completions
 		 * and detect a gap in sequential numbers.
@@ -70,7 +75,7 @@ int isp_ringbuffer_write(struct isp_ringbuffer *rb,
 		rb->tail = CIRC_ADD(rb, rb->tail);
 	}
 
-	memcpy(&rb->buffer[rb->head], completion, rb->entry_sz);
+	memcpy(&rb->buffer[rb->head], completion, entry_sz);
 	rb->head = CIRC_ADD(rb, rb->head);
 	spin_unlock(&rb->lock);
 
@@ -86,10 +91,10 @@ void isp_ringbuffer_release(struct isp_ringbuffer *rb)
 	kvfree(rb->buffer);
 }
 
-int isp_ringbuffer_init(struct isp_ringbuffer *rb,
-			size_t entry_size,
-			size_t buffer_size)
+int isp_ringbuffer_init(struct isp_ringbuffer *rb, size_t buffer_size)
 {
+	size_t entry_size = sizeof(struct isp_completion);
+
 	if (!is_power_of_2(buffer_size) || !is_power_of_2(entry_size))
 		return -EINVAL;
 	if (!entry_size || buffer_size / entry_size <= 1)
@@ -104,7 +109,6 @@ int isp_ringbuffer_init(struct isp_ringbuffer *rb,
 	if (!rb->buffer)
 		return -ENOMEM;
 
-	rb->entry_sz = entry_size;
 	rb->buffer_sz = buffer_size;
 	spin_lock_init(&rb->lock);
 

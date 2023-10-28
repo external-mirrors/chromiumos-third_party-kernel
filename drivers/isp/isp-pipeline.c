@@ -1868,9 +1868,7 @@ int isp_pipeline_init(struct isp_device *isp, struct isp_pipeline *pipeline)
 		return ret;
 	}
 
-	ret = isp_ringbuffer_init(&pipeline->event_buffer,
-				  sizeof(struct isp_completion),
-				  ISP_RINGBUFFER_SIZE);
+	ret = isp_ringbuffer_init(&pipeline->event_buffer, ISP_RINGBUFFER_SIZE);
 	if (ret) {
 		isp_ns_release(&pipeline->ops);
 		isp_ns_release(&pipeline->objs);
