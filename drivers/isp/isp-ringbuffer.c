@@ -16,18 +16,18 @@
 #include <linux/slab.h>
 
 #define CIRC_ADD(rb, pos)			\
-	(((pos) + sizeof(struct isp_completion)) & ((rb)->buffer_sz - 1))
+	(((pos) + sizeof(struct isp_completion)) & (ISP_RINGBUFFER_SIZE - 1))
 
 bool isp_ringbuffer_has_entry(struct isp_ringbuffer *rb)
 {
 	size_t entry_sz = sizeof(struct isp_completion);
-	bool entries;
+	bool ents;
 
 	spin_lock(&rb->lock);
-	entries = (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) >= entry_sz);
+	ents = (CIRC_CNT(rb->head, rb->tail, ISP_RINGBUFFER_SIZE) >= entry_sz);
 	spin_unlock(&rb->lock);
 
-	return entries;
+	return ents;
 }
 
 int isp_ringbuffer_read(struct isp_ringbuffer *rb,
@@ -37,7 +37,7 @@ int isp_ringbuffer_read(struct isp_ringbuffer *rb,
 	size_t entry_sz = sizeof(struct isp_completion);
 
 	spin_lock(&rb->lock);
-	while (CIRC_CNT(rb->head, rb->tail, rb->buffer_sz) < entry_sz) {
+	while (CIRC_CNT(rb->head, rb->tail, ISP_RINGBUFFER_SIZE) < entry_sz) {
 		if (flags & IOCB_NOWAIT) {
 			spin_unlock(&rb->lock);
 			return -EAGAIN;
@@ -67,7 +67,7 @@ int isp_ringbuffer_write(struct isp_ringbuffer *rb,
 	completion->seqno = atomic64_read(&rb->seqno);
 	atomic64_inc(&rb->seqno);
 
-	if (CIRC_SPACE(rb->head, rb->tail, rb->buffer_sz) < entry_sz) {
+	if (CIRC_SPACE(rb->head, rb->tail, ISP_RINGBUFFER_SIZE) < entry_sz) {
 		/*
 		 * We just move ahead, user-space should consume completions
 		 * and detect a gap in sequential numbers.
@@ -91,26 +91,24 @@ void isp_ringbuffer_release(struct isp_ringbuffer *rb)
 	kvfree(rb->buffer);
 }
 
-int isp_ringbuffer_init(struct isp_ringbuffer *rb, size_t buffer_size)
+int isp_ringbuffer_init(struct isp_ringbuffer *rb)
 {
 	size_t entry_size = sizeof(struct isp_completion);
 
-	if (!is_power_of_2(buffer_size) || !is_power_of_2(entry_size))
+	if (!is_power_of_2(ISP_RINGBUFFER_SIZE) || !is_power_of_2(entry_size))
 		return -EINVAL;
-	if (!entry_size || buffer_size / entry_size <= 1)
+	if (!entry_size || ISP_RINGBUFFER_SIZE / entry_size <= 1)
 		return -EINVAL;
 
 	rb->head = 0;
 	rb->tail = 0;
 	atomic64_set(&rb->seqno, 0);
 	init_waitqueue_head(&rb->wait);
+	spin_lock_init(&rb->lock);
 
-	rb->buffer = kvzalloc(buffer_size, GFP_KERNEL);
+	rb->buffer = kvzalloc(ISP_RINGBUFFER_SIZE, GFP_KERNEL);
 	if (!rb->buffer)
 		return -ENOMEM;
-
-	rb->buffer_sz = buffer_size;
-	spin_lock_init(&rb->lock);
 
 	return 0;
 }

@@ -5,22 +5,14 @@
 
 #include <kunit/test.h>
 
-#define ENTRY_CNT (4)
+#define ENTRY_CNT (ISP_RINGBUFFER_SIZE / sizeof(struct isp_completion))
 
 static void ringbuffer_alloc(struct kunit *test)
 {
 	struct isp_ringbuffer rb;
 	int ret;
 
-	/* Buffer size is not a power of 2 */
-	ret = isp_ringbuffer_init(&rb, PAGE_SIZE - 1);
-	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
-
-	/* Buffer size is too small */
-	ret = isp_ringbuffer_init(&rb, sizeof(struct isp_completion) - 1);
-	KUNIT_EXPECT_EQ(test, ret, -EINVAL);
-
-	ret = isp_ringbuffer_init(&rb, PAGE_SIZE);
+	ret = isp_ringbuffer_init(&rb);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
 	isp_ringbuffer_release(&rb);
@@ -29,12 +21,14 @@ static void ringbuffer_alloc(struct kunit *test)
 static void ringbuffer_write(struct kunit *test)
 {
 	struct isp_ringbuffer rb;
-	struct isp_completion objs[ENTRY_CNT];
+	struct isp_completion *objs;
 	int i, ret;
 	off_t head;
 
-	ret = isp_ringbuffer_init(&rb,
-				  sizeof(struct isp_completion) * ENTRY_CNT);
+	objs = kvzalloc(ISP_RINGBUFFER_SIZE, GFP_KERNEL);
+	KUNIT_EXPECT_PTR_NE(test, objs, NULL);
+
+	ret = isp_ringbuffer_init(&rb);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
 	/*
@@ -50,24 +44,27 @@ static void ringbuffer_write(struct kunit *test)
 	}
 
 	head = rb.head;
-	 /* Now the buffer is full */
+	/* Now the buffer is full */
 	ret = isp_ringbuffer_write(&rb, &objs[0]);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 	/* Ringbuffer head is supposed to advance */
 	KUNIT_EXPECT_NE(test, head, rb.head);
 
 	isp_ringbuffer_release(&rb);
+	kvfree(objs);
 }
 
 static void ringbuffer_read(struct kunit *test)
 {
 	struct isp_ringbuffer rb;
-	struct isp_completion objs[ENTRY_CNT * 2];
+	struct isp_completion *objs;
 	struct isp_completion readback;
 	int i, ret;
 
-	ret = isp_ringbuffer_init(&rb,
-				  sizeof(struct isp_completion) * ENTRY_CNT);
+	objs = kvzalloc(ISP_RINGBUFFER_SIZE * 2, GFP_KERNEL);
+	KUNIT_EXPECT_PTR_NE(test, objs, NULL);
+
+	ret = isp_ringbuffer_init(&rb);
 	KUNIT_EXPECT_EQ(test, ret, 0);
 
 	/* No objects in the buffer */
@@ -75,7 +72,7 @@ static void ringbuffer_read(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ret, -EAGAIN);
 
 	/*
-	 * Write an object and read that back immediately.
+	 * Write an object and read it back immediately.
 	 * The buffer pointers should circle back when they reach the end.
 	 */
 	for (i = 0; i < ENTRY_CNT * 2; i++) {
@@ -95,6 +92,7 @@ static void ringbuffer_read(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, ret, -EAGAIN);
 
 	isp_ringbuffer_release(&rb);
+	kvfree(objs);
 }
 
 static struct kunit_case isp_ringbuffer_test_cases[] = {

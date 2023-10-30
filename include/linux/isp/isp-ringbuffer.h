@@ -19,8 +19,6 @@
 struct isp_ringbuffer {
 	/** @buffer: the actual buffer */
 	u8			*buffer;
-	/** @buffer_sz: the buffer size, must be a power of two */
-	size_t			buffer_sz;
 	/** @head: buffer head */
 	off_t			head;
 	/** @tail: buffer tail */
@@ -42,6 +40,6 @@ int isp_ringbuffer_write(struct isp_ringbuffer *rb,
 			 struct isp_completion *completion);
 
 void isp_ringbuffer_release(struct isp_ringbuffer *rb);
-int isp_ringbuffer_init(struct isp_ringbuffer *rb, size_t buffer_size);
+int isp_ringbuffer_init(struct isp_ringbuffer *rb);
 
 #endif /* __LINUX_ISP_RINGBUFFER_H__ */
