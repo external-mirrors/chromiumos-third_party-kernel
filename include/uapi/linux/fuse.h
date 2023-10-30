@@ -448,9 +448,10 @@ struct fuse_file_lock {
 #define FUSE_SECURITY_CTX	(1ULL << 32)
 #define FUSE_HAS_INODE_DAX	(1ULL << 33)
 #define FUSE_CREATE_SUPP_GROUP	(1ULL << 34)
-#define FUSE_PASSTHROUGH	(1ULL << 34)
 #define FUSE_HAS_EXPIRE_ONLY	(1ULL << 35)
 #define FUSE_DIRECT_IO_RELAX	(1ULL << 36)
+/* to avoid conflicts, non-upstream flags should be in the rightmost bits */
+#define FUSE_PASSTHROUGH	(1ULL << 63)
 
 /**
  * CUSE INIT request/reply flags
