@@ -231,7 +231,7 @@ static const struct id_table ic_id_table[] = {
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xc, 0x8, HCI_UART),
 	  .config_needed = true,
 	  .has_rom_version = true,
-	  .has_msft_ext = true,
+	  .has_msft_ext = false,
 	  .fw_name  = "rtl_bt/rtl8822cs_fw",
 	  .cfg_name = "rtl_bt/rtl8822cs_config",
 	  .hw_info  = "rtl8822cs" },
@@ -240,7 +240,7 @@ static const struct id_table ic_id_table[] = {
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xc, 0xa, HCI_UART),
 	  .config_needed = true,
 	  .has_rom_version = true,
-	  .has_msft_ext = true,
+	  .has_msft_ext = false,
 	  .fw_name  = "rtl_bt/rtl8822cs_fw",
 	  .cfg_name = "rtl_bt/rtl8822cs_config",
 	  .hw_info  = "rtl8822cs" },
@@ -249,7 +249,7 @@ static const struct id_table ic_id_table[] = {
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xc, 0xa, HCI_USB),
 	  .config_needed = false,
 	  .has_rom_version = true,
-	  .has_msft_ext = true,
+	  .has_msft_ext = false,
 	  .fw_name  = "rtl_bt/rtl8822cu_fw",
 	  .cfg_name = "rtl_bt/rtl8822cu_config",
 	  .hw_info  = "rtl8822cu" },
@@ -1201,8 +1201,9 @@ next:
 		}
 	}
 
-	/* The following chips supports the Microsoft vendor extension,
-	 * therefore set the corresponding VsMsftOpCode.
+	/* Both RTL8822B and RTL8852A support only one tracking device
+	 * per condition in firmware, the use of MSFT HCI extension is
+	 * eliminated. See b/200993792 for more details.
 	 */
 	if (btrtl_dev->ic_info->has_msft_ext)
 		hci_set_msft_opcode(hdev, 0xFCF0);
