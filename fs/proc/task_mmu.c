@@ -20,6 +20,8 @@
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
 #include <linux/pkeys.h>
+#include <linux/random.h>
+#include <linux/mm_inline.h>
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -1768,6 +1770,154 @@ const struct file_operations proc_pagemap_operations = {
 	.release	= pagemap_release,
 };
 #endif /* CONFIG_PROC_PAGE_MONITOR */
+
+#ifdef CONFIG_PROCESS_RECLAIM
+
+static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned long nr_to_try)
+{
+	struct vm_area_struct *start, *vma;
+	unsigned long limit = nr_to_try;
+	bool pageout;
+
+	mmap_read_lock(mm);
+
+	start = find_vma(mm, 0);
+	if (nr_to_try != ULONG_MAX) {
+		unsigned int start_idx;
+
+		/*
+		 * Try to start at a random VMA to avoid always
+		 * reclaiming the same pages.
+		 */
+		start_idx = get_random_u32() % mm->map_count;
+		for (; start_idx && start; start_idx--)
+			start = find_vma(mm, start->vm_end);
+	}
+	BUG_ON(!start);
+
+	vma = start;
+	while (limit) {
+		if (is_vm_hugetlb_page(vma))
+			goto next;
+
+		if (vma->vm_flags & VM_LOCKED)
+			goto next;
+
+		if (type == RECLAIM_ANON && !vma_is_anonymous(vma))
+			goto next;
+		if ((type == RECLAIM_FILE || type == RECLAIM_SHMEM)
+				&& vma_is_anonymous(vma)) {
+			goto next;
+		}
+
+		if (vma_is_anonymous(vma) || shmem_file(vma->vm_file)) {
+			if (get_nr_swap_pages() <= 0 ||
+				get_mm_counter(mm, MM_ANONPAGES) == 0) {
+				if (type == RECLAIM_ALL)
+					goto next;
+				else
+					break;
+			}
+
+			if (shmem_file(vma->vm_file) && type != RECLAIM_SHMEM)
+				goto next;
+
+			pageout = true;
+		} else {
+			pageout = false;
+		}
+
+		/*
+		 * Use a random start address if we are limited in order
+		 * to avoid always hitting the same pages when we only
+		 * have a few eligible mappings.
+		 */
+		if (nr_to_try != ULONG_MAX) {
+			unsigned long idx, start;
+
+			idx = (vma->vm_end - vma->vm_start) / PAGE_SIZE;
+			idx = idx ? (get_random_u32() % idx) : 0;
+			start = vma->vm_start + PAGE_SIZE * idx;
+
+			limit -= madvise_cold_or_pageout_proc(vma, start, vma->vm_end,
+							      pageout, type, limit);
+			if (start != vma->vm_start)
+				limit -= madvise_cold_or_pageout_proc(vma, vma->vm_start, start,
+								      pageout, type, limit);
+		} else {
+			limit -= madvise_cold_or_pageout_proc(vma, vma->vm_start, vma->vm_end,
+							      pageout, type, limit);
+		}
+
+next:
+		vma = find_vma(mm, vma->vm_end);
+		if (!vma)
+			vma = find_vma(mm, 0);
+
+		/* Already walked through all of them. */
+		if (vma == start)
+			break;
+	}
+
+	flush_tlb_mm(mm);
+	mmap_read_unlock(mm);
+}
+
+static ssize_t reclaim_write(struct file *file, const char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	char buffer[PROC_NUMBUF];
+	struct mm_struct *mm;
+	enum reclaim_type type;
+	unsigned long num;
+	char *tok, *type_buf;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+
+	type_buf = strstrip(buffer);
+	tok = strsep(&type_buf, " ");
+	if (!strcmp(tok, "file"))
+		type = RECLAIM_FILE;
+	else if (!strcmp(tok, "anon"))
+		type = RECLAIM_ANON;
+#ifdef CONFIG_SHMEM
+	else if (!strcmp(tok, "shmem"))
+		type = RECLAIM_SHMEM;
+#endif
+	else if (!strcmp(tok, "all"))
+		type = RECLAIM_ALL;
+	else
+		return -EINVAL;
+
+	tok = strsep(&type_buf, " ");
+	if (!tok || kstrtol(tok, 10, &num) < 0)
+		num = ULONG_MAX;
+
+	task = get_proc_task(file->f_path.dentry->d_inode);
+	if (!task)
+		return -ESRCH;
+
+	mm = get_task_mm(task);
+	if (mm) {
+		reclaim_mm(mm, type, num);
+		mmput(mm);
+	}
+	put_task_struct(task);
+
+	return count;
+}
+
+const struct file_operations proc_reclaim_operations = {
+	.write		= reclaim_write,
+	.llseek		= noop_llseek,
+};
+#endif
 
 #ifdef CONFIG_NUMA
 

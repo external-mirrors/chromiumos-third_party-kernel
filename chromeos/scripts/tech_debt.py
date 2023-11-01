@@ -15,8 +15,12 @@ import sys
 
 
 TECH_DEBT_MSG = 'This patch is not fully upstream. Please open a tracking bug here: go/cros-kernel-technical-debt-bug and add a label UPSTREAM-TASK=b:XXXX referencing it. A member of the review committee will review the CL. Thank you.'
+<<<<<<< HEAD
 TECH_DEBT_MISSING_BUG = 'Proper BUG=b:XXXX entry is missing in the commit message'
 TECH_DEBT_DUP_BUG_MSG = 'UPSTREAM-TASK bugs cannot be the same as those present in the BUG tag.'
+=======
+
+>>>>>>> chromeos-kernelupstream-6.6-rc6-mm
 
 def is_chromium_only(files):
     """Check if the CL modifies files that only belong to ChromiumOS"""
@@ -44,6 +48,7 @@ def check_tech_debt(commit):
         'BACKPORT: FROMLIST'):
         return True
 
+<<<<<<< HEAD
     bug_id = r'b:[0-9]{7,}'
     bugs_ids= rf'({bug_id}(?:[, ]+{bug_id})*)'
 
@@ -73,6 +78,16 @@ def check_tech_debt(commit):
         return False
 
     return True
+=======
+    buganizer = r'b:[0-9]{7,}'
+    tag_line = r'\nUPSTREAM-TASK=%s([, ]+%s)*[ \t]*\n' % (buganizer, buganizer)
+    if re.search(tag_line, commit_message):
+        return True
+
+    print(TECH_DEBT_MSG, file=sys.stderr)
+    return False
+
+>>>>>>> chromeos-kernelupstream-6.6-rc6-mm
 
 def main():
     """Main function."""

@@ -374,7 +374,7 @@ config DISK_BASED_SWAP
 	default n
 	help
 	  By default, the Chromium OS kernel allows swapping only to
-	  zram devices. This option allows you to use disk and disk-based files
+	  zram devices. This option allows you to use disk-based files
 	  as swap devices too.  If unsure say N.
 
 config SYSVIPC

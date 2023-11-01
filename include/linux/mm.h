@@ -194,6 +194,7 @@ static inline void __mm_zero_struct_page(struct page *page)
 #define DEFAULT_MAX_MAP_COUNT	(USHRT_MAX - MAPCOUNT_ELF_CORE_MARGIN)
 
 extern int sysctl_max_map_count;
+extern int sysctl_mmap_noexec_taint;
 
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
@@ -201,6 +202,8 @@ extern unsigned long sysctl_admin_reserve_kbytes;
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern unsigned long sysctl_overcommit_kbytes;
+
+extern int sysctl_disk_based_swap;
 
 int overcommit_ratio_handler(struct ctl_table *, int, void *, size_t *,
 		loff_t *);
@@ -3292,6 +3295,24 @@ extern int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 extern int do_munmap(struct mm_struct *, unsigned long, size_t,
 		     struct list_head *uf);
 extern int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int behavior);
+
+#ifdef CONFIG_PROCESS_RECLAIM
+enum reclaim_type {
+	RECLAIM_FILE = 1,
+	RECLAIM_ANON,
+	RECLAIM_ALL,
+	/*
+	 * For safety and backwards compatibility, shmem reclaim mode
+	 * is only possible by directly using 'shmem', 'all' does not
+	 * inlcude shmem.
+	 */
+	RECLAIM_SHMEM,
+};
+
+extern unsigned long madvise_cold_or_pageout_proc(struct vm_area_struct *vma,
+	unsigned long start_addr, unsigned long end_addr,
+	bool pageout, enum reclaim_type type, unsigned long limit);
+#endif
 
 #ifdef CONFIG_MMU
 extern int do_vma_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
