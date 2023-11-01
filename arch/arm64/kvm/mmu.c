@@ -260,6 +260,21 @@ static int kvm_host_page_count(void *addr)
 	return page_count(virt_to_page(addr));
 }
 
+static void kvm_s2_rcu_put_page(struct rcu_head *head)
+{
+	put_page(container_of(head, struct page, rcu_head));
+}
+
+static void kvm_s2_put_page_rcu(void *addr)
+{
+	struct page *page = virt_to_page(addr);
+
+	if (kvm_host_page_count(addr) == 1)
+		kvm_account_pgtable_pages(addr, -1);
+
+	call_rcu(&page->rcu_head, kvm_s2_rcu_put_page);
+}
+
 static phys_addr_t kvm_host_pa(void *addr)
 {
 	return __pa(addr);
@@ -846,6 +861,7 @@ static struct kvm_pgtable_mm_ops kvm_s2_mm_ops = {
 	.free_unlinked_table	= stage2_free_unlinked_table,
 	.get_page		= kvm_host_get_page,
 	.put_page		= kvm_s2_put_page,
+	.put_page_rcu		= kvm_s2_put_page_rcu,
 	.page_count		= kvm_host_page_count,
 	.phys_to_virt		= kvm_host_va,
 	.virt_to_phys		= kvm_host_pa,
@@ -1280,7 +1296,7 @@ static bool fault_supports_stage2_huge_mapping(struct kvm_memory_slot *memslot,
 static long
 transparent_hugepage_adjust(struct kvm *kvm, struct kvm_memory_slot *memslot,
 			    unsigned long hva, kvm_pfn_t *pfnp,
-			    phys_addr_t *ipap)
+			    struct page **page, phys_addr_t *ipap)
 {
 	kvm_pfn_t pfn = *pfnp;
 
@@ -1289,7 +1305,8 @@ transparent_hugepage_adjust(struct kvm *kvm, struct kvm_memory_slot *memslot,
 	 * sure that the HVA and IPA are sufficiently aligned and that the
 	 * block map is contained within the memslot.
 	 */
-	if (fault_supports_stage2_huge_mapping(memslot, hva, PMD_SIZE)) {
+	if (*page && 
+	    fault_supports_stage2_huge_mapping(memslot, hva, PMD_SIZE)) {
 		int sz = get_user_mapping_size(kvm, hva);
 
 		if (sz < 0)
@@ -1317,10 +1334,11 @@ transparent_hugepage_adjust(struct kvm *kvm, struct kvm_memory_slot *memslot,
 		 * page accordingly.
 		 */
 		*ipap &= PMD_MASK;
-		kvm_release_pfn_clean(pfn);
+		put_page(*page);
 		pfn &= ~(PTRS_PER_PMD - 1);
-		get_page(pfn_to_page(pfn));
 		*pfnp = pfn;
+		*page = pfn_to_page(pfn);
+		get_page(*page);
 
 		return PMD_SIZE;
 	}
@@ -1406,6 +1424,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	short vma_shift;
 	gfn_t gfn;
 	kvm_pfn_t pfn;
+	struct page *page;
 	bool logging_active = memslot_is_logging(memslot);
 	unsigned long fault_level = kvm_vcpu_trap_get_fault_level(vcpu);
 	long vma_pagesize, fault_granule;
@@ -1504,8 +1523,8 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	mmu_seq = vcpu->kvm->mmu_invalidate_seq;
 	mmap_read_unlock(current->mm);
 
-	pfn = __gfn_to_pfn_memslot(memslot, gfn, false, false, NULL,
-				   write_fault, &writable, NULL);
+	pfn = __gfn_to_pfn_page_memslot(memslot, gfn, false, NULL,
+					write_fault, &writable, NULL, &page);
 	if (pfn == KVM_PFN_ERR_HWPOISON) {
 		kvm_send_hwpoison_signal(hva, vma_shift);
 		return 0;
@@ -1551,7 +1570,8 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 			vma_pagesize = fault_granule;
 		else
 			vma_pagesize = transparent_hugepage_adjust(kvm, memslot,
-								   hva, &pfn,
+					                           hva,
+								   &pfn, &page,
 								   &fault_ipa);
 
 		if (vma_pagesize < 0) {
@@ -1597,13 +1617,17 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	/* Mark the page dirty only if the fault is handled successfully */
 	if (writable && !ret) {
-		kvm_set_pfn_dirty(pfn);
+		if (page)
+			kvm_set_pfn_dirty(pfn);
 		mark_page_dirty_in_slot(kvm, memslot, gfn);
 	}
 
 out_unlock:
 	read_unlock(&kvm->mmu_lock);
-	kvm_release_pfn_clean(pfn);
+	if (page) {
+		kvm_set_pfn_accessed(pfn);
+		put_page(page);
+	}
 	return ret != -EAGAIN ? ret : 0;
 }
 
@@ -1836,6 +1860,70 @@ bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 	return kvm_pgtable_stage2_test_clear_young(kvm->arch.mmu.pgt,
 						   range->start << PAGE_SHIFT,
 						   size, false);
+}
+
+struct test_clear_young_arg {
+	struct kvm_gfn_range *range;
+	gfn_t lsb_gfn;
+	unsigned long *bitmap;
+};
+
+static int stage2_test_clear_young(u64 addr, u64 end, u32 level, kvm_pte_t *ptep,
+				   enum kvm_pgtable_walk_flags flag, void *const ctx)
+{
+	gfn_t gfn = addr / PAGE_SIZE;
+	kvm_pte_t old = READ_ONCE(*ptep);
+	kvm_pte_t new = old & ~KVM_PTE_LEAF_ATTR_LO_S2_AF;
+	struct test_clear_young_arg *arg = ctx;
+
+	VM_WARN_ON_ONCE(!page_count(virt_to_page(ptep)));
+	VM_WARN_ON_ONCE(gfn < arg->range->start || gfn >= arg->range->end);
+
+	if (kvm_pte_table(old, level))
+		return 0;
+
+	if (!kvm_pte_valid(new))
+		return 0;
+
+	if (new == old)
+		return 0;
+
+	/* see the comments on the generic kvm_arch_has_test_clear_young() */
+	if (__test_and_change_bit(arg->lsb_gfn - gfn, arg->bitmap))
+		cmpxchg64(ptep, old, new);
+
+	return 0;
+}
+
+bool kvm_arch_test_clear_young(struct kvm *kvm, struct kvm_gfn_range *range,
+			       gfn_t lsb_gfn, unsigned long *bitmap)
+{
+	u64 start = range->start * PAGE_SIZE;
+	u64 end = range->end * PAGE_SIZE;
+	struct test_clear_young_arg arg = {
+		.range		= range,
+		.lsb_gfn	= lsb_gfn,
+		.bitmap		= bitmap,
+	};
+	struct kvm_pgtable_walker walker = {
+		.cb		= stage2_test_clear_young,
+		.arg		= &arg,
+		.flags		= KVM_PGTABLE_WALK_LEAF,
+	};
+
+	BUILD_BUG_ON(is_hyp_code());
+
+	if (WARN_ON_ONCE(!kvm_arch_has_test_clear_young()))
+		return false;
+
+	/* see the comments on kvm_pgtable_walk_flags */
+	rcu_read_lock();
+
+	kvm_pgtable_walk(kvm->arch.mmu.pgt, start, end - start, &walker);
+
+	rcu_read_unlock();
+
+	return true;
 }
 
 phys_addr_t kvm_mmu_get_httbr(void)
