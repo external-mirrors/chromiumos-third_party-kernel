@@ -85,6 +85,11 @@ config BPF_UNPRIV_DEFAULT_OFF
 
 	  If you are unsure how to answer this question, answer Y.
 
+config BPF_DYNPTR
+	bool "Enable dynptr support in BPF"
+	help
+	  Enables dynptr support in BPF. This is used to disable dynptr in chromeos-6.1.
+
 source "kernel/bpf/preload/Kconfig"
 
 config BPF_LSM

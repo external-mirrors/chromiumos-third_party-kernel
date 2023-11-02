@@ -1649,6 +1649,7 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 		return &bpf_loop_proto;
 	case BPF_FUNC_user_ringbuf_drain:
 		return &bpf_user_ringbuf_drain_proto;
+#ifdef CONFIG_BPF_DYNPTR
 	case BPF_FUNC_ringbuf_reserve_dynptr:
 		return &bpf_ringbuf_reserve_dynptr_proto;
 	case BPF_FUNC_ringbuf_submit_dynptr:
@@ -1663,6 +1664,7 @@ bpf_base_func_proto(enum bpf_func_id func_id)
 		return &bpf_dynptr_write_proto;
 	case BPF_FUNC_dynptr_data:
 		return &bpf_dynptr_data_proto;
+#endif
 	default:
 		break;
 	}

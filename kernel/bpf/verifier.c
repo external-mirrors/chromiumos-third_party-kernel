@@ -6190,6 +6190,8 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 arg,
 
 skip_type_check:
 	if (arg_type_is_release(arg_type)) {
+		if (!IS_ENABLED(CONFIG_BPF_DYNPTR) && arg_type_is_dynptr(arg_type))
+			return -EINVAL;
 		if (arg_type_is_dynptr(arg_type)) {
 			struct bpf_func_state *state = func(env, reg);
 			int spi = get_spi(reg->off);
@@ -7514,6 +7516,12 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 			func_id);
 		return -EINVAL;
 	}
+
+	if (!IS_ENABLED(CONFIG_BPF_DYNPTR) &&
+			(func_id == BPF_FUNC_ringbuf_reserve_dynptr ||
+			 func_id == BPF_FUNC_ringbuf_submit_dynptr ||
+			 func_id == BPF_FUNC_ringbuf_discard_dynptr))
+		return -EINVAL;
 
 	if (env->ops->get_func_proto)
 		fn = env->ops->get_func_proto(func_id, env->prog);

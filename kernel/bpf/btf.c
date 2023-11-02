@@ -6472,6 +6472,8 @@ static int btf_check_func_arg_match(struct bpf_verifier_env *env,
 				bool arg_dynptr = btf_type_is_struct(ref_t) &&
 						  !strcmp(ref_tname,
 							  stringify_struct(bpf_dynptr_kern));
+				if (!IS_ENABLED(CONFIG_BPF_DYNPTR) && arg_dynptr)
+					return -EINVAL;
 
 				/* Permit pointer to mem, but only when argument
 				 * type is pointer to scalar, or struct composed
