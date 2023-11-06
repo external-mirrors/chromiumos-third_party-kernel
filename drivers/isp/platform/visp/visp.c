@@ -427,8 +427,6 @@ static void isp_objects_release(struct visp_device *visp)
 
 	if (visp->root_entity)
 		isp_entity_unregister(visp->root_entity);
-
-	dev_info(visp->dev, "%s: done\n", __func__);
 }
 
 static int visp_probe(struct platform_device *pdev)
@@ -463,8 +461,7 @@ static int visp_probe(struct platform_device *pdev)
 
 	visp->isp = isp_device_get();
 	if (!visp->isp) {
-		dev_err(visp->dev, "%s: isp device initialization failed\n",
-			__func__);
+		dev_err(visp->dev, "isp device initialization failed\n");
 		kfree(visp);
 		return -ENOMEM;
 	}
@@ -501,8 +498,8 @@ static int visp_probe(struct platform_device *pdev)
 					     entity_names[idx]);
 		visp->entities[obj] = entity;
 		if (!visp->entities[obj]) {
-			dev_err(visp->dev, "%s: failed to register entity\n",
-				__func__);
+			dev_err(visp->dev, "failed to register entity: %s\n",
+				entity_names[idx]);
 			ret = -ENOMEM;
 			goto error;
 		}
@@ -521,8 +518,8 @@ static int visp_probe(struct platform_device *pdev)
 						       "%s-event",
 						       entity_names[idx]);
 		if (!visp->events[obj]) {
-			dev_err(visp->dev, "%s: failed to register event\n",
-				__func__);
+			dev_err(visp->dev, "failed to register %s-event\n",
+				entity_names[idx]);
 			ret = -ENOMEM;
 			goto error;
 		}
@@ -537,7 +534,6 @@ static int visp_probe(struct platform_device *pdev)
 	hrtimer_start(&visp->event_timer_fast, 0, HRTIMER_MODE_REL);
 	hrtimer_start(&visp->event_timer_slow, 0, HRTIMER_MODE_REL);
 
-	dev_info(visp->dev, "%s: done\n", __func__);
 	return 0;
 
 error:
@@ -585,15 +581,13 @@ static int __init visp_init(void)
 
 	ret = platform_driver_register(&visp_driver);
 	if (ret < 0) {
-		pr_err("%s: platform driver registration failed: %d\n", __func__,
-		       ret);
+		pr_err("platform driver registration failed: %d\n", ret);
 		return ret;
 	}
 
 	ret = platform_device_register(&visp_device);
 	if (ret < 0) {
-		pr_err("%s: platform device registration failed: %d\n", __func__,
-		       ret);
+		pr_err("platform device registration failed: %d\n", ret);
 		return ret;
 	}
 
