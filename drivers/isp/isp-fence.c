@@ -85,7 +85,7 @@ void isp_out_fence_unregister(struct isp_obj *nsobj)
 	 * fence.
 	 *
 	 * We take a different approach here: we put DMA fence and release
-	 * ISP fence object only from DAM fence ->release callback.
+	 * ISP fence object only from DMA fence ->release callback.
 	 */
 	dma_fence_put(&fc->out.fence);
 }
