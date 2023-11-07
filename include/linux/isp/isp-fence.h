@@ -44,10 +44,10 @@ struct isp_obj_fence {
 			/** @notify_lock: protects list of signals */
 			rwlock_t		notify_lock;
 			/**
-			 * @notify_active_chain: list of operations that are
+			 * @active_sig_chain: list of operations that are
 			 * blocked on us
 			 */
-			struct list_head	notify_active_chain;
+			struct list_head	active_sig_chain;
 		} in;
 	};
 

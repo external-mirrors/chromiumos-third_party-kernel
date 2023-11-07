@@ -565,12 +565,8 @@ bool isp_event_activate_signal(struct isp_op_signal *sig)
 	if (WARN_ON(!event))
 		return false;
 
-	/*
-	 * notify_active_chain is accessed from the IRQ context,
-	 * so we need to disable local IRQs.
-	 */
 	write_lock_irqsave(&event->notify_lock, flags);
-	list_add_tail(&sig->entry, &event->notify_active_chain);
+	list_add_tail(&sig->entry, &event->active_sig_chain);
 	write_unlock_irqrestore(&event->notify_lock, flags);
 	return true;
 }
@@ -586,13 +582,9 @@ bool isp_event_deactivate_signal(struct isp_op_signal *sig)
 	if (WARN_ON(!event))
 		return false;
 
-	/*
-	 * notify_active_chain is accessed from the IRQ context,
-	 * so we need to disable local IRQs.
-	 */
 	ret = false;
 	write_lock_irqsave(&event->notify_lock, flags);
-	list_for_each_entry(active, &event->notify_active_chain, entry) {
+	list_for_each_entry(active, &event->active_sig_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
 			ret = true;
@@ -617,7 +609,7 @@ void isp_event_trigger_signals(struct isp_obj_entity *entity,
 
 	trace_isp_event_trigger(entity, NULL, event);
 	write_lock_irqsave(&event->notify_lock, flags);
-	isp_fire_active_signals(&event->notify_active_chain);
+	isp_fire_active_signals(&event->active_sig_chain);
 	write_unlock_irqrestore(&event->notify_lock, flags);
 }
 EXPORT_SYMBOL_GPL(isp_event_trigger_signals);
@@ -640,7 +632,7 @@ void isp_instance_event_trigger_signals(struct isp_obj_entity *entity,
 	trace_isp_event_trigger(entity, instance, event);
 	write_lock_irqsave(&event->notify_lock, flags);
 	isp_instance_fire_active_signals(instance,
-					 &event->notify_active_chain,
+					 &event->active_sig_chain,
 					 error);
 	write_unlock_irqrestore(&event->notify_lock, flags);
 }
@@ -677,8 +669,7 @@ EXPORT_SYMBOL_GPL(isp_event_id);
  */
 void isp_event_unregister(struct isp_obj_event *event)
 {
-	/* @FIXME */
-	WARN_ON(!list_empty(&event->notify_active_chain));
+	WARN_ON(!list_empty(&event->active_sig_chain));
 	isp_obj_remove(&event->nsobj);
 	isp_obj_deinit(&event->nsobj);
 }
@@ -719,7 +710,7 @@ struct isp_obj_event *isp_event_register(struct isp_device *isp,
 	va_end(args);
 
 	strscpy(event->name, name, ISP_EVENT_NAME_SZ);
-	INIT_LIST_HEAD(&event->notify_active_chain);
+	INIT_LIST_HEAD(&event->active_sig_chain);
 	rwlock_init(&event->notify_lock);
 	isp_obj_init(&event->nsobj, ISP_OBJ_TYPE_EVENT, isp_event_release,
 		     &isp->ns);

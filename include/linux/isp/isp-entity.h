@@ -128,10 +128,10 @@ struct isp_obj_instance {
 struct isp_obj_event {
 	/** @nsobj: namespace object */
 	struct isp_obj		nsobj;
-	/** @notify_lock: protects list of signals i.e. @notify_active_chain */
+	/** @notify_lock: protects list of signals i.e. @active_sig_chain */
 	rwlock_t		notify_lock;
-	/** @notify_active_chain: list of pipeline objects that are blocked on us */
-	struct list_head	notify_active_chain;
+	/** @active_sig_chain: list of objects that are blocked on us */
+	struct list_head	active_sig_chain;
 	/** @name: event name */
 	char			name[ISP_EVENT_NAME_SZ];
 };

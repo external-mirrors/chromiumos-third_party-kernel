@@ -117,7 +117,7 @@ static void isp_fence_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 	fc = container_of(cb, struct isp_obj_fence, in.cb);
 
 	write_lock_irqsave(&fc->in.notify_lock, flags);
-	isp_fire_active_signals(&fc->in.notify_active_chain);
+	isp_fire_active_signals(&fc->in.active_sig_chain);
 	write_unlock_irqrestore(&fc->in.notify_lock, flags);
 }
 
@@ -141,7 +141,7 @@ struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
 	vsnprintf(name, sizeof(name), namefmt, args);
 	va_end(args);
 
-	INIT_LIST_HEAD(&fc->in.notify_active_chain);
+	INIT_LIST_HEAD(&fc->in.active_sig_chain);
 	rwlock_init(&fc->in.notify_lock);
 	strscpy(fc->name, name, ISP_FENCE_NAME_SZ);
 	isp_obj_init(&fc->nsobj,
@@ -183,12 +183,8 @@ bool isp_in_fence_activate_signal(struct isp_op_signal *sig)
 	if (WARN_ON(!fc))
 		return false;
 
-	/*
-	 * notify_active_chain is accessed from the IRQ context,
-	 * so we need to disable local IRQs.
-	 */
 	write_lock_irqsave(&fc->in.notify_lock, flags);
-	list_add_tail(&sig->entry, &fc->in.notify_active_chain);
+	list_add_tail(&sig->entry, &fc->in.active_sig_chain);
 	write_unlock_irqrestore(&fc->in.notify_lock, flags);
 
 	if (dma_fence_is_signaled(fc->in.fence)) {
@@ -197,7 +193,7 @@ bool isp_in_fence_activate_signal(struct isp_op_signal *sig)
 		 * whether sig activation has raced with fence signaling, IOW
 		 * whether list_add() has raced with isp_fence_fence_cb().
 		 *
-		 * If the sig is on the fence's active_chain list then
+		 * If the sig is on the fence's active_sig_chain list then
 		 * activation happened too late and fence won't ever fire that
 		 * sig: remove the sig and let pipeline handle failed
 		 * activation.
@@ -222,13 +218,9 @@ bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig)
 	if (WARN_ON(!fc))
 		return false;
 
-	/*
-	 * notify_active_chain is accessed from the IRQ context,
-	 * so we need to disable local IRQs.
-	 */
 	ret = false;
 	write_lock_irqsave(&fc->in.notify_lock, flags);
-	list_for_each_entry(active, &fc->in.notify_active_chain, entry) {
+	list_for_each_entry(active, &fc->in.active_sig_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
 			ret = true;

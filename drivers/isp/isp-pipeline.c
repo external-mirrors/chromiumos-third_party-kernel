@@ -106,9 +106,9 @@ static void isp_op_release(struct isp_obj *nsobj)
 {
 	struct isp_obj_op *op = nsobj_to_isp_op(nsobj);
 
-	WARN_ON(!list_empty(&op->notify_active_chain));
-	WARN_ON(!list_empty(&op->notify_pending_chain));
-	WARN_ON(!list_empty(&op->notifiers));
+	WARN_ON(!list_empty(&op->active_sig_chain));
+	WARN_ON(!list_empty(&op->pending_sig_chain));
+	WARN_ON(!list_empty(&op->sigs));
 
 	if (op->exec_entity)
 		isp_entity_put(op->exec_entity);
@@ -215,12 +215,12 @@ static int isp_op_activate_pending_signal(struct isp_obj_op *op)
 	bool ret;
 
 	write_lock_irqsave(&op->notify_lock, flags);
-	if (list_empty(&op->notify_pending_chain)) {
+	if (list_empty(&op->pending_sig_chain)) {
 		write_unlock_irqrestore(&op->notify_lock, flags);
 		return ISP_OP_PENDING_SIGNAL_NONE;
 	}
 
-	sig = list_first_entry(&op->notify_pending_chain,
+	sig = list_first_entry(&op->pending_sig_chain,
 			       struct isp_op_signal,
 			       entry);
 	list_del(&sig->entry);
@@ -242,7 +242,7 @@ static int isp_op_activate_pending_signal(struct isp_obj_op *op)
 }
 
 /**
- * isp_op_notify() - Notify the signal target
+ * isp_op_notify() - Notify the signal target OP
  * @sig: pointer to ISP signal
  *
  * This notifies the signal target, which is an operation, and possibly
@@ -311,8 +311,8 @@ static void isp_op_destroy_signals(struct isp_obj_op *op)
 {
 	struct isp_op_signal *sig, *safe;
 
-	list_for_each_entry_safe(sig, safe, &op->notifiers, notifiers_entry) {
-		list_del_init(&sig->notifiers_entry);
+	list_for_each_entry_safe(sig, safe, &op->sigs, sigs_entry) {
+		list_del_init(&sig->sigs_entry);
 		release_signal(sig);
 	}
 }
@@ -329,13 +329,13 @@ static void isp_drain_op_signals(struct isp_obj_op *op)
 
 	write_lock_irqsave(&op->notify_lock, flags);
 	/* First, remove all pending signals, so nothing gets activated */
-	list_for_each_entry_safe(sig, safe, &op->notify_pending_chain, entry) {
+	list_for_each_entry_safe(sig, safe, &op->pending_sig_chain, entry) {
 		list_del_init(&sig->entry);
 	}
 	write_unlock_irqrestore(&op->notify_lock, flags);
 
 	/* Second, deactivate all already activated (yet not raised) signals */
-	list_for_each_entry_safe(sig, safe, &op->notifiers, notifiers_entry) {
+	list_for_each_entry_safe(sig, safe, &op->sigs, sigs_entry) {
 		sig->deactivate(sig);
 	}
 
@@ -399,7 +399,7 @@ static void isp_drain_ops(struct isp_pipeline *pipeline)
  * isp_op_fire_signals() - Signal the operations blocked on the input operation
  * @op: pointer to ISP operation
  *
- * This walks the notify_active_chain and raises signals for all pipeline
+ * This walks the active_sig_chain and raises signals for all pipeline
  * isp_op objects that are blocked on us.
  */
 static void isp_op_fire_signals(struct isp_obj_op *op)
@@ -411,7 +411,7 @@ static void isp_op_fire_signals(struct isp_obj_op *op)
 	 *
 	 * Famous last words.
 	 */
-	isp_fire_active_signals(&op->notify_active_chain);
+	isp_fire_active_signals(&op->active_sig_chain);
 	isp_op_destroy_signals(op);
 	isp_drain_op_fences(op);
 }
@@ -420,7 +420,7 @@ static void isp_op_fire_signals(struct isp_obj_op *op)
  * isp_op_activate_signal() - Activate a pending signal
  * @sig: pointer to ISP signal where its source is an operation
  *
- * This activates the signal by appending it to source operation's notify
+ * This activates the signal by appending it to source operation's signals
  * chain.
  * Unlike isp_op_activate_pending_signal(), which is where sig->activate() is
  * called, this is the actual callback that does the work and to be fed into
@@ -446,7 +446,7 @@ static bool isp_op_activate_signal(struct isp_op_signal *sig)
 		ret = false;
 		goto out;
 	}
-	list_add_tail(&sig->entry, &source->notify_active_chain);
+	list_add_tail(&sig->entry, &source->active_sig_chain);
 	write_unlock_irqrestore(&source->notify_lock, flags);
 	ret = true;
 
@@ -467,7 +467,7 @@ static bool isp_op_deactivate_signal(struct isp_op_signal *sig)
 
 	ret = true;
 	write_lock_irqsave(&source->notify_lock, flags);
-	list_for_each_entry(active, &source->notify_active_chain, entry) {
+	list_for_each_entry(active, &source->active_sig_chain, entry) {
 		if (active == sig) {
 			list_del_init(&sig->entry);
 			ret = true;
@@ -994,15 +994,15 @@ static int isp_pipeline_io_worker(void *data)
 
 /**
  * isp_fire_active_signals() - Raise all signals in an active chain
- * @notify_active_chain: operation notify chain with signals to be fired
+ * @active_sig_chain: operation signals chain with signals to be fired
  *
  * After firing the signals will be removed from the chain and released.
  */
-void isp_fire_active_signals(struct list_head *notify_active_chain)
+void isp_fire_active_signals(struct list_head *active_sig_chain)
 {
 	struct isp_op_signal *sig, *safe;
 
-	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+	list_for_each_entry_safe(sig, safe, active_sig_chain, entry) {
 		if (sig->instance != ISP_OP_NO_INSTANCE)
 			continue;
 
@@ -1015,13 +1015,13 @@ void isp_fire_active_signals(struct list_head *notify_active_chain)
  * isp_instance_fire_active_signals() - Raise signals that wait on instance
  * event
  * @instance: entity instance (context)
- * @notify_active_chain: operation notify chain with signals to be fired
+ * @active_sig_chain: operation signals chain with signals to be fired
  * @error: execution context error code, or 0 if success
  *
  * After firing the signals will be removed from the chain and released.
  */
 void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
-				      struct list_head *notify_active_chain,
+				      struct list_head *active_sig_chain,
 				      int error)
 {
 	struct isp_op_signal *sig, *safe;
@@ -1049,7 +1049,7 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 		return;
 	}
 
-	list_for_each_entry_safe(sig, safe, notify_active_chain, entry) {
+	list_for_each_entry_safe(sig, safe, active_sig_chain, entry) {
 		if (sig->instance != isp_obj_id(&instance->nsobj))
 			continue;
 
@@ -1122,7 +1122,7 @@ ALLOW_ERROR_INJECTION(isp_pipeline_dequeue, ERRNO);
  * @activate: the callback called to activate the pending signal
  * @deactivate: the callback called to deactivate the active signal
  *
- * This allocate a pending ISP signal and append it to target's notify chain.
+ * This allocate a pending ISP signal and append it to target's signals chain.
  * Note that the fire callback is always isp_op_notify() in the current design.
  *
  * Return: 0 on success or a negative error code otherwise.
@@ -1145,7 +1145,7 @@ static int isp_op_add_pending_signal(struct isp_obj *source,
 	sig->deactivate	= deactivate;
 
 	INIT_LIST_HEAD(&sig->entry);
-	INIT_LIST_HEAD(&sig->notifiers_entry);
+	INIT_LIST_HEAD(&sig->sigs_entry);
 
 	/* Signal should keep both objects alive until it triggers */
 	if (!isp_obj_get(source))
@@ -1156,8 +1156,8 @@ static int isp_op_add_pending_signal(struct isp_obj *source,
 		goto error;
 	sig->target	= &target->nsobj;
 
-	list_add_tail(&sig->entry, &target->notify_pending_chain);
-	list_add_tail(&sig->notifiers_entry, &target->notifiers);
+	list_add_tail(&sig->entry, &target->pending_sig_chain);
+	list_add_tail(&sig->sigs_entry, &target->sigs);
 	atomic_inc(&target->num_blockers);
 	trace_isp_signal_add_pending(sig);
 	return 0;
@@ -1291,7 +1291,7 @@ isp_export_fence_instruction(struct isp_obj_op *op,
  * @op: pointer to ISP operation to activate the signal from
  *
  * This activates the pending signal of an operation in STRICT mode i.e.
- * we only activate one signal at a time from the notify chain.
+ * we only activate one signal at a time from the signals chain.
  *
  * Return: True on successful signal activation or false otherwise.
  */
@@ -1302,7 +1302,7 @@ static bool isp_activate_strict_dependency_mode(struct isp_obj_op *op)
 
 	/*
 	 * In STRICT mode we pick first pending signal and try to
-	 * activate it (move it into active notify list).
+	 * activate it (move it into active signals list).
 	 */
 	do {
 		ret = isp_op_activate_pending_signal(op);
@@ -1333,7 +1333,7 @@ static bool isp_activate_strict_dependency_mode(struct isp_obj_op *op)
  * @op: pointer to ISP operation that signal is activated from
  *
  * This activates the pending signal of an operation in weak mode i.e.
- * we activate as many signals as possible by walking through the notify chain.
+ * we activate as many signals as possible by walking through the signals chain.
  *
  * Return: True on any successful signal activation or false otherwise.
  */
@@ -1496,9 +1496,9 @@ int isp_pipeline_enqueue_prepare(struct isp_pipeline *pipeline,
 	isp_obj_set_id(&op->nsobj, req->id);
 
 	atomic_set(&op->num_blockers, 0);
-	INIT_LIST_HEAD(&op->notify_active_chain);
-	INIT_LIST_HEAD(&op->notify_pending_chain);
-	INIT_LIST_HEAD(&op->notifiers);
+	INIT_LIST_HEAD(&op->active_sig_chain);
+	INIT_LIST_HEAD(&op->pending_sig_chain);
+	INIT_LIST_HEAD(&op->sigs);
 	INIT_LIST_HEAD(&op->io_queue_entry);
 	rwlock_init(&op->notify_lock);
 	op->pipeline = pipeline;

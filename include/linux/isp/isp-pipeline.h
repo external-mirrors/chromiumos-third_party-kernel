@@ -100,8 +100,8 @@ struct isp_op_signal {
 	 * targer or source object, depending on the signal state
 	 */
 	struct list_head		entry;
-	/** @notifiers_entry: List entry in the owner object list */
-	struct list_head		notifiers_entry;
+	/** @sigs_entry: List entry in the owner object's sigs list */
+	struct list_head		sigs_entry;
 	/** @instance: ID of entity instance */
 	u32				instance;
 };
@@ -133,27 +133,27 @@ struct isp_obj_op {
 	 * Everything below this line needs to be protected by notify_lock,
 	 * including object state transitions.
 	 */
-	/** @notify_lock: Lock that protects state and notifications */
+
+	/** @notify_lock: Lock that protects state and signals */
 	rwlock_t			notify_lock;
 	/** @state: State of the operation */
 	enum isp_operation_state	state;
 	/** @exec_error: Instruction execution error code */
 	u32				exec_error;
 	/**
-	 * @notify_active_chain: List of operations that are blocked on us.
+	 * @active_sig_chain: List of operations that are blocked on us.
 	 * This is a list of imported signals.
 	 */
-	struct list_head		notify_active_chain;
+	struct list_head		active_sig_chain;
 	/**
-	 * @notify_pending_chain: List of signals that we will be blocked on.
+	 * @pending_sig_chain: List of signals that we will be blocked on.
 	 * This is a list of signals that will be exported.
-	 * See comment in isp_pipeline_enqueue().
 	 */
-	struct list_head		notify_pending_chain;
+	struct list_head		pending_sig_chain;
 	/**
-	 * @notifiers: List of all signals this OP owns.
+	 * @signals: List of all signals this OP owns.
 	 */
-	struct list_head		notifiers;
+	struct list_head		sigs;
 };
 
 struct isp_device;
@@ -176,9 +176,9 @@ int isp_enum_operations(struct isp_pipeline *pipeline,
 			struct isp_query_operations *query,
 			struct isp_koutput *output);
 
-void isp_fire_active_signals(struct list_head *notify_active_chain);
+void isp_fire_active_signals(struct list_head *active_sig_chain);
 void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
-				      struct list_head *notify_active_chain,
+				      struct list_head *active_sig_chain,
 				      int error);
 
 int isp_pipeline_io_setup(struct isp_pipeline *pipeline);
