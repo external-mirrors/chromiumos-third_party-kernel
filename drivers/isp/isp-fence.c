@@ -310,21 +310,16 @@ static void isp_dma_fence_release(struct dma_fence *fence)
 	isp_obj_deinit(&fc->nsobj);
 }
 
-static struct isp_obj *isp_fence_lookup(struct isp_ns *ns, u32 type, u32 id)
+struct isp_obj_fence *isp_out_fence_lookup(struct isp_ns *ns, u32 id)
 {
+	struct isp_obj *nsobj;
+
 	if (!isp_valid_fence_id(id, ISP_OBJS_NS_OUT_FENCE_ID_START,
 				ISP_OBJS_NS_OUT_FENCE_ID_END))
 		return NULL;
 
 	id += ISP_OBJS_NS_OUT_FENCE_ID_START;
-	return isp_obj_lookup(ns, type, id);
-}
-
-struct isp_obj_fence *isp_out_fence_lookup(struct isp_ns *ns, u32 id)
-{
-	struct isp_obj *nsobj;
-
-	nsobj = isp_fence_lookup(ns, ISP_OBJ_TYPE_OUT_FENCE, id);
+	nsobj = isp_obj_lookup(ns, ISP_OBJ_TYPE_OUT_FENCE, id);
 	if (!nsobj)
 		return NULL;
 
