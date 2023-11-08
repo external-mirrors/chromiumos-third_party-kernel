@@ -40,7 +40,7 @@ static void dpcd_handle_payload_allocate(struct dprx_dp *dp)
 			dpcd_deallocate_vc_payload(dp, start, id);
 		else
 			dpcd_allocate_vc_payload(dp, start, count, id);
-		dprx_dprx_set_vc_payload_table(dp, dp->dpcd.vc_table, dp->vc_id);
+		dprx_dprx_set_vc_payload_table(dp, dp->dpcd.vc_table);
 	}
 	dp->dpcd.vc_table_status |= 1 << 0;
 }

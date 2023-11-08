@@ -81,6 +81,7 @@ static void execute_allocate_payload(struct dprx_dp *dp,
 	pbn = req->buf[3] << 8 | req->buf[4];
 
 	dp->vc_id[port-1] = id;
+	dprx_dprx_set_vc_ids(dp, dp->vc_id);
 
 	rep->buf[0] = MT_ALLOCATE_PAYLOAD;
 	rep->buf[1] = port << 4;

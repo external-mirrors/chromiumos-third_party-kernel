@@ -154,31 +154,37 @@ void dprx_dprx_clear_vc_payload_table(struct dprx_dp *dp)
 	dp_wr(dp, DPRX_MST_CONTROL1, reg);
 }
 
-void dprx_dprx_set_vc_payload_table(struct dprx_dp *dp, u8 *table, u8 *id)
+void dprx_dprx_set_vc_payload_table(struct dprx_dp *dp, u8 *table)
 {
-	u8 map[64];
 	int i, j;
 	u32 reg;
 
-	memset(map, 0, 64);
-	for (i = 0; i < 4; i++) {
-		if (id[i] != 0 && id[i] < 64)
-			map[id[i]] = i + 1;
-	}
-
 	for (i = 0; i < 8; i++) {
 		reg = 0;
-		for (j = 0; j < 8; j++)
-			reg |= map[table[i*8+j]] << (j * 4);
+		for (j = 0; j < 8; j++) {
+			u8 val = table[i*8+j];
+			if (val <= 4)
+				reg |= val << (j * 4);
+		}
 		dp_wr(dp, DPRX_MST_VCPTAB0 + i, reg);
 	}
 
 	reg = dp_rd(dp, DPRX_MST_CONTROL1);
-	reg &= ~(0xffff << 4);
-	for (i = 0; i < 4; i++)
-		if (id[i] != 0 && id[i] < 64)
-			reg |= (i + 1) << ((i + 1) * 4);
 	reg |= 1 << 30;
+	dp_wr(dp, DPRX_MST_CONTROL1, reg);
+}
+
+void dprx_dprx_set_vc_ids(struct dprx_dp *dp, u8 *ids)
+{
+	u32 reg;
+	int i;
+
+	reg = dp_rd(dp, DPRX_MST_CONTROL1);
+	reg &= ~(0xffff << 4);
+	for (i = 0; i < 4; i++) {
+		if (ids[i] <= 4)
+			reg |= ids[i] << ((i + 1) * 4);
+	}
 	dp_wr(dp, DPRX_MST_CONTROL1, reg);
 }
 
