@@ -42,6 +42,10 @@ struct isp_obj_fence {
 			 * blocked on us
 			 */
 			struct list_head	active_sig_chain;
+			/** @release_entry: Pipeline fence relase entry */
+			struct list_head	release_entry;
+			/** @pipeline: ISP pipeilne that owns this fence */
+			struct isp_pipeline	*pipeline;
 		} in;
 	};
 };
@@ -49,16 +53,15 @@ struct isp_obj_fence {
 struct isp_obj_op;
 
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
-					     u64 context,
-					     u64 seqno);
+					     u64 context, u64 seqno);
 
-struct isp_obj_fence *isp_in_fence_register(struct isp_ns *ns,
-					    struct isp_obj_op *op,
-					    int fd);
+struct isp_obj_fence *isp_in_fence_register(struct isp_pipeline *pipeline,
+					    u32 fd, u32 id);
 
 int isp_out_fence_fd(struct isp_obj_fence *sf);
 
 struct isp_obj_fence *isp_out_fence_lookup(struct isp_ns *ns, u32 id);
+struct isp_obj_fence *isp_in_fence_lookup(struct isp_ns *ns, u32 id);
 
 void isp_in_fence_unregister(struct isp_obj *nsobj);
 void isp_out_fence_unregister(struct isp_obj *nsobj);

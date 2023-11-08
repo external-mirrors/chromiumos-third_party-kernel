@@ -286,23 +286,6 @@ static bool isp_op_notify(struct isp_op_signal *sig)
 	return execute;
 }
 
-static void isp_drain_op_fences(struct isp_obj_op *op)
-{
-	struct isp_obj *link;
-	struct isp_obj *save;
-
-	isp_obj_for_each_link_safe(link, save, &op->nsobj) {
-		switch (isp_obj_type(link)) {
-		case ISP_OBJ_TYPE_IN_FENCE:
-			isp_in_fence_unregister(link);
-			break;
-		default:
-			pr_err("Unknown link object type: %d\n",
-			       isp_obj_type(link));
-		}
-	}
-}
-
 /**
  * isp_op_destroy_signals() - Release all signals that operation owns
  * @op: operation to drain
@@ -363,7 +346,6 @@ static bool isp_drain_op(struct isp_obj_op *op)
 		return false;
 
 	isp_drain_op_signals(op);
-	isp_drain_op_fences(op);
 	isp_obj_remove(&op->nsobj);
 	/*
 	 * We cannot deinit OP nsobj at this point, as we still
@@ -413,7 +395,6 @@ static void isp_op_fire_signals(struct isp_obj_op *op)
 	 */
 	isp_fire_active_signals(&op->active_sig_chain);
 	isp_op_destroy_signals(op);
-	isp_drain_op_fences(op);
 }
 
 /**
@@ -909,6 +890,28 @@ static void isp_pipeline_io_completions(struct isp_pipeline *pipeline)
 	} while (op);
 }
 
+static void isp_pipeline_in_fence_release(struct isp_pipeline *pipeline)
+{
+	struct isp_obj_fence *fc;
+	unsigned long flags;
+
+	do {
+		fc = NULL;
+
+		spin_lock_irqsave(&pipeline->io_comp_queue_lock, flags);
+		if (!list_empty(&pipeline->in_fence_release)) {
+			fc = list_first_entry(&pipeline->in_fence_release,
+					      struct isp_obj_fence,
+					      in.release_entry);
+			list_del(&fc->in.release_entry);
+		}
+		spin_unlock_irqrestore(&pipeline->io_comp_queue_lock, flags);
+
+		if (fc)
+			isp_in_fence_unregister(&fc->nsobj);
+	} while (fc);
+}
+
 /**
  * isp_pipeline_io_worker() - IO-thread worker that consumes the pipeline queue
  * @data: pointer to ISP pipeline
@@ -944,6 +947,8 @@ static int isp_pipeline_io_worker(void *data)
 		 * in deferred contexts.
 		 */
 		isp_pipeline_io_completions(pipeline);
+		/* Destroy signaled IN (imported) fences */
+		isp_pipeline_in_fence_release(pipeline);
 
 		spin_lock_irqsave(&pipeline->io_queue_lock, flags);
 		if (!list_empty(&pipeline->io_queue)) {
@@ -964,6 +969,7 @@ static int isp_pipeline_io_worker(void *data)
 		}
 	}
 
+	isp_pipeline_in_fence_release(pipeline);
 	isp_drain_out_fences(pipeline);
 	isp_drain_instances(pipeline);
 	isp_drain_buffers(pipeline);
@@ -995,6 +1001,15 @@ void isp_fire_active_signals(struct list_head *active_sig_chain)
 		list_del_init(&sig->entry);
 		sig->fire(sig);
 	}
+}
+
+void isp_in_fence_release_deferred(struct isp_obj_fence *fc)
+{
+	struct isp_pipeline *pipeline = fc->in.pipeline;
+
+	spin_lock(&pipeline->io_comp_queue_lock);
+	list_add_tail(&fc->in.release_entry, &pipeline->in_fence_release);
+	spin_unlock(&pipeline->io_comp_queue_lock);
 }
 
 /**
@@ -1220,33 +1235,44 @@ static int isp_event_dependency_add(struct isp_pipeline *pipeline,
 }
 
 /**
- * isp_fence_in_dependency_add() - Create In-Fence-to-OP dependency
+ * isp_in_fence_dependency_add() - Create In-Fence-to-OP dependency
  * @pipeline: pointer to ISP pipeline
  * @req: add request from user-space
  * @op: pointer to the dependent operation
  *
  * Return: 0 on success or a negative error code otherwise.
  */
-static int isp_fence_in_dependency_add(struct isp_pipeline *pipeline,
+static int isp_in_fence_dependency_add(struct isp_pipeline *pipeline,
 				       struct isp_dependency *req,
 				       struct isp_obj_op *op)
 {
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 	int ret;
 
-	/*
-	 * Imported fences are OP dependencies (OP is blocked on a signal)
-	 * hence IN fences are linked to their OPs
-	 */
-	sf = isp_in_fence_register(&pipeline->objs, op, req->id);
-	if (!sf)
+	fc = isp_in_fence_lookup(&pipeline->objs, req->id);
+	if (!fc)
 		return -EINVAL;
 
-	ret = isp_op_add_pending_signal(&sf->nsobj, op,
+	ret = isp_op_add_pending_signal(&fc->nsobj, op,
 					ISP_OP_NO_INSTANCE,
 					isp_in_fence_activate_signal,
 					isp_in_fence_deactivate_signal);
+	isp_fence_put(fc);
 	return ret;
+}
+
+static int
+isp_import_fence_instruction(struct isp_obj_op *op,
+			     struct isp_import_fence_instruction *insn)
+{
+	struct isp_pipeline *pipeline = op->pipeline;
+	struct isp_obj_fence *fc;
+
+	fc = isp_in_fence_register(pipeline, insn->fd, insn->id);
+	if (!fc)
+		return -EINVAL;
+	isp_fence_put(fc);
+	return 0;
 }
 
 /**
@@ -1261,17 +1287,17 @@ isp_export_fence_instruction(struct isp_obj_op *op,
 			     struct isp_export_fence_instruction *insn)
 {
 	struct isp_pipeline *pipeline = op->pipeline;
-	struct isp_obj_fence *sf;
+	struct isp_obj_fence *fc;
 
 	insn->id = ISP_OP_NO_FENCE;
 	/* Exported fences are pipeline objects, not linked to any OPs */
-	sf = isp_out_fence_register(&pipeline->objs,
+	fc = isp_out_fence_register(&pipeline->objs,
 				    pipeline->id,
 				    atomic64_inc_return(&pipeline->seqno));
-	if (!sf)
+	if (!fc)
 		return -EINVAL;
 
-	insn->id = isp_out_fence_fd(sf);
+	insn->id = isp_out_fence_fd(fc);
 	return 0;
 }
 
@@ -1440,6 +1466,9 @@ static int isp_op_prepare_rw_instruction(struct isp_obj_op *op)
 	case ISP_INSTANCE_INSTRUCTION:
 		ret = isp_prepare_instance_instruction(op, &insn.in);
 		break;
+	case ISP_IMPORT_FENCE_INSTRUCTION:
+		ret = isp_import_fence_instruction(op, &insn.ff);
+		break;
 	case ISP_EXPORT_FENCE_INSTRUCTION:
 		ret = isp_export_fence_instruction(op, &insn.ef);
 		ret |= copy_to_user(payload, &insn, sizeof(insn));
@@ -1534,7 +1563,7 @@ int isp_pipeline_enqueue_prepare(struct isp_pipeline *pipeline,
 			ret = isp_event_dependency_add(pipeline, dep, op);
 			break;
 		case ISP_DEPENDENCY_FENCE:
-			ret = isp_fence_in_dependency_add(pipeline, dep, op);
+			ret = isp_in_fence_dependency_add(pipeline, dep, op);
 			break;
 		}
 
@@ -1622,6 +1651,36 @@ isp_cancel_instance_instruction(struct isp_obj_op *op,
 	isp_instance_destroy(&pipeline->objs, insn->id);
 }
 
+static void
+isp_cancel_import_fence_instruction(struct isp_obj_op *op,
+				    struct isp_import_fence_instruction *insn)
+{
+	struct isp_pipeline *pipeline = op->pipeline;
+	struct isp_obj_fence *fc;
+
+	fc = isp_in_fence_lookup(&pipeline->objs, insn->id);
+	if (!fc)
+		return;
+
+	isp_in_fence_unregister(&fc->nsobj);
+	isp_fence_put(fc);
+}
+
+static void
+isp_cancel_export_fence_instruction(struct isp_obj_op *op,
+				    struct isp_export_fence_instruction *insn)
+{
+	struct isp_pipeline *pipeline = op->pipeline;
+	struct isp_obj_fence *fc;
+
+	fc = isp_out_fence_lookup(&pipeline->objs, insn->id);
+	if (!fc)
+		return;
+
+	isp_out_fence_unregister(&fc->nsobj);
+	isp_fence_put(fc);
+}
+
 static void isp_op_cancel_rw_instruction(struct isp_obj_op *op)
 {
 	struct isp_rw_instruction __user *payload;
@@ -1642,6 +1701,12 @@ static void isp_op_cancel_rw_instruction(struct isp_obj_op *op)
 		break;
 	case ISP_INSTANCE_INSTRUCTION:
 		isp_cancel_instance_instruction(op, &insn.in);
+		break;
+	case ISP_IMPORT_FENCE_INSTRUCTION:
+		isp_cancel_import_fence_instruction(op, &insn.ff);
+		break;
+	case ISP_EXPORT_FENCE_INSTRUCTION:
+		isp_cancel_export_fence_instruction(op, &insn.ef);
 		break;
 	}
 }
@@ -1666,7 +1731,6 @@ int isp_pipeline_enqueue_cancel(struct isp_pipeline *pipeline,
 	isp_op_set_state(op, ISP_OPERATION_STATE_DELETED);
 	isp_op_cancel_rw_instruction(op);
 	isp_drain_op_signals(op);
-	isp_drain_op_fences(op);
 	/* drop lookup ref-count */
 	isp_op_put(op);
 	/* Now release the object */
@@ -1867,6 +1931,7 @@ int isp_pipeline_init(struct isp_device *isp, struct isp_pipeline *pipeline)
 	INIT_LIST_HEAD(&pipeline->io_queue);
 	spin_lock_init(&pipeline->io_queue_lock);
 	INIT_LIST_HEAD(&pipeline->io_comp_queue);
+	INIT_LIST_HEAD(&pipeline->in_fence_release);
 	spin_lock_init(&pipeline->io_comp_queue_lock);
 	mutex_init(&pipeline->io_release_lock);
 	pipeline->io_thread = NULL;

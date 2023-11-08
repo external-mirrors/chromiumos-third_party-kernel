@@ -39,6 +39,8 @@ struct isp_pipeline {
 	spinlock_t		io_comp_queue_lock;
 	/** @io_comp_queue: Deferred OP completion queue */
 	struct list_head	io_comp_queue;
+	/** @in_fence_release: Deferred release of imported DMA fences */
+	struct list_head	in_fence_release;
 	/** @io_thread: IO thread that handles OPs execution */
 	struct task_struct	*io_thread;
 	/** @io_queue_wait: IO-queue wait_queue */
@@ -182,6 +184,9 @@ void isp_fire_active_signals(struct list_head *active_sig_chain);
 void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 				      struct list_head *active_sig_chain,
 				      int error);
+
+struct isp_obj_fence;
+void isp_in_fence_release_deferred(struct isp_obj_fence *fc);
 
 int isp_pipeline_io_setup(struct isp_pipeline *pipeline);
 int isp_pipeline_io_release(struct isp_pipeline *pipeline);
