@@ -372,7 +372,6 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 	va_end(args);
 
 	spin_lock_init(&fc->out.context_lock);
-	atomic64_set(&fc->out.fence_seqno, 0);
 	fc->out.fd = -1;
 	strscpy(fc->name, name, ISP_FENCE_NAME_SZ);
 	isp_obj_init(&fc->nsobj,
@@ -380,12 +379,8 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 		     isp_out_fence_release,
 		     ns);
 
-	fc->out.fence_context = dma_fence_context_alloc(1);
-	dma_fence_init(&fc->out.fence,
-		       &isp_out_fence_ops,
-		       &fc->out.context_lock,
-		       fc->out.fence_context,
-		       atomic64_inc_return(&fc->out.fence_seqno));
+	dma_fence_init(&fc->out.fence, &isp_out_fence_ops,
+		       &fc->out.context_lock, 0, 0);
 
 	fc->out.fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fc->out.fd < 0)

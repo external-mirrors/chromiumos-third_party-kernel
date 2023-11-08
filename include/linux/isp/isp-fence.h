@@ -28,10 +28,6 @@ struct isp_obj_fence {
 			int			fd;
 			/** @context_lock: DMA fence context lock */
 			spinlock_t		context_lock;
-			/** @fence_context: Fence context index */
-			u64			fence_context;
-			/** @fence_seqno: Accumulative fence seqno */
-			atomic64_t		fence_seqno;
 			/** @fence: base dma_fence object */
 			struct dma_fence	fence;
 		} out;
