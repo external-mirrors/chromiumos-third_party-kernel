@@ -22,7 +22,9 @@
 
 static bool isp_valid_fence_id(u32 id)
 {
-	if (id + ISP_OBJS_NS_FENCE_ID_START > ISP_OBJS_NS_FENCE_ID_END) {
+	u32 i = id + ISP_OBJS_NS_OUT_FENCE_ID_START;
+
+	if (i > ISP_OBJS_NS_OUT_FENCE_ID_END) {
 		pr_devel("Invalid fence ID: %u\n", id);
 		return false;
 	}
@@ -309,7 +311,7 @@ static struct isp_obj *isp_fence_lookup(struct isp_ns *ns, u32 type, u32 id)
 	if (!isp_valid_fence_id(id))
 		return NULL;
 
-	id += ISP_OBJS_NS_FENCE_ID_START;
+	id += ISP_OBJS_NS_OUT_FENCE_ID_START;
 	return isp_obj_lookup(ns, type, id);
 }
 
@@ -392,7 +394,7 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 	if (!isp_valid_fence_id(fc->out.fd))
 		goto error;
 
-	isp_obj_set_id(&fc->nsobj, fc->out.fd + ISP_OBJS_NS_FENCE_ID_START);
+	isp_obj_set_id(&fc->nsobj, fc->out.fd + ISP_OBJS_NS_OUT_FENCE_ID_START);
 
 	syncfile = sync_file_create(&fc->out.fence);
 	if (!syncfile)
