@@ -15,8 +15,6 @@
 
 #include <uapi/linux/isp.h>
 
-#define ISP_FENCE_NAME_SZ		16
-
 struct isp_obj_fence {
 	/** @nsobj: namespace object */
 	struct isp_obj	nsobj;
@@ -46,23 +44,17 @@ struct isp_obj_fence {
 			struct list_head	active_sig_chain;
 		} in;
 	};
-
-	char		name[ISP_FENCE_NAME_SZ];
 };
 
 struct isp_obj_op;
 
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     u64 context,
-					     u64 seqno,
-					     const char *namefmt,
-					     ...);
+					     u64 seqno);
 
 struct isp_obj_fence *isp_in_fence_register(struct isp_ns *ns,
 					    struct isp_obj_op *op,
-					    int fd,
-					    const char *namefmt,
-					    ...);
+					    int fd);
 
 int isp_out_fence_fd(struct isp_obj_fence *sf);
 

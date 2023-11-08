@@ -149,36 +149,25 @@ static void isp_fence_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
  * @ns: namespace
  * @op: ISP operation that owns ISP fence object
  * @fd: file descriptor of imported DMA fence
- * @namefmt: name format
  *
  * This creates ISP fence object, imports underlying DMA fence and registers
  * a callback so that we get DMA fence completion signals.
  *
  * Return: ISP fence pointer on success or NULL otherwise
  */
-__printf(4, 5)
 struct isp_obj_fence *isp_in_fence_register(struct isp_ns *ns,
 					    struct isp_obj_op *op,
-					    int fd,
-					    const char *namefmt,
-					    ...)
+					    int fd)
 {
-	char name[ISP_FENCE_NAME_SZ];
 	struct isp_obj_fence *fc;
-	va_list args;
 	int ret;
 
 	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
 	if (!fc)
 		return NULL;
 
-	va_start(args, namefmt);
-	vsnprintf(name, sizeof(name), namefmt, args);
-	va_end(args);
-
 	INIT_LIST_HEAD(&fc->in.active_sig_chain);
 	rwlock_init(&fc->in.notify_lock);
-	strscpy(fc->name, name, ISP_FENCE_NAME_SZ);
 	isp_obj_init(&fc->nsobj,
 		     ISP_OBJ_TYPE_IN_FENCE,
 		     isp_in_fence_release,
@@ -347,7 +336,6 @@ static struct dma_fence_ops isp_out_fence_ops = {
  * @ns: namespace
  * @context: ID of the context this fence is run on
  * @seqno: sequential number within this context
- * @namefmt: name format
  *
  * This creates ISP fence object, a corresponding DMA fence object and
  * installs the syncfile into process' fd-table so that the DMA fence
@@ -355,29 +343,19 @@ static struct dma_fence_ops isp_out_fence_ops = {
  *
  * Return: ISP fence points on success and NULL on error
  */
-__printf(4, 5)
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     u64 context,
-					     u64 seqno,
-					     const char *namefmt,
-					     ...)
+					     u64 seqno)
 {
 	struct sync_file *syncfile = NULL;
-	char name[ISP_FENCE_NAME_SZ];
 	struct isp_obj_fence *fc;
-	va_list args;
 
 	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
 	if (!fc)
 		return NULL;
 
-	va_start(args, namefmt);
-	vsnprintf(name, sizeof(name), namefmt, args);
-	va_end(args);
-
 	spin_lock_init(&fc->out.context_lock);
 	fc->out.fd = -1;
-	strscpy(fc->name, name, ISP_FENCE_NAME_SZ);
 	isp_obj_init(&fc->nsobj,
 		     ISP_OBJ_TYPE_OUT_FENCE,
 		     isp_out_fence_release,

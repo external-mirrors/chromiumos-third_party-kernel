@@ -1252,8 +1252,7 @@ static int isp_fence_in_dependency_add(struct isp_pipeline *pipeline,
 	 * Imported fences are OP dependencies (OP is blocked on a signal)
 	 * hence IN fences are linked to their OPs
 	 */
-	sf = isp_in_fence_register(&pipeline->objs, op, req->id,
-				   "in-fence-%d", req->id);
+	sf = isp_in_fence_register(&pipeline->objs, op, req->id);
 	if (!sf)
 		return -EINVAL;
 
@@ -1282,9 +1281,7 @@ isp_export_fence_instruction(struct isp_obj_op *op,
 	/* Exported fences are pipeline objects, not linked to any OPs */
 	sf = isp_out_fence_register(&pipeline->objs,
 				    pipeline->id,
-				    atomic64_inc_return(&pipeline->seqno),
-				    "out-fence-%d",
-				    isp_obj_id(&op->nsobj));
+				    atomic64_inc_return(&pipeline->seqno));
 	if (!sf)
 		return -EINVAL;
 
