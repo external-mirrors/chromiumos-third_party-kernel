@@ -20,11 +20,9 @@
 
 #include <uapi/linux/isp.h>
 
-static bool isp_valid_fence_id(u32 id)
+static bool isp_valid_fence_id(u32 id, u32 low, u32 high)
 {
-	u32 i = id + ISP_OBJS_NS_OUT_FENCE_ID_START;
-
-	if (i > ISP_OBJS_NS_OUT_FENCE_ID_END) {
+	if (id + low > high) {
 		pr_devel("Invalid fence ID: %u\n", id);
 		return false;
 	}
@@ -308,7 +306,8 @@ static void isp_dma_fence_release(struct dma_fence *fence)
 
 static struct isp_obj *isp_fence_lookup(struct isp_ns *ns, u32 type, u32 id)
 {
-	if (!isp_valid_fence_id(id))
+	if (!isp_valid_fence_id(id, ISP_OBJS_NS_OUT_FENCE_ID_START,
+				ISP_OBJS_NS_OUT_FENCE_ID_END))
 		return NULL;
 
 	id += ISP_OBJS_NS_OUT_FENCE_ID_START;
@@ -391,7 +390,8 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 	if (fc->out.fd < 0)
 		goto error;
 
-	if (!isp_valid_fence_id(fc->out.fd))
+	if (!isp_valid_fence_id(fc->out.fd, ISP_OBJS_NS_OUT_FENCE_ID_START,
+				ISP_OBJS_NS_OUT_FENCE_ID_END))
 		goto error;
 
 	isp_obj_set_id(&fc->nsobj, fc->out.fd + ISP_OBJS_NS_OUT_FENCE_ID_START);
