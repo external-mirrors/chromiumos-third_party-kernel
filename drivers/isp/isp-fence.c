@@ -38,6 +38,12 @@ static struct isp_obj_fence *nsobj_to_isp_fence(struct isp_obj *nsobj,
 	return container_of(nsobj, struct isp_obj_fence, nsobj);
 }
 
+/**
+ * isp_out_fence_fd() - Return OUT (exported) ISP fence file descriptor
+ * @fc: ISP fence
+ *
+ * Return: negative code on error and file descriptor otherwise
+ */
 int isp_out_fence_fd(struct isp_obj_fence *fc)
 {
 	if (!(fc->nsobj.type & ISP_OBJ_TYPE_OUT_FENCE))
@@ -56,6 +62,12 @@ static struct isp_obj_fence *nsobj_to_isp_out_fence(struct isp_obj *nsobj)
 	return nsobj_to_isp_fence(nsobj, ISP_OBJ_TYPE_OUT_FENCE);
 }
 
+/**
+ * isp_in_fence_unregister() - Unregister IN (imported) fence
+ * @nsobj: namespace object of the ISP fence
+ *
+ * Removes ISP fence from the namespace and de-inits namespace object.
+ */
 void isp_in_fence_unregister(struct isp_obj *nsobj)
 {
 	struct isp_obj_fence *fc;
@@ -68,6 +80,13 @@ void isp_in_fence_unregister(struct isp_obj *nsobj)
 	isp_obj_deinit(&fc->nsobj);
 }
 
+/**
+ * isp_out_fence_unregister() - Unregister OUT (exported) fence
+ * @nsobj: namespace object of the ISP fence
+ *
+ * This unlinks fence, removes it from the namespace and puts underlying
+ * DMA fence ref-count.
+ */
 void isp_out_fence_unregister(struct isp_obj *nsobj)
 {
 	struct isp_obj_fence *fc;
@@ -90,6 +109,10 @@ void isp_out_fence_unregister(struct isp_obj *nsobj)
 	dma_fence_put(&fc->out.fence);
 }
 
+/**
+ * isp_fence_put() - Put ISP fence ref-count
+ * @fc: ISP fence
+ */
 void isp_fence_put(struct isp_obj_fence *fc)
 {
 	if (likely(fc))
@@ -121,6 +144,18 @@ static void isp_fence_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 	write_unlock_irqrestore(&fc->in.notify_lock, flags);
 }
 
+/**
+ * isp_in_fence_register() - Register new IN (imported) fence
+ * @isp: ISP device
+ * @op: ISP operation that owns ISP fence object
+ * @fd: file descriptor of imported DMA fence
+ * @namefmt: name format
+ *
+ * This creates ISP fence object, imports underlying DMA fence and registers
+ * a callback so that we get DMA fence completion signals.
+ *
+ * Return: ISP fence pointer on success or NULL otherwise
+ */
 __printf(4, 5)
 struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
 					    struct isp_obj_op *op,
@@ -174,6 +209,15 @@ error:
 }
 ALLOW_ERROR_INJECTION(isp_in_fence_register, NULL);
 
+/**
+ * isp_in_fence_activate_signal() - ISP signal activation for imported fence
+ * @sig: ISP signal
+ *
+ * Adds ISP signal to the imported ISP fence active chain, if the underlying
+ * DMA fence has not been signaled yet.
+ *
+ * Return: true on success and false otherwise
+ */
 bool isp_in_fence_activate_signal(struct isp_op_signal *sig)
 {
 	struct isp_obj_fence *fc;
@@ -207,6 +251,14 @@ bool isp_in_fence_activate_signal(struct isp_op_signal *sig)
 	return true;
 }
 
+/**
+ * isp_in_fence_deactivate_signal() - ISP signal deactivation for imported fence
+ * @sig: ISP signal
+ *
+ * Performs ISP signal deactivation (if signal has not been fired yet).
+ *
+ * Return: true on success and false otherwise
+ */
 bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig)
 {
 	struct isp_op_signal *active;
@@ -288,6 +340,17 @@ static struct dma_fence_ops isp_out_fence_ops = {
 	.release		= isp_dma_fence_release,
 };
 
+/**
+ * isp_out_fence_register() - Register new OUT (exported) fence
+ * @ns: namespace
+ * @namefmt: name format
+ *
+ * This creates ISP fence object, a corresponding DMA fence object and
+ * installs the syncfile into process' fd-table so that the DMA fence
+ * can be exported.
+ *
+ * Return: ISP fence points on success and NULL on error
+ */
 __printf(2, 3)
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     const char *namefmt,
@@ -351,6 +414,12 @@ error:
 }
 ALLOW_ERROR_INJECTION(isp_out_fence_register, NULL);
 
+/**
+ * isp_fire_out_fence_signal() - Signal completion of a DMA fence
+ * @nsobj: namespace object of the ISP fence
+ *
+ * Return: 0 on success or negative error code otherwise
+ */
 int isp_fire_out_fence_signal(struct isp_obj *nsobj)
 {
 	struct isp_obj_fence *fc;
@@ -362,6 +431,15 @@ int isp_fire_out_fence_signal(struct isp_obj *nsobj)
 	return dma_fence_signal(&fc->out.fence);
 }
 
+/**
+ * isp_drain_out_fences() - Drains OUT (exported) fences
+ * @pipeline: ISP pipeline to drain
+ *
+ * This signals and unregisters all OUT (exported) ISP fences that the
+ * pipeline in question owns.
+ *
+ * Return: 0
+ */
 int isp_drain_out_fences(struct isp_pipeline *pipeline)
 {
 	struct isp_obj *nsobj;

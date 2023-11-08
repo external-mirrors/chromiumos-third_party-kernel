@@ -21,7 +21,7 @@ struct isp_obj_fence {
 	/** @nsobj: namespace object */
 	struct isp_obj	nsobj;
 
-	/* ISP fence is either ined (in) or outed (out) */
+	/* ISP fence is either exported (out) or imported (in) */
 	union {
 		struct export {
 			/** @fd: File descriptor of this fence */
