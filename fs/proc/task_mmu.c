@@ -1833,8 +1833,6 @@ huge_unlock:
 	}
 
 regular_page:
-	if (pmd_trans_unstable(pmd))
-		return 0;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
@@ -1934,9 +1932,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 
 		/*
 		 * Reclaim the whole huge page even if it would make us go
-		 * over our limit. The alternative would be to split the
-		 * huge page, but if we try to do that pmd_trans_unstable()
-		 * below would fail, and we wouldn't progress.
+		 * over our limit.
 		 */
 		data->nr_to_try -= min_t(unsigned long, data->nr_to_try,
 		    thp_nr_pages(page));
@@ -1953,8 +1949,6 @@ huge_unlock:
 	}
 
 regular_page:
-	if (pmd_trans_unstable(pmd))
-		return 0;
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
