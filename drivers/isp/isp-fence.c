@@ -345,6 +345,8 @@ static struct dma_fence_ops isp_out_fence_ops = {
 /**
  * isp_out_fence_register() - Register new OUT (exported) fence
  * @ns: namespace
+ * @context: ID of the context this fence is run on
+ * @seqno: sequential number within this context
  * @namefmt: name format
  *
  * This creates ISP fence object, a corresponding DMA fence object and
@@ -353,8 +355,10 @@ static struct dma_fence_ops isp_out_fence_ops = {
  *
  * Return: ISP fence points on success and NULL on error
  */
-__printf(2, 3)
+__printf(4, 5)
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
+					     u64 context,
+					     u64 seqno,
 					     const char *namefmt,
 					     ...)
 {
@@ -380,7 +384,7 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 		     ns);
 
 	dma_fence_init(&fc->out.fence, &isp_out_fence_ops,
-		       &fc->out.context_lock, 0, 0);
+		       &fc->out.context_lock, context, seqno);
 
 	fc->out.fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fc->out.fd < 0)

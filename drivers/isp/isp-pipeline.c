@@ -1280,7 +1280,10 @@ isp_export_fence_instruction(struct isp_obj_op *op,
 
 	insn->id = ISP_OP_NO_FENCE;
 	/* Exported fences are pipeline objects, not linked to any OPs */
-	sf = isp_out_fence_register(&pipeline->objs, "out-fence-%d",
+	sf = isp_out_fence_register(&pipeline->objs,
+				    pipeline->id,
+				    atomic64_inc_return(&pipeline->seqno),
+				    "out-fence-%d",
 				    isp_obj_id(&op->nsobj));
 	if (!sf)
 		return -EINVAL;
@@ -1886,5 +1889,6 @@ int isp_pipeline_init(struct isp_device *isp, struct isp_pipeline *pipeline)
 	pipeline->io_thread = NULL;
 	pipeline->isp = isp;
 	pipeline->id = atomic_inc_return(&pipeline_count);
+	atomic64_set(&pipeline->seqno, 0);
 	return ret;
 }

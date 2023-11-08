@@ -53,6 +53,8 @@ struct isp_obj_fence {
 struct isp_obj_op;
 
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
+					     u64 context,
+					     u64 seqno,
 					     const char *namefmt,
 					     ...);
 

@@ -47,6 +47,8 @@ struct isp_pipeline {
 	unsigned long		io_state;
 	/** @io_release_lock: Lock to protect IO-thread release */
 	struct mutex		io_release_lock;
+	/** @seqno: sequential number for DMA context */
+	atomic64_t		seqno;
 	/** @id: ID of the pipeline used for debugging */
 	int			id;
 };
