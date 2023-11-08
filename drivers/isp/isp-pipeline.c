@@ -1248,8 +1248,11 @@ static int isp_fence_in_dependency_add(struct isp_pipeline *pipeline,
 	struct isp_obj_fence *sf;
 	int ret;
 
-	/* Imported fences are linked to their OP */
-	sf = isp_in_fence_register(pipeline->isp, op, req->id,
+	/*
+	 * Imported fences are OP dependencies (OP is blocked on a signal)
+	 * hence IN fences are linked to their OPs
+	 */
+	sf = isp_in_fence_register(&pipeline->objs, op, req->id,
 				   "in-fence-%d", req->id);
 	if (!sf)
 		return -EINVAL;

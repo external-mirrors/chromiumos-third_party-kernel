@@ -60,7 +60,7 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     const char *namefmt,
 					     ...);
 
-struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
+struct isp_obj_fence *isp_in_fence_register(struct isp_ns *ns,
 					    struct isp_obj_op *op,
 					    int fd,
 					    const char *namefmt,

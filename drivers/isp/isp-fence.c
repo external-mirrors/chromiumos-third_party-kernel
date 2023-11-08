@@ -146,7 +146,7 @@ static void isp_fence_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 
 /**
  * isp_in_fence_register() - Register new IN (imported) fence
- * @isp: ISP device
+ * @ns: namespace
  * @op: ISP operation that owns ISP fence object
  * @fd: file descriptor of imported DMA fence
  * @namefmt: name format
@@ -157,7 +157,7 @@ static void isp_fence_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
  * Return: ISP fence pointer on success or NULL otherwise
  */
 __printf(4, 5)
-struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
+struct isp_obj_fence *isp_in_fence_register(struct isp_ns *ns,
 					    struct isp_obj_op *op,
 					    int fd,
 					    const char *namefmt,
@@ -182,7 +182,13 @@ struct isp_obj_fence *isp_in_fence_register(struct isp_device *isp,
 	isp_obj_init(&fc->nsobj,
 		     ISP_OBJ_TYPE_IN_FENCE,
 		     isp_in_fence_release,
-		     &isp->ns);
+		     ns);
+
+	if (!isp_valid_fence_id(fd, ISP_OBJS_NS_IN_FENCE_ID_START,
+				ISP_OBJS_NS_IN_FENCE_ID_END))
+		goto error;
+
+	isp_obj_set_id(&fc->nsobj, fd + ISP_OBJS_NS_IN_FENCE_ID_START);
 
 	fc->in.fence = sync_file_get_fence(fd);
 	if (!fc->in.fence)
