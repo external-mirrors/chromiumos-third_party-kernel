@@ -344,7 +344,7 @@ enum isp_rw_instruction_type {
  * @wr:		Used when type is ISP_WRITE_INSTRUCTION
  * @db:		Used when type is ISP_DMABUF_INSTRUCTION
  * @in:		Used when type is ISP_INSTANCE_INSTRUCTION
- * @of:		Used when type is ISP_EXPORT_FENCE_INSTRUCTION
+ * @ef:		Used when type is ISP_EXPORT_FENCE_INSTRUCTION
  * @sf:		User when type is ISP_SIGNAL_FENCE_INSTRUCTION
  * @reserved:	Reserved for alignment and future extension
  */
