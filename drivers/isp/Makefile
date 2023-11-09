@@ -18,11 +18,9 @@ ifeq ($(CONFIG_TRACEPOINTS),y)
 endif
 obj-$(CONFIG_ISP)		+= isp.o
 
-isp-ioctl-test-objs		+= isp-ioctl.o
 isp-namespace-test-objs		+= isp-namespace.o
 isp-graph-test-objs		+= isp-graph.o
 isp-ringbuffer-test-objs	+= isp-ringbuffer.o
-obj-$(CONFIG_ISP_KUNIT_TESTS)	+= isp-ioctl-test.o \
-					isp-namespace-test.o \
+obj-$(CONFIG_ISP_KUNIT_TESTS)	+= isp-namespace-test.o \
 					isp-graph-test.o \
 					isp-ringbuffer-test.o
