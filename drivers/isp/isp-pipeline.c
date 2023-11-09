@@ -970,7 +970,7 @@ static int isp_pipeline_io_worker(void *data)
 	}
 
 	isp_pipeline_in_fence_release(pipeline);
-	isp_drain_out_fences(pipeline);
+	isp_drain_fences(pipeline);
 	isp_drain_instances(pipeline);
 	isp_drain_buffers(pipeline);
 	isp_drain_ops(pipeline);

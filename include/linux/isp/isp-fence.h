@@ -71,5 +71,5 @@ bool isp_in_fence_activate_signal(struct isp_op_signal *sig);
 bool isp_in_fence_deactivate_signal(struct isp_op_signal *sig);
 
 int isp_fire_out_fence_signal(struct isp_obj *nsobj);
-int isp_drain_out_fences(struct isp_pipeline *pipeline);
+int isp_drain_fences(struct isp_pipeline *pipeline);
 #endif /* __LINUX_ISP_FENCE_H__ */

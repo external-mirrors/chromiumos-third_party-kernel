@@ -433,25 +433,31 @@ int isp_fire_out_fence_signal(struct isp_obj *nsobj)
 }
 
 /**
- * isp_drain_out_fences() - Drains pipeline's OUT (exported) fences
+ * isp_drain_fences() - Drains pipeline's fences
  * @pipeline: ISP pipeline to drain
  *
- * This signals and unregisters all OUT (exported) ISP fences that the
- * pipeline in question owns.
+ * This signals and unregisters all OUT (exported) and IN (imported)
+ * ISP fences that the pipeline in question owns.
  *
  * Return: 0
  */
-int isp_drain_out_fences(struct isp_pipeline *pipeline)
+int isp_drain_fences(struct isp_pipeline *pipeline)
 {
 	struct isp_obj *nsobj;
 	struct isp_obj *save;
 
 	isp_ns_for_each_obj_safe(nsobj, save, &pipeline->objs) {
-		if (isp_obj_type(nsobj) != ISP_OBJ_TYPE_OUT_FENCE)
-			continue;
-
-		isp_fire_out_fence_signal(nsobj);
-		isp_out_fence_unregister(nsobj);
+		switch (isp_obj_type(nsobj)) {
+		case ISP_OBJ_TYPE_OUT_FENCE:
+			isp_fire_out_fence_signal(nsobj);
+			isp_out_fence_unregister(nsobj);
+			break;
+		case ISP_OBJ_TYPE_IN_FENCE:
+			isp_in_fence_unregister(nsobj);
+			break;
+		default:
+			break;
+		}
 	}
 	return 0;
 }
