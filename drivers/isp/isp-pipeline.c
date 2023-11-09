@@ -552,16 +552,9 @@ isp_prepare_instance_instruction(struct isp_obj_op *op,
 		return 0;
 
 	if (insn->op == ISP_OP_INSTANCE_CREATE) {
-		struct isp_obj_instance *instance;
-
-		instance = isp_instance_create(&pipeline->objs,
-					       op->exec_entity,
-					       insn->id);
-		if (!instance)
-			return -EINVAL;
-
-		isp_instance_put(instance);
-		return 0;
+		return isp_instance_create(&pipeline->objs,
+					   op->exec_entity,
+					   insn->id);
 	}
 
 	pr_devel("Unknown instance instruction operation: %d\n", insn->op);

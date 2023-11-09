@@ -370,22 +370,22 @@ int isp_instance_destroy(struct isp_ns *ns, u32 id)
  * @entity: ISP entity
  * @id: ID of the instance (context) object
  *
- * Return: NULL on error or ISP instance pointer otherwise
+ * Return: 0 on success or negative error code otherwise
  */
-struct isp_obj_instance *isp_instance_create(struct isp_ns *ns,
-					     struct isp_obj_entity *entity,
-					     u32 id)
+int isp_instance_create(struct isp_ns *ns,
+			struct isp_obj_entity *entity,
+			u32 id)
 {
 	struct isp_obj_instance *instance;
 	void *dev;
 
 	if (!isp_valid_instance_id(id))
-		return NULL;
+		return -EINVAL;
 
 	id += ISP_OBJS_NS_INSTANCE_ID_START;
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
 	if (!instance)
-		return NULL;
+		return -ENOMEM;
 
 	isp_obj_init(&instance->nsobj, ISP_OBJ_TYPE_INSTANCE,
 		     isp_instance_deferred_release,
@@ -411,14 +411,15 @@ struct isp_obj_instance *isp_instance_create(struct isp_ns *ns,
 	if (!instance->driver_data)
 		goto error;
 
-	if (isp_obj_insert(&instance->nsobj))
+	/* Instances belong to USER_ID namespace, so we don't need id */
+	if (isp_obj_move(&instance->nsobj, NULL))
 		goto error;
 
-	return instance;
+	return 0;
 
 error:
 	isp_instance_release(&instance->release_work);
-	return NULL;
+	return -EINVAL;
 }
 
 /**
