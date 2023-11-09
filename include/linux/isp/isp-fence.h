@@ -55,8 +55,7 @@ struct isp_obj_op;
 struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 					     u64 context, u64 seqno);
 
-struct isp_obj_fence *isp_in_fence_register(struct isp_pipeline *pipeline,
-					    u32 fd, u32 id);
+int isp_in_fence_register(struct isp_pipeline *pipeline, u32 fd, u32 id);
 
 int isp_out_fence_fd(struct isp_obj_fence *sf);
 

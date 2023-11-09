@@ -1265,14 +1265,7 @@ static int
 isp_import_fence_instruction(struct isp_obj_op *op,
 			     struct isp_import_fence_instruction *insn)
 {
-	struct isp_pipeline *pipeline = op->pipeline;
-	struct isp_obj_fence *fc;
-
-	fc = isp_in_fence_register(pipeline, insn->fd, insn->id);
-	if (!fc)
-		return -EINVAL;
-	isp_fence_put(fc);
-	return 0;
+	return isp_in_fence_register(op->pipeline, insn->fd, insn->id);
 }
 
 /**

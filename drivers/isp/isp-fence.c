@@ -162,17 +162,16 @@ static void isp_in_fence_cb(struct dma_fence *f, struct dma_fence_cb *cb)
  * This creates ISP fence object, imports underlying DMA fence and registers
  * a callback so that we get DMA fence completion signals.
  *
- * Return: ISP fence pointer on success or NULL otherwise
+ * Return: 0 on success or negative error code otherwise
  */
-struct isp_obj_fence *isp_in_fence_register(struct isp_pipeline *pipeline,
-					    u32 fd, u32 id)
+int isp_in_fence_register(struct isp_pipeline *pipeline, u32 fd, u32 id)
 {
 	struct isp_obj_fence *fc;
 	int ret;
 
 	fc = kzalloc(sizeof(*fc), GFP_KERNEL);
 	if (!fc)
-		return NULL;
+		return -ENOMEM;
 
 	INIT_LIST_HEAD(&fc->in.active_sig_chain);
 	INIT_LIST_HEAD(&fc->in.release_entry);
@@ -200,16 +199,17 @@ struct isp_obj_fence *isp_in_fence_register(struct isp_pipeline *pipeline,
 	if (ret && ret != -ENOENT)
 		goto error;
 
-	if (isp_obj_insert(&fc->nsobj))
+	/* Fences belong to USER_ID namespace, so we don't need id */
+	if (isp_obj_move(&fc->nsobj, NULL))
 		goto error;
 
-	return fc;
+	return 0;
 
 error:
 	isp_in_fence_release(&fc->nsobj);
-	return NULL;
+	return -EINVAL;
 }
-ALLOW_ERROR_INJECTION(isp_in_fence_register, NULL);
+ALLOW_ERROR_INJECTION(isp_in_fence_register, ERRNO);
 
 /**
  * isp_in_fence_activate_signal() - ISP signal activation for imported fence
