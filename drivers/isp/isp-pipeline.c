@@ -1291,6 +1291,7 @@ isp_export_fence_instruction(struct isp_obj_op *op,
 		return -EINVAL;
 
 	insn->id = isp_out_fence_fd(fc);
+	isp_fence_put(fc);
 	return 0;
 }
 

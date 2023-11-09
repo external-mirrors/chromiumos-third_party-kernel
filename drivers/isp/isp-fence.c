@@ -399,6 +399,14 @@ struct isp_obj_fence *isp_out_fence_register(struct isp_ns *ns,
 	if (!syncfile)
 		goto error;
 
+	/*
+	 * Bump ref-count because we are not the only ones who hold a
+	 * reference to that object. DMA fence indirectly owns this object
+	 * and we can release it only once DMA fence ref-count reaches 0.
+	 */
+	if (WARN_ON(!isp_obj_get(&fc->nsobj)))
+		goto error;
+
 	if (isp_obj_insert(&fc->nsobj))
 		goto error;
 
