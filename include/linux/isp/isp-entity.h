@@ -11,7 +11,6 @@
 #include <linux/isp/isp-device.h>
 #include <linux/isp/isp-namespace.h>
 #include <linux/dma-buf.h>
-#include <linux/workqueue.h>
 
 struct isp_obj_entity;
 
@@ -116,8 +115,6 @@ struct isp_obj_instance {
 	spinlock_t		lock;
 	/** @private: ISP pipeline data associated with this instance */
 	void			*private;
-	/** @release_work: Deferred instance release */
-	struct work_struct	release_work;
 };
 
 /**

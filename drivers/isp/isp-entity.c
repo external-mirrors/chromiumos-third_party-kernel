@@ -306,17 +306,15 @@ static struct isp_obj_instance *nsobj_to_isp_instance(struct isp_obj *nsobj)
 	return container_of(nsobj, struct isp_obj_instance, nsobj);
 }
 
-/**
- * isp_instance_release() - The release function of ISP instance
- * @work: pointer to instance deferred release work
- */
-static void isp_instance_release(struct work_struct *work)
+static void isp_instance_release(struct isp_obj *nsobj)
 {
-	struct isp_obj_instance *instance;
+	struct isp_obj_instance *instance = nsobj_to_isp_instance(nsobj);
 	struct isp_obj *link;
 	void *dev, *dev_data;
 
-	instance = container_of(work, struct isp_obj_instance, release_work);
+	if (!instance)
+		return;
+
 	link = isp_obj_linked_to(&instance->nsobj);
 	dev_data = instance->driver_data;
 	if (link) {
@@ -336,16 +334,6 @@ static void isp_instance_release(struct work_struct *work)
 
 	isp_obj_unlink(&instance->nsobj);
 	kfree(instance);
-}
-
-static void isp_instance_deferred_release(struct isp_obj *nsobj)
-{
-	struct isp_obj_instance *instance = nsobj_to_isp_instance(nsobj);
-
-	if (!instance)
-		return;
-
-	queue_work(system_long_wq, &instance->release_work);
 }
 
 /**
@@ -388,10 +376,9 @@ int isp_instance_create(struct isp_ns *ns,
 		return -ENOMEM;
 
 	isp_obj_init(&instance->nsobj, ISP_OBJ_TYPE_INSTANCE,
-		     isp_instance_deferred_release,
+		     isp_instance_release,
 		     ns);
 	isp_obj_set_id(&instance->nsobj, id);
-	INIT_WORK(&instance->release_work, isp_instance_release);
 	spin_lock_init(&instance->lock);
 
 	if (atomic_dec_if_positive(&entity->instances_avail) < 0)
@@ -418,7 +405,7 @@ int isp_instance_create(struct isp_ns *ns,
 	return 0;
 
 error:
-	isp_instance_release(&instance->release_work);
+	isp_instance_release(&instance->nsobj);
 	return -EINVAL;
 }
 
