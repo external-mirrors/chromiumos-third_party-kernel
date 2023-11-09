@@ -1454,7 +1454,7 @@ static int test_dma_fence(struct libisp *isp)
 	if (!event)
 		return -EINVAL;
 
-	lio = libisp_operation_get(4);
+	lio = libisp_operation_get(5);
 	if (!lio)
 		return -EINVAL;
 
@@ -1527,6 +1527,19 @@ static int test_dma_fence(struct libisp *isp)
 	op->operation_add.deps[0].type	= ISP_DEPENDENCY_FENCE;
 	op->operation_add.deps[0].id	= 88;
 
+	op = libisp_operation_at(lio, 4);
+	op->operation_type		= ISP_OPERATION_TYPE_ADD;
+	op->operation_add.id		= 4;
+	op->operation_add.delay_ns	= 0;
+	op->operation_add.instruction	= ISP_OP_NULL_PTR;
+	op->operation_add.entity	= entity->id;
+	op->operation_add.instance	= ISP_OP_NO_INSTANCE;
+	op->operation_add.mode		= ISP_DEPENDENCY_WEAK_ORDER;
+	op->operation_add.deps[0].type	= ISP_DEPENDENCY_FENCE;
+	op->operation_add.deps[0].id	= 88;
+	op->operation_add.deps[1].type	= ISP_DEPENDENCY_OP;
+	op->operation_add.deps[1].id	= 3;
+
 	ret = libisp_operation_ioctl(isp, lio);
 	if (ret) {
 		pr_err("FATAL: failed to add operation: %d\n", ret);
@@ -1535,8 +1548,8 @@ static int test_dma_fence(struct libisp *isp)
 
 	MAY_EXIT_AT();
 
-	ret = read_operations_completion_events(isp, 4);
-	if (ret != 4) {
+	ret = read_operations_completion_events(isp, 5);
+	if (ret != 5) {
 		pr_err("FATAL: unexpected completion read error: %d\n", ret);
 		ret = -EINVAL;
 		goto out;
