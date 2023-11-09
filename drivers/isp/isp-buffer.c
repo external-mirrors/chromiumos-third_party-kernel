@@ -42,15 +42,12 @@ static struct isp_obj_buffer *nsobj_to_isp_buffer(struct isp_obj *nsobj)
 	return container_of(nsobj, struct isp_obj_buffer, nsobj);
 }
 
-/**
- * isp_buffer_release() - The release function of ISP buffer
- * @work: pointer to buffer deferred release work
- */
-static void isp_buffer_release(struct work_struct *work)
+static void isp_buffer_release(struct isp_obj *nsobj)
 {
-	struct isp_obj_buffer *buffer;
+	struct isp_obj_buffer *buffer = nsobj_to_isp_buffer(nsobj);
 
-	buffer = container_of(work, struct isp_obj_buffer, release_work);
+	if (!buffer)
+		return;
 
 	if (buffer->driver_data) {
 		void *dev = isp_entity_driver_data(buffer->entity);
@@ -67,16 +64,6 @@ static void isp_buffer_release(struct work_struct *work)
 		dma_buf_put(buffer->dma_buf);
 
 	kfree(buffer);
-}
-
-static void isp_buffer_deferred_release(struct isp_obj *nsobj)
-{
-	struct isp_obj_buffer *buffer = nsobj_to_isp_buffer(nsobj);
-
-	if (!buffer)
-		return;
-
-	queue_work(system_long_wq, &buffer->release_work);
 }
 
 /**
@@ -109,10 +96,9 @@ int isp_buffer_register(struct isp_ns *ns, struct isp_obj_entity *entity,
 
 	isp_obj_init(&buffer->nsobj,
 		     ISP_OBJ_TYPE_BUFFER,
-		     isp_buffer_deferred_release,
+		     isp_buffer_release,
 		     ns);
 	isp_obj_set_id(&buffer->nsobj, id);
-	INIT_WORK(&buffer->release_work, isp_buffer_release);
 
 	buffer->dma_buf = dma_buf_get(fd);
 	if (IS_ERR(buffer->dma_buf))
@@ -131,7 +117,7 @@ int isp_buffer_register(struct isp_ns *ns, struct isp_obj_entity *entity,
 	return 0;
 
 error:
-	isp_buffer_release(&buffer->release_work);
+	isp_buffer_release(&buffer->nsobj);
 	return -EINVAL;
 }
 ALLOW_ERROR_INJECTION(isp_buffer_register, ERRNO);

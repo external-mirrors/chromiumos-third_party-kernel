@@ -13,7 +13,6 @@
 #include <linux/sync_file.h>
 #include <linux/dma-buf.h>
 #include <linux/types.h>
-#include <linux/workqueue.h>
 
 struct isp_obj_entity;
 
@@ -32,8 +31,6 @@ struct isp_obj_buffer {
 	void				*driver_data;
 	/** @entity: ISP entity that imported this buffer */
 	struct isp_obj_entity		*entity;
-	/** @release_work: Deferred buffer release */
-	struct work_struct		release_work;
 };
 
 int isp_buffer_register(struct isp_ns *ns, struct isp_obj_entity *entity,
