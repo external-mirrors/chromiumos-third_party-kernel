@@ -525,17 +525,10 @@ static int isp_prepare_dmabuf_instruction(struct isp_obj_op *op,
 		return 0;
 
 	if (insn->op == ISP_OP_DMABUF_ADD) {
-		struct isp_obj_buffer *buffer;
-
-		buffer = isp_buffer_register(&pipeline->objs,
-					     op->exec_entity,
-					     insn->dma_fd,
-					     insn->buf_id);
-		if (!buffer)
-			return -EINVAL;
-
-		isp_buffer_put(buffer);
-		return 0;
+		return isp_buffer_register(&pipeline->objs,
+					   op->exec_entity,
+					   insn->dma_fd,
+					   insn->buf_id);
 	}
 
 	pr_devel("Unknown dmabuf instruction operation: %d\n", insn->op);

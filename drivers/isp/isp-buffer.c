@@ -87,26 +87,24 @@ static void isp_buffer_deferred_release(struct isp_obj *nsobj)
  * @fd: file descriptor of the imported DMA buffer
  * @id: requested object ID
  *
- * Return: NULL on error or ISP buffer pointer otherwise.
+ * Return: 0 on success or negative error code otherwise.
  */
-struct isp_obj_buffer *isp_buffer_register(struct isp_ns *ns,
-					   struct isp_obj_entity *entity,
-					   u32 fd,
-					   u32 id)
+int isp_buffer_register(struct isp_ns *ns, struct isp_obj_entity *entity,
+			u32 fd, u32 id)
 {
 	struct isp_obj_buffer *buffer;
 	void *dev;
 
 	if (!isp_valid_buffer_id(id))
-		return NULL;
+		return -EINVAL;
 
 	if (!isp_entity_get(entity))
-		return NULL;
+		return -EINVAL;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer) {
 		isp_entity_put(entity);
-		return NULL;
+		return -ENOMEM;
 	}
 
 	isp_obj_init(&buffer->nsobj,
@@ -126,16 +124,17 @@ struct isp_obj_buffer *isp_buffer_register(struct isp_ns *ns,
 	if (!buffer->driver_data)
 		goto error;
 
-	if (isp_obj_insert(&buffer->nsobj))
+	/* Buffers belong to USER_ID namespace, so we don't need id */
+	if (isp_obj_move(&buffer->nsobj, NULL))
 		goto error;
 
-	return buffer;
+	return 0;
 
 error:
 	isp_buffer_release(&buffer->release_work);
-	return NULL;
+	return -EINVAL;
 }
-ALLOW_ERROR_INJECTION(isp_buffer_register, NULL);
+ALLOW_ERROR_INJECTION(isp_buffer_register, ERRNO);
 
 /**
  * isp_buffer_unregister() - Unregister (remove from namespace and possibly

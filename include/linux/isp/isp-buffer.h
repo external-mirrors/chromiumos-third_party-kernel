@@ -36,10 +36,8 @@ struct isp_obj_buffer {
 	struct work_struct		release_work;
 };
 
-struct isp_obj_buffer *isp_buffer_register(struct isp_ns *ns,
-					   struct isp_obj_entity *entity,
-					   u32 fd,
-					   u32 id);
+int isp_buffer_register(struct isp_ns *ns, struct isp_obj_entity *entity,
+			u32 fd, u32 id);
 int isp_buffer_unregister(struct isp_ns *ns, u32 id);
 
 struct isp_obj_buffer *isp_buffer_lookup(struct isp_ns *ns, u32 id);
