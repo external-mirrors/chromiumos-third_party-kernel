@@ -66,7 +66,7 @@ static struct isp_obj_fence *nsobj_to_isp_out_fence(struct isp_obj *nsobj)
  * isp_in_fence_unregister() - Unregister IN (imported) fence
  * @nsobj: namespace object of the ISP fence
  *
- * Removes ISP fence from the namespace and de-inits namespace object.
+ * Removes ISP fence from DMA fence callback list and from the namespace.
  */
 void isp_in_fence_unregister(struct isp_obj *nsobj)
 {
@@ -75,6 +75,10 @@ void isp_in_fence_unregister(struct isp_obj *nsobj)
 	fc = nsobj_to_isp_in_fence(nsobj);
 	if (WARN_ON(!fc))
 		return;
+
+	if (fc->in.fence)
+		dma_fence_remove_callback(fc->in.fence, &fc->in.cb);
+	dma_fence_put(fc->in.fence);
 
 	isp_obj_remove(&fc->nsobj);
 }
@@ -123,9 +127,6 @@ static void isp_in_fence_release(struct isp_obj *nsobj)
 {
 	struct isp_obj_fence *fc = nsobj_to_isp_in_fence(nsobj);
 
-	if (fc->in.fence)
-		dma_fence_remove_callback(fc->in.fence, &fc->in.cb);
-	dma_fence_put(fc->in.fence);
 	kfree(fc);
 }
 
