@@ -1511,7 +1511,7 @@ error:
 	return err;
 }
 
-static const struct bpf_func_proto bpf_dynptr_from_mem_proto = {
+static const struct bpf_func_proto bpf_dynptr_from_mem_proto __maybe_unused = {
 	.func		= bpf_dynptr_from_mem,
 	.gpl_only	= false,
 	.ret_type	= RET_INTEGER,
@@ -1555,7 +1555,7 @@ BPF_CALL_5(bpf_dynptr_read, void *, dst, u32, len, const struct bpf_dynptr_kern 
 	}
 }
 
-static const struct bpf_func_proto bpf_dynptr_read_proto = {
+static const struct bpf_func_proto bpf_dynptr_read_proto __maybe_unused = {
 	.func		= bpf_dynptr_read,
 	.gpl_only	= false,
 	.ret_type	= RET_INTEGER,
@@ -1605,7 +1605,7 @@ BPF_CALL_5(bpf_dynptr_write, const struct bpf_dynptr_kern *, dst, u32, offset, v
 	}
 }
 
-static const struct bpf_func_proto bpf_dynptr_write_proto = {
+static const struct bpf_func_proto bpf_dynptr_write_proto __maybe_unused = {
 	.func		= bpf_dynptr_write,
 	.gpl_only	= false,
 	.ret_type	= RET_INTEGER,
@@ -1647,7 +1647,7 @@ BPF_CALL_3(bpf_dynptr_data, const struct bpf_dynptr_kern *, ptr, u32, offset, u3
 	}
 }
 
-static const struct bpf_func_proto bpf_dynptr_data_proto = {
+static const struct bpf_func_proto bpf_dynptr_data_proto __maybe_unused = {
 	.func		= bpf_dynptr_data,
 	.gpl_only	= false,
 	.ret_type	= RET_PTR_TO_DYNPTR_MEM_OR_NULL,
