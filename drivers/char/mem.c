@@ -30,6 +30,7 @@
 #include <linux/uio.h>
 #include <linux/uaccess.h>
 #include <linux/security.h>
+#include <linux/low-mem-notify.h>
 
 #ifdef CONFIG_IA64
 # include <linux/efi.h>
@@ -709,6 +710,9 @@ static const struct memdev {
 	[9] = { "urandom", &urandom_fops, FMODE_NOWAIT, 0666 },
 #ifdef CONFIG_PRINTK
 	[11] = { "kmsg", &kmsg_fops, 0, 0644 },
+#endif
+#ifdef CONFIG_LOW_MEM_NOTIFY
+	[12] = { "chromeos-low-mem", &low_mem_notify_fops, 0, 0666 },
 #endif
 };
 

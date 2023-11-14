@@ -2415,7 +2415,7 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 		if (kern_path(pathname->name, LOOKUP_FOLLOW, &path_holder))
 			goto out;  /* Propogate the original err. */
 		victim_path = &path_holder;
-		mapping = victim_path->dentry->d_inode->i_mapping;
+		mapping = d_backing_inode(victim_path->dentry)->i_mapping;
 		victim = NULL;
 	} else {
 		mapping = victim->f_mapping;
@@ -2423,7 +2423,12 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	spin_lock(&swap_lock);
 	plist_for_each_entry(p, &swap_active_head, list) {
 		if (p->flags & SWP_WRITEOK) {
-			if (p->swap_file->f_mapping == mapping) {
+			struct dentry *dentry = p->swap_file->f_path.dentry;
+			if (!dentry)
+				continue; /* negative dentry */
+			if (dentry->d_inode->i_mapping == mapping) {
+				if (victim_path)
+					mapping = p->swap_file->f_mapping;
 				found = 1;
 				break;
 			}
@@ -2770,11 +2775,15 @@ static struct swap_info_struct *alloc_swap_info(void)
 	return p;
 }
 
+/* This sysctl is only exposed when CONFIG_DISK_BASED_SWAP is enabled. */
+int sysctl_disk_based_swap;
+
 static int claim_swapfile(struct swap_info_struct *p, struct inode *inode)
 {
 	int error;
 	bool disk_based_swap_enabled = IS_ENABLED(CONFIG_DISK_BASED_SWAP);
 
+	/* On Chromium OS, we only support zram swap devices. */
 	if (S_ISBLK(inode->i_mode)) {
 		char name[BDEVNAME_SIZE];
 
