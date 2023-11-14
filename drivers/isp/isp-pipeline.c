@@ -329,22 +329,9 @@ static void isp_drain_op_signals(struct isp_obj_op *op)
 /**
  * isp_drain_op() - Drains a single operation.
  * @op: operation to drain
- *
- * Return: true on success or false otherwise.
  */
-static bool isp_drain_op(struct isp_obj_op *op)
+static void isp_drain_op(struct isp_obj_op *op)
 {
-	/*
-	 * This is where operation removal is synchronized with operation
-	 * enqueuing and execution. If we are not able to set operation state
-	 * to DELETED then we lost the race against enqueue path and should
-	 * let operation to execute. Consequentially if we successfully set
-	 * operation to DELETE then operation enqueuing/execution should never
-	 * occur.
-	 */
-	if (!isp_op_set_state(op, ISP_OPERATION_STATE_DELETED))
-		return false;
-
 	isp_drain_op_signals(op);
 	isp_obj_remove(&op->nsobj);
 	/*
@@ -353,7 +340,6 @@ static bool isp_drain_op(struct isp_obj_op *op)
 	 * reference to this OP (dependency, etc.)
 	 */
 	isp_op_put(op);
-	return true;
 }
 
 /**
@@ -373,6 +359,7 @@ static void isp_drain_ops(struct isp_pipeline *pipeline)
 		if (WARN_ON(!op))
 			return;
 
+		isp_op_set_state(op, ISP_OPERATION_STATE_DELETED);
 		isp_drain_op(op);
 	}
 }
@@ -833,8 +820,11 @@ static int isp_op_run_rw_instructions(struct isp_obj_op *op)
  */
 static void isp_op_run(struct isp_obj_op *op)
 {
+	struct isp_pipeline *pipeline = op->pipeline;
+
 	WARN_ON(!isp_op_set_state(op, ISP_OPERATION_STATE_RUNNING));
 
+	atomic_inc(&pipeline->num_in_flight);
 	if (op->delay_ns)
 		ndelay(op->delay_ns);
 
@@ -842,6 +832,7 @@ static void isp_op_run(struct isp_obj_op *op)
 		return;
 
 	isp_op_run_complete(op);
+	atomic_dec(&pipeline->num_in_flight);
 }
 
 static bool io_queue_status(struct isp_pipeline *pipeline)
@@ -969,6 +960,11 @@ static int isp_pipeline_io_worker(void *data)
 		}
 	}
 
+	/* Wait for all in-flight operations to finish first */
+	while (atomic_read(&pipeline->num_in_flight)) {
+		schedule_timeout(HZ / 10);
+	}
+
 	isp_pipeline_in_fence_release(pipeline);
 	isp_drain_fences(pipeline);
 	isp_drain_instances(pipeline);
@@ -1040,12 +1036,7 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 	op = instance->private;
 	instance->private = NULL;
 
-	/*
-	 * If instance has no OP then we raised with pipeline destruction
-	 * and there is nothing left to do (signaled are deactivated during
-	 * OP drain)
-	 */
-	if (!op) {
+	if (WARN_ON(!op)) {
 		spin_unlock(&instance->lock);
 		return;
 	}
@@ -1061,6 +1052,7 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 	pipeline = op->pipeline;
 	op->exec_error = error;
 
+
 	/*
 	 * Instances can fire signals from atomic context (e.g. driver
 	 * IRQ), while operation completion in general requires a
@@ -1072,10 +1064,11 @@ void isp_instance_fire_active_signals(struct isp_obj_instance *instance,
 	spin_lock(&pipeline->io_comp_queue_lock);
 	list_add_tail(&op->io_queue_entry, &pipeline->io_comp_queue);
 	spin_unlock(&pipeline->io_comp_queue_lock);
+	spin_unlock(&instance->lock);
 
 	if (isp_pipeline_is_active(pipeline))
 		wake_up(&pipeline->io_queue_wait);
-	spin_unlock(&instance->lock);
+	atomic_dec(&pipeline->num_in_flight);
 }
 
 /**
@@ -1103,8 +1096,16 @@ int isp_pipeline_dequeue(struct isp_pipeline *pipeline,
 	 * OP removal is not guaranteed to succeed. For instance if at this
 	 * point OP is already QUEUED or EXECUTING then we won't be able
 	 * to remove it, it's going to get executed.
+	 *
+	 * This is where operation removal is synchronized with operation
+	 * enqueuing and execution. If we are not able to set operation state
+	 * to DELETED then we lost the race against enqueue path and should
+	 * let operation to execute. Consequentially if we successfully set
+	 * operation to DELETE then operation enqueuing/execution should never
+	 * occur.
 	 */
-	if (isp_drain_op(op)) {
+	if (isp_op_set_state(op, ISP_OPERATION_STATE_DELETED)) {
+		isp_drain_op(op);
 		/* Let user-space know that we deleted the OP */
 		isp_op_completion_event(pipeline, op);
 	}
@@ -1932,5 +1933,6 @@ int isp_pipeline_init(struct isp_device *isp, struct isp_pipeline *pipeline)
 	pipeline->isp = isp;
 	pipeline->id = atomic_inc_return(&pipeline_count);
 	atomic64_set(&pipeline->seqno, 0);
+	atomic_set(&pipeline->num_in_flight, 0);
 	return ret;
 }

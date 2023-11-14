@@ -53,6 +53,8 @@ struct isp_pipeline {
 	atomic64_t		seqno;
 	/** @id: ID of the pipeline used for debugging */
 	int			id;
+	/** @num_in_flight: number of in-flight operations */
+	atomic_t		num_in_flight;
 };
 
 /**

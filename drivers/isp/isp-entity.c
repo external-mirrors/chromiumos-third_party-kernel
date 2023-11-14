@@ -911,7 +911,6 @@ int isp_drain_instances(struct isp_pipeline *pipeline)
 		if (isp_obj_type(nsobj) != ISP_OBJ_TYPE_INSTANCE)
 			continue;
 
-		isp_instance_private_set(nsobj_to_isp_instance(nsobj), NULL);
 		ret = isp_obj_remove_id(&pipeline->objs,
 					ISP_OBJ_TYPE_INSTANCE,
 					isp_obj_id(nsobj));
