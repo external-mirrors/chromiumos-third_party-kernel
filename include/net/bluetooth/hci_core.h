@@ -730,6 +730,7 @@ struct hci_conn {
 	struct amp_mgr	*amp_mgr;
 
 	struct hci_conn	*link;
+	__u8		force_retrans_effort;
 
 	void (*connect_cfm_cb)	(struct hci_conn *conn, u8 status);
 	void (*security_cfm_cb)	(struct hci_conn *conn, u8 status);
@@ -1963,4 +1964,6 @@ void hci_copy_identity_address(struct hci_dev *hdev, bdaddr_t *bdaddr,
 #define SCO_AIRMODE_CVSD       0x0000
 #define SCO_AIRMODE_TRANSP     0x0003
 
+/* An arbitrarily invalid number for SCO retransmission effort */
+#define SCO_NO_FORCE_RETRANS_EFFORT	0x3F
 #endif /* __HCI_CORE_H */
