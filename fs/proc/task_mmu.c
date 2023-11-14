@@ -27,6 +27,7 @@
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include "internal.h"
+#include "../../mm/internal.h"
 
 #define SEQ_PUT_DEC(str, val) \
 		seq_put_decimal_ull_width(m, str, (val) << (PAGE_SHIFT-10), 8)
@@ -876,6 +877,87 @@ static int show_smap(struct seq_file *m, void *v)
 	return 0;
 }
 
+static void add_smaps_sum(struct mem_size_stats *mss,
+		struct mem_size_stats *mss_sum)
+{
+	mss_sum->resident += mss->resident;
+	mss_sum->pss += mss->pss;
+	mss_sum->pss_anon += mss->pss_anon;
+	mss_sum->pss_file += mss->pss_file;
+	mss_sum->pss_shmem += mss->pss_shmem;
+	mss_sum->shared_clean += mss->shared_clean;
+	mss_sum->shared_dirty += mss->shared_dirty;
+	mss_sum->private_clean += mss->private_clean;
+	mss_sum->private_dirty += mss->private_dirty;
+	mss_sum->referenced += mss->referenced;
+	mss_sum->anonymous += mss->anonymous;
+	mss_sum->anonymous_thp += mss->anonymous_thp;
+	mss_sum->swap += mss->swap;
+}
+
+static int totmaps_proc_show(struct seq_file *m, void *data)
+{
+	struct proc_maps_private *priv = m->private;
+	struct mm_struct *mm;
+	struct vm_area_struct *vma;
+	struct mem_size_stats *mss_sum = priv->mss;
+	struct vma_iterator vmi;
+
+	/* reference to priv->task already taken */
+	/* but need to get the mm here because */
+	/* task could be in the process of exiting */
+	mm = get_task_mm(priv->task);
+	if (!mm || IS_ERR(mm))
+		return -EINVAL;
+
+	mmap_read_lock(mm);
+	hold_task_mempolicy(priv);
+
+	vma_iter_init(&vmi, mm, 0);
+	for_each_vma(vmi, vma) {
+		struct mem_size_stats mss;
+
+		if (vma->vm_mm && !is_vm_hugetlb_page(vma)) {
+			memset(&mss, 0, sizeof(mss));
+			walk_page_vma(vma, &smaps_walk_ops, &mss);
+			add_smaps_sum(&mss, mss_sum);
+		}
+	}
+	seq_printf(m,
+		   "Rss:            %8lu kB\n"
+		   "Pss:            %8lu kB\n"
+		   "Pss_Anon:       %8lu kB\n"
+		   "Pss_File:       %8lu kB\n"
+		   "Pss_Shmem:      %8lu kB\n"
+		   "Shared_Clean:   %8lu kB\n"
+		   "Shared_Dirty:   %8lu kB\n"
+		   "Private_Clean:  %8lu kB\n"
+		   "Private_Dirty:  %8lu kB\n"
+		   "Referenced:     %8lu kB\n"
+		   "Anonymous:      %8lu kB\n"
+		   "AnonHugePages:  %8lu kB\n"
+		   "Swap:           %8lu kB\n",
+		   mss_sum->resident >> 10,
+		   (unsigned long)(mss_sum->pss >> (10 + PSS_SHIFT)),
+		   (unsigned long)(mss_sum->pss_anon >> (10 + PSS_SHIFT)),
+		   (unsigned long)(mss_sum->pss_file >> (10 + PSS_SHIFT)),
+		   (unsigned long)(mss_sum->pss_shmem >> (10 + PSS_SHIFT)),
+		   mss_sum->shared_clean  >> 10,
+		   mss_sum->shared_dirty  >> 10,
+		   mss_sum->private_clean >> 10,
+		   mss_sum->private_dirty >> 10,
+		   mss_sum->referenced >> 10,
+		   mss_sum->anonymous >> 10,
+		   mss_sum->anonymous_thp >> 10,
+		   mss_sum->swap >> 10);
+
+	release_task_mempolicy(priv);
+	mmap_read_unlock(mm);
+	mmput(mm);
+
+	return 0;
+}
+
 static int show_smaps_rollup(struct seq_file *m, void *v)
 {
 	struct proc_maps_private *priv = m->private;
@@ -1049,6 +1131,57 @@ static int smaps_rollup_release(struct inode *inode, struct file *file)
 	return single_release(inode, file);
 }
 
+static int totmaps_open(struct inode *inode, struct file *file)
+{
+	struct proc_maps_private *priv;
+	int ret;
+
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	priv->mss = kzalloc(sizeof(*priv->mss), GFP_KERNEL);
+	if (!priv->mss) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	/* we need to grab references to the task_struct */
+	/* at open time, because there's a potential information */
+	/* leak where the totmaps file is opened and held open */
+	/* while the underlying pid to task mapping changes */
+	/* underneath it */
+	priv->task = get_pid_task(proc_pid(inode), PIDTYPE_PID);
+	if (!priv->task) {
+		ret = -ESRCH;
+		goto exit;
+	}
+
+	ret = single_open(file, totmaps_proc_show, priv);
+	if (ret)
+		goto exit;
+
+	return 0;
+exit:
+	if (priv->task)
+		put_task_struct(priv->task);
+	kfree(priv->mss);
+	kfree(priv);
+	return ret;
+}
+
+static int totmaps_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *m = file->private_data;
+	struct proc_maps_private *priv = m->private;
+
+	put_task_struct(priv->task);
+	kfree(priv->mss);
+	kfree(priv);
+	m->private = NULL;
+	return single_release(inode, file);
+}
+
 const struct file_operations proc_pid_smaps_operations = {
 	.open		= pid_smaps_open,
 	.read		= seq_read,
@@ -1061,6 +1194,13 @@ const struct file_operations proc_pid_smaps_rollup_operations = {
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= smaps_rollup_release,
+};
+
+const struct file_operations proc_totmaps_operations = {
+	.open		= totmaps_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= totmaps_release,
 };
 
 enum clear_refs_types {
@@ -2020,13 +2160,106 @@ regular_page:
 	return 0;
 }
 
+static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned long nr_to_try)
+{
+	struct vm_area_struct *start, *vma;
+	struct mm_walk_ops reclaim_walk = {};
+	struct walk_data reclaim_data = {
+		.type = type,
+		.nr_to_try = nr_to_try,
+	};
+
+	mmap_read_lock(mm);
+
+	start = find_vma(mm, 0);
+	if (nr_to_try != ULONG_MAX) {
+		unsigned int start_idx;
+
+		/*
+		 * Try to start at a random VMA to avoid always
+		 * reclaiming the same pages.
+		 */
+		start_idx = get_random_u32() % mm->map_count;
+		for (; start_idx && start; start_idx--)
+			start = find_vma(mm, start->vm_end);
+	}
+	BUG_ON(!start);
+
+	vma = start;
+	while (reclaim_data.nr_to_try) {
+		if (is_vm_hugetlb_page(vma))
+			goto next;
+
+		if (vma->vm_flags & VM_LOCKED)
+			goto next;
+
+		if (type == RECLAIM_ANON && !vma_is_anonymous(vma))
+			goto next;
+		if ((type == RECLAIM_FILE || type == RECLAIM_SHMEM)
+				&& vma_is_anonymous(vma)) {
+			goto next;
+		}
+
+		if (vma_is_anonymous(vma) || shmem_file(vma->vm_file)) {
+			if (get_nr_swap_pages() <= 0 ||
+				get_mm_counter(mm, MM_ANONPAGES) == 0) {
+				if (type == RECLAIM_ALL)
+					goto next;
+				else
+					break;
+			}
+
+			if (shmem_file(vma->vm_file) && type != RECLAIM_SHMEM)
+				goto next;
+
+			reclaim_walk.pmd_entry = reclaim_pte_range;
+		} else {
+			reclaim_walk.pmd_entry = deactivate_pte_range;
+		}
+
+		/*
+		 * Use a random start address if we are limited in order
+		 * to avoid always hitting the same pages when we only
+		 * have a few eligible mappings.
+		 */
+		if (nr_to_try != ULONG_MAX) {
+			unsigned long idx, start;
+
+			idx = (vma->vm_end - vma->vm_start) / PAGE_SIZE;
+			idx = idx ? (get_random_u32() % idx) : 0;
+			start = vma->vm_start + PAGE_SIZE * idx;
+
+			walk_page_range(mm, start, vma->vm_end,
+			    &reclaim_walk, (void *)&reclaim_data);
+			if (start != vma->vm_start)
+				walk_page_range(mm, vma->vm_start,
+				    start, &reclaim_walk,
+				    (void *)&reclaim_data);
+		} else {
+			walk_page_range(mm, vma->vm_start, vma->vm_end,
+			    &reclaim_walk, (void *)&reclaim_data);
+		}
+
+next:
+		vma = find_vma(mm, vma->vm_end);
+		if (!vma)
+			vma = find_vma(mm, 0);
+
+		/* Already walked through all of them. */
+		if (vma == start)
+			break;
+	}
+
+	flush_tlb_mm(mm);
+	mmap_read_unlock(mm);
+}
+
 static ssize_t reclaim_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
 	struct task_struct *task;
 	char buffer[PROC_NUMBUF];
 	struct mm_struct *mm;
-	struct vm_area_struct *start, *next, *vma;
 	enum reclaim_type type;
 	unsigned long num;
 	char *tok, *type_buf;
@@ -2063,92 +2296,7 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 
 	mm = get_task_mm(task);
 	if (mm) {
-		struct mm_walk_ops reclaim_walk = {
-			.pmd_entry = reclaim_pte_range,
-		};
-
-		struct walk_data reclaim_data = {
-			.type = type,
-			.nr_to_try = num,
-		};
-
-		mmap_read_lock(mm);
-		start = find_vma(mm, 0);
-		if (num != ULONG_MAX) {
-			unsigned int start_idx;
-
-			/*
-			 * Try to start at a random VMA to avoid always
-			 * reclaiming the same pages.
-			 */
-			start_idx = get_random_u32() % mm->map_count;
-			for (; start_idx && start; start_idx--)
-				start = find_vma(mm, start->vm_end);
-			BUG_ON(!start);
-		}
-
-		for (vma = start, next = find_vma(mm, vma->vm_end); vma && next != start;
-		    (vma = next ? next :
-		    /* Only loop around if we didn't start at mm->mmap. */
-		    (start != find_vma(mm, 0) ? find_vma(mm, 0) : NULL)),
-		    (next = vma ? find_vma(mm, vma->vm_end) : NULL)) {
-			if (!reclaim_data.nr_to_try)
-				break;
-			if (is_vm_hugetlb_page(vma))
-				continue;
-
-			if (vma->vm_flags & VM_LOCKED)
-				continue;
-
-			if (type == RECLAIM_ANON && !vma_is_anonymous(vma))
-				continue;
-			if ((type == RECLAIM_FILE || type == RECLAIM_SHMEM)
-					&& vma_is_anonymous(vma)) {
-				continue;
-			}
-
-			if (vma_is_anonymous(vma) || shmem_file(vma->vm_file)) {
-				if (get_nr_swap_pages() <= 0 ||
-					get_mm_counter(mm, MM_ANONPAGES) == 0) {
-					if (type == RECLAIM_ALL)
-						continue;
-					else
-						break;
-				}
-
-				if (shmem_file(vma->vm_file) && type != RECLAIM_SHMEM) {
-					continue;
-				}
-
-				reclaim_walk.pmd_entry = reclaim_pte_range;
-			} else {
-				reclaim_walk.pmd_entry = deactivate_pte_range;
-			}
-
-			/*
-			 * Use a random start address if we are limited in order
-			 * to avoid always hitting the same pages when we only
-			 * have a few eligible mappings.
-			 */
-			if (num != ULONG_MAX) {
-				unsigned long idx, start;
-
-				idx = (vma->vm_end - vma->vm_start) / PAGE_SIZE;
-				idx = idx ? (get_random_u32() % idx) : 0;
-				start = vma->vm_start + PAGE_SIZE * idx;
-
-				walk_page_range(mm, start, vma->vm_end,
-				    &reclaim_walk, (void*)&reclaim_data);
-				if (start != vma->vm_start)
-					walk_page_range(mm, vma->vm_start,
-					    start, &reclaim_walk,
-					    (void*)&reclaim_data);
-			} else
-				walk_page_range(mm, vma->vm_start, vma->vm_end,
-				    &reclaim_walk, (void*)&reclaim_data);
-		}
-		flush_tlb_mm(mm);
-		mmap_read_unlock(mm);
+		reclaim_mm(mm, type, num);
 		mmput(mm);
 	}
 	put_task_struct(task);
