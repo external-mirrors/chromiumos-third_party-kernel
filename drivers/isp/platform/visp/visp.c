@@ -19,18 +19,30 @@
 
 #include <uapi/linux/visp.h>
 
+/*
+ * This is a testing driver for ISP subsystem. We use it in conduction
+ * with visptest tool, so the driver doesn't do much beside the basic ISP
+ * functionality testing (entities registration, events registration,
+ * instances handling, etc.).
+ */
+
 #define VISP_DEVICE_NAME		"visp"
 
 #define EVENT_TRIGGER_MS		1010
 
-#define ENTITY_FAST_IRQ			0
-#define ENTITY_FAST_IRQ_EVENT		0
+#define ROOT_ENTITY		0
 
-#define ENTITY_SLOW_IRQ			1
-#define ENTITY_SLOW_IRQ_EVENT		1
+/* Simulate frequent device IRQ for fast events */
+#define FAST_ENTITY		1
+#define FAST_ENTITY_EVENT	1
 
-#define ENTITY_BM_IRQ		2
-#define ENTITY_BM_IRQ_EVENT		2
+/* Simulate slower device IRQ for slow events */
+#define SLOW_ENTITY		2
+#define SLOW_ENTITY_EVENT	2
+
+/* Very fast device IRQ for benchmarking mode */
+#define BM_ENTITY		3
+#define BM_ENTITY_EVENT		3
 
 #define BM_IRQ_INTERVAL		200000
 
@@ -45,12 +57,11 @@ struct visp_device {
 	struct device			*dev;
 	struct isp_device		*isp;
 
-	struct isp_obj_entity		*root_entity;
-	struct isp_obj_entity		*entities[3];
-	struct isp_obj_event		*events[3];
+	struct isp_obj_entity		*entities[4];
+	struct isp_obj_event		*events[4];
 
 	spinlock_t			instances_lock;
-	struct list_head		instances;
+	struct list_head		instances[4];
 
 	struct hrtimer			event_timer_fast;
 	struct hrtimer			event_timer_slow;
@@ -94,8 +105,9 @@ static void trigger_event_on(struct visp_device *visp,
 				  visp->events[event_id]);
 
 	spin_lock_irqsave(&visp->instances_lock, flags);
-	while (!list_empty(&visp->instances)) {
-		inst = list_first_entry(&visp->instances,
+	/* We trigger all in-flight instance operations for entity at once */
+	while (!list_empty(&visp->instances[entity_id])) {
+		inst = list_first_entry(&visp->instances[entity_id],
 					struct visp_exec_instance,
 					entry);
 		list_del(&inst->entry);
@@ -113,22 +125,16 @@ static void trigger_event_on(struct visp_device *visp,
 static enum hrtimer_restart visp_event_timer(struct visp_device *visp)
 {
 	/*
-	 * Trigger only ENTITY_FAST_IRQ events. We use other entities
+	 * Trigger only FAST_ENTITY events. We use other entities
 	 * block OPs on and to test query/add/remove ioctl().
 	 */
-	trigger_event_on(visp, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
+	trigger_event_on(visp, FAST_ENTITY, FAST_ENTITY_EVENT);
 
-	/*
-	 * Flush all events every 5 seconds.
-	 * 5s ought to be enough for anybody.
-	 */
+	/* Flush all events every 5 seconds */
 	if (!time_after(jiffies, visp->timer_start_ts + 5 * HZ))
 		return HRTIMER_RESTART;
 
-	/* We cancel HR timer, send spurious wakeup to all entities */
-	trigger_event_on(visp, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
-	trigger_event_on(visp, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
-
+	trigger_event_on(visp, SLOW_ENTITY, SLOW_ENTITY_EVENT);
 	visp->timer_start_ts = jiffies;
 
 	return HRTIMER_RESTART;
@@ -171,7 +177,7 @@ static enum hrtimer_restart visp_event_hrtimer_bm(struct hrtimer *hrtimer)
 
 	visp = container_of(hrtimer, struct visp_device, event_timer_bm);
 
-	trigger_event_on(visp, ENTITY_BM_IRQ, ENTITY_BM_IRQ_EVENT);
+	trigger_event_on(visp, BM_ENTITY, BM_ENTITY_EVENT);
 
 	if (atomic_read(&visp->bm_ops) >= BM_NUM_OPS) {
 		/*
@@ -201,8 +207,8 @@ static void visp_configure_bm_hrtimer(struct visp_device *visp)
 		return;
 
 	/* In benchmark mode we only want benchmark hrtimer */
-	trigger_event_on(visp, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
-	trigger_event_on(visp, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
+	trigger_event_on(visp, FAST_ENTITY, FAST_ENTITY_EVENT);
+	trigger_event_on(visp, SLOW_ENTITY, SLOW_ENTITY_EVENT);
 	hrtimer_cancel(&visp->event_timer_fast);
 	hrtimer_cancel(&visp->event_timer_slow);
 
@@ -237,7 +243,12 @@ static void entity_instance_destroy(void *dev, void *instance_data)
 	kfree(data);
 }
 
+/*
+ * This records an in-flight instance operation for a given entity, which is
+ * finished when a corresponding event fires.
+ */
 static int record_event_instance(struct visp_device *visp,
+				 u32 event_id,
 				 struct isp_obj_instance *instance)
 {
 	struct visp_exec_instance *inst;
@@ -256,9 +267,32 @@ static int record_event_instance(struct visp_device *visp,
 	inst->instance = instance;
 
 	spin_lock_irqsave(&visp->instances_lock, flags);
-	list_add(&inst->entry, &visp->instances);
+	list_add(&inst->entry, &visp->instances[event_id]);
 	spin_unlock_irqrestore(&visp->instances_lock, flags);
 	return ISP_INSTRUCTION_EXEC_DEFERRED;
+}
+
+static int entity_instance_write(void *dev, u32 entity_id,
+				 struct isp_obj_instance *instance,
+				 struct isp_write_instruction *rw)
+{
+	struct visp_device *visp = dev;
+	char dummy_buffer[32] = {};
+
+	pr_devel("VISP: execute entity register %u write\n", rw->reg);
+
+	if (rw->size > sizeof(dummy_buffer)) {
+		pr_err("VISP: write size is too large");
+		return -EINVAL;
+	}
+
+	if (copy_from_user(dummy_buffer, u64_to_user_ptr(rw->ptr), rw->size)) {
+		pr_err("VISP: cannot copy from user\n");
+		return -EINVAL;
+	}
+
+	pr_devel("VISP: register write payload: %s\n", dummy_buffer);
+	return record_event_instance(visp, entity_id, instance);
 }
 
 static int entity_instance_read(void *dev,
@@ -285,27 +319,18 @@ static int entity_instance_read(void *dev,
 	return ISP_INSTRUCTION_EXEC_HANDLED;
 }
 
-static int entity_instance_write(void *dev,
-				 struct isp_obj_instance *instance,
-				 struct isp_write_instruction *rw)
+static int fast_entity_instance_write(void *dev,
+				      struct isp_obj_instance *instance,
+				      struct isp_write_instruction *rw)
 {
-	struct visp_device *visp = dev;
-	char dummy_buffer[32] = {};
+	return entity_instance_write(dev, FAST_ENTITY, instance, rw);
+}
 
-	pr_devel("VISP: execute entity register %u write\n", rw->reg);
-
-	if (rw->size > sizeof(dummy_buffer)) {
-		pr_err("VISP: write size is too large");
-		return -EINVAL;
-	}
-
-	if (copy_from_user(dummy_buffer, u64_to_user_ptr(rw->ptr), rw->size)) {
-		pr_err("VISP: cannot copy from user\n");
-		return -EINVAL;
-	}
-
-	pr_devel("VISP: register write payload: %s\n", dummy_buffer);
-	return record_event_instance(visp, instance);
+static int slow_entity_instance_write(void *dev,
+				      struct isp_obj_instance *instance,
+				      struct isp_write_instruction *rw)
+{
+	return entity_instance_write(dev, SLOW_ENTITY, instance, rw);
 }
 
 static int bm_entity_instance_read(void *dev,
@@ -330,7 +355,7 @@ static int bm_entity_instance_write(void *dev,
 	/* Only once */
 	visp_configure_bm_hrtimer(visp);
 
-	ret = record_event_instance(visp, instance);
+	ret = record_event_instance(visp, BM_ENTITY, instance);
 	if (ret == ISP_INSTRUCTION_EXEC_DEFERRED)
 		atomic_inc(&visp->bm_ops);
 
@@ -385,9 +410,18 @@ error:
 	return NULL;
 }
 
-static const struct isp_entity_ops entity_ops = {
+static const struct isp_entity_ops slow_entity_ops = {
 	.instance_read		= entity_instance_read,
-	.instance_write		= entity_instance_write,
+	.instance_write		= slow_entity_instance_write,
+	.instance_create	= entity_instance_create,
+	.instance_destroy	= entity_instance_destroy,
+	.dmabuf_add		= dmabuf_add,
+	.dmabuf_remove		= dmabuf_remove,
+};
+
+static const struct isp_entity_ops fast_entity_ops = {
+	.instance_read		= entity_instance_read,
+	.instance_write		= fast_entity_instance_write,
 	.instance_create	= entity_instance_create,
 	.instance_destroy	= entity_instance_destroy,
 	.dmabuf_add		= dmabuf_add,
@@ -405,36 +439,31 @@ static const struct isp_entity_ops bm_entity_ops = {
 
 static void isp_objects_release(struct visp_device *visp)
 {
-	int obj;
+	int idx;
 
-	trigger_event_on(visp, ENTITY_FAST_IRQ, ENTITY_FAST_IRQ_EVENT);
-	trigger_event_on(visp, ENTITY_SLOW_IRQ, ENTITY_SLOW_IRQ_EVENT);
-	trigger_event_on(visp, ENTITY_BM_IRQ, ENTITY_BM_IRQ_EVENT);
+	trigger_event_on(visp, FAST_ENTITY, FAST_ENTITY);
+	trigger_event_on(visp, SLOW_ENTITY, SLOW_ENTITY_EVENT);
+	trigger_event_on(visp, BM_ENTITY, BM_ENTITY_EVENT);
 
 	hrtimer_cancel(&visp->event_timer_fast);
 	hrtimer_cancel(&visp->event_timer_slow);
 	hrtimer_cancel(&visp->event_timer_bm);
 
-	for (obj = 0; obj < ARRAY_SIZE(visp->events); obj++) {
-		if (visp->events[obj])
-			isp_event_unregister(visp->events[obj]);
+	for (idx = ARRAY_SIZE(visp->events) - 1; idx >= 0; idx--) {
+		if (visp->events[idx])
+			isp_event_unregister(visp->events[idx]);
 	}
 
-	for (obj = 0; obj < ARRAY_SIZE(visp->entities); obj++) {
-		if (visp->entities[obj])
-			isp_entity_unregister(visp->entities[obj]);
+	for (idx = ARRAY_SIZE(visp->entities) - 1; idx >= 0; idx--) {
+		if (visp->entities[idx])
+			isp_entity_unregister(visp->entities[idx]);
 	}
-
-	if (visp->root_entity)
-		isp_entity_unregister(visp->root_entity);
 }
 
 static int visp_probe(struct platform_device *pdev)
 {
 	struct visp_device *visp;
-	int parent_obj, obj, idx;
-	u32 parent_id;
-	int ret;
+	int idx, ret;
 
 	visp = kzalloc(sizeof(*visp), GFP_KERNEL);
 	if (!visp)
@@ -443,7 +472,6 @@ static int visp_probe(struct platform_device *pdev)
 	atomic_set(&visp->bm_init_done, 0);
 	atomic_set(&visp->bm_ops, 0);
 	spin_lock_init(&visp->instances_lock);
-	INIT_LIST_HEAD(&visp->instances);
 	visp->dev = &pdev->dev;
 	platform_set_drvdata(pdev, visp);
 
@@ -467,66 +495,64 @@ static int visp_probe(struct platform_device *pdev)
 	}
 
 	isp_ns_enumeration_forbid(visp->isp);
-	idx = 0;
-	visp->root_entity = isp_entity_register(visp->isp,
-						ISP_ENTITY_ID_ROOT,
-						visp,
-						&entity_ops,
-						ISP_ENTITY_MIN_INSTANCES,
-						entity_names[idx]);
-	if (!visp->root_entity) {
-		ret = -ENOMEM;
-		goto error;
-	}
 
-	idx = 1;
-	for (obj = 0; obj < ARRAY_SIZE(visp->entities); obj++) {
+	for (idx = 0; idx < ARRAY_SIZE(visp->entities); idx++) {
 		static const struct isp_entity_ops *ops;
 		struct isp_obj_entity *entity;
+		u32 parent_id, num_instances;
 
-		if (obj != ENTITY_BM_IRQ)
-			ops = &entity_ops;
-		else
+		switch (idx) {
+		case ROOT_ENTITY:
+			parent_id = ISP_ENTITY_ID_ROOT;
+			num_instances = ISP_ENTITY_MIN_INSTANCES;
+			ops = &slow_entity_ops;
+			break;
+		case FAST_ENTITY:
+			parent_id = isp_entity_id(visp->entities[ROOT_ENTITY]);
+			num_instances = VISP_NUM_INSTANCES;
+			ops = &fast_entity_ops;
+			break;
+		case SLOW_ENTITY:
+			parent_id = isp_entity_id(visp->entities[ROOT_ENTITY]);
+			num_instances = VISP_NUM_INSTANCES;
+			ops = &slow_entity_ops;
+			break;
+		case BM_ENTITY:
+			parent_id = isp_entity_id(visp->entities[ROOT_ENTITY]);
+			num_instances = VISP_NUM_INSTANCES;
 			ops = &bm_entity_ops;
+			break;
+		}
 
-		parent_id = isp_entity_id(visp->root_entity);
+		INIT_LIST_HEAD(&visp->instances[idx]);
 		entity = isp_entity_register(visp->isp,
 					     parent_id,
 					     visp,
 					     ops,
-					     VISP_NUM_INSTANCES,
+					     num_instances,
 					     entity_names[idx]);
-		visp->entities[obj] = entity;
-		if (!visp->entities[obj]) {
+		visp->entities[idx] = entity;
+		if (!visp->entities[idx]) {
 			dev_err(visp->dev, "failed to register entity: %s\n",
 				entity_names[idx]);
 			ret = -ENOMEM;
 			goto error;
 		}
-		idx++;
 	}
 
-	parent_obj = 0;
-	obj = 0;
-	idx = 1;
+	for (idx = 1; idx < ARRAY_SIZE(visp->events); idx++) {
+		u32 parent_id = isp_entity_id(visp->entities[idx]);
 
-	while (obj < ARRAY_SIZE(visp->events)) {
-		parent_id = isp_entity_id(visp->entities[parent_obj]);
-
-		visp->events[obj] = isp_event_register(visp->isp,
+		visp->events[idx] = isp_event_register(visp->isp,
 						       parent_id,
 						       "%s-event",
 						       entity_names[idx]);
-		if (!visp->events[obj]) {
+		if (!visp->events[idx]) {
 			dev_err(visp->dev, "failed to register %s-event\n",
 				entity_names[idx]);
 			ret = -ENOMEM;
 			goto error;
 		}
-
-		idx++;
-		obj++;
-		parent_obj++;
 	}
 
 	isp_ns_enumeration_permit(visp->isp);
