@@ -110,10 +110,10 @@ static void isp_op_release(struct isp_obj *nsobj)
 	WARN_ON(!list_empty(&op->pending_sig_chain));
 	WARN_ON(!list_empty(&op->sigs));
 
-	if (op->exec_entity)
-		isp_entity_put(op->exec_entity);
 	if (op->exec_instance)
 		isp_instance_put(op->exec_instance);
+	if (op->exec_entity)
+		isp_entity_put(op->exec_entity);
 	kfree(op);
 }
 
