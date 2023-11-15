@@ -376,7 +376,7 @@ static int uid_cputime_show(struct seq_file *m, void *v)
 	}
 
 	rcu_read_lock();
-	do_each_thread(temp, task) {
+	for_each_process_thread(temp, task) {
 		uid = from_kuid_munged(user_ns, task_uid(task));
 		lock_uid(uid);
 
@@ -530,7 +530,7 @@ static void update_io_stats_all(void)
 	}
 
 	rcu_read_lock();
-	do_each_thread(temp, task) {
+	for_each_process_thread(temp, task) {
 		uid = from_kuid_munged(user_ns, task_uid(task));
 		lock_uid(uid);
 		if (!uid_entry || uid_entry->uid != uid)
@@ -572,7 +572,7 @@ static void update_io_stats_uid_locked(struct uid_entry *uid_entry)
 	set_io_uid_tasks_zero(uid_entry);
 
 	rcu_read_lock();
-	do_each_thread(temp, task) {
+	for_each_process_thread(temp, task) {
 		if (from_kuid_munged(user_ns, task_uid(task)) != uid_entry->uid)
 			continue;
 		add_uid_io_stats(uid_entry, task, UID_STATE_TOTAL_CURR);
