@@ -194,7 +194,7 @@ static inline void pvr_fence_cleanup(void)
 	 * Ensure all PVR fence contexts have been destroyed, by flushing
 	 * the global workqueue.
 	 */
-	flush_scheduled_work();
+	__flush_workqueue(system_wq);
 }
 
 #if defined(PVR_FENCE_DEBUG)
