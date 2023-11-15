@@ -73,21 +73,22 @@ Representation of Dynamic Information
 =====================================
 
 The ISP subsystem also creates other types of objects. They are created
-as a result of processing a user request. When the file descriptor is
-closed, these objects will be released. These objects will have an ID
-passed from the user-space, except for the fence objects described
-below. The fences are identified by an file descriptor, because they
-have to work with external subsystems.
+as a result of processing a user request. These objects will have an ID
+passed from the user-space. These IDs have to be locally unique per ISP
+file descriptor.
 
 Instance
 --------
 
 An instance object is created dynamically for an entity. It serves as
-the execution context for a request posted to the entity. An instance is
-useful when a device has more than one identical processing blocks. For
-example, for a hardware block with four identical processing
+the execution context for a series of requests posted to the entity. An
+instance is useful when a device has more than one identical processing
+blocks. For example, for a hardware block with four identical processing
 capabilities, an entity representing that block may allow creation of up
 to four instances.
+
+The user-space should request destruction of the instance object when it
+is no longer needed.
 
 Operation
 ---------
@@ -102,21 +103,26 @@ be executed only after its dependency operation has finished. If it has
 more than one dependencies, it will only be executed after all the
 dependencies are satisfied.
 
+An operation object is internally destroyed after it is executed. It can
+also be destroyed when the user-space cancels the operation.
+
 Buffer
 ------
 
 A buffer object is created when a DMA-BUF is imported by an instruction.
-It is only accessible with the file descriptor used to import the
-DMA-BUF, for the sake of privacy.
+
+The user-space should request removal of the DMA-BUF to destroy the
+buffer object when it is no longer needed.
 
 Fence
 -----
 
-A fence object is created either when a DMA fence is imported or a DMA
-fence is exported. A fence is implicitly imported when its file
-descriptor is given as the dependency of an operation. On the other
-hand, a fence is only exported explicitly by an instruction. The
-self-importing of an exported fence is also allowed.
+A fence object is created either when a DMA fence is imported or
+exported by an instruction.
+
+An imported fence object is internally destroyed when it is signaled and
+an exported fence object is destroyed when the last reference to it is
+dropped.
 
 Header File
 ===========
@@ -213,17 +219,13 @@ is read.
 
 If an opration has dependencies, they must be set at the time of adding
 the dependent operation. It cannot be changed after the request is
-submitted. Similarly, if fences exported should be signaled on
-completion of an operation, they must also be set at the time of
-addition.
+submitted.
 
 A dependency is specified by the type and the identifier of an object.
-The identifier is mostly the ISP object's ID, except for fences. To
-specify fence dependencies, their file descriptor should be used. For
-cases where the ISP subsystem fails to resolve a given identifier into
-an object, its behavior depends on the type of the dependency object.
-For operation dependency, it is regarded as satisfied. This is because
-the operation given as dependency might have completed and its
+For cases where the ISP subsystem fails to resolve a given identifier
+into an object, its behavior depends on the type of the dependency
+object. For operation dependency, it is regarded as satisfied. This is
+because the operation given as dependency might have completed and its
 corresponding object released by the time the new request reaches the
 ISP subsystem. For all the other types, the operation request
 immediately returns with an error.
