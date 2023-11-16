@@ -981,7 +981,8 @@ static int isp_pipeline_io_worker(void *data)
 }
 
 /**
- * isp_fire_active_signals() - Raise all signals in an active chain
+ * isp_fire_active_signals() - Fire signals (event) that are not specific
+ * to a entity instance
  * @active_sig_chain: operation signals chain with signals to be fired
  *
  * After firing the signals will be removed from the chain and released.
@@ -1009,8 +1010,8 @@ void isp_in_fence_release_deferred(struct isp_obj_fence *fc)
 }
 
 /**
- * isp_instance_fire_active_signals() - Raise signals that wait on instance
- * event
+ * isp_instance_fire_active_signals() - Fire signals (event) that are
+ * specific to the given entity instance
  * @instance: entity instance (context)
  * @active_sig_chain: operation signals chain with signals to be fired
  * @error: execution context error code, or 0 if success
