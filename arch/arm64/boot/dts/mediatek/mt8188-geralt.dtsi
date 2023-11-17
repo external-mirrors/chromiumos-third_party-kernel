@@ -1337,7 +1337,7 @@
 
 &scp_c1 {
 	firmware-name = "mediatek/mt8188/scp-dual.img";
-	memory-region = <&scp_dual_mem_reserved>;
+	memory-region = <&scp_dual_mem_reserved>, <&scp_isp_cma_reserved>;
 	status = "okay";
 };
 
