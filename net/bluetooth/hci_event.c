@@ -5211,7 +5211,7 @@ static void hci_io_capa_request_evt(struct hci_dev *hdev, void *data,
 	hci_dev_lock(hdev);
 
 	conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &ev->bdaddr);
-	if (!conn || !hci_dev_test_flag(hdev, HCI_SSP_ENABLED))
+	if (!conn)
 		goto unlock;
 
 	/* Assume remote supports SSP since it has triggered this event */
@@ -5458,7 +5458,7 @@ static void hci_simple_pair_complete_evt(struct hci_dev *hdev, void *data,
 	hci_dev_lock(hdev);
 
 	conn = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &ev->bdaddr);
-	if (!conn || !hci_conn_ssp_enabled(conn))
+	if (!conn)
 		goto unlock;
 
 	/* Reset the authentication requirement to unknown */
