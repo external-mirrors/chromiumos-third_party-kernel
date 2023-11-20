@@ -20,7 +20,7 @@
 /**
  * struct isp_pipeline - ISP execution pipeline
  *
- * @TODO add documentation
+ * Requests (operations) execution pipeline.
  */
 struct isp_pipeline {
 	/** @ops: Operations namespace */
@@ -115,7 +115,7 @@ struct isp_op_signal {
 /**
  * struct isp_obj_op - ISP operations
  *
- * The actual executable request.
+ * The actual executable request (operation).
  */
 struct isp_obj_op {
 	/** @nsobj: Namespace object */
