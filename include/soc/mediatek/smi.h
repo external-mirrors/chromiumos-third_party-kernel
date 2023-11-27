@@ -28,4 +28,6 @@ struct mtk_smi_larb_iommu {
 
 #endif
 
+void mtk_smi_larb_clamp(struct device *larbdev, bool on);
+
 #endif
