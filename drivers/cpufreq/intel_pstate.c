@@ -1660,13 +1660,6 @@ static void intel_pstate_update_epp_defaults(struct cpudata *cpudata)
 	cpudata->epp_default = intel_pstate_get_epp(cpudata, 0);
 
 	/*
-	 * If this CPU gen doesn't call for change in balance_perf
-	 * EPP return.
-	 */
-	if (epp_values[EPP_INDEX_BALANCE_PERFORMANCE] == HWP_EPP_BALANCE_PERFORMANCE)
-		return;
-
-	/*
 	 * If powerup EPP is something other than chipset default 0x80 and
 	 * - is more performance oriented than 0x80 (default balance_perf EPP)
 	 * - But less performance oriented than performance EPP
@@ -1677,6 +1670,13 @@ static void intel_pstate_update_epp_defaults(struct cpudata *cpudata)
 		epp_values[EPP_INDEX_BALANCE_PERFORMANCE] = cpudata->epp_default;
 		return;
 	}
+
+	/*
+	 * If this CPU gen doesn't call for change in balance_perf
+	 * EPP return.
+	 */
+	if (epp_values[EPP_INDEX_BALANCE_PERFORMANCE] == HWP_EPP_BALANCE_PERFORMANCE)
+		return;
 
 	/*
 	 * Use hard coded value per gen to update the balance_perf
