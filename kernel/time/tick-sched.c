@@ -1454,7 +1454,7 @@ void tick_nohz_hres_to_lres(void)
 
 	WARN_ON(td->mode != TICKDEV_MODE_ONESHOT);
 	WARN_ON(clockevent_get_state(td->evtdev) != CLOCK_EVT_STATE_ONESHOT);
-	td->evtdev->event_handler = tick_nohz_handler;
+	td->evtdev->event_handler = tick_nohz_lowres_handler;
 
 	hrtimer_cancel(&ts->sched_timer);
 	hrtimer_set_expires(&ts->sched_timer, ts->last_tick);
