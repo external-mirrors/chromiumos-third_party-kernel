@@ -129,7 +129,7 @@ drivers_allowlist_lockdown_store(const struct bus_type *bus, const char *buf,
 	bool lockdown, state_changed = false;
 	struct pci_dev *dev = NULL;
 
-	if (strtobool(buf, &lockdown))
+	if (kstrtobool(buf, &lockdown))
 		return -EINVAL;
 
 	down_write(&lockdown_sem);
