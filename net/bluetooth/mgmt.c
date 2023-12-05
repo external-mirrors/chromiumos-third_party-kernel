@@ -9406,7 +9406,7 @@ static int floss_notify_sco_connection_change(struct sock *sk,
 	 */
 	conn = hci_conn_hash_lookup_ba(hdev, SCO_LINK, &cp->addr.bdaddr);
 	if (cp->connected && !conn) {
-		conn = hci_conn_add(hdev, SCO_LINK, &cp->addr.bdaddr, 0);
+		conn = hci_conn_add_unset(hdev, SCO_LINK, &cp->addr.bdaddr, 0);
 		if (!conn)
 			return -ENOMEM;
 
