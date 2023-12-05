@@ -1034,6 +1034,28 @@ DevmemXIntUnreserveRange(DEVMEMXINT_RESERVATION *psRsrv)
 	return PVRSRV_OK;
 }
 
+static INLINE PVRSRV_ERROR
+DevmemValidateFlags(PMR *psPMR, PVRSRV_MEMALLOCFLAGS_T uiMapFlags)
+{
+	PMR_FLAGS_T uiPMRFlags = PMR_Flags(psPMR);
+	PVRSRV_ERROR eError = PVRSRV_OK;
+
+	if (PVRSRV_CHECK_SHARED_BUFFER(uiPMRFlags) && PVRSRV_CHECK_GPU_READABLE(uiMapFlags) && !PVRSRV_CHECK_GPU_READABLE(uiPMRFlags))
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: PMR is not GPU readable.", __func__));
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_FLAGS, ErrorReturnError);
+	}
+
+	if (PVRSRV_CHECK_SHARED_BUFFER(uiPMRFlags) && PVRSRV_CHECK_GPU_WRITEABLE(uiMapFlags) && !PVRSRV_CHECK_GPU_WRITEABLE(uiPMRFlags))
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: PMR is not GPU writeable.", __func__));
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_FLAGS, ErrorReturnError);
+	}
+
+ErrorReturnError:
+	return eError;
+}
+
 PVRSRV_ERROR
 DevmemXIntMapPages(DEVMEMXINT_RESERVATION *psRsrv,
                    PMR *psPMR,
@@ -1064,6 +1086,9 @@ DevmemXIntMapPages(DEVMEMXINT_RESERVATION *psRsrv,
 		        PMR_GetLog2Contiguity(psPMR)));
 		return PVRSRV_ERROR_INVALID_PARAMS;
 	}
+
+	eError = DevmemValidateFlags(psPMR, uiFlags);
+	PVR_LOG_RETURN_IF_ERROR(eError, "DevmemValidateFlags");
 
 	OSLockAcquire(psRsrv->hLock);
 
@@ -1199,6 +1224,8 @@ DevmemIntMapPMR2(DEVMEMINT_HEAP *psDevmemHeap,
 		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, ErrorReturnError);
 	}
 
+	eError = DevmemValidateFlags(psPMR, uiMapFlags);
+	PVR_LOG_GOTO_IF_ERROR(eError, "DevmemValidateFlags", ErrorReturnError);
 
 	OSLockAcquire(psReservation->hLock);
 
@@ -1845,6 +1872,8 @@ DevmemIntChangeSparse2(DEVMEMINT_HEAP *psDevmemHeap,
 	}
 
 	uiFlags = psReservation->uiFlags;
+	eError = DevmemValidateFlags(psPMR, uiFlags);
+	PVR_LOG_GOTO_IF_ERROR(eError, "DevmemValidateFlags", e0);
 
 	pai32MapIndices = pai32AllocIndices;
 	pai32UnmapIndices = pai32FreeIndices;
