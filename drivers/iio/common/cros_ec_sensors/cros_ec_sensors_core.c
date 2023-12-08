@@ -128,7 +128,7 @@ static ssize_t cros_ec_sensors_flush(struct device *dev,
 	int ret = 0;
 	bool flush;
 
-	ret = strtobool(buf, &flush);
+	ret = kstrtobool(buf, &flush);
 	if (ret < 0)
 		return ret;
 	if (!flush)
