@@ -40,7 +40,7 @@ static ssize_t peak_shift_enable_store(struct device *dev,
 	bool enable;
 	int ret;
 
-	if (strtobool(buf, &enable) < 0)
+	if (kstrtobool(buf, &enable) < 0)
 		return -EINVAL;
 
 	ret = wilco_ec_set_peak_shift_enable(ec, enable);
@@ -76,7 +76,7 @@ static ssize_t advanced_charging_enable_store(struct device *dev,
 	bool enable;
 	int ret;
 
-	if (strtobool(buf, &enable) < 0)
+	if (kstrtobool(buf, &enable) < 0)
 		return -EINVAL;
 
 	ret = wilco_ec_set_adv_charging_enable(ec, enable);
