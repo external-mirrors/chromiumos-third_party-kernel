@@ -64,9 +64,10 @@ struct chv3_i2s_dev {
 	struct snd_pcm_substream *rx_substream;
 	struct snd_pcm_substream *tx_substream;
 	int tx_bytes_to_fetch;
+	struct snd_soc_dai_driver cpu_dai_drv;
 };
 
-static struct snd_soc_dai_driver chv3_i2s_dai = {
+static struct snd_soc_dai_driver chv3_i2s_dai_template = {
 	.name = "chv3-i2s",
 	.capture = {
 		.channels_min = 1,
@@ -281,12 +282,21 @@ static const struct snd_soc_component_driver chv3_i2s_comp = {
 static int chv3_i2s_probe(struct platform_device *pdev)
 {
 	struct chv3_i2s_dev *i2s;
+	const char *name;
 	int res;
 	int irq;
 
 	i2s = devm_kzalloc(&pdev->dev, sizeof(*i2s), GFP_KERNEL);
 	if (!i2s)
 		return -ENOMEM;
+
+	memcpy(&i2s->cpu_dai_drv, &chv3_i2s_dai_template,
+	       sizeof(chv3_i2s_dai_template));
+
+	/* Find name property and replace the default name */
+	if (!of_property_read_string(pdev->dev.of_node, "google,dai-name",
+				     &name))
+		i2s->cpu_dai_drv.name = name;
 
 	i2s->iobase = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(i2s->iobase))
@@ -309,7 +319,7 @@ static int chv3_i2s_probe(struct platform_device *pdev)
 		return res;
 
 	res = devm_snd_soc_register_component(&pdev->dev, &chv3_i2s_comp,
-					      &chv3_i2s_dai, 1);
+					      &i2s->cpu_dai_drv, 1);
 	if (res) {
 		dev_err(&pdev->dev, "couldn't register component: %d\n", res);
 		return res;
