@@ -214,7 +214,8 @@ bool make_spte(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp,
 
 	if (shadow_memtype_mask)
 		spte |= kvm_x86_call(get_mt_mask)(vcpu, gfn,
-						  kvm_is_mmio_pfn(pfn));
+							 kvm_is_mmio_pfn(pfn),
+							 slot);
 	if (host_writable)
 		spte |= shadow_host_writable_mask;
 	else

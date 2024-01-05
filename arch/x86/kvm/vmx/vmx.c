@@ -7648,7 +7648,8 @@ int vmx_vm_init(struct kvm *kvm)
 	return 0;
 }
 
-u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
+u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio,
+			  const struct kvm_memory_slot *slot)
 {
 	/*
 	 * Force UC for host MMIO regions, as allowing the guest to access MMIO
