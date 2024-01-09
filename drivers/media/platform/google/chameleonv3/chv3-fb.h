@@ -26,6 +26,8 @@ struct chv3_fb_cfg {
 	int index;
 };
 
+void chv3_fb_runtime_reset(struct chv3_fb *fb);
+
 int chv3_fb_register(struct chv3_fb *fb,
 		     struct chv3_video *video,
 		     const struct chv3_fb_cfg *cfg);

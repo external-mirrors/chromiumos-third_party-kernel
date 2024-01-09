@@ -189,12 +189,24 @@ static ssize_t dp_hpd_show(struct device *dev, struct device_attribute *attr,
 	return sprintf(buf, "%d\n", dprx_dprx_get_hpd(dp));
 }
 
+static void dp_reset_fbs(struct chv3_video *video, struct dprx_dp *dp)
+{
+	int i;
+
+	if (dp == &video->dp_sst) {
+		chv3_fb_runtime_reset(&video->fb_sst);
+	} else {
+		for (i = 0; i < 4; i++)
+			chv3_fb_runtime_reset(&video->fb_mst[i]);
+	}
+}
+
 static ssize_t dp_hpd_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
 	struct chv3_video *video = dev_get_drvdata(dev);
 	struct dprx_dp *dp;
-	unsigned long val;
+	unsigned long val, prev_val;
 	int res;
 
 	if (attr == &dev_attr_dp0_hpd)
@@ -205,6 +217,10 @@ static ssize_t dp_hpd_store(struct device *dev, struct device_attribute *attr,
 	res = kstrtoul(buf, 10, &val);
 	if (res)
 		return res;
+
+	prev_val = dprx_dprx_get_hpd(dp);
+	if (!prev_val && val)
+		dp_reset_fbs(video, dp);
 
 	dprx_dprx_set_hpd(dp, val);
 	return count;

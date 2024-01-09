@@ -438,6 +438,38 @@ static irqreturn_t fb_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+/* misc */
+
+void chv3_fb_runtime_reset(struct chv3_fb *fb)
+{
+	unsigned long flags;
+	u32 en;
+	u32 buffera;
+	u32 bufferb;
+	u32 buffersize;
+	u32 dmaformat;
+
+	spin_lock_irqsave(&fb->bufs_lock, flags);
+
+	en = readl(fb->iobase + FB_EN);
+	buffera = readl(fb->iobase + FB_BUFFERA);
+	bufferb = readl(fb->iobase + FB_BUFFERB);
+	buffersize = readl(fb->iobase + FB_BUFFERSIZE);
+	dmaformat = readl(fb->iobase + FB_DMAFORMAT);
+
+	writel(0, fb->iobase + FB_EN);
+	writel(1, fb->iobase + FB_RESET);
+	writel(1, fb->iobase + FB_IODATARATE);
+	writel(1, fb->iobase + FB_IOPIXELMODE);
+	writel(dmaformat, fb->iobase + FB_DMAFORMAT);
+	writel(buffersize, fb->iobase + FB_BUFFERSIZE);
+	writel(buffera, fb->iobase + FB_BUFFERA);
+	writel(bufferb, fb->iobase + FB_BUFFERB);
+	writel(en, fb->iobase + FB_EN);
+
+	spin_unlock_irqrestore(&fb->bufs_lock, flags);
+}
+
 /* driver probe & remove */
 
 static int fb_check_version(struct chv3_fb *fb)
