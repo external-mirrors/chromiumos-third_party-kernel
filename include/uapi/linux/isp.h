@@ -97,7 +97,7 @@ struct isp_query_operation_entry {
  */
 struct isp_query_dmabuf_entry {
 	__u32		id;
-};
+} __attribute__((packed));
 
 /**
  * struct isp_query_entities - Query entities
@@ -156,7 +156,7 @@ struct isp_query_operations {
  */
 struct isp_query_dmabuf {
 	__u32		fd;
-};
+} __attribute__((packed));
 
 /**
  * enum query_type - Types of ISP query ioctl
@@ -227,7 +227,7 @@ struct isp_dmabuf_instruction {
 	__u32		op;
 	__u32		dma_fd;
 	__u32		buf_id;
-};
+} __attribute__((packed));
 
 /**
  * enum isp_instance_instruction_op - Instance instruction operation type
@@ -250,7 +250,7 @@ enum isp_instance_instruction_op {
 struct isp_instance_instruction {
 	__u32		op;
 	__u32		id;
-};
+} __attribute__((packed));
 
 /**
  * enum isp_op_instance_id - Special operation instance values
@@ -270,7 +270,7 @@ enum isp_op_instance_id {
 struct isp_import_fence_instruction {
 	__u32		id;
 	__u32		fd;
-};
+} __attribute__((packed));
 
 /**
  * struct isp_export_fence_instruction - Export fence instruction
@@ -279,7 +279,7 @@ struct isp_import_fence_instruction {
  */
 struct isp_export_fence_instruction {
 	__u32		id;
-};
+} __attribute__((packed));
 
 /**
  * struct isp_signal_fence_instruction - Signal and destroy exported fence
@@ -288,7 +288,7 @@ struct isp_export_fence_instruction {
  */
 struct isp_signal_fence_instruction {
 	__u32		id;
-};
+} __attribute__((packed));
 
 #define ISP_RW_INSN_MAX_NUM_BUFFERS	1024
 
