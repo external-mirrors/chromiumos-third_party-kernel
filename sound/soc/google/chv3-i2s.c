@@ -67,7 +67,6 @@ struct chv3_i2s_dev {
 };
 
 static struct snd_soc_dai_driver chv3_i2s_dai = {
-	.name = "chv3-i2s",
 	.capture = {
 		.channels_min = 1,
 		.channels_max = 128,
