@@ -15,6 +15,151 @@
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
 	};
+
+	soc {
+		i2s0: i2s@c0060300 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0060300 0x100>,
+			      <0xc0060f00 0x10>;
+			interrupts = <0 20 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+
+		i2s1: i2s@c0060400 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0060400 0x100>,
+			      <0xc0060f10 0x10>;
+			interrupts = <0 21 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+
+		i2s2: i2s@c0061100 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0061100 0x100>,
+			      <0xc0060f90 0x10>;
+			interrupts = <0 28 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+
+		i2s3: i2s@c0061200 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0061200 0x100>,
+			      <0xc0060fa0 0x10>;
+			interrupts = <0 29 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+
+		i2s4: i2s@c0061300 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0061300 0x100>,
+			      <0xc0060fb0 0x10>;
+			interrupts = <0 30 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+
+		i2s5: i2s@c0061400 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0061400 0x100>,
+			      <0xc0060fc0 0x10>;
+			interrupts = <0 31 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+
+		i2s6: i2s@c0061500 {
+			compatible = "google,chv3-i2s";
+			reg = <0xc0061500 0x100>,
+			      <0xc0060fd0 0x10>;
+			interrupts = <0 32 IRQ_TYPE_LEVEL_HIGH>;
+			#sound-dai-cells = <0>;
+		};
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "chv3-audio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		simple-audio-card,dai-link@0 {
+			reg = <0>;
+			cpu {
+				sound-dai = <&i2s0>;
+			};
+			codec {
+				sound-dai = <&chv3_codec>;
+			};
+		};
+
+		simple-audio-card,dai-link@1 {
+			reg = <1>;
+			format = "i2s";
+			cpu {
+				sound-dai = <&i2s1>;
+			};
+			codec {
+				sound-dai = <&ssm2603>;
+				bitclock-master;
+				frame-master;
+				system-clock-frequency = <22579200>;
+				mclk-fs = <512>;
+			};
+		};
+
+		simple-audio-card,dai-link@2 {
+			reg = <2>;
+			cpu {
+				sound-dai = <&i2s2>;
+			};
+			codec {
+				sound-dai = <&chv3_codec>;
+			};
+		};
+
+		simple-audio-card,dai-link@3 {
+			reg = <3>;
+			cpu {
+				sound-dai = <&i2s3>;
+			};
+			codec {
+				sound-dai = <&chv3_codec>;
+			};
+		};
+
+		simple-audio-card,dai-link@4 {
+			reg = <4>;
+			cpu {
+				sound-dai = <&i2s4>;
+			};
+			codec {
+				sound-dai = <&chv3_codec>;
+			};
+		};
+
+		simple-audio-card,dai-link@5 {
+			reg = <5>;
+			cpu {
+				sound-dai = <&i2s5>;
+			};
+			codec {
+				sound-dai = <&chv3_codec>;
+			};
+		};
+
+		simple-audio-card,dai-link@6 {
+			reg = <6>;
+			cpu {
+				sound-dai = <&i2s6>;
+			};
+			codec {
+				sound-dai = <&chv3_codec>;
+			};
+		};
+	};
+
+	chv3_codec: audio-codec {
+		compatible = "google,chv3-codec";
+		#sound-dai-cells = <0>;
+	};
 };
 
 &gmac0 {
@@ -39,6 +184,7 @@
 	ssm2603: audio-codec@1a {
 		compatible = "adi,ssm2603";
 		reg = <0x1a>;
+		#sound-dai-cells = <0>;
 	};
 };
 
