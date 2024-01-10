@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+
+steps:
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  entrypoint: 'bash'
+  id: 'configure'
+  args:
+  - '-c'
+  - |
+        set -ve
+        virtme-configkernel --defconfig
+        ./scripts/config -e ISP_VIRTUAL_DEVICE -e ISP
+        ./scripts/config -e PROVE_LOCKING -e DEBUG_ATOMIC_SLEEP -e UNWINDER_ORC -e DEBUG_INFO -e DEBUG_INFO_REDUCED
+        ./scripts/config -e MEDIA_SUPPORT -e MEDIA_TEST_SUPPORT -e V4L_TEST_DRIVERS
+        ./scripts/config -m VIDEO_VIMC -m VIDEO_VIVID -m VIDEO_VIM2M
+        ./scripts/config -d CONFIG_SOUND -d CONFIG_X86_PLATFORM_DEVICES -d CONFIG_SURFACE_PLATFORMS -d CONFIG_WLAN -d CONFIG_DRM_I915 -d CONFIG_DRM
+        ./scripts/config -d CONFIG_LOGO -d CONFIG_MACINTOSH_DRIVERS -d CONFIG_MQ_IOSCHED_KYBER -d CONFIG_KVM -d CONFIG_VIRTUALIZATION
+        ./scripts/config -d CONFIG_ISO9660_FS -d CONFIG_MISC_FILESYSTEMS -d CONFIG_NFS_FS -d CONFIG_ROOT_NFS
+        ./scripts/config -d CONFIG_NFS_DISABLE_UDP_SUPPORT -d CONFIG_SUSPEND -d CONFIG_HIBERNATION -d CONFIG_USB_NET_DRIVERS -d CONFIG_SWAP
+        ./scripts/config -d CONFIG_RFKILL
+        ./scripts/config -e CONFIG_DMABUF_HEAPS -e CONFIG_DMABUF_HEAPS_SYSTEM
+        ./scripts/config -e CONFIG_MEMFD_CREATE -e CONFIG_DMA_SHARED_BUFFER -e CONFIG_UDMABUF
+        ./scripts/config -d CONFIG_WERROR
+        make olddefconfig
+- name: 'gcr.io/cloud-builders/git'
+  entrypoint: 'bash'
+  id: 'makepatch'
+  args:
+  - '-c'
+  - |
+        set -ve
+        git checkout -b CUT #Cl under test
+        git format-patch -1
+        git checkout HEAD~1
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  timeout: "600s"
+  entrypoint: 'bash'
+  id: 'build_parent'
+  allowFailure: true
+  args:
+  - '-c'
+  - |
+        set -ve
+        CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
+        CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  timeout: "600s"
+  entrypoint: 'bash'
+  id: 'build'
+  args:
+  - '-c'
+  - |
+        set -ve
+        git checkout CUT
+        CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
+        CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  entrypoint: 'bash'
+  id: 'build_userspace_tests'
+  args:
+  - '-c'
+  - |
+        set -ve
+        cd tools/isp
+        sh autogen.sh
+        ./configure
+        make -j $(nproc)
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  entrypoint: 'bash'
+  id: 'virtme'
+  args:
+  - '-c'
+  - |
+        set -ve
+        cat > test.sh <<EOF
+        set -ve
+        dmesg -C
+        #        modprobe visp
+        #        rmmod visp
+        #        modprobe visp
+        cat /sys/devices/platform/visp.0/modalias
+        /workspace/tools/isp/visp-test/visptest --exit_at test_add_valid_operations
+        /workspace/tools/isp/visp-test/visptest --exit_at test_add_valid_rw_operations
+        /workspace/tools/isp/visp-test/visptest --exit_at test_dma_fence
+        /workspace/tools/isp/visp-test/visptest
+        dmesg
+        EOF
+        chmod a+x test.sh
+        cat test.sh
+        virtme-run --rodir $(pwd) --kdir . --mods=auto --script-exec $(pwd)/test.sh --show-boot-console 2>&1 < /dev/zero | tee /tmp/virtme.out
+        grep -qz "BUG: " /tmp/virtme.out && exit 1
+        grep -qz "WARNING: " /tmp/virtme.out && exit 1
+        grep "virtme-init: script returned 0" /tmp/virtme.out
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  entrypoint: 'bash'
+  id: 'kunit'
+  args:
+  - '-c'
+  - |
+        set -v
+        make ARCH=x86_64 -j $(nproc) mrproper
+        mkdir -p /tmp/kunit
+        TMPDIR=/tmp/kunit ./tools/testing/kunit/kunit.py run --jobs=$(nproc) --kunitconfig=drivers/isp/.kunitconfig --arch x86_64
+- name: 'gcr.io/${PROJECT_ID}/kcam'
+  entrypoint: 'bash'
+  id: 'checkpatch'
+  args:
+  - '-c'
+  - |
+        set -v
+        scripts/checkpatch.pl --show-types --strict --ignore GERRIT_CHANGE_ID \
+                --ignore UNKNOWN_COMMIT_ID --ignore COMMIT_LOG_LONG_LINE \
+                --ignore FILE_PATH_CHANGES --ignore COMPARISON_TO_NULL *patch
+substitutions:
+  _ARCH: x86
+  _CROSS_COMPILE: ""
+  _FETCH_DEPTH: "2"
+timeout: "1200s"
+options:
+ machineType: 'E2_HIGHCPU_32'
