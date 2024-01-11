@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 
 steps:
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   entrypoint: 'bash'
   id: 'configure'
   args:
@@ -32,7 +32,7 @@ steps:
         git checkout -b CUT #Cl under test
         git format-patch -1
         git checkout HEAD~1
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   timeout: "600s"
   entrypoint: 'bash'
   id: 'build_parent'
@@ -43,7 +43,7 @@ steps:
         set -ve
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   timeout: "600s"
   entrypoint: 'bash'
   id: 'build'
@@ -54,7 +54,7 @@ steps:
         git checkout CUT
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make olddefconfig 2> /dev/null
         CROSS_COMPILE=${_CROSS_COMPILE} ARCH=${_ARCH} make -j $(nproc) W=1 C=1
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   entrypoint: 'bash'
   id: 'build_userspace_tests'
   args:
@@ -65,7 +65,7 @@ steps:
         sh autogen.sh
         ./configure
         make -j $(nproc)
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   entrypoint: 'bash'
   id: 'virtme'
   args:
@@ -87,11 +87,11 @@ steps:
         EOF
         chmod a+x test.sh
         cat test.sh
-        virtme-run --rodir $(pwd) --kdir . --mods=auto --script-exec $(pwd)/test.sh --show-boot-console 2>&1 < /dev/zero | tee /tmp/virtme.out
+        virtme-run --rodir $(pwd) --kdir . --mods=auto --script-exec $(pwd)/test.sh --show-boot-console --verbose 2>&1 | tee /tmp/virtme.out
         grep -qz "BUG: " /tmp/virtme.out && exit 1
         grep -qz "WARNING: " /tmp/virtme.out && exit 1
         grep "virtme-init: script returned 0" /tmp/virtme.out
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   entrypoint: 'bash'
   id: 'kunit'
   args:
@@ -101,7 +101,7 @@ steps:
         make ARCH=x86_64 -j $(nproc) mrproper
         mkdir -p /tmp/kunit
         TMPDIR=/tmp/kunit ./tools/testing/kunit/kunit.py run --jobs=$(nproc) --kunitconfig=drivers/isp/.kunitconfig --arch x86_64
-- name: 'gcr.io/${PROJECT_ID}/kcam'
+- name: 'gcr.io/${PROJECT_ID}/isp'
   entrypoint: 'bash'
   id: 'checkpatch'
   args:
