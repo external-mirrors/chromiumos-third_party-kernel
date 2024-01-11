@@ -274,7 +274,7 @@ static int snapshot_set_block_device(struct snapshot_data *data, __u32 device)
 
 	res = set_blocksize(bdev, PAGE_SIZE);
 	if (res < 0) {
-		blkdev_put(bdev, BLK_OPEN_READ | BLK_OPEN_WRITE | BLK_OPEN_EXCL);
+		blkdev_put(bdev, &snapshot_state);
 		return res;
 	}
 
@@ -293,7 +293,7 @@ static int snapshot_release_block_device(struct snapshot_data *data)
 	if (!data->dev || !data->bdev)
 		return -ENODEV;
 
-	blkdev_put(data->bdev, BLK_OPEN_READ | BLK_OPEN_WRITE | BLK_OPEN_EXCL);
+	blkdev_put(data->bdev, &snapshot_state);
 	data->dev = 0;
 	data->bdev = NULL;
 
