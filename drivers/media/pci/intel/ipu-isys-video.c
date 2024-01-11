@@ -135,7 +135,7 @@ static int video_open(struct file *file)
 {
 	struct ipu_isys_video *av = video_drvdata(file);
 	struct ipu_isys *isys = av->isys;
-	struct ipu_bus_device *adev = to_ipu_bus_device(&isys->adev->dev);
+	struct ipu_bus_device *adev = isys->adev;
 	struct ipu_device *isp = adev->isp;
 	int rval;
 	const struct ipu_isys_internal_pdata *ipdata;
@@ -144,14 +144,14 @@ static int video_open(struct file *file)
 
 	if (isys->reset_needed || isp->flr_done) {
 		mutex_unlock(&isys->mutex);
-		dev_warn(&isys->adev->dev, "isys power cycle required\n");
+		dev_warn(isys_to_device(isys), "isys power cycle required\n");
 		return -EIO;
 	}
 	mutex_unlock(&isys->mutex);
 
-	rval = pm_runtime_get_sync(&isys->adev->dev);
+	rval = pm_runtime_get_sync(isys_to_device(isys));
 	if (rval < 0) {
-		pm_runtime_put_noidle(&isys->adev->dev);
+		pm_runtime_put_noidle(isys_to_device(isys));
 		return rval;
 	}
 
@@ -189,7 +189,7 @@ static int video_open(struct file *file)
 		 * Something went wrong in previous shutdown. As we are now
 		 * restarting isys we can safely delete old context.
 		 */
-		dev_err(&isys->adev->dev, "Clearing old context\n");
+		dev_err(isys_to_device(isys), "Clearing old context\n");
 		ipu_fw_isys_cleanup(isys);
 	}
 
@@ -209,7 +209,7 @@ out_lib_init:
 out_v4l2_fh_release:
 	v4l2_fh_release(file);
 out_power_down:
-	pm_runtime_put(&isys->adev->dev);
+	pm_runtime_put(isys_to_device(isys));
 
 	return rval;
 }
@@ -236,9 +236,9 @@ static int video_release(struct file *file)
 	v4l2_pipeline_pm_put(&av->vdev.entity);
 
 	if (av->isys->reset_needed)
-		pm_runtime_put_sync(&av->isys->adev->dev);
+		pm_runtime_put_sync(isys_to_device(av->isys));
 	else
-		pm_runtime_put(&av->isys->adev->dev);
+		pm_runtime_put(isys_to_device(av->isys));
 
 	return ret;
 }
@@ -302,8 +302,8 @@ int ipu_isys_vidioc_querycap(struct file *file, void *fh,
 {
 	struct ipu_isys_video *av = video_drvdata(file);
 
-	strlcpy(cap->driver, IPU_ISYS_NAME, sizeof(cap->driver));
-	strlcpy(cap->card, av->isys->media_dev.model, sizeof(cap->card));
+	strscpy(cap->driver, KBUILD_MODNAME ".ipu-isys", sizeof(cap->driver));
+	strscpy(cap->card, av->isys->media_dev.model, sizeof(cap->card));
 	snprintf(cap->bus_info, sizeof(cap->bus_info), "PCI:%s",
 		 av->isys->media_dev.bus_info);
 	return 0;
@@ -340,7 +340,7 @@ int ipu_isys_vidioc_enum_fmt(struct file *file, void *fh,
 			break;
 
 	if (!pfmt->bpp) {
-		dev_warn(&av->isys->adev->dev,
+		dev_warn(isys_to_device(av->isys),
 			 "Format not found in mapping table.");
 		return -EINVAL;
 	}
@@ -454,7 +454,7 @@ ipu_isys_video_try_fmt_vid_mplane(struct ipu_isys_video *av,
 		av->ts_offsets[0] = mpix->plane_fmt[0].sizeimage;
 		mpix->plane_fmt[0].sizeimage += tile_status_size;
 
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"cmprs: bpl:%d, height:%d img size:%d, ts_sz:%d\n",
 			mpix->plane_fmt[0].bytesperline, mpix->height,
 			av->ts_offsets[0], tile_status_size);
@@ -511,7 +511,8 @@ static long ipu_isys_vidioc_private(struct file *file, void *fh,
 		break;
 
 	default:
-		dev_dbg(&av->isys->adev->dev, "unsupported private ioctl %x\n",
+		dev_dbg(isys_to_device(av->isys),
+			"unsupported private ioctl %x\n",
 			cmd);
 	}
 
@@ -684,7 +685,7 @@ static int get_external_facing_format(struct ipu_isys_pipeline *ip,
 			   ip->external :
 			   media_pad_remote_pad_first(ip->external);
 	if (WARN_ON(!external_facing)) {
-		dev_warn(&av->isys->adev->dev,
+		dev_warn(isys_to_device(av->isys),
 			 "no external facing pad --- driver bug?\n");
 		return -EINVAL;
 	}
@@ -705,7 +706,7 @@ static void short_packet_queue_destroy(struct ipu_isys_pipeline *ip)
 		return;
 	for (i = 0; i < IPU_ISYS_SHORT_PACKET_BUFFER_NUM; i++) {
 		if (ip->short_packet_bufs[i].buffer)
-			dma_free_coherent(&av->isys->adev->dev,
+			dma_free_coherent(isys_to_device(av->isys),
 					  ip->short_packet_buffer_size,
 					  ip->short_packet_bufs[i].buffer,
 					  ip->short_packet_bufs[i].dma_addr);
@@ -755,7 +756,8 @@ static int short_packet_queue_setup(struct ipu_isys_pipeline *ip)
 		buf->ip = ip;
 		buf->ib.type = IPU_ISYS_SHORT_PACKET_BUFFER;
 		buf->bytesused = buf_size;
-		buf->buffer = dma_alloc_coherent(&av->isys->adev->dev, buf_size,
+		buf->buffer = dma_alloc_coherent(isys_to_device(av->isys),
+						 buf_size,
 						 &buf->dma_addr, GFP_KERNEL);
 		if (!buf->buffer) {
 			short_packet_queue_destroy(ip);
@@ -905,7 +907,7 @@ ipu_isys_prepare_fw_cfg_default(struct ipu_isys_video *av,
 		break;
 
 	default:
-		dev_err(&av->isys->adev->dev,
+		dev_err(isys_to_device(av->isys),
 			"Unknown pin type, use metadata type as default\n");
 
 		pin_info->sensor_type = isys->sensor_info.sensor_metadata;
@@ -969,7 +971,7 @@ static int start_stream_firmware(struct ipu_isys_video *av,
 {
 	struct media_pipeline *mp = media_entity_pipeline(&av->vdev.entity);
 	struct ipu_isys_pipeline *ip = to_ipu_isys_pipeline(mp);
-	struct device *dev = &av->isys->adev->dev;
+	struct device *dev = isys_to_device(av->isys);
 	struct v4l2_subdev_selection sel_fmt = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 		.target = V4L2_SEL_TGT_CROP,
@@ -1209,7 +1211,7 @@ static void stop_streaming_firmware(struct ipu_isys_video *av)
 {
 	struct media_pipeline *mp = media_entity_pipeline(&av->vdev.entity);
 	struct ipu_isys_pipeline *ip = to_ipu_isys_pipeline(mp);
-	struct device *dev = &av->isys->adev->dev;
+	struct device *dev = isys_to_device(av->isys);
 	int rval, tout;
 	enum ipu_fw_isys_send_type send_type =
 		IPU_FW_ISYS_SEND_TYPE_STREAM_FLUSH;
@@ -1238,7 +1240,7 @@ static void close_streaming_firmware(struct ipu_isys_video *av)
 {
 	struct media_pipeline *mp = media_entity_pipeline(&av->vdev.entity);
 	struct ipu_isys_pipeline *ip = to_ipu_isys_pipeline(mp);
-	struct device *dev = &av->isys->adev->dev;
+	struct device *dev = isys_to_device(av->isys);
 	int rval, tout;
 
 	reinit_completion(&ip->stream_close_completion);
@@ -1293,7 +1295,7 @@ int ipu_isys_video_prepare_streaming(struct ipu_isys_video *av,
 				     unsigned int state)
 {
 	struct ipu_isys *isys = av->isys;
-	struct device *dev = &isys->adev->dev;
+	struct device *dev = isys_to_device(av->isys);
 	struct ipu_isys_pipeline *ip;
 	struct media_graph graph;
 	struct media_entity *entity;
@@ -1372,7 +1374,7 @@ int ipu_isys_video_prepare_streaming(struct ipu_isys_video *av,
 	if (ip->interlaced) {
 		rval = short_packet_queue_setup(ip);
 		if (rval) {
-			dev_err(&isys->adev->dev,
+			dev_err(isys_to_device(av->isys),
 				"Failed to setup short packet buffer.\n");
 			goto out_pipeline_stop;
 		}
@@ -1502,7 +1504,7 @@ int ipu_isys_video_set_streaming(struct ipu_isys_video *av,
 				 unsigned int state,
 				 struct ipu_isys_buffer_list *bl)
 {
-	struct device *dev = &av->isys->adev->dev;
+	struct device *dev = isys_to_device(av->isys);
 	struct media_device *mdev = av->vdev.entity.graph_obj.mdev;
 	struct media_entity_enum entities;
 
@@ -1766,7 +1768,7 @@ int ipu_isys_video_init(struct ipu_isys_video *av,
 		rval = media_create_pad_link(&av->vdev.entity, 0, entity,
 					     pad, flags);
 	if (rval) {
-		dev_info(&av->isys->adev->dev, "can't create link\n");
+		dev_info(isys_to_device(av->isys), "can't create link\n");
 		goto out_media_entity_cleanup;
 	}
 

@@ -278,7 +278,7 @@ int ipu_isys_csi2_be_soc_init(struct ipu_isys_csi2_be_soc *csi2_be_soc,
 	rval = v4l2_device_register_subdev(&isys->v4l2_dev,
 					   &csi2_be_soc->asd.sd);
 	if (rval) {
-		dev_info(&isys->adev->dev, "can't register v4l2 subdev\n");
+		dev_info(isys_to_device(isys), "can't register v4l2 subdev\n");
 		goto fail;
 	}
 
@@ -306,7 +306,7 @@ int ipu_isys_csi2_be_soc_init(struct ipu_isys_csi2_be_soc *csi2_be_soc,
 	/* create v4l2 ctrl for be-soc video node */
 	rval = v4l2_ctrl_handler_init(&csi2_be_soc->av.ctrl_handler, 0);
 	if (rval) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"failed to init v4l2 ctrl handler for be_soc\n");
 		goto fail;
 	}
@@ -315,7 +315,7 @@ int ipu_isys_csi2_be_soc_init(struct ipu_isys_csi2_be_soc *csi2_be_soc,
 		v4l2_ctrl_new_custom(&csi2_be_soc->av.ctrl_handler,
 				     &compression_ctrl_cfg, NULL);
 	if (!csi2_be_soc->av.compression_ctrl) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"failed to create BE-SOC cmprs ctrl\n");
 		goto fail;
 	}
@@ -329,7 +329,7 @@ int ipu_isys_csi2_be_soc_init(struct ipu_isys_csi2_be_soc *csi2_be_soc,
 				   MEDIA_PAD_FL_SINK,
 				   MEDIA_LNK_FL_DYNAMIC);
 	if (rval) {
-		dev_info(&isys->adev->dev, "can't init video node\n");
+		dev_info(isys_to_device(isys), "can't init video node\n");
 		goto fail;
 	}
 

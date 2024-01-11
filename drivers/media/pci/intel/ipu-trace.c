@@ -449,8 +449,8 @@ static ssize_t traceconf_write(struct file *file, const char __user *buf,
 static int traceconf_release(struct inode *inode, struct file *file)
 {
 	struct ipu_device *isp = file->private_data;
-	struct device *psys_dev = isp->psys ? &isp->psys->dev : NULL;
-	struct device *isys_dev = isp->isys ? &isp->isys->dev : NULL;
+	struct device *psys_dev = isp->psys ? &isp->psys->auxdev.dev : NULL;
+	struct device *isys_dev = isp->isys ? &isp->isys->auxdev.dev : NULL;
 	int pm_rval = -EINVAL;
 
 	/*
@@ -477,7 +477,7 @@ static int traceconf_release(struct inode *inode, struct file *file)
 					pm_runtime_put(isys_dev);
 			}
 		} else {
-			pm_runtime_put_noidle(&isp->isys->dev);
+			pm_runtime_put_noidle(isys_dev);
 		}
 	}
 
@@ -758,9 +758,9 @@ int ipu_trace_init(struct ipu_device *isp, void __iomem *base,
 
 	mutex_lock(&isp->trace->lock);
 
-	if (dev == &isp->isys->dev) {
+	if (dev == &isp->isys->auxdev.dev) {
 		sys = &trace->isys;
-	} else if (dev == &isp->psys->dev) {
+	} else if (dev == &isp->psys->auxdev.dev) {
 		sys = &trace->psys;
 	} else {
 		ret = -EINVAL;

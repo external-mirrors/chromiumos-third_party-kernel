@@ -319,16 +319,16 @@ int ipu_buttress_psys_freq_get(void *data, u64 *val)
 	u32 reg_val;
 	int rval;
 
-	rval = pm_runtime_get_sync(&isp->psys->dev);
+	rval = pm_runtime_get_sync(&isp->psys->auxdev.dev);
 	if (rval < 0) {
-		pm_runtime_put(&isp->psys->dev);
+		pm_runtime_put(&isp->psys->auxdev.dev);
 		dev_err(&isp->pdev->dev, "Runtime PM failed (%d)\n", rval);
 		return rval;
 	}
 
 	reg_val = readl(isp->base + BUTTRESS_REG_PS_FREQ_CTL);
 
-	pm_runtime_put(&isp->psys->dev);
+	pm_runtime_put(&isp->psys->auxdev.dev);
 
 	*val = IPU_PS_FREQ_RATIO_BASE *
 	    (reg_val & IPU_BUTTRESS_PS_FREQ_CTL_DIVISOR_MASK);

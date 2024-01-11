@@ -304,12 +304,14 @@ struct ipu6_psys_hw_res_variant {
 };
 struct ipu_psys_kcmd;
 struct ipu_psys;
-int ipu_fw_psys_pg_start(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_pg_disown(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_pg_abort(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_pg_submit(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_ppg_suspend(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_ppg_resume(struct ipu_psys_kcmd *kcmd);
+struct ipu_psys_pg;
+struct ipu_psys_ppg;
+int ipu_fw_psys_pg_start(struct ipu_psys_pg *pg);
+int ipu_fw_psys_pg_disown(struct ipu_psys_pg *pg, struct ipu_psys *psys);
+int ipu_fw_psys_pg_abort(struct ipu_psys_pg *pg, struct ipu_psys *psys);
+int ipu_fw_psys_pg_submit(struct ipu_psys_pg *pg);
+int ipu_fw_psys_ppg_suspend(struct ipu_psys_ppg *ppg, struct ipu_psys *psys);
+int ipu_fw_psys_ppg_resume(struct ipu_psys_ppg *ppg, struct ipu_psys *psys);
 int ipu_fw_psys_pg_load_cycles(struct ipu_psys_kcmd *kcmd);
 int ipu_fw_psys_pg_init_cycles(struct ipu_psys_kcmd *kcmd);
 int ipu_fw_psys_pg_processing_cycles(struct ipu_psys_kcmd *kcmd);
@@ -323,16 +325,16 @@ int ipu_fw_psys_terminal_set(struct ipu_fw_psys_terminal *terminal,
 			     struct ipu_psys_kcmd *kcmd,
 			     u32 buffer, unsigned int size);
 void ipu_fw_psys_pg_dump(struct ipu_psys *psys,
-			 struct ipu_psys_kcmd *kcmd, const char *note);
-int ipu_fw_psys_pg_get_id(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_pg_get_terminal_count(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_pg_get_size(struct ipu_psys_kcmd *kcmd);
-int ipu_fw_psys_pg_set_ipu_vaddress(struct ipu_psys_kcmd *kcmd,
+			 struct ipu_psys_pg *pg, const char *note);
+int ipu_fw_psys_pg_get_id(struct ipu_psys_pg *pg);
+int ipu_fw_psys_pg_get_terminal_count(struct ipu_psys_pg *pg);
+int ipu_fw_psys_pg_get_size(struct ipu_psys_pg *pg);
+int ipu_fw_psys_pg_set_ipu_vaddress(struct ipu_psys_pg *pg,
 				    dma_addr_t vaddress);
-struct ipu_fw_psys_terminal *ipu_fw_psys_pg_get_terminal(struct ipu_psys_kcmd
-							 *kcmd, int index);
-void ipu_fw_psys_pg_set_token(struct ipu_psys_kcmd *kcmd, u64 token);
-u64 ipu_fw_psys_pg_get_token(struct ipu_psys_kcmd *kcmd);
+struct ipu_fw_psys_terminal *ipu_fw_psys_pg_get_terminal(struct ipu_psys_pg *pg,
+							 int index);
+void ipu_fw_psys_pg_set_token(struct ipu_psys_pg *pg, u64 token);
+u64 ipu_fw_psys_pg_get_token(struct ipu_psys_pg *pg);
 int ipu_fw_psys_ppg_set_buffer_set(struct ipu_psys_kcmd *kcmd,
 				   struct ipu_fw_psys_terminal *terminal,
 				   int terminal_idx, u32 buffer);
@@ -346,9 +348,9 @@ struct ipu_fw_psys_buffer_set *
 ipu_fw_psys_ppg_create_buffer_set(struct ipu_psys_kcmd *kcmd,
 				  void *kaddr, u32 frame_counter);
 int ipu_fw_psys_ppg_enqueue_bufs(struct ipu_psys_kcmd *kcmd);
-u8 ipu_fw_psys_ppg_get_base_queue_id(struct ipu_psys_kcmd *kcmd);
+u8 ipu_fw_psys_ppg_get_base_queue_id(struct ipu_psys_ppg *ppg);
 void ipu_fw_psys_ppg_set_base_queue_id(struct ipu_psys_kcmd *kcmd, u8 queue_id);
-int ipu_fw_psys_pg_get_protocol(struct ipu_psys_kcmd *kcmd);
+int ipu_fw_psys_pg_get_protocol(struct ipu_psys_pg *pg);
 int ipu_fw_psys_open(struct ipu_psys *psys);
 int ipu_fw_psys_close(struct ipu_psys *psys);
 
@@ -377,6 +379,6 @@ int ipu6_fw_psys_get_program_manifest_by_process(
 	const struct ipu_fw_psys_program_group_manifest *pg_manifest,
 	struct ipu_fw_psys_process *process);
 void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
-			  struct ipu_psys_kcmd *kcmd, const char *note);
+			  struct ipu_psys_pg *pg, const char *note);
 void ipu6_psys_hw_res_variant_init(void);
 #endif /* IPU_FW_PSYS_H */

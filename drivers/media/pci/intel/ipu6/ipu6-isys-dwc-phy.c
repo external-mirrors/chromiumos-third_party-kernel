@@ -78,7 +78,7 @@ static void dwc_dphy_write(struct ipu_isys *isys, u32 phy_id, u32 addr,
 	void __iomem *isys_base = isys->pdata->base;
 	void __iomem *base = isys_base + IPU_DWC_DPHY_BASE(phy_id);
 
-	dev_dbg(&isys->adev->dev, "write: reg 0x%lx = data 0x%x",
+	dev_dbg(isys_to_device(isys), "write: reg 0x%lx = data 0x%x",
 		base + addr - isys_base, data);
 	writel(data, base + addr);
 }
@@ -90,7 +90,7 @@ static u32 dwc_dphy_read(struct ipu_isys *isys, u32 phy_id, u32 addr)
 	void __iomem *base = isys_base + IPU_DWC_DPHY_BASE(phy_id);
 
 	data = readl(base + addr);
-	dev_dbg(&isys->adev->dev, "read: reg 0x%lx = data 0x%x",
+	dev_dbg(isys_to_device(isys), "read: reg 0x%lx = data 0x%x",
 		base + addr - isys_base, data);
 
 	return data;
@@ -131,13 +131,13 @@ static int dwc_dphy_ifc_read(struct ipu_isys *isys, u32 phy_id, u32 addr, u32 *v
 	rval = readl_poll_timeout(reg, completion, !(completion & BIT(0)),
 				  10, timeout);
 	if (rval) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"%s: ifc request read timeout!", __func__);
 		return rval;
 	}
 
 	*val = completion >> 8 & 0xff;
-	dev_dbg(&isys->adev->dev, "ifc read 0x%x = 0x%x", addr, *val);
+	dev_dbg(isys_to_device(isys), "ifc read 0x%x = 0x%x", addr, *val);
 
 	return 0;
 }
@@ -158,7 +158,7 @@ static int dwc_dphy_ifc_write(struct ipu_isys *isys, u32 phy_id, u32 addr, u32 d
 	rval = readl_poll_timeout(reg, completion, !(completion & BIT(0)),
 				  10, timeout);
 	if (rval) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"%s: ifc request write timeout", __func__);
 		return rval;
 	}
@@ -174,7 +174,7 @@ static void dwc_dphy_ifc_write_mask(struct ipu_isys *isys, u32 phy_id, u32 addr,
 
 	rval = dwc_dphy_ifc_read(isys, phy_id, addr, &temp);
 	if (rval) {
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"dphy proxy read failed with %d", rval);
 		return;
 	}
@@ -184,7 +184,7 @@ static void dwc_dphy_ifc_write_mask(struct ipu_isys *isys, u32 phy_id, u32 addr,
 	temp |= (data & mask) << shift;
 	rval = dwc_dphy_ifc_write(isys, phy_id, addr, temp);
 	if (rval)
-		dev_err(&isys->adev->dev, "dphy proxy write failed(%d)", rval);
+		dev_err(isys_to_device(isys), "dphy proxy write failed(%d)", rval);
 }
 
 static u32 dwc_dphy_ifc_read_mask(struct ipu_isys *isys, u32 phy_id, u32 addr,
@@ -195,7 +195,7 @@ static u32 dwc_dphy_ifc_read_mask(struct ipu_isys *isys, u32 phy_id, u32 addr,
 
 	rval = dwc_dphy_ifc_read(isys, phy_id, addr, &val);
 	if (rval) {
-		dev_err(&isys->adev->dev, "dphy proxy read failed with %d", rval);
+		dev_err(isys_to_device(isys), "dphy proxy read failed with %d", rval);
 		return 0;
 	}
 
@@ -218,7 +218,7 @@ static int dwc_dphy_pwr_up(struct ipu_isys *isys, u32 phy_id)
 				false, isys, phy_id, 0x1e, 0, 4);
 
 	if (ret) {
-		dev_err(&isys->adev->dev, "DPHY%d power up failed, state 0x%x",
+		dev_err(isys_to_device(isys), "DPHY%d power up failed, state 0x%x",
 			phy_id, fsm_state);
 		return ret;
 	}
@@ -320,14 +320,14 @@ int ipu6_isys_dwc_phy_config(struct ipu_isys *isys, u32 phy_id, u32 mbps)
 	u32 index;
 	u32 osc_freq_target;
 	u32 cfg_clk_freqrange;
-	struct ipu_bus_device *adev = to_ipu_bus_device(&isys->adev->dev);
+	struct ipu_bus_device *adev = to_ipu_bus_device(isys_to_device(isys));
 	struct ipu_device *isp = adev->isp;
 
-	dev_dbg(&isys->adev->dev, "config phy %u with %u mbps", phy_id, mbps);
+	dev_dbg(isys_to_device(isys), "config phy %u with %u mbps", phy_id, mbps);
 
 	index = get_hsfreq_by_mbps(mbps);
 	if (index == DPHY_FREQ_RANGE_INVALID_INDEX) {
-		dev_err(&isys->adev->dev, "link freq not found for mbps %u",
+		dev_err(isys_to_device(isys), "link freq not found for mbps %u",
 			mbps);
 		return -EINVAL;
 	}
@@ -369,7 +369,7 @@ int ipu6_isys_dwc_phy_config(struct ipu_isys *isys, u32 phy_id, u32 mbps)
 	 * (38.4 - 17) * 4 = ~85 (0x55)
 	 */
 	cfg_clk_freqrange = (isp->buttress.ref_clk - 170) * 4 / 10;
-	dev_dbg(&isys->adev->dev, "ref_clk = %u clf_freqrange = %u",
+	dev_dbg(isys_to_device(isys), "ref_clk = %u clf_freqrange = %u",
 		isp->buttress.ref_clk, cfg_clk_freqrange);
 	dwc_dphy_write_mask(isys, phy_id, IPU_DWC_DPHY_CFGCLKFREQRANGE,
 			    cfg_clk_freqrange, 0, 8);
@@ -426,7 +426,7 @@ int ipu6_isys_dwc_phy_powerup_ack(struct ipu_isys *isys, u32 phy_id)
 
 	rval = dwc_dphy_pwr_up(isys, phy_id);
 	if (rval != 0) {
-		dev_err(&isys->adev->dev, "dphy%u power up failed(%d)", phy_id,
+		dev_err(isys_to_device(isys), "dphy%u power up failed(%d)", phy_id,
 			rval);
 		return rval;
 	}
@@ -435,7 +435,7 @@ int ipu6_isys_dwc_phy_powerup_ack(struct ipu_isys *isys, u32 phy_id)
 	dwc_dphy_write_mask(isys, phy_id, IPU_DWC_DPHY_DFT_CTRL2, 0, 4, 1);
 	dwc_dphy_write_mask(isys, phy_id, IPU_DWC_DPHY_DFT_CTRL2, 0, 8, 1);
 
-	dev_dbg(&isys->adev->dev, "phy %u is ready!", phy_id);
+	dev_dbg(isys_to_device(isys), "phy %u is ready!", phy_id);
 
 	if (phy_id != PHY_E || isys->phy_termcal_val)
 		return 0;
@@ -445,7 +445,7 @@ int ipu6_isys_dwc_phy_powerup_ack(struct ipu_isys *isys, u32 phy_id)
 	if (rescal_done) {
 		isys->phy_termcal_val = dwc_dphy_ifc_read_mask(isys, phy_id,
 							       0x220, 2, 4);
-		dev_dbg(&isys->adev->dev, "termcal done with value = %u",
+		dev_dbg(isys_to_device(isys), "termcal done with value = %u",
 			isys->phy_termcal_val);
 	}
 
@@ -454,7 +454,7 @@ int ipu6_isys_dwc_phy_powerup_ack(struct ipu_isys *isys, u32 phy_id)
 
 void ipu6_isys_dwc_phy_reset(struct ipu_isys *isys, u32 phy_id)
 {
-	dev_dbg(&isys->adev->dev, "Reset phy %u", phy_id);
+	dev_dbg(isys_to_device(isys), "Reset phy %u", phy_id);
 
 	dwc_dphy_write(isys, phy_id, IPU_DWC_DPHY_SHUTDOWNZ, 0);
 	dwc_dphy_write(isys, phy_id, IPU_DWC_DPHY_RSTZ, 0);

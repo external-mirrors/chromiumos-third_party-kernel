@@ -31,6 +31,7 @@ config VIDEO_INTEL_IPU6
 	select V4L2_FWNODE
 	select PHYS_ADDR_T_64BIT
 	select COMMON_CLK
+	select ISP
 	help
 	  This is the Intel imaging processing unit, found in Intel SoCs and
 	  used for capturing images and video from a camera sensor.

@@ -8,6 +8,7 @@
 #include <linux/list.h>
 #include <uapi/linux/media.h>
 #include <linux/version.h>
+#include <linux/mutex.h>
 
 #include "ipu-pdata.h"
 #include "ipu-bus.h"
@@ -69,6 +70,7 @@ struct firmware;
 
 struct ipu_device {
 	struct pci_dev *pdev;
+	struct mutex mutex; /* protects devices */
 	struct list_head devices;
 	struct ipu_bus_device *isys;
 	struct ipu_bus_device *psys;
@@ -89,7 +91,6 @@ struct ipu_device {
 	bool flr_done;
 	bool ipc_reinit;
 	bool secure_mode;
-	bool ipu_bus_ready_to_probe;
 
 	int (*cpd_fw_reload)(struct ipu_device *isp);
 };

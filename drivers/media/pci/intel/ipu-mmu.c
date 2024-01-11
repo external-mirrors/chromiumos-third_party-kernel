@@ -830,6 +830,7 @@ struct ipu_mmu *ipu_mmu_init(struct device *dev,
 	mmu->tlb_invalidate = tlb_invalidate;
 	mmu->ready = false;
 	INIT_LIST_HEAD(&mmu->vma_list);
+	spin_lock_init(&mmu->list_lock);
 	spin_lock_init(&mmu->ready_lock);
 
 	mmu->dmap = alloc_dma_mapping(isp);

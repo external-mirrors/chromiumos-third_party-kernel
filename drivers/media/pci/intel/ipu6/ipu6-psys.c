@@ -13,12 +13,15 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/isp/isp-entity.h>
+#include <linux/isp/isp-buffer.h>
 
 #include "ipu.h"
 #include "ipu-psys.h"
 #include "ipu6-ppg.h"
 #include "ipu-platform-regs.h"
 #include "ipu-trace.h"
+#include "ipu-isp.h"
 
 MODULE_IMPORT_NS(DMA_BUF);
 
@@ -87,7 +90,7 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on)
 	u32 val;
 
 	/* power domain req */
-	dev_dbg(&psys->adev->dev, "power %s psys sub-domains",
+	dev_dbg(psys_to_device(psys), "power %s psys sub-domains",
 		on ? "UP" : "DOWN");
 	if (on)
 		writel(IPU_PSYS_SUBDOMAINS_POWER_MASK,
@@ -102,7 +105,7 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on)
 		val = readl(psys->adev->isp->base +
 			    IPU_PSYS_SUBDOMAINS_POWER_STATUS);
 		if (!(val & BIT(31))) {
-			dev_dbg(&psys->adev->dev,
+			dev_dbg(psys_to_device(psys),
 				"PS sub-domains req done with status 0x%x",
 				val);
 			break;
@@ -111,7 +114,7 @@ void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on)
 	} while (i < PSYS_SUBDOMAINS_STATUS_WAIT_COUNT);
 
 	if (i == PSYS_SUBDOMAINS_STATUS_WAIT_COUNT)
-		dev_warn(&psys->adev->dev, "Psys sub-domains %s req timeout!",
+		dev_warn(psys_to_device(psys), "Psys sub-domains %s req timeout!",
 			 on ? "UP" : "DOWN");
 }
 
@@ -158,23 +161,26 @@ void ipu_psys_setup_hw(struct ipu_psys *psys)
 
 static struct ipu_psys_ppg *ipu_psys_identify_kppg(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_psys_scheduler *sched = &kcmd->fh->sched;
+	struct ipu_isp_psys_instance *instance;
+	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
 
-	mutex_lock(&kcmd->fh->mutex);
+	instance = isp_instance_driver_data(kcmd->isp_instance);
+	sched = &instance->sched;
+
+	mutex_lock(&instance->mutex);
 	if (list_empty(&sched->ppgs))
 		goto not_found;
 
 	list_for_each_entry_safe(kppg, tmp, &sched->ppgs, list) {
-		if (ipu_fw_psys_pg_get_token(kcmd)
-		    != kppg->token)
+		if (ipu_fw_psys_pg_get_token(kcmd->kpg) != kppg->token)
 			continue;
-		mutex_unlock(&kcmd->fh->mutex);
+		mutex_unlock(&instance->mutex);
 		return kppg;
 	}
 
 not_found:
-	mutex_unlock(&kcmd->fh->mutex);
+	mutex_unlock(&instance->mutex);
 	return NULL;
 }
 
@@ -184,14 +190,18 @@ not_found:
  */
 static void ipu_psys_kcmd_free(struct ipu_psys_kcmd *kcmd)
 {
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_ppg *kppg;
 	struct ipu_psys_scheduler *sched;
+	int i;
 
 	if (!kcmd)
 		return;
 
+	instance = isp_instance_driver_data(kcmd->isp_instance);
+
 	kppg = ipu_psys_identify_kppg(kcmd);
-	sched = &kcmd->fh->sched;
+	sched = &instance->sched;
 
 	if (kcmd->kbuf_set) {
 		mutex_lock(&sched->bs_mutex);
@@ -207,22 +217,37 @@ static void ipu_psys_kcmd_free(struct ipu_psys_kcmd *kcmd)
 		mutex_unlock(&kppg->mutex);
 	}
 
+	if (kcmd->isp_instance)
+		isp_instance_put(kcmd->isp_instance);
+
+	if (kcmd->isp_pg_buffer)
+		isp_buffer_put(kcmd->isp_pg_buffer);
+
+	if (kcmd->isp_buffers) {
+		for (i = 0; i < kcmd->nbuffers; i++) {
+			if (!kcmd->isp_buffers[i])
+				break;
+			isp_buffer_put(kcmd->isp_buffers[i]);
+		}
+		kfree(kcmd->isp_buffers);
+	}
+
 	kfree(kcmd->pg_manifest);
-	kfree(kcmd->kbufs);
 	kfree(kcmd->buffers);
 	kfree(kcmd);
 }
 
-static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
-					       struct ipu_psys_fh *fh)
+static struct ipu_psys_kcmd *
+ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
+		  struct isp_obj_instance *isp_instance,
+		  struct isp_obj_buffer **isp_buffers)
 {
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_isp_psys_instance *psys_instance;
+	struct ipu_psys *psys = NULL;
 	struct ipu_psys_kcmd *kcmd;
-	struct ipu_psys_kbuffer *kpgbuf;
+	struct ipu_isp_psys_dbuf *psys_pg_buf, *psys_buf;
 	unsigned int i;
-	int ret, prevfd, fd;
-
-	fd = prevfd = -1;
+	int ret;
 
 	if (cmd->bufcount > IPU_MAX_PSYS_CMD_BUFFERS)
 		return NULL;
@@ -230,56 +255,45 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 	if (!cmd->pg_manifest_size)
 		return NULL;
 
+	if (!isp_buffers)
+		return NULL;
+
 	kcmd = kzalloc(sizeof(*kcmd), GFP_KERNEL);
 	if (!kcmd)
 		return NULL;
 
+	if (!isp_instance_get(isp_instance))
+		goto error;
+	kcmd->isp_instance = isp_instance;
+
+	psys_instance = isp_instance_driver_data(isp_instance);
+	psys = psys_instance->psys;
+
 	kcmd->state = KCMD_STATE_PPG_NEW;
-	kcmd->fh = fh;
 	INIT_LIST_HEAD(&kcmd->list);
 
-	mutex_lock(&fh->mutex);
-	fd = cmd->pg;
-	kpgbuf = ipu_psys_lookup_kbuffer(fh, fd);
-	if (!kpgbuf || !kpgbuf->sgt) {
-		dev_err(&psys->adev->dev, "%s kbuf %p with fd %d not found.\n",
-			__func__, kpgbuf, fd);
-		mutex_unlock(&fh->mutex);
+	/*
+	 * increment the reference count of the buffer object to indirectly keep
+	 * the mapping alive
+	 */
+	if (!isp_buffer_get(isp_buffers[0]))
 		goto error;
-	}
+	kcmd->isp_pg_buffer = isp_buffers[0];
 
-	/* check and remap if possibe */
-	ret = ipu_psys_mapbuf_locked(fd, fh, kpgbuf);
-	if (ret) {
-		dev_err(&psys->adev->dev, "%s remap failed\n", __func__);
-		mutex_unlock(&fh->mutex);
-		goto error;
-	}
-
-	kpgbuf = ipu_psys_lookup_kbuffer(fh, fd);
-	if (!kpgbuf || !kpgbuf->sgt) {
-		WARN(1, "kbuf not found or unmapped.\n");
-		mutex_unlock(&fh->mutex);
-		goto error;
-	}
-	mutex_unlock(&fh->mutex);
-
-	kcmd->pg_user = kpgbuf->kaddr;
-	kcmd->kpg = __get_pg_buf(psys, kpgbuf->len);
+	psys_pg_buf = isp_buffer_driver_data(isp_buffers[0]);
+	kcmd->pg_user = psys_pg_buf->va;
+	kcmd->kpg = __get_pg_buf(psys, psys_pg_buf->dma_buf->size);
 	if (!kcmd->kpg)
 		goto error;
-
 	memcpy(kcmd->kpg->pg, kcmd->pg_user, kcmd->kpg->pg_size);
 
 	kcmd->pg_manifest = kzalloc(cmd->pg_manifest_size, GFP_KERNEL);
 	if (!kcmd->pg_manifest)
 		goto error;
-
 	ret = copy_from_user(kcmd->pg_manifest, cmd->pg_manifest,
 			     cmd->pg_manifest_size);
 	if (ret)
 		goto error;
-
 	kcmd->pg_manifest_size = cmd->pg_manifest_size;
 
 	kcmd->user_token = cmd->user_token;
@@ -289,105 +303,75 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 		goto error;
 
 	/*
-	 * Kenel enable bitmap be used only.
+	 * Kernel enable bitmap be used only.
 	 */
 	memcpy(kcmd->kernel_enable_bitmap, cmd->kernel_enable_bitmap,
 	       sizeof(cmd->kernel_enable_bitmap));
 
-	kcmd->nbuffers = ipu_fw_psys_pg_get_terminal_count(kcmd);
+	/* stopping doesn't need any buffers */
+	if (cmd->type == CMD_TYPE_STOP) {
+		kcmd->state = KCMD_STATE_PPG_STOP;
+		return kcmd;
+	}
+
+	kcmd->nbuffers = ipu_fw_psys_pg_get_terminal_count(kcmd->kpg);
 	kcmd->buffers = kcalloc(kcmd->nbuffers, sizeof(*kcmd->buffers),
 				GFP_KERNEL);
 	if (!kcmd->buffers)
 		goto error;
 
-	kcmd->kbufs = kcalloc(kcmd->nbuffers, sizeof(kcmd->kbufs[0]),
-			      GFP_KERNEL);
-	if (!kcmd->kbufs)
-		goto error;
-
-	/* should be stop cmd for ppg */
-	if (!cmd->buffers) {
-		kcmd->state = KCMD_STATE_PPG_STOP;
-		return kcmd;
-	}
-
 	if (!cmd->bufcount || kcmd->nbuffers > cmd->bufcount)
 		goto error;
-
 	ret = copy_from_user(kcmd->buffers, cmd->buffers,
 			     kcmd->nbuffers * sizeof(*kcmd->buffers));
 	if (ret)
 		goto error;
 
+	/* starting needs buffer information, but there is no actual buffer */
+	if (cmd->type == CMD_TYPE_START) {
+		kcmd->state = KCMD_STATE_PPG_START;
+		return kcmd;
+	}
+
+	kcmd->isp_buffers = kcalloc(kcmd->nbuffers,
+				    sizeof(kcmd->isp_buffers[0]),
+				    GFP_KERNEL);
+	if (!kcmd->isp_buffers)
+		goto error;
+
 	for (i = 0; i < kcmd->nbuffers; i++) {
 		struct ipu_fw_psys_terminal *terminal;
 
-		terminal = ipu_fw_psys_pg_get_terminal(kcmd, i);
+		terminal = ipu_fw_psys_pg_get_terminal(kcmd->kpg, i);
 		if (!terminal)
 			continue;
 
-		if (!(kcmd->buffers[i].flags & IPU_BUFFER_FLAG_DMA_HANDLE)) {
-			kcmd->state = KCMD_STATE_PPG_START;
-			continue;
-		}
-		if (kcmd->state == KCMD_STATE_PPG_START) {
-			dev_err(&psys->adev->dev,
-				"err: all buffer.flags&DMA_HANDLE must 0\n");
+		if (!isp_buffer_get(isp_buffers[i + 1]))
 			goto error;
-		}
-
-		mutex_lock(&fh->mutex);
-		fd = kcmd->buffers[i].base.fd;
-		kpgbuf = ipu_psys_lookup_kbuffer(fh, fd);
-		if (!kpgbuf || !kpgbuf->sgt) {
-			dev_err(&psys->adev->dev,
-				"%s kcmd->buffers[%d] %p fd %d not found.\n",
-				__func__, i, kpgbuf, fd);
-			mutex_unlock(&fh->mutex);
+		kcmd->isp_buffers[i] = isp_buffers[i + 1];
+		psys_buf = isp_buffer_driver_data(isp_buffers[i + 1]);
+		if (!psys_buf ||
+		    !psys_buf->dma_sgt ||
+		    psys_buf->dma_buf->size < kcmd->buffers[i].bytes_used)
 			goto error;
-		}
-
-		ret = ipu_psys_mapbuf_locked(fd, fh, kpgbuf);
-		if (ret) {
-			dev_err(&psys->adev->dev, "%s remap failed\n",
-				__func__);
-			mutex_unlock(&fh->mutex);
-			goto error;
-		}
-
-		kpgbuf = ipu_psys_lookup_kbuffer(fh, fd);
-		if (!kpgbuf || !kpgbuf->sgt) {
-			WARN(1, "kbuf not found or unmapped.\n");
-			mutex_unlock(&fh->mutex);
-			goto error;
-		}
-		mutex_unlock(&fh->mutex);
-		kcmd->kbufs[i] = kpgbuf;
-		if (!kcmd->kbufs[i] || !kcmd->kbufs[i]->sgt ||
-		    kcmd->kbufs[i]->len < kcmd->buffers[i].bytes_used)
-			goto error;
-		if ((kcmd->kbufs[i]->flags &
-		     IPU_BUFFER_FLAG_NO_FLUSH) ||
-		    (kcmd->buffers[i].flags &
-		     IPU_BUFFER_FLAG_NO_FLUSH) ||
-		    prevfd == kcmd->buffers[i].base.fd)
+		if (kcmd->buffers[i].flags & IPU_BUFFER_FLAG_NO_FLUSH)
 			continue;
 
-		prevfd = kcmd->buffers[i].base.fd;
-		dma_sync_sg_for_device(&psys->adev->dev,
-				       kcmd->kbufs[i]->sgt->sgl,
-				       kcmd->kbufs[i]->sgt->orig_nents,
+		dma_sync_sg_for_device(psys_to_device(psys),
+				       psys_buf->dma_sgt->sgl,
+				       psys_buf->dma_sgt->orig_nents,
 				       DMA_BIDIRECTIONAL);
 	}
 
-	if (kcmd->state != KCMD_STATE_PPG_START)
-		kcmd->state = KCMD_STATE_PPG_ENQUEUE;
+	kcmd->state = KCMD_STATE_PPG_ENQUEUE;
 
 	return kcmd;
-error:
-	ipu_psys_kcmd_free(kcmd);
 
-	dev_dbg(&psys->adev->dev, "failed to copy cmd\n");
+error:
+	if (psys)
+		dev_err(psys_to_device(psys), "failed to copy cmd\n");
+
+	ipu_psys_kcmd_free(kcmd);
 
 	return NULL;
 }
@@ -395,12 +379,12 @@ error:
 static struct ipu_psys_buffer_set *
 ipu_psys_lookup_kbuffer_set(struct ipu_psys *psys, u32 addr)
 {
-	struct ipu_psys_fh *fh;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_buffer_set *kbuf_set;
 	struct ipu_psys_scheduler *sched;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		sched = &fh->sched;
+	list_for_each_entry(instance, &psys->instances, list) {
+		sched = &instance->sched;
 		mutex_lock(&sched->bs_mutex);
 		list_for_each_entry(kbuf_set, &sched->buf_sets, list) {
 			if (kbuf_set->buf_set &&
@@ -418,25 +402,25 @@ ipu_psys_lookup_kbuffer_set(struct ipu_psys *psys, u32 addr)
 static struct ipu_psys_ppg *ipu_psys_lookup_ppg(struct ipu_psys *psys,
 						dma_addr_t pg_addr)
 {
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_scheduler *sched;
 	struct ipu_psys_ppg *kppg, *tmp;
-	struct ipu_psys_fh *fh;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		sched = &fh->sched;
-		mutex_lock(&fh->mutex);
+	list_for_each_entry(instance, &psys->instances, list) {
+		sched = &instance->sched;
+		mutex_lock(&instance->mutex);
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 
 		list_for_each_entry_safe(kppg, tmp, &sched->ppgs, list) {
 			if (pg_addr != kppg->kpg->pg_dma_addr)
 				continue;
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			return kppg;
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 
 	return NULL;
@@ -444,38 +428,38 @@ static struct ipu_psys_ppg *ipu_psys_lookup_ppg(struct ipu_psys *psys,
 
 /*
  * Move kcmd into completed state (due to running finished or failure).
- * Fill up the event struct and notify waiters.
+ * Fill up the event struct
  */
 void ipu_psys_kcmd_complete(struct ipu_psys_ppg *kppg,
 			    struct ipu_psys_kcmd *kcmd, int error)
 {
-	struct ipu_psys_fh *fh = kcmd->fh;
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_isp_psys_instance *instance;
+	struct ipu_psys *psys;
+
+	instance = isp_instance_driver_data(kcmd->isp_instance);
+	psys = instance->psys;
 
 	kcmd->ev.type = IPU_PSYS_EVENT_TYPE_CMD_COMPLETE;
 	kcmd->ev.user_token = kcmd->user_token;
 	kcmd->ev.issue_id = kcmd->issue_id;
-	kcmd->ev.error = error;
 	list_move_tail(&kcmd->list, &kppg->kcmds_finished_list);
 
 	if (kcmd->constraint.min_freq)
 		ipu_buttress_remove_psys_constraint(psys->adev->isp,
 						    &kcmd->constraint);
 
-	if (!early_pg_transfer && kcmd->pg_user && kcmd->kpg->pg) {
-		struct ipu_psys_kbuffer *kbuf;
-
-		kbuf = ipu_psys_lookup_kbuffer_by_kaddr(kcmd->fh,
-							kcmd->pg_user);
-		if (kbuf && kbuf->valid)
-			memcpy(kcmd->pg_user,
-			       kcmd->kpg->pg, kcmd->kpg->pg_size);
-		else
-			dev_dbg(&psys->adev->dev, "Skipping unmapped buffer\n");
-	}
+	/*
+	 * the mapping for the buffer should be alive, since we keep the
+	 * reference count > 0 until kcmd is freed
+	 */
+	if (!early_pg_transfer && kcmd->pg_user && kcmd->kpg->pg)
+		memcpy(kcmd->pg_user, kcmd->kpg->pg, kcmd->kpg->pg_size);
 
 	kcmd->state = KCMD_STATE_PPG_COMPLETE;
-	wake_up_interruptible(&fh->wait);
+	isp_instance_event_trigger_signals(psys->isp_entity,
+					   kcmd->isp_instance,
+					   psys->isp_event,
+					   error);
 }
 
 /*
@@ -496,17 +480,19 @@ int ipu_psys_kcmd_start(struct ipu_psys *psys, struct ipu_psys_kcmd *kcmd)
 	if (early_pg_transfer && kcmd->pg_user && kcmd->kpg->pg)
 		memcpy(kcmd->pg_user, kcmd->kpg->pg, kcmd->kpg->pg_size);
 
-	ret = ipu_fw_psys_pg_start(kcmd);
+	ret = ipu_fw_psys_pg_start(kcmd->kpg);
 	if (ret) {
-		dev_err(&psys->adev->dev, "failed to start kcmd!\n");
+		dev_err(psys_to_device(psys), "failed to start kcmd!\n");
 		return ret;
 	}
 
-	ipu_fw_psys_pg_dump(psys, kcmd, "run");
+	ipu_fw_psys_pg_dump(psys, kcmd->kpg, "run");
 
-	ret = ipu_fw_psys_pg_disown(kcmd);
+	ret = ipu_fw_psys_pg_disown(kcmd->kpg, psys);
 	if (ret) {
-		dev_err(&psys->adev->dev, "failed to start kcmd!\n");
+		if (ret == -ENODATA)
+			kcmd->pg_user = NULL;
+		dev_err(psys_to_device(psys), "failed to start kcmd!\n");
 		return ret;
 	}
 
@@ -515,13 +501,17 @@ int ipu_psys_kcmd_start(struct ipu_psys *psys, struct ipu_psys_kcmd *kcmd)
 
 static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_psys_fh *fh = kcmd->fh;
-	struct ipu_psys_scheduler *sched = &fh->sched;
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_isp_psys_instance *instance;
+	struct ipu_psys_scheduler *sched;
+	struct ipu_psys *psys;
 	struct ipu_psys_ppg *kppg;
 	struct ipu_psys_resource_pool *rpr;
 	int queue_id;
 	int ret;
+
+	instance = isp_instance_driver_data(kcmd->isp_instance);
+	sched = &instance->sched;
+	psys = instance->psys;
 
 	rpr = &psys->resource_pool_running;
 
@@ -529,11 +519,11 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 	if (!kppg)
 		return -ENOMEM;
 
-	kppg->fh = fh;
 	kppg->kpg = kcmd->kpg;
 	kppg->state = PPG_STATE_START;
 	kppg->pri_base = kcmd->priority;
 	kppg->pri_dynamic = 0;
+	kppg->psys = psys;
 	INIT_LIST_HEAD(&kppg->list);
 
 	mutex_init(&kppg->mutex);
@@ -552,10 +542,9 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 
 	queue_id = ipu_psys_allocate_cmd_queue_resource(rpr);
 	if (queue_id == -ENOSPC) {
-		dev_err(&psys->adev->dev, "no available queue\n");
+		dev_err(psys_to_device(psys), "no available queue\n");
 		kfree(kppg->manifest);
 		kfree(kppg);
-		mutex_unlock(&psys->mutex);
 		return -ENOMEM;
 	}
 
@@ -564,9 +553,9 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 	 * enqueue cmd so that kppg could be retrieved.
 	 */
 	kppg->token = (u64)kcmd->kpg;
-	ipu_fw_psys_pg_set_token(kcmd, kppg->token);
+	ipu_fw_psys_pg_set_token(kcmd->kpg, kppg->token);
 	ipu_fw_psys_ppg_set_base_queue_id(kcmd, queue_id);
-	ret = ipu_fw_psys_pg_set_ipu_vaddress(kcmd,
+	ret = ipu_fw_psys_pg_set_ipu_vaddress(kcmd->kpg,
 					      kcmd->kpg->pg_dma_addr);
 	if (ret) {
 		ipu_psys_free_cmd_queue_resource(rpr, queue_id);
@@ -576,17 +565,17 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 	}
 	memcpy(kcmd->pg_user, kcmd->kpg->pg, kcmd->kpg->pg_size);
 
-	mutex_lock(&fh->mutex);
+	mutex_lock(&instance->mutex);
 	list_add_tail(&kppg->list, &sched->ppgs);
-	mutex_unlock(&fh->mutex);
+	mutex_unlock(&instance->mutex);
 
 	mutex_lock(&kppg->mutex);
 	list_add(&kcmd->list, &kppg->kcmds_new_list);
 	mutex_unlock(&kppg->mutex);
 
-	dev_dbg(&psys->adev->dev,
+	dev_dbg(psys_to_device(psys),
 		"START ppg(%d, 0x%p) kcmd 0x%p, queue %d\n",
-		ipu_fw_psys_pg_get_id(kcmd), kppg, kcmd, queue_id);
+		ipu_fw_psys_pg_get_id(kcmd->kpg), kppg, kcmd, queue_id);
 
 	/* Kick l-scheduler thread */
 	atomic_set(&psys->wakeup_count, 1);
@@ -597,43 +586,46 @@ static int ipu_psys_kcmd_send_to_ppg_start(struct ipu_psys_kcmd *kcmd)
 
 static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_psys_fh *fh = kcmd->fh;
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_isp_psys_instance *instance;
+	struct ipu_psys *psys;
 	struct ipu_psys_ppg *kppg;
 	struct ipu_psys_resource_pool *rpr;
 	unsigned long flags;
 	u8 id;
 	bool resche = true;
 
-	rpr = &psys->resource_pool_running;
 	if (kcmd->state == KCMD_STATE_PPG_START)
 		return ipu_psys_kcmd_send_to_ppg_start(kcmd);
+
+	instance = isp_instance_driver_data(kcmd->isp_instance);
+	psys = instance->psys;
+	rpr = &psys->resource_pool_running;
 
 	kppg = ipu_psys_identify_kppg(kcmd);
 	spin_lock_irqsave(&psys->pgs_lock, flags);
 	kcmd->kpg->pg_size = 0;
 	spin_unlock_irqrestore(&psys->pgs_lock, flags);
 	if (!kppg) {
-		dev_err(&psys->adev->dev, "token not match\n");
+		dev_err(psys_to_device(psys), "token not match\n");
 		return -EINVAL;
 	}
 
 	kcmd->kpg = kppg->kpg;
 
-	dev_dbg(&psys->adev->dev, "%s ppg(%d, 0x%p) kcmd %p\n",
+	dev_dbg(psys_to_device(psys), "%s ppg(%d, 0x%p) kcmd %p\n",
 		(kcmd->state == KCMD_STATE_PPG_STOP) ?
 		"STOP" : "ENQUEUE",
-		ipu_fw_psys_pg_get_id(kcmd), kppg, kcmd);
+		ipu_fw_psys_pg_get_id(kcmd->kpg), kppg, kcmd);
 
 	if (kcmd->state == KCMD_STATE_PPG_STOP) {
 		mutex_lock(&kppg->mutex);
 		if (kppg->state == PPG_STATE_STOPPED) {
-			dev_dbg(&psys->adev->dev,
+			dev_dbg(psys_to_device(psys),
 				"kppg 0x%p  stopped!\n", kppg);
-			id = ipu_fw_psys_ppg_get_base_queue_id(kcmd);
+			id = ipu_fw_psys_ppg_get_base_queue_id(kppg);
 			ipu_psys_free_cmd_queue_resource(rpr, id);
 			ipu_psys_kcmd_complete(kppg, kcmd, 0);
-			pm_runtime_put(&psys->adev->dev);
+			pm_runtime_put(psys_to_device(psys));
 			resche = false;
 		} else {
 			list_add(&kcmd->list, &kppg->kcmds_new_list);
@@ -642,7 +634,7 @@ static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 	} else {
 		int ret;
 
-		ret = ipu_psys_ppg_get_bufset(kcmd, kppg);
+		ret = ipu_psys_ppg_get_bufset(kcmd);
 		if (ret)
 			return ret;
 
@@ -659,38 +651,42 @@ static int ipu_psys_kcmd_send_to_ppg(struct ipu_psys_kcmd *kcmd)
 	return 0;
 }
 
-int ipu_psys_kcmd_new(struct ipu_psys_command *cmd, struct ipu_psys_fh *fh)
+int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
+		      struct ipu_bus_device *adev,
+		      struct isp_obj_instance *isp_instance,
+		      struct isp_obj_buffer **isp_buffers)
 {
-	struct ipu_psys *psys = fh->psys;
 	struct ipu_psys_kcmd *kcmd;
 	size_t pg_size;
 	int ret;
 
-	if (psys->adev->isp->flr_done)
+	if (adev->isp->flr_done)
 		return -EIO;
 
-	kcmd = ipu_psys_copy_cmd(cmd, fh);
-	if (!kcmd)
-		return -EINVAL;
+	kcmd = ipu_psys_copy_cmd(cmd, isp_instance, isp_buffers);
+	if (!kcmd) {
+		ret = -EINVAL;
+		goto error;
+	}
 
-	pg_size = ipu_fw_psys_pg_get_size(kcmd);
+	pg_size = ipu_fw_psys_pg_get_size(kcmd->kpg);
 	if (pg_size > kcmd->kpg->pg_size) {
-		dev_dbg(&psys->adev->dev, "pg size mismatch %lu %lu\n",
+		dev_dbg(&adev->auxdev.dev, "pg size mismatch %lu %lu\n",
 			pg_size, kcmd->kpg->pg_size);
 		ret = -EINVAL;
 		goto error;
 	}
 
-	if (ipu_fw_psys_pg_get_protocol(kcmd) !=
+	if (ipu_fw_psys_pg_get_protocol(kcmd->kpg) !=
 			IPU_FW_PSYS_PROCESS_GROUP_PROTOCOL_PPG) {
-		dev_err(&psys->adev->dev, "No support legacy pg now\n");
+		dev_err(&adev->auxdev.dev, "No support legacy pg now\n");
 		ret = -EINVAL;
 		goto error;
 	}
 
 	if (cmd->min_psys_freq) {
 		kcmd->constraint.min_freq = cmd->min_psys_freq;
-		ipu_buttress_add_psys_constraint(psys->adev->isp,
+		ipu_buttress_add_psys_constraint(adev->isp,
 						 &kcmd->constraint);
 	}
 
@@ -698,7 +694,7 @@ int ipu_psys_kcmd_new(struct ipu_psys_command *cmd, struct ipu_psys_fh *fh)
 	if (ret)
 		goto error;
 
-	dev_dbg(&psys->adev->dev,
+	dev_dbg(&adev->auxdev.dev,
 		"IOC_QCMD: user_token:%llx issue_id:0x%llx pri:%d\n",
 		cmd->user_token, cmd->issue_id, cmd->priority);
 
@@ -713,16 +709,16 @@ error:
 static bool ipu_psys_kcmd_is_valid(struct ipu_psys *psys,
 				   struct ipu_psys_kcmd *kcmd)
 {
-	struct ipu_psys_fh *fh;
+	struct ipu_isp_psys_instance *instance;
 	struct ipu_psys_kcmd *kcmd0;
 	struct ipu_psys_ppg *kppg, *tmp;
 	struct ipu_psys_scheduler *sched;
 
-	list_for_each_entry(fh, &psys->fhs, list) {
-		sched = &fh->sched;
-		mutex_lock(&fh->mutex);
+	list_for_each_entry(instance, &psys->instances, list) {
+		sched = &instance->sched;
+		mutex_lock(&instance->mutex);
 		if (list_empty(&sched->ppgs)) {
-			mutex_unlock(&fh->mutex);
+			mutex_unlock(&instance->mutex);
 			continue;
 		}
 		list_for_each_entry_safe(kppg, tmp, &sched->ppgs, list) {
@@ -732,13 +728,13 @@ static bool ipu_psys_kcmd_is_valid(struct ipu_psys *psys,
 					    list) {
 				if (kcmd0 == kcmd) {
 					mutex_unlock(&kppg->mutex);
-					mutex_unlock(&fh->mutex);
+					mutex_unlock(&instance->mutex);
 					return true;
 				}
 			}
 			mutex_unlock(&kppg->mutex);
 		}
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 	}
 
 	return false;
@@ -762,7 +758,8 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 		if (!event.context_handle)
 			break;
 
-		dev_dbg(&psys->adev->dev, "ppg event: 0x%x, %d, status %d\n",
+		dev_dbg(psys_to_device(psys),
+			"ppg event: 0x%x, %d, status %d\n",
 			event.context_handle, event.command, event.status);
 
 		error = false;
@@ -810,17 +807,17 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 				mutex_unlock(&kppg->mutex);
 			}
 		} else {
-			dev_err(&psys->adev->dev, "invalid event\n");
+			dev_err(psys_to_device(psys), "invalid event\n");
 			continue;
 		}
 
 		if (error || !kppg) {
-			dev_err(&psys->adev->dev, "event error, command %d\n",
+			dev_err(psys_to_device(psys), "event error, command %d\n",
 				cmd);
 			break;
 		}
 
-		dev_dbg(&psys->adev->dev, "event to kppg 0x%p, kcmd 0x%p\n",
+		dev_dbg(psys_to_device(psys), "event to kppg 0x%p, kcmd 0x%p\n",
 			kppg, kcmd);
 
 		ipu_psys_ppg_complete(psys, kppg);
@@ -836,23 +833,23 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 	} while (1);
 }
 
-int ipu_psys_fh_init(struct ipu_psys_fh *fh)
+int ipu_psys_instance_init(struct ipu_isp_psys_instance *instance)
 {
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_buffer_set *kbuf_set, *kbuf_set_tmp;
-	struct ipu_psys_scheduler *sched = &fh->sched;
+	struct ipu_psys_scheduler *sched = &instance->sched;
 	int i;
 
 	mutex_init(&sched->bs_mutex);
 	INIT_LIST_HEAD(&sched->buf_sets);
 	INIT_LIST_HEAD(&sched->ppgs);
-	pm_runtime_dont_use_autosuspend(&psys->adev->dev);
+	pm_runtime_dont_use_autosuspend(psys_to_device(psys));
 	/* allocate and map memory for buf_sets */
 	for (i = 0; i < IPU_PSYS_BUF_SET_POOL_SIZE; i++) {
 		kbuf_set = kzalloc(sizeof(*kbuf_set), GFP_KERNEL);
 		if (!kbuf_set)
 			goto out_free_buf_sets;
-		kbuf_set->kaddr = dma_alloc_attrs(&psys->adev->dev,
+		kbuf_set->kaddr = dma_alloc_attrs(psys_to_device(psys),
 						  IPU_PSYS_BUF_SET_MAX_SIZE,
 						  &kbuf_set->dma_addr,
 						  GFP_KERNEL,
@@ -870,7 +867,7 @@ int ipu_psys_fh_init(struct ipu_psys_fh *fh)
 out_free_buf_sets:
 	list_for_each_entry_safe(kbuf_set, kbuf_set_tmp,
 				 &sched->buf_sets, list) {
-		dma_free_attrs(&psys->adev->dev,
+		dma_free_attrs(psys_to_device(psys),
 			       kbuf_set->size, kbuf_set->kaddr,
 			       kbuf_set->dma_addr, 0);
 		list_del(&kbuf_set->list);
@@ -880,43 +877,40 @@ out_free_buf_sets:
 
 	return -ENOMEM;
 }
+EXPORT_SYMBOL_GPL(ipu_psys_instance_init);
 
-int ipu_psys_fh_deinit(struct ipu_psys_fh *fh)
+int ipu_psys_instance_deinit(struct ipu_isp_psys_instance *instance)
 {
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_ppg *kppg, *kppg0;
 	struct ipu_psys_kcmd *kcmd, *kcmd0;
 	struct ipu_psys_buffer_set *kbuf_set, *kbuf_set0;
-	struct ipu_psys_scheduler *sched = &fh->sched;
+	struct ipu_psys_scheduler *sched = &instance->sched;
 	struct ipu_psys_resource_pool *rpr;
 	struct ipu_psys_resource_alloc *alloc;
 	u8 id;
 
-	mutex_lock(&fh->mutex);
+	mutex_lock(&instance->mutex);
 	if (!list_empty(&sched->ppgs)) {
 		list_for_each_entry_safe(kppg, kppg0, &sched->ppgs, list) {
 			unsigned long flags;
 
 			mutex_lock(&kppg->mutex);
 			if (!(kppg->state &
-			      (PPG_STATE_STOPPED |
-			       PPG_STATE_STOPPING))) {
-				struct ipu_psys_kcmd tmp = {
-					.kpg = kppg->kpg,
-				};
+			      (PPG_STATE_STOPPED | PPG_STATE_STOPPING))) {
 
 				rpr = &psys->resource_pool_running;
 				alloc = &kppg->kpg->resource_alloc;
-				id = ipu_fw_psys_ppg_get_base_queue_id(&tmp);
+				id = ipu_fw_psys_ppg_get_base_queue_id(kppg);
 				ipu_psys_ppg_stop(kppg);
 				ipu_psys_free_resources(alloc, rpr);
 				ipu_psys_free_cmd_queue_resource(rpr, id);
-				dev_dbg(&psys->adev->dev,
-				    "s_change:%s %p %d -> %d\n", __func__,
-				    kppg, kppg->state, PPG_STATE_STOPPED);
+				dev_dbg(psys_to_device(psys),
+					"s_change:%s %p %d -> %d\n", __func__,
+					kppg, kppg->state, PPG_STATE_STOPPED);
 				kppg->state = PPG_STATE_STOPPED;
 				if (psys->power_gating != PSYS_POWER_GATED)
-					pm_runtime_put(&psys->adev->dev);
+					pm_runtime_put(psys_to_device(psys));
 			}
 			list_del(&kppg->list);
 			mutex_unlock(&kppg->mutex);
@@ -924,27 +918,27 @@ int ipu_psys_fh_deinit(struct ipu_psys_fh *fh)
 			list_for_each_entry_safe(kcmd, kcmd0,
 						 &kppg->kcmds_new_list, list) {
 				kcmd->pg_user = NULL;
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				ipu_psys_kcmd_free(kcmd);
-				mutex_lock(&fh->mutex);
+				mutex_lock(&instance->mutex);
 			}
 
 			list_for_each_entry_safe(kcmd, kcmd0,
 						 &kppg->kcmds_processing_list,
 						 list) {
 				kcmd->pg_user = NULL;
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				ipu_psys_kcmd_free(kcmd);
-				mutex_lock(&fh->mutex);
+				mutex_lock(&instance->mutex);
 			}
 
 			list_for_each_entry_safe(kcmd, kcmd0,
 						 &kppg->kcmds_finished_list,
 						 list) {
 				kcmd->pg_user = NULL;
-				mutex_unlock(&fh->mutex);
+				mutex_unlock(&instance->mutex);
 				ipu_psys_kcmd_free(kcmd);
-				mutex_lock(&fh->mutex);
+				mutex_lock(&instance->mutex);
 			}
 
 			spin_lock_irqsave(&psys->pgs_lock, flags);
@@ -956,11 +950,11 @@ int ipu_psys_fh_deinit(struct ipu_psys_fh *fh)
 			kfree(kppg);
 		}
 	}
-	mutex_unlock(&fh->mutex);
+	mutex_unlock(&instance->mutex);
 
 	mutex_lock(&sched->bs_mutex);
 	list_for_each_entry_safe(kbuf_set, kbuf_set0, &sched->buf_sets, list) {
-		dma_free_attrs(&psys->adev->dev,
+		dma_free_attrs(psys_to_device(psys),
 			       kbuf_set->size, kbuf_set->kaddr,
 			       kbuf_set->dma_addr, 0);
 		list_del(&kbuf_set->list);
@@ -971,16 +965,18 @@ int ipu_psys_fh_deinit(struct ipu_psys_fh *fh)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ipu_psys_instance_deinit);
 
-struct ipu_psys_kcmd *ipu_get_completed_kcmd(struct ipu_psys_fh *fh)
+struct ipu_psys_kcmd *
+ipu_get_completed_kcmd(struct ipu_isp_psys_instance *instance)
 {
-	struct ipu_psys_scheduler *sched = &fh->sched;
+	struct ipu_psys_scheduler *sched = &instance->sched;
 	struct ipu_psys_kcmd *kcmd;
 	struct ipu_psys_ppg *kppg;
 
-	mutex_lock(&fh->mutex);
+	mutex_lock(&instance->mutex);
 	if (list_empty(&sched->ppgs)) {
-		mutex_unlock(&fh->mutex);
+		mutex_unlock(&instance->mutex);
 		return NULL;
 	}
 
@@ -993,39 +989,28 @@ struct ipu_psys_kcmd *ipu_get_completed_kcmd(struct ipu_psys_fh *fh)
 
 		kcmd = list_first_entry(&kppg->kcmds_finished_list,
 					struct ipu_psys_kcmd, list);
-		mutex_unlock(&fh->mutex);
 		mutex_unlock(&kppg->mutex);
-		dev_dbg(&fh->psys->adev->dev,
+		mutex_unlock(&instance->mutex);
+		dev_dbg(psys_to_device(instance->psys),
 			"get completed kcmd 0x%p\n", kcmd);
 		return kcmd;
 	}
-	mutex_unlock(&fh->mutex);
+	mutex_unlock(&instance->mutex);
 
 	return NULL;
 }
 
 long ipu_ioctl_dqevent(struct ipu_psys_event *event,
-		       struct ipu_psys_fh *fh, unsigned int f_flags)
+		       struct ipu_isp_psys_instance *instance)
 {
-	struct ipu_psys *psys = fh->psys;
+	struct ipu_psys *psys = instance->psys;
 	struct ipu_psys_kcmd *kcmd = NULL;
-	int rval;
 
-	dev_dbg(&psys->adev->dev, "IOC_DQEVENT\n");
+	dev_dbg(psys_to_device(psys), "IOC_DQEVENT\n");
 
-	if (!(f_flags & O_NONBLOCK)) {
-		rval = wait_event_interruptible(fh->wait,
-						(kcmd =
-						 ipu_get_completed_kcmd(fh)));
-		if (rval == -ERESTARTSYS)
-			return rval;
-	}
-
-	if (!kcmd) {
-		kcmd = ipu_get_completed_kcmd(fh);
-		if (!kcmd)
-			return -ENODATA;
-	}
+	kcmd = ipu_get_completed_kcmd(instance);
+	if (!kcmd)
+		return -ERESTARTSYS;
 
 	*event = kcmd->ev;
 	ipu_psys_kcmd_free(kcmd);

@@ -82,7 +82,7 @@ int ipu_isys_csi2_get_link_freq(struct ipu_isys_csi2 *csi2, s64 *link_freq)
 						      pipe);
 	struct v4l2_subdev *ext_sd =
 		media_entity_to_v4l2_subdev(pipe->external->entity);
-	struct device *dev = &csi2->isys->adev->dev;
+	struct device *dev = isys_to_device(csi2->isys);
 	unsigned int bpp, lanes;
 	s64 ret;
 
@@ -111,7 +111,7 @@ static int subscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 {
 	struct ipu_isys_csi2 *csi2 = to_ipu_isys_csi2(sd);
 
-	dev_dbg(&csi2->isys->adev->dev, "subscribe event(type %u id %u)\n",
+	dev_dbg(isys_to_device(csi2->isys), "subscribe event(type %u id %u)\n",
 		sub->type, sub->id);
 
 	switch (sub->type) {
@@ -185,8 +185,8 @@ ipu_isys_csi2_calc_timing(struct ipu_isys_csi2 *csi2,
 	timing->csettle = calc_timing(CSI2_CSI_RX_DLY_CNT_SETTLE_CLANE_A,
 				      CSI2_CSI_RX_DLY_CNT_SETTLE_CLANE_B,
 				      link_freq, accinv);
-	dev_dbg(&csi2->isys->adev->dev, "ctermen %u\n", timing->ctermen);
-	dev_dbg(&csi2->isys->adev->dev, "csettle %u\n", timing->csettle);
+	dev_dbg(isys_to_device(csi2->isys), "ctermen %u\n", timing->ctermen);
+	dev_dbg(isys_to_device(csi2->isys), "csettle %u\n", timing->csettle);
 
 	timing->dtermen = calc_timing(CSI2_CSI_RX_DLY_CNT_TERMEN_DLANE_A,
 				      CSI2_CSI_RX_DLY_CNT_TERMEN_DLANE_B,
@@ -194,8 +194,8 @@ ipu_isys_csi2_calc_timing(struct ipu_isys_csi2 *csi2,
 	timing->dsettle = calc_timing(CSI2_CSI_RX_DLY_CNT_SETTLE_DLANE_A,
 				      CSI2_CSI_RX_DLY_CNT_SETTLE_DLANE_B,
 				      link_freq, accinv);
-	dev_dbg(&csi2->isys->adev->dev, "dtermen %u\n", timing->dtermen);
-	dev_dbg(&csi2->isys->adev->dev, "dsettle %u\n", timing->dsettle);
+	dev_dbg(isys_to_device(csi2->isys), "dtermen %u\n", timing->dtermen);
+	dev_dbg(isys_to_device(csi2->isys), "dsettle %u\n", timing->dsettle);
 
 	return 0;
 }
@@ -215,7 +215,7 @@ static int set_stream(struct v4l2_subdev *sd, int enable)
 	unsigned int nlanes;
 	int rval;
 
-	dev_dbg(&csi2->isys->adev->dev, "csi2 s_stream %d\n", enable);
+	dev_dbg(isys_to_device(csi2->isys), "csi2 s_stream %d\n", enable);
 
 	if (!ip->external->entity) {
 		WARN_ON(1);
@@ -233,7 +233,7 @@ static int set_stream(struct v4l2_subdev *sd, int enable)
 
 	nlanes = cfg->nlanes;
 
-	dev_dbg(&csi2->isys->adev->dev, "lane nr %d.\n", nlanes);
+	dev_dbg(isys_to_device(csi2->isys), "lane nr %d.\n", nlanes);
 
 	rval = ipu_isys_csi2_calc_timing(csi2, &timing, CSI2_ACCINV);
 	if (rval)
@@ -291,7 +291,7 @@ static int csi2_link_validate(struct media_link *link)
 
 		if (remote_pad &&
 		    is_media_entity_v4l2_subdev(remote_pad->entity)) {
-			dev_err(&csi2->isys->adev->dev,
+			dev_err(isys_to_device(csi2->isys),
 				"CSI2 BE requires CSI2 headers.\n");
 			return -EINVAL;
 		}
@@ -444,7 +444,7 @@ int ipu_isys_csi2_init(struct ipu_isys_csi2 *csi2,
 	};
 	int i, rval, src;
 
-	dev_dbg(&isys->adev->dev, "csi-%d base = 0x%lx\n", index,
+	dev_dbg(isys_to_device(isys), "csi-%d base = 0x%lx\n", index,
 		(unsigned long)base);
 	csi2->isys = isys;
 	csi2->base = base;
@@ -483,7 +483,7 @@ int ipu_isys_csi2_init(struct ipu_isys_csi2 *csi2,
 
 	rval = v4l2_device_register_subdev(&isys->v4l2_dev, &csi2->asd.sd);
 	if (rval) {
-		dev_info(&isys->adev->dev, "can't register v4l2 subdev\n");
+		dev_info(isys_to_device(isys), "can't register v4l2 subdev\n");
 		goto fail;
 	}
 
@@ -517,7 +517,7 @@ int ipu_isys_csi2_init(struct ipu_isys_csi2 *csi2,
 				   CSI2_PAD_SOURCE,
 				   MEDIA_PAD_FL_SINK, 0);
 	if (rval) {
-		dev_info(&isys->adev->dev, "can't init video node\n");
+		dev_info(isys_to_device(isys), "can't init video node\n");
 		goto fail;
 	}
 
@@ -560,7 +560,7 @@ void ipu_isys_csi2_sof_event(struct ipu_isys_csi2 *csi2)
 	spin_unlock_irqrestore(&csi2->isys->lock, flags);
 
 	v4l2_event_queue(vdev, &ev);
-	dev_dbg(&csi2->isys->adev->dev,
+	dev_dbg(isys_to_device(csi2->isys),
 		"sof_event::csi2-%i sequence: %i\n",
 		csi2->index, ev.u.frame_sync.frame_sequence);
 }
@@ -589,7 +589,7 @@ void ipu_isys_csi2_eof_event(struct ipu_isys_csi2 *csi2)
 		frame_sequence = atomic_read(&ip->sequence);
 		spin_unlock_irqrestore(&csi2->isys->lock, flags);
 
-		dev_dbg(&csi2->isys->adev->dev,
+		dev_dbg(isys_to_device(csi2->isys),
 			"eof_event::csi2-%i sequence: %i\n",
 			csi2->index, frame_sequence);
 		return;
@@ -616,7 +616,7 @@ void ipu_isys_csi2_wait_last_eof(struct ipu_isys_csi2 *csi2)
 	tout = wait_for_completion_timeout(&csi2->eof_completion,
 					   IPU_EOF_TIMEOUT_JIFFIES);
 	if (!tout)
-		dev_err(&csi2->isys->adev->dev,
+		dev_err(isys_to_device(csi2->isys),
 			"csi2-%d: timeout at sync to eof\n",
 			csi2->index);
 	csi2->wait_for_sync = false;
@@ -645,7 +645,7 @@ ipu_isys_csi2_get_short_packet_buffer(struct ipu_isys_pipeline *ip,
 	ph->word_count = 0xffff;
 	ph->dtype = 0xff;
 
-	dma_sync_single_for_cpu(&ip->isys->adev->dev, pb->dma_addr,
+	dma_sync_single_for_cpu(isys_to_device(ip->isys), pb->dma_addr,
 				sizeof(*ph), DMA_BIDIRECTIONAL);
 	spin_unlock_irqrestore(&ip->short_packet_queue_lock, flags);
 	list_move(&ib->head, &bl->head);

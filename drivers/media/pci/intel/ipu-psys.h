@@ -4,10 +4,12 @@
 #ifndef IPU_PSYS_H
 #define IPU_PSYS_H
 
-#include <linux/cdev.h>
 #include <linux/workqueue.h>
+#include <linux/kref.h>
+#include <linux/auxiliary_bus.h>
 
 #include "ipu.h"
+#include "ipu-bus.h"
 #include "ipu-pdata.h"
 #include "ipu-fw-psys.h"
 #include "ipu-platform-psys.h"
@@ -76,10 +78,12 @@ struct ipu_psys_resource_alloc {
 };
 
 struct task_struct;
+struct isp_obj_entity;
+struct isp_obj_event;
+struct isp_obj_buffer;
 struct ipu_psys {
 	struct ipu_psys_capability caps;
-	struct cdev cdev;
-	struct device dev;
+	unsigned int id;
 
 	struct mutex mutex;	/* Psys various */
 	int ready; /* psys fw status */
@@ -87,7 +91,7 @@ struct ipu_psys {
 	bool icache_prefetch_isp;
 	spinlock_t ready_lock;	/* protect psys firmware state */
 	spinlock_t pgs_lock;	/* Protect pgs list access */
-	struct list_head fhs;
+	struct list_head instances;
 	struct list_head pgs;
 	struct list_head started_kcmds_list;
 	struct ipu_psys_pdata *pdata;
@@ -116,15 +120,29 @@ struct ipu_psys {
 	void *fwcom;
 
 	int power_gating;
+
+	struct isp_device *isp;
+	struct isp_obj_entity *isp_entity;
+	struct isp_obj_event *isp_event;
+	struct list_head bufmap;
 };
 
-struct ipu_psys_fh {
+struct ipu_isp_psys_instance {
 	struct ipu_psys *psys;
-	struct mutex mutex;	/* Protects bufmap & kcmds fields */
-	struct list_head list;
-	struct list_head bufmap;
-	wait_queue_head_t wait;
+	struct mutex mutex;	/* protect below */
 	struct ipu_psys_scheduler sched;
+	struct list_head list;
+};
+
+struct ipu_isp_psys_dbuf {
+	struct list_head bufmap_list;
+	struct kref kref;
+	struct ipu_psys *psys;
+	struct dma_buf *dma_buf;
+	struct dma_buf_attachment *dma_attach;
+	struct sg_table *dma_sgt;
+	u64 dma_addr;
+	void *va;
 };
 
 struct ipu_psys_pg {
@@ -137,13 +155,11 @@ struct ipu_psys_pg {
 };
 
 struct ipu_psys_kcmd {
-	struct ipu_psys_fh *fh;
 	struct list_head list;
 	struct ipu_psys_buffer_set *kbuf_set;
 	enum ipu_psys_cmd_state state;
 	void *pg_manifest;
 	size_t pg_manifest_size;
-	struct ipu_psys_kbuffer **kbufs;
 	struct ipu_psys_buffer *buffers;
 	size_t nbuffers;
 	struct ipu_fw_psys_process_group *pg_user;
@@ -158,59 +174,58 @@ struct ipu_psys_kcmd {
 	struct ipu_buttress_constraint constraint;
 	struct ipu_psys_event ev;
 	struct timer_list watchdog;
+
+	struct isp_obj_instance *isp_instance;
+	struct isp_obj_buffer *isp_pg_buffer;
+	struct isp_obj_buffer **isp_buffers;
 };
 
-struct ipu_dma_buf_attach {
-	struct device *dev;
-	u64 len;
-	void *userptr;
-	struct sg_table *sgt;
-	bool vma_is_io;
-	struct page **pages;
-	size_t npages;
+struct ipu_dma_buf_attachment {
+	struct sg_table sgt;
+	enum dma_data_direction dir;
+	struct ipu_psys_kbuffer *kbuf;
 };
 
 struct ipu_psys_kbuffer {
 	u64 len;
-	void *userptr;
+	u64 userptr;
 	u32 flags;
-	int fd;
-	void *kaddr;
-	struct list_head list;
-	dma_addr_t dma_addr;
-	struct sg_table *sgt;
-	struct dma_buf_attachment *db_attach;
 	struct dma_buf *dbuf;
-	bool valid;	/* True when buffer is usable */
+
+	struct page **pages;
+	size_t npages;
 };
 
-#define inode_to_ipu_psys(inode) \
-	container_of((inode)->i_cdev, struct ipu_psys, cdev)
-
-#ifdef CONFIG_COMPAT
-long ipu_psys_compat_ioctl32(struct file *file, unsigned int cmd,
-			     unsigned long arg);
-#endif
+static inline struct device *psys_to_device(struct ipu_psys *psys)
+{
+	return &psys->adev->auxdev.dev;
+}
 
 void ipu_psys_setup_hw(struct ipu_psys *psys);
 void ipu_psys_subdomains_power(struct ipu_psys *psys, bool on);
 void ipu_psys_handle_events(struct ipu_psys *psys);
-int ipu_psys_kcmd_new(struct ipu_psys_command *cmd, struct ipu_psys_fh *fh);
+int ipu_psys_kcmd_new(struct ipu_psys_command *cmd,
+		      struct ipu_bus_device *adev,
+		      struct isp_obj_instance *isp_instance,
+		      struct isp_obj_buffer **isp_buffers);
 void ipu_psys_run_next(struct ipu_psys *psys);
 struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size);
-struct ipu_psys_kbuffer *
-ipu_psys_lookup_kbuffer(struct ipu_psys_fh *fh, int fd);
-int ipu_psys_mapbuf_locked(int fd, struct ipu_psys_fh *fh,
-			   struct ipu_psys_kbuffer *kbuf);
-struct ipu_psys_kbuffer *
-ipu_psys_lookup_kbuffer_by_kaddr(struct ipu_psys_fh *fh, void *kaddr);
 #ifdef IPU_PSYS_GPC
 int ipu_psys_gpc_init_debugfs(struct ipu_psys *psys);
 #endif
 int ipu_psys_resource_pool_init(struct ipu_psys_resource_pool *pool);
 void ipu_psys_resource_pool_cleanup(struct ipu_psys_resource_pool *pool);
-struct ipu_psys_kcmd *ipu_get_completed_kcmd(struct ipu_psys_fh *fh);
+struct ipu_psys_kcmd *
+ipu_get_completed_kcmd(struct ipu_isp_psys_instance *instance);
 long ipu_ioctl_dqevent(struct ipu_psys_event *event,
-		       struct ipu_psys_fh *fh, unsigned int f_flags);
+		       struct ipu_isp_psys_instance *instance);
 
+long ipu_get_manifest(struct ipu_psys_manifest *manifest,
+		      struct ipu_psys *psys);
+
+int ipu_psys_instance_init(struct ipu_isp_psys_instance *instance);
+int ipu_psys_instance_deinit(struct ipu_isp_psys_instance *instance);
+
+int register_psys_driver(void);
+void unregister_psys_driver(void);
 #endif /* IPU_PSYS_H */

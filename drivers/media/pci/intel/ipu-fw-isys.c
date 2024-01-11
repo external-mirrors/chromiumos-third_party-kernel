@@ -103,7 +103,7 @@ static int handle_proxy_response(struct ipu_isys *isys, unsigned int req_id)
 	if (!resp)
 		return 1;
 
-	dev_dbg(&isys->adev->dev,
+	dev_dbg(isys_to_device(isys),
 		"Proxy response: id 0x%x, error %d, details %d\n",
 		resp->request_id, resp->error_info.error,
 		resp->error_info.error_details);
@@ -126,7 +126,7 @@ int ipu_fw_isys_send_proxy_token(struct ipu_isys *isys,
 	unsigned int timeout = 1000;
 	int rval = -EBUSY;
 
-	dev_dbg(&isys->adev->dev,
+	dev_dbg(isys_to_device(isys),
 		"proxy send token: req_id 0x%x, index %d, offset 0x%x, value 0x%x\n",
 		req_id, index, offset, value);
 
@@ -147,7 +147,7 @@ int ipu_fw_isys_send_proxy_token(struct ipu_isys *isys,
 		if (!rval)
 			break;
 		if (rval == -EIO) {
-			dev_err(&isys->adev->dev,
+			dev_err(isys_to_device(isys),
 				"Proxy response received with unexpected id\n");
 			break;
 		}
@@ -155,7 +155,7 @@ int ipu_fw_isys_send_proxy_token(struct ipu_isys *isys,
 	} while (rval && timeout);
 
 	if (!timeout)
-		dev_err(&isys->adev->dev, "Proxy response timed out\n");
+		dev_err(isys_to_device(isys), "Proxy response timed out\n");
 leave:
 	return rval;
 }
@@ -173,7 +173,7 @@ ipu_fw_isys_complex_cmd(struct ipu_isys *isys,
 	if (send_type >= N_IPU_FW_ISYS_SEND_TYPE)
 		return -EINVAL;
 
-	dev_dbg(&isys->adev->dev, "send_token: %s\n",
+	dev_dbg(isys_to_device(isys), "send_token: %s\n",
 		send_msg_types[send_type]);
 
 	/*
@@ -207,7 +207,7 @@ int ipu_fw_isys_simple_cmd(struct ipu_isys *isys,
 
 int ipu_fw_isys_close(struct ipu_isys *isys)
 {
-	struct device *dev = &isys->adev->dev;
+	struct device *dev = isys_to_device(isys);
 	int timeout = IPU_ISYS_TURNOFF_TIMEOUT;
 	int rval;
 	unsigned long flags;
@@ -251,7 +251,7 @@ void ipu_fw_isys_cleanup(struct ipu_isys *isys)
 
 	ret = ipu_fw_com_release(isys->fwcom, 1);
 	if (ret < 0)
-		dev_err(&isys->adev->dev,
+		dev_err(isys_to_device(isys),
 			"Device busy, fw_com release failed.");
 	isys->fwcom = NULL;
 }
@@ -317,7 +317,7 @@ static int ipu6_isys_fwcom_cfg_init(struct ipu_isys *isys,
 
 	num_in_message_queues = clamp_t(unsigned int, num_streams, 1,
 					max_streams);
-	isys_fw_cfg = devm_kzalloc(&isys->adev->dev, sizeof(*isys_fw_cfg),
+	isys_fw_cfg = devm_kzalloc(isys_to_device(isys), sizeof(*isys_fw_cfg),
 				   GFP_KERNEL);
 	if (!isys_fw_cfg)
 		return -ENOMEM;
@@ -336,12 +336,12 @@ static int ipu6_isys_fwcom_cfg_init(struct ipu_isys *isys,
 		num_out_message_queues;
 
 	size = sizeof(*input_queue_cfg) * max_send_queues;
-	input_queue_cfg = devm_kzalloc(&isys->adev->dev, size, GFP_KERNEL);
+	input_queue_cfg = devm_kzalloc(isys_to_device(isys), size, GFP_KERNEL);
 	if (!input_queue_cfg)
 		return -ENOMEM;
 
 	size = sizeof(*output_queue_cfg) * IPU_N_MAX_RECV_QUEUES;
-	output_queue_cfg = devm_kzalloc(&isys->adev->dev, size, GFP_KERNEL);
+	output_queue_cfg = devm_kzalloc(isys_to_device(isys), size, GFP_KERNEL);
 	if (!output_queue_cfg)
 		return -ENOMEM;
 
@@ -419,7 +419,7 @@ int ipu_fw_isys_init(struct ipu_isys *isys, unsigned int num_streams)
 		.buttress_boot_offset = SYSCOM_BUTTRESS_FW_PARAMS_ISYS_OFFSET,
 	};
 
-	struct device *dev = &isys->adev->dev;
+	struct device *dev = isys_to_device(isys);
 	int rval;
 
 	ipu6_isys_fwcom_cfg_init(isys, &fwcom, num_streams);

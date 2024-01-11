@@ -41,7 +41,7 @@ static int queue_setup(struct vb2_queue *q,
 		if (use_fmt)
 			sizes[i] = av->mpix.plane_fmt[i].sizeimage;
 		alloc_devs[i] = aq->dev;
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"%s: queue setup: plane %d size %u\n",
 			av->vdev.name, i, sizes[i]);
 	}
@@ -54,7 +54,7 @@ static void ipu_isys_queue_lock(struct vb2_queue *q)
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(q);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
 
-	dev_dbg(&av->isys->adev->dev, "%s: queue lock\n", av->vdev.name);
+	dev_dbg(isys_to_device(av->isys), "%s: queue lock\n", av->vdev.name);
 	mutex_lock(&av->mutex);
 }
 
@@ -63,7 +63,7 @@ static void ipu_isys_queue_unlock(struct vb2_queue *q)
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(q);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
 
-	dev_dbg(&av->isys->adev->dev, "%s: queue unlock\n", av->vdev.name);
+	dev_dbg(isys_to_device(av->isys), "%s: queue unlock\n", av->vdev.name);
 	mutex_unlock(&av->mutex);
 }
 
@@ -72,7 +72,7 @@ static int buf_init(struct vb2_buffer *vb)
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(vb->vb2_queue);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
 
-	dev_dbg(&av->isys->adev->dev, "buffer: %s: %s\n", av->vdev.name,
+	dev_dbg(isys_to_device(av->isys), "buffer: %s: %s\n", av->vdev.name,
 		__func__);
 
 	if (aq->buf_init)
@@ -86,7 +86,7 @@ int ipu_isys_buf_prepare(struct vb2_buffer *vb)
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(vb->vb2_queue);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
 
-	dev_dbg(&av->isys->adev->dev,
+	dev_dbg(isys_to_device(av->isys),
 		"buffer: %s: configured size %u, buffer size %lu\n",
 		av->vdev.name,
 		av->mpix.plane_fmt[0].sizeimage, vb2_plane_size(vb, 0));
@@ -119,7 +119,7 @@ static void buf_finish(struct vb2_buffer *vb)
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(vb->vb2_queue);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
 
-	dev_dbg(&av->isys->adev->dev, "buffer: %s: %s\n", av->vdev.name,
+	dev_dbg(isys_to_device(av->isys), "buffer: %s: %s\n", av->vdev.name,
 		__func__);
 
 }
@@ -129,7 +129,7 @@ static void buf_cleanup(struct vb2_buffer *vb)
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(vb->vb2_queue);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
 
-	dev_dbg(&av->isys->adev->dev, "buffer: %s: %s\n", av->vdev.name,
+	dev_dbg(isys_to_device(av->isys), "buffer: %s: %s\n", av->vdev.name,
 		__func__);
 
 	if (aq->buf_cleanup)
@@ -195,7 +195,7 @@ void ipu_isys_buffer_list_queue(struct ipu_isys_buffer_list *bl,
 		}
 
 		if (first) {
-			dev_dbg(&av->isys->adev->dev,
+			dev_dbg(isys_to_device(av->isys),
 				"queue buf list %p flags %lx, s %d, %d bufs\n",
 				bl, op_flags, state, bl->nbufs);
 			first = false;
@@ -232,7 +232,7 @@ static void flush_firmware_streamon_fail(struct ipu_isys_pipeline *ip)
 
 			list_del(&ib->head);
 			if (av->streaming) {
-				dev_dbg(&av->isys->adev->dev,
+				dev_dbg(isys_to_device(av->isys),
 					"%s: queue buffer %u back to incoming\n",
 					av->vdev.name,
 					vb->index);
@@ -241,7 +241,7 @@ static void flush_firmware_streamon_fail(struct ipu_isys_pipeline *ip)
 				continue;
 			}
 			/* Queue not yet streaming, return to user. */
-			dev_dbg(&av->isys->adev->dev,
+			dev_dbg(isys_to_device(av->isys),
 				"%s: return %u back to videobuf2\n",
 				av->vdev.name,
 				vb->index);
@@ -287,7 +287,7 @@ static int buffer_list_get(struct ipu_isys_pipeline *ip,
 			goto error;
 		}
 
-		dev_dbg(&ip->isys->adev->dev, "buffer: %s: buffer %u\n",
+		dev_dbg(isys_to_device(ip->isys), "buffer: %s: buffer %u\n",
 			ipu_isys_queue_to_video(aq)->vdev.name,
 			ipu_isys_buffer_to_vb2_buffer(ib)->index
 		    );
@@ -312,7 +312,7 @@ static int buffer_list_get(struct ipu_isys_pipeline *ip,
 		ib = ipu_isys_csi2_get_short_packet_buffer(ip, bl);
 		if (!ib) {
 			ret = -ENODATA;
-			dev_err(&ip->isys->adev->dev,
+			dev_err(isys_to_device(ip->isys),
 				"No more short packet buffers. Driver bug?");
 			WARN_ON(1);
 			goto error;
@@ -320,7 +320,8 @@ static int buffer_list_get(struct ipu_isys_pipeline *ip,
 		bl->nbufs++;
 	}
 
-	dev_dbg(&ip->isys->adev->dev, "get buffer list %p, %u buffers\n", bl,
+	dev_dbg(isys_to_device(ip->isys), "get buffer list %p, %u buffers\n",
+		bl,
 		bl->nbufs);
 	return ret;
 
@@ -446,7 +447,8 @@ static int ipu_isys_stream_start(struct ipu_isys_pipeline *ip,
 
 		ipu_isys_buffer_to_fw_frame_buff(buf, ip, bl);
 
-		ipu_fw_isys_dump_frame_buff_set(&pipe_av->isys->adev->dev, buf,
+		ipu_fw_isys_dump_frame_buff_set(isys_to_device(pipe_av->isys),
+						buf,
 						ip->nr_output_pins);
 
 		ipu_isys_buffer_list_queue(bl,
@@ -493,13 +495,14 @@ static void buf_queue(struct vb2_buffer *vb)
 	unsigned int i;
 	int rval;
 
-	dev_dbg(&av->isys->adev->dev, "buffer: %s: buf_queue %u\n",
+	dev_dbg(isys_to_device(av->isys), "buffer: %s: buf index %u\n",
 		av->vdev.name,
 		vb->index
 	    );
 
 	for (i = 0; i < vb->num_planes; i++)
-		dev_dbg(&av->isys->adev->dev, "iova: plane %u iova 0x%x\n", i,
+		dev_dbg(isys_to_device(av->isys), "iova: plane %u iova 0x%x\n",
+			i,
 			(u32)vb2_dma_contig_plane_dma_addr(vb, i));
 
 	spin_lock_irqsave(&aq->lock, flags);
@@ -510,7 +513,7 @@ static void buf_queue(struct vb2_buffer *vb)
 		return;
 
 	if (!pipe_av || !vb->vb2_queue->streaming) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"not pipe_av set, adding to incoming\n");
 		return;
 	}
@@ -519,7 +522,7 @@ static void buf_queue(struct vb2_buffer *vb)
 	mutex_lock(&pipe_av->mutex);
 
 	if (ip->nr_streaming != ip->nr_queues) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"not streaming yet, adding to incoming\n");
 		goto out;
 	}
@@ -532,11 +535,11 @@ static void buf_queue(struct vb2_buffer *vb)
 	rval = buffer_list_get(ip, &bl);
 	if (rval < 0) {
 		if (rval == -EINVAL) {
-			dev_err(&av->isys->adev->dev,
+			dev_err(isys_to_device(av->isys),
 				"error: should not happen\n");
 			WARN_ON(1);
 		} else {
-			dev_dbg(&av->isys->adev->dev,
+			dev_dbg(isys_to_device(av->isys),
 				"not enough buffers available\n");
 		}
 		goto out;
@@ -551,15 +554,15 @@ static void buf_queue(struct vb2_buffer *vb)
 
 	ipu_isys_buffer_to_fw_frame_buff(buf, ip, &bl);
 
-	ipu_fw_isys_dump_frame_buff_set(&pipe_av->isys->adev->dev, buf,
+	ipu_fw_isys_dump_frame_buff_set(isys_to_device(pipe_av->isys), buf,
 					ip->nr_output_pins);
 
 	if (!ip->streaming) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"got a buffer to start streaming!\n");
 		rval = ipu_isys_stream_start(ip, &bl, true);
 		if (rval)
-			dev_err(&av->isys->adev->dev,
+			dev_err(isys_to_device(av->isys),
 				"stream start failed.\n");
 		goto out;
 	}
@@ -578,7 +581,7 @@ static void buf_queue(struct vb2_buffer *vb)
 				       sizeof(*buf),
 				       IPU_FW_ISYS_SEND_TYPE_STREAM_CAPTURE);
 	if (!WARN_ON(rval < 0))
-		dev_dbg(&av->isys->adev->dev, "queued buffer\n");
+		dev_dbg(isys_to_device(av->isys), "queued buffer\n");
 
 out:
 	mutex_unlock(&pipe_av->mutex);
@@ -594,7 +597,7 @@ int ipu_isys_link_fmt_validate(struct ipu_isys_queue *aq)
 	int rval;
 
 	if (!pad) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"video node %s pad not connected\n", av->vdev.name);
 		return -ENOTCONN;
 	}
@@ -609,7 +612,7 @@ int ipu_isys_link_fmt_validate(struct ipu_isys_queue *aq)
 
 	if (fmt.format.width != av->mpix.width ||
 	    fmt.format.height != av->mpix.height) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"wrong width or height %ux%u (%ux%u expected)\n",
 			av->mpix.width, av->mpix.height,
 			fmt.format.width, fmt.format.height);
@@ -617,14 +620,14 @@ int ipu_isys_link_fmt_validate(struct ipu_isys_queue *aq)
 	}
 
 	if (fmt.format.field != av->mpix.field) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"wrong field value 0x%8.8x (0x%8.8x expected)\n",
 			av->mpix.field, fmt.format.field);
 		return -EINVAL;
 	}
 
 	if (fmt.format.code != av->pfmt->code) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"wrong media bus code 0x%8.8x (0x%8.8x expected)\n",
 			av->pfmt->code, fmt.format.code);
 		return -EINVAL;
@@ -654,7 +657,7 @@ static void return_buffers(struct ipu_isys_queue *aq,
 
 		vb2_buffer_done(vb, state);
 
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"%s: stop_streaming incoming %u\n",
 			ipu_isys_queue_to_video(vb2_queue_to_ipu_isys_queue
 						(vb->vb2_queue))->vdev.name,
@@ -680,7 +683,7 @@ static void return_buffers(struct ipu_isys_queue *aq,
 
 		vb2_buffer_done(vb, state);
 
-		dev_warn(&av->isys->adev->dev, "%s: cleaning active queue %u\n",
+		dev_warn(isys_to_device(av->isys), "%s: cleaning active queue %u\n",
 			 ipu_isys_queue_to_video(vb2_queue_to_ipu_isys_queue
 						 (vb->vb2_queue))->vdev.name,
 			 vb->index);
@@ -708,7 +711,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 	bool first;
 	int rval;
 
-	dev_dbg(&av->isys->adev->dev,
+	dev_dbg(isys_to_device(av->isys),
 		"stream: %s: width %u, height %u, css pixelformat %u\n",
 		av->vdev.name, av->mpix.width, av->mpix.height,
 		av->pfmt->css_pixelformat);
@@ -727,7 +730,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 
 	rval = aq->link_fmt_validate(aq);
 	if (rval) {
-		dev_dbg(&av->isys->adev->dev,
+		dev_dbg(isys_to_device(av->isys),
 			"%s: link format validation failed (%d)\n",
 			av->vdev.name, rval);
 		goto out_unprepare_streaming;
@@ -739,7 +742,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 
 	mutex_lock(&pipe_av->mutex);
 	ip->nr_streaming++;
-	dev_dbg(&av->isys->adev->dev, "queue %u of %u\n", ip->nr_streaming,
+	dev_dbg(isys_to_device(av->isys), "queue %u of %u\n", ip->nr_streaming,
 		ip->nr_queues);
 	list_add(&aq->node, &ip->queues);
 	if (ip->nr_streaming != ip->nr_queues)
@@ -751,7 +754,7 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 		if (rval == -EINVAL) {
 			goto out_stream_start;
 		} else if (rval < 0) {
-			dev_dbg(&av->isys->adev->dev,
+			dev_dbg(isys_to_device(av->isys),
 				"no request available, postponing streamon\n");
 			goto out;
 		}
@@ -836,18 +839,18 @@ get_sof_sequence_by_timestamp(struct ipu_isys_pipeline *ip,
 
 	for (i = 0; i < IPU_ISYS_MAX_PARALLEL_SOF; i++)
 		if (time == ip->seq[i].timestamp) {
-			dev_dbg(&isys->adev->dev,
+			dev_dbg(isys_to_device(isys),
 				"sof: using seq nr %u for ts 0x%16.16llx\n",
 				ip->seq[i].sequence, time);
 			return ip->seq[i].sequence;
 		}
 
-	dev_dbg(&isys->adev->dev, "SOF: looking for 0x%16.16llx\n", time);
+	dev_dbg(isys_to_device(isys), "SOF: looking for 0x%16.16llx\n", time);
 	for (i = 0; i < IPU_ISYS_MAX_PARALLEL_SOF; i++)
-		dev_dbg(&isys->adev->dev,
+		dev_dbg(isys_to_device(isys),
 			"SOF: sequence %u, timestamp value 0x%16.16llx\n",
 			ip->seq[i].sequence, ip->seq[i].timestamp);
-	dev_dbg(&isys->adev->dev, "SOF sequence number not found\n");
+	dev_dbg(isys_to_device(isys), "SOF sequence number not found\n");
 
 	return 0;
 }
@@ -855,7 +858,7 @@ get_sof_sequence_by_timestamp(struct ipu_isys_pipeline *ip,
 static u64 get_sof_ns_delta(struct ipu_isys_video *av,
 			    struct ipu_fw_isys_resp_info_abi *info)
 {
-	struct ipu_bus_device *adev = to_ipu_bus_device(&av->isys->adev->dev);
+	struct ipu_bus_device *adev = to_ipu_bus_device(isys_to_device(av->isys));
 	struct ipu_device *isp = adev->isp;
 	u64 delta, tsc_now;
 
@@ -876,7 +879,7 @@ ipu_isys_buf_calc_sequence_time(struct ipu_isys_buffer *ib,
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct ipu_isys_queue *aq = vb2_queue_to_ipu_isys_queue(vb->vb2_queue);
 	struct ipu_isys_video *av = ipu_isys_queue_to_video(aq);
-	struct device *dev = &av->isys->adev->dev;
+	struct device *dev = isys_to_device(av->isys);
 	struct media_pipeline *mp = media_entity_pipeline(&av->vdev.entity);
 	struct ipu_isys_pipeline *ip = to_ipu_isys_pipeline(mp);
 	u64 ns;
@@ -930,13 +933,13 @@ void ipu_isys_queue_buf_ready(struct ipu_isys_pipeline *ip,
 	bool first = true;
 	struct vb2_v4l2_buffer *buf;
 
-	dev_dbg(&isys->adev->dev, "buffer: %s: received buffer %8.8x\n",
+	dev_dbg(isys_to_device(isys), "buffer: %s: received buffer %8.8x\n",
 		ipu_isys_queue_to_video(aq)->vdev.name, info->pin.addr);
 
 	spin_lock_irqsave(&aq->lock, flags);
 	if (list_empty(&aq->active)) {
 		spin_unlock_irqrestore(&aq->lock, flags);
-		dev_err(&isys->adev->dev, "active queue empty\n");
+		dev_err(isys_to_device(isys), "active queue empty\n");
 		return;
 	}
 
@@ -948,7 +951,7 @@ void ipu_isys_queue_buf_ready(struct ipu_isys_pipeline *ip,
 
 		if (info->pin.addr != addr) {
 			if (first)
-				dev_err(&isys->adev->dev,
+				dev_err(isys_to_device(isys),
 					"WARN: buffer address %pad expected!\n",
 					&addr);
 			first = false;
@@ -963,7 +966,8 @@ void ipu_isys_queue_buf_ready(struct ipu_isys_pipeline *ip,
 			 */
 			atomic_set(&ib->str2mmio_flag, 1);
 		}
-		dev_dbg(&isys->adev->dev, "buffer: found buffer %pad\n", &addr);
+		dev_dbg(isys_to_device(isys), "buffer: found buffer %pad\n",
+			&addr);
 
 		buf = to_vb2_v4l2_buffer(vb);
 		buf->field = V4L2_FIELD_NONE;
@@ -990,7 +994,7 @@ void ipu_isys_queue_buf_ready(struct ipu_isys_pipeline *ip,
 		return;
 	}
 
-	dev_err(&isys->adev->dev,
+	dev_err(isys_to_device(isys),
 		"WARNING: cannot find a matching video buffer!\n");
 
 	spin_unlock_irqrestore(&aq->lock, flags);
@@ -1004,7 +1008,7 @@ ipu_isys_queue_short_packet_ready(struct ipu_isys_pipeline *ip,
 	    container_of(ip, struct ipu_isys_video, ip)->isys;
 	unsigned long flags;
 
-	dev_dbg(&isys->adev->dev, "receive short packet buffer %8.8x\n",
+	dev_dbg(isys_to_device(isys), "receive short packet buffer %8.8x\n",
 		info->pin.addr);
 	spin_lock_irqsave(&ip->short_packet_queue_lock, flags);
 	ip->cur_field = ipu_isys_csi2_get_current_field(ip, info->timestamp);
@@ -1041,8 +1045,8 @@ int ipu_isys_queue_init(struct ipu_isys_queue *aq)
 	if (rval)
 		return rval;
 
-	aq->dev = &isys->adev->dev;
-	aq->vbq.dev = &isys->adev->dev;
+	aq->dev = isys_to_device(isys);
+	aq->vbq.dev = isys_to_device(isys);
 	spin_lock_init(&aq->lock);
 	INIT_LIST_HEAD(&aq->active);
 	INIT_LIST_HEAD(&aq->incoming);
