@@ -11,8 +11,8 @@ steps:
         virtme-configkernel --defconfig
         ./scripts/config -e ISP_VIRTUAL_DEVICE -e ISP
         ./scripts/config -e PROVE_LOCKING -e DEBUG_ATOMIC_SLEEP -e UNWINDER_ORC -e DEBUG_INFO -e DEBUG_INFO_REDUCED
-        ./scripts/config -e MEDIA_SUPPORT -e MEDIA_TEST_SUPPORT -e V4L_TEST_DRIVERS
-        ./scripts/config -m VIDEO_VIMC -m VIDEO_VIVID -m VIDEO_VIM2M
+        ./scripts/config -d MEDIA_SUPPORT -d MEDIA_TEST_SUPPORT -d V4L_TEST_DRIVERS
+        ./scripts/config -d VIDEO_VIMC -d VIDEO_VIVID -d VIDEO_VIM2M
         ./scripts/config -d CONFIG_SOUND -d CONFIG_X86_PLATFORM_DEVICES -d CONFIG_SURFACE_PLATFORMS -d CONFIG_WLAN -d CONFIG_DRM_I915 -d CONFIG_DRM
         ./scripts/config -d CONFIG_LOGO -d CONFIG_MACINTOSH_DRIVERS -d CONFIG_MQ_IOSCHED_KYBER -d CONFIG_KVM -d CONFIG_VIRTUALIZATION
         ./scripts/config -d CONFIG_ISO9660_FS -d CONFIG_MISC_FILESYSTEMS -d CONFIG_NFS_FS -d CONFIG_ROOT_NFS
