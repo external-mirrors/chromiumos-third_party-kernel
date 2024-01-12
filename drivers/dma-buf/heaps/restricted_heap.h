@@ -17,6 +17,8 @@ struct restricted_heap {
 	const char		*name;
 
 	const struct restricted_heap_ops *ops;
+
+	void			*priv_data;
 };
 
 struct restricted_heap_ops {
