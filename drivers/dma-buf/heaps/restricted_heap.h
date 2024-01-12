@@ -15,6 +15,18 @@ struct restricted_buffer {
 
 struct restricted_heap {
 	const char		*name;
+
+	const struct restricted_heap_ops *ops;
+};
+
+struct restricted_heap_ops {
+	int	(*heap_init)(struct restricted_heap *heap);
+
+	int	(*memory_alloc)(struct restricted_heap *heap, struct restricted_buffer *buf);
+	void	(*memory_free)(struct restricted_heap *heap, struct restricted_buffer *buf);
+
+	int	(*memory_restrict)(struct restricted_heap *heap, struct restricted_buffer *buf);
+	void	(*memory_unrestrict)(struct restricted_heap *heap, struct restricted_buffer *buf);
 };
 
 int restricted_heap_add(struct restricted_heap *rstrd_heap);
