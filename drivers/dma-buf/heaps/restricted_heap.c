@@ -96,8 +96,23 @@ static struct sg_table *
 restricted_heap_map_dma_buf(struct dma_buf_attachment *attachment, enum dma_data_direction direct)
 {
 	struct restricted_heap_attachment *a = attachment->priv;
+	struct dma_buf *dmabuf = attachment->dmabuf;
+	struct restricted_buffer *restricted_buf = dmabuf->priv;
 	struct sg_table *table = a->table;
 
+	/*
+	 * Technically dma_address refers to the address used by HW, But for restricted buffer
+	 * we don't know its dma_address in kernel, Instead, we may know its restricted address
+	 * which refers to the real buffer in the trusted or secure world. Here use this property
+	 * to save the restricted address, and the user will use it to obtain the real address in
+	 * trusted or secure world.
+	 *
+	 * Note: CONFIG_DMA_API_DEBUG requires this to be aligned with PAGE_SIZE.
+	 */
+	if (restricted_buf->restricted_addr) {
+		sg_dma_address(table->sgl) = restricted_buf->restricted_addr;
+		sg_dma_len(table->sgl) = restricted_buf->size;
+	}
 	return table;
 }
 
@@ -108,6 +123,8 @@ restricted_heap_unmap_dma_buf(struct dma_buf_attachment *attachment, struct sg_t
 	struct restricted_heap_attachment *a = attachment->priv;
 
 	WARN_ON(a->table != table);
+	sg_dma_address(table->sgl) = 0;
+	sg_dma_len(table->sgl) = 0;
 }
 
 static int

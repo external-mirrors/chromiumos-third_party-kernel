@@ -11,6 +11,9 @@
 struct restricted_buffer {
 	struct dma_heap		*heap;
 	size_t			size;
+
+	/* A reference to a buffer in the trusted or secure world. */
+	u64			restricted_addr;
 };
 
 struct restricted_heap {
