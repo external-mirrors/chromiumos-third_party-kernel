@@ -2221,11 +2221,6 @@ static int mtk_thermal_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mt);
 
-	tzdev = devm_thermal_of_zone_register(&pdev->dev, 0, mt,
-					      &mtk_thermal_ops);
-	if (IS_ERR(tzdev))
-		return PTR_ERR(tzdev);
-
 	for (i = 0; i < mt->conf->num_sensors + 1; i++) {
 		tz = kmalloc(sizeof(*tz), GFP_KERNEL);
 		if (!tz)
