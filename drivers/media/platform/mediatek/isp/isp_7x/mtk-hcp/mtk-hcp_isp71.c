@@ -205,6 +205,14 @@ static phys_addr_t isp71_get_reserve_mem_phys(unsigned int id)
 	}
 }
 
+static void *isp71_get_reserve_mem_virt(unsigned int id)
+{
+	if (id >= NUMS_MEM_ID)
+		return NULL;
+	else
+		return mb[id].start_virt;
+}
+
 static phys_addr_t isp71_get_reserve_mem_dma(unsigned int id)
 {
 	if (id >= NUMS_MEM_ID) {
@@ -489,6 +497,7 @@ struct mtk_hcp_data isp71_hcp_data = {
 	.get_init_info = isp71_get_init_info,
 	.get_gce_virt = isp71_get_gce_virt,
 	.get_gce_mem_size = isp71_get_gce_mem_size,
+	.get_reserve_mem_virt = isp71_get_reserve_mem_virt,
 };
 EXPORT_SYMBOL_GPL(isp71_hcp_data);
 

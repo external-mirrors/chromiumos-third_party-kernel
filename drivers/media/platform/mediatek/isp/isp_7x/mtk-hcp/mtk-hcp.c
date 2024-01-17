@@ -233,6 +233,29 @@ struct platform_device *mtk_hcp_get_plat_device(struct platform_device *pdev)
 }
 EXPORT_SYMBOL(mtk_hcp_get_plat_device);
 
+void *mtk_hcp_get_reserve_mem_virt(struct platform_device *pdev, unsigned int id)
+{
+	struct mtk_hcp *hcp_dev = platform_get_drvdata(pdev);
+	void *buffer;
+
+	if ((id < 0) || (id >= NUMS_MEM_ID)) {
+		pr_info("[HCP] no reserve memory for %d", id);
+		return 0;
+	} else {
+		if (!hcp_dev->data->get_reserve_mem_virt) {
+			dev_info(&pdev->dev, "%s: not supported\n", __func__);
+			return NULL;
+		}
+
+		buffer = hcp_dev->data->get_reserve_mem_virt(id);
+		if (!buffer)
+			dev_info(&pdev->dev, "%s: get_reserve_mem_virt is null for id:%u\n", __func__, id);
+
+		return buffer;
+	}
+}
+EXPORT_SYMBOL(mtk_hcp_get_reserve_mem_virt);
+
 void *mtk_hcp_get_gce_mem_virt(struct platform_device *pdev)
 {
 	struct mtk_hcp *hcp_dev = platform_get_drvdata(pdev);

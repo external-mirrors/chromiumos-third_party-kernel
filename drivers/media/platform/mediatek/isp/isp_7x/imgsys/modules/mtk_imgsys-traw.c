@@ -12,6 +12,9 @@
 #include <linux/remoteproc.h>
 #include <dt-bindings/memory/mtk-memory-port.h>
 
+#include "mtk-hcp.h"
+#include "mtk-hcp_isp71.h"
+#include "../mtk_imgsys-debug.h"
 #include "../mtk_imgsys-engine.h"
 #include "mtk_imgsys-traw.h"
 
@@ -25,6 +28,7 @@
 #define TRAW_DMA_ADDR_END		0x5300
 #define TRAW_DATA_ADDR_OFST		0x8000
 #define TRAW_MAX_ADDR_OFST		0xBD00
+#define TRAW_REG_RANGE			0xC000
 
 #define TRAW_HW_SET		3
 #define WPE_HW_SET		3
@@ -606,6 +610,61 @@ void imgsys_traw_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int engi
 	imgsys_traw_dump_smto(imgsys_dev, traw_reg_ba, TRAW_CTL_DBG_SEL, TRAW_CTL_DBG_PORT);
 }
 EXPORT_SYMBOL_GPL(imgsys_traw_debug_dump);
+
+void imgsys_traw_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
+			  struct imgsys_ndd_frm_dump_info *frm_dump_info)
+{
+	const char *traw_name;
+	char file_name[NDD_FP_SIZE] = "\0";
+	ssize_t ret;
+	void *cq_va;
+
+	if (frm_dump_info->eng_e > IMGSYS_NDD_ENG_XTR ||
+	    frm_dump_info->eng_e < IMGSYS_NDD_ENG_TRAW)
+		return;
+
+	switch (frm_dump_info->eng_e) {
+	case IMGSYS_NDD_ENG_TRAW:
+		traw_name = frm_dump_info->user_buffer ?
+			"REG_TRAW_traw.reg" : "REG_TRAW_traw.regKernel";
+		break;
+	case IMGSYS_NDD_ENG_LTR:
+		traw_name = frm_dump_info->user_buffer ?
+			"REG_LTRAW_ltraw.reg" : "REG_LTRAW_ltraw.regKernel";
+		break;
+	case IMGSYS_NDD_ENG_XTR:
+		traw_name = frm_dump_info->user_buffer ?
+			"REG_XTRAW_xtraw.reg" : "REG_XTRAW_xtraw.regKernel";
+		break;
+	default:
+		return;
+	}
+
+	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, TRAW_MEM_C_ID);
+	if (!cq_va)
+		return;
+
+	cq_va += frm_dump_info->cq_ofst[frm_dump_info->eng_e];
+
+	ret = snprintf(file_name, sizeof(file_name), "%s%s", frm_dump_info->fp, traw_name);
+	if (ret < 0 || ret >= sizeof(file_name)) {
+		dev_err(imgsys_dev->dev, "wrong traw ndd file name %s\n", file_name);
+		return;
+	}
+
+	if (frm_dump_info->user_buffer) {
+		ret = copy_to_user(frm_dump_info->user_buffer, file_name, sizeof(file_name));
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += sizeof(file_name);
+
+		ret = copy_to_user(frm_dump_info->user_buffer, cq_va, TRAW_REG_RANGE);
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += TRAW_REG_RANGE;
+	}
+}
+EXPORT_SYMBOL_GPL(imgsys_traw_ndd_dump);
 
 void imgsys_traw_uninit(struct mtk_imgsys_dev *imgsys_dev)
 {

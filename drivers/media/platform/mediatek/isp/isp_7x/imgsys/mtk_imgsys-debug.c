@@ -6,12 +6,162 @@
  *
  */
 
+#include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/of_address.h>
 #include <linux/pm_runtime.h>
 #include <linux/remoteproc.h>
+#include <linux/uaccess.h>
+
 #include "mtk_imgsys-engine.h"
 #include "mtk_imgsys-debug.h"
+
+static DEFINE_MUTEX(ndd_mutex);
+
+struct ndd_swfrm_info_t {
+	struct mtk_imgsys_dev *imgsys_dev;
+	struct swfrm_info_t *gwfrm_info;
+	struct list_head list;
+} __packed;
+
+LIST_HEAD(ndd_swfrm_list);
+
+#define DEBUGFS_DIR "mtk_imgsys_debug"
+#define DEBUGFS_FILE "mtk_imgsys_ndd"
+#define FILE_PERMISSIONS 0644
+
+static struct dentry *debugfs_dir, *debugfs_file;
+
+#define WPE_ENG_NUM	3
+#define TRAW_ENG_NUM	3
+#define DIP_ENG_NUM	1
+#define PQDIP_ENG_NUM	2
+#define ME_ENG_NUM	1
+
+#define WPE_NDD_SIZE	0x1000
+#define TRAW_NDD_SIZE	0xC000
+#define DIP_NDD_SIZE	0x5F000
+#define PQDIP_NDD_SIZE	0x6000
+#define ME_NDD_SIZE	0xA20
+
+struct ndd_request_t {
+	int fd;
+	int total_frmnum;
+} __packed;
+
+static struct ndd_request_t ndd_request;
+
+struct ndd_wpe_info_t {
+	char fp[NDD_FP_SIZE];
+	u8 data[WPE_NDD_SIZE];
+};
+
+struct ndd_traw_info_t {
+	char fp[NDD_FP_SIZE];
+	u8 data[TRAW_NDD_SIZE];
+};
+
+struct ndd_dip_info_t {
+	char fp[NDD_FP_SIZE];
+	u8 data[DIP_NDD_SIZE];
+};
+
+struct ndd_pqdip_info_t {
+	char fp[NDD_FP_SIZE];
+	u8 data[PQDIP_NDD_SIZE];
+};
+
+struct ndd_me_info_t {
+	char fp[NDD_FP_SIZE];
+	u8 data[ME_NDD_SIZE];
+};
+
+struct ndd_frm_info_t {
+	struct ndd_wpe_info_t	wpe[WPE_ENG_NUM];
+	struct ndd_traw_info_t	traw[TRAW_ENG_NUM];
+	struct ndd_dip_info_t	dip[DIP_ENG_NUM];
+	struct ndd_pqdip_info_t	pqdip[PQDIP_ENG_NUM];
+	struct ndd_me_info_t	me[ME_ENG_NUM];
+} __packed;
+
+static ssize_t debugfs_write(struct file *file, const char __user *user_buffer,
+			     size_t count, loff_t *ppos)
+{
+	if (count != sizeof(ndd_request))
+		return -EINVAL;
+
+	if (copy_from_user(&ndd_request, user_buffer, count))
+		return -EFAULT;
+
+	*ppos += count;
+
+	return count;
+}
+
+static ssize_t debugfs_read(struct file *file, char __user *user_buffer, size_t count, loff_t *ppos)
+{
+	struct ndd_swfrm_info_t *cur_ndd_swfrm = NULL, *temp = NULL;
+	struct img_swfrm_info *subfrm_info = NULL;
+	struct imgsys_ndd_frm_dump_info frm_dump_info = { 0 };
+	ssize_t read_count = 0;
+	size_t buffer_size = count;
+	bool found = false;
+	int frm, ret = 0;
+
+	mutex_lock(&ndd_mutex);
+
+	list_for_each_entry_safe(cur_ndd_swfrm, temp, &ndd_swfrm_list, list) {
+		if (cur_ndd_swfrm->gwfrm_info &&
+		    cur_ndd_swfrm->gwfrm_info->request_fd == ndd_request.fd) {
+			found = true;
+			for (frm = 0; frm < cur_ndd_swfrm->gwfrm_info->total_frmnum; frm++) {
+				subfrm_info = &cur_ndd_swfrm->gwfrm_info->user_info[frm];
+				memset(&frm_dump_info, 0, sizeof(frm_dump_info));
+
+				if (buffer_size < sizeof(struct ndd_frm_info_t)) {
+					ret = -ENOMEM;
+					goto out;
+				}
+
+				if (subfrm_info->ndd_fp[0] == '\0')
+					continue;
+
+				frm_dump_info.user_buffer = user_buffer +
+					sizeof(struct ndd_frm_info_t) * frm;
+				frm_dump_info.hw_comb = subfrm_info->hw_comb;
+				frm_dump_info.cq_ofst = subfrm_info->ndd_cq_ofst;
+				frm_dump_info.wpe_psp_ofst = subfrm_info->ndd_wpe_psp_ofst;
+				frm_dump_info.wpe_fp = subfrm_info->ndd_wpe_fp;
+				frm_dump_info.fp = subfrm_info->ndd_fp;
+
+				imgsys_ndd_dump_routine(cur_ndd_swfrm->imgsys_dev, &frm_dump_info);
+				read_count += sizeof(struct ndd_frm_info_t);
+				buffer_size -= sizeof(struct ndd_frm_info_t);
+			}
+
+			complete(cur_ndd_swfrm->gwfrm_info->ndd_user_complete);
+
+			list_del(&cur_ndd_swfrm->list);
+			kfree(cur_ndd_swfrm);
+			cur_ndd_swfrm = NULL;
+			break;
+		}
+	}
+
+	if (!found)
+		ret = -ENOENT;
+out:
+	mutex_unlock(&ndd_mutex);
+
+	return ret == 0 ? read_count : ret;
+}
+
+static const struct file_operations debugfs_fops = {
+	.write = debugfs_write,
+	.read = debugfs_read,
+};
 
 #define DL_CHECK_ENG_NUM 11
 #define WPE_HW_SET    3
@@ -123,6 +273,21 @@ void imgsys_main_init(struct mtk_imgsys_dev *imgsys_dev)
 		adlb_reg_base = NULL;
 		dev_info(imgsys_dev->dev, "%s Do not have ADL hardware.\n", __func__);
 	}
+
+	debugfs_dir = debugfs_create_dir(DEBUGFS_DIR, NULL);
+	if (!debugfs_dir) {
+		dev_err(imgsys_dev->dev, "%s Failed to create debugfs dir\n", __func__);
+		return;
+	}
+
+	debugfs_file = debugfs_create_file(DEBUGFS_FILE, FILE_PERMISSIONS,
+					   debugfs_dir, NULL, &debugfs_fops);
+	if (!debugfs_file) {
+		dev_err(imgsys_dev->dev, "%s Failed to create debugfs file\n", __func__);
+		return;
+	}
+
+	mutex_init(&ndd_mutex);
 }
 
 void imgsys_main_set_init(struct mtk_imgsys_dev *imgsys_dev)
@@ -247,6 +412,9 @@ void imgsys_main_uninit(struct mtk_imgsys_dev *imgsys_dev)
 		iounmap(adlb_reg_base);
 		adlb_reg_base = NULL;
 	}
+
+	debugfs_remove(debugfs_file);
+	debugfs_remove(debugfs_dir);
 }
 
 void imgsys_debug_dump_routine(struct mtk_imgsys_dev *imgsys_dev,
@@ -289,7 +457,90 @@ void imgsys_debug_dump_routine(struct mtk_imgsys_dev *imgsys_dev,
 }
 EXPORT_SYMBOL_GPL(imgsys_debug_dump_routine);
 
-static void imgsys_cg_debug_dump(struct mtk_imgsys_dev *imgsys_dev)
+void imgsys_ndd_swfrm_list_add(struct mtk_imgsys_dev *imgsys_dev,
+			       struct swfrm_info_t *gwfrm_info)
+{
+	struct ndd_swfrm_info_t *new_ndd_swfrm;
+
+	new_ndd_swfrm = kzalloc(sizeof(*new_ndd_swfrm), GFP_KERNEL);
+	if (!new_ndd_swfrm)
+		return;
+
+	new_ndd_swfrm->imgsys_dev = imgsys_dev;
+	new_ndd_swfrm->gwfrm_info = gwfrm_info;
+
+	mutex_lock(&ndd_mutex);
+	list_add_tail(&new_ndd_swfrm->list, &ndd_swfrm_list);
+	mutex_unlock(&ndd_mutex);
+}
+EXPORT_SYMBOL_GPL(imgsys_ndd_swfrm_list_add);
+
+void imgsys_ndd_dump_routine(struct mtk_imgsys_dev *imgsys_dev,
+			     struct imgsys_ndd_frm_dump_info *frm_dump_info)
+{
+	int i = 0;
+	int mid = 0;
+	unsigned int hw_num = 0x1;
+	unsigned int module_copy_ofst = 0;
+	const struct module_ops *imgsys_modules = imgsys_dev->modules;
+
+	dev_dbg(imgsys_dev->dev,
+		"%s: hw comb set: 0x%x\n", __func__, frm_dump_info->hw_comb);
+
+	for (i = 0; hw_num < IMGSYS_ENG_MAX_NUM; i++, hw_num = (0x1 << i)) {
+		switch (hw_num) {
+		case IMGSYS_ENG_WPE_EIS:
+		case IMGSYS_ENG_WPE_TNR:
+		case IMGSYS_ENG_WPE_LITE:
+			module_copy_ofst = (NDD_FP_SIZE + WPE_NDD_SIZE);
+			mid = IMGSYS_MOD_WPE;
+			break;
+		case IMGSYS_ENG_ADL_A:
+		case IMGSYS_ENG_ADL_B:
+			module_copy_ofst = 0;
+			break;
+		case IMGSYS_ENG_TRAW:
+		case IMGSYS_ENG_LTR:
+		case IMGSYS_ENG_XTR:
+			module_copy_ofst = (NDD_FP_SIZE + TRAW_NDD_SIZE);
+			mid = IMGSYS_MOD_TRAW;
+			break;
+		case IMGSYS_ENG_DIP:
+			module_copy_ofst = (NDD_FP_SIZE + DIP_NDD_SIZE);
+			mid = IMGSYS_MOD_DIP;
+			break;
+		case IMGSYS_ENG_PQDIP_A:
+		case IMGSYS_ENG_PQDIP_B:
+			module_copy_ofst = (NDD_FP_SIZE + PQDIP_NDD_SIZE);
+			mid = IMGSYS_MOD_PQDIP;
+			break;
+		case IMGSYS_ENG_ME:
+			module_copy_ofst = (NDD_FP_SIZE + ME_NDD_SIZE);
+			mid = IMGSYS_MOD_ME;
+			break;
+		default:
+			dev_err(imgsys_dev->dev, "%s get wrong hw id %d\n", __func__, hw_num);
+			break;
+		}
+
+		if (frm_dump_info->hw_comb & hw_num) {
+			frm_dump_info->eng_e = i;
+			if (frm_dump_info->eng_e <= IMGSYS_NDD_ENG_ME)
+				imgsys_modules[mid].ndddump(imgsys_dev, frm_dump_info);
+		} else {
+			if (frm_dump_info->user_buffer)
+				frm_dump_info->user_buffer += module_copy_ofst;
+			else
+				frm_dump_info->user_buffer = NULL;
+		}
+
+		if ((frm_dump_info->hw_comb >> i) == 0)
+			return;
+	}
+}
+EXPORT_SYMBOL_GPL(imgsys_ndd_dump_routine);
+
+void imgsys_cg_debug_dump(struct mtk_imgsys_dev *imgsys_dev)
 {
 	unsigned int i = 0;
 

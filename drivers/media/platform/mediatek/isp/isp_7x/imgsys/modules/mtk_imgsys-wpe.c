@@ -6,6 +6,8 @@
  *
  */
 
+#include "mtk-hcp_isp71.h"
+#include "mtk_imgsys-debug.h"
 #include <linux/device.h>
 #include <linux/of_address.h>
 #include <linux/pm_runtime.h>
@@ -34,6 +36,10 @@ static const unsigned int mtk_imgsys_wpe_base_ofst[] = {0x0, 0x300000, 0x400000}
 #define WPE_REG_DBG_PORT    (0x4C)
 #define WPE_REG_CQ_THR0_CTL (0xB08)
 #define WPE_REG_CQ_THR1_CTL (0xB18)
+
+#define WPE_REG_RANGE		0x1000
+#define WPE_PSP_END_OFST	0x554
+#define WPE_COEF_END_OFST	0x5D8
 
 static const struct mtk_imgsys_init_array mtk_imgsys_wpe_init_ary[] = {
 	{0x0018, 0x80000000}, /* WPE_TOP_CTL_INT_EN, en w-clr */
@@ -281,6 +287,61 @@ void imgsys_wpe_debug_dump(struct mtk_imgsys_dev *imgsys_dev,
 	}
 }
 EXPORT_SYMBOL_GPL(imgsys_wpe_debug_dump);
+
+void imgsys_wpe_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
+			 struct imgsys_ndd_frm_dump_info *frm_dump_info)
+{
+	char file_name[NDD_FP_SIZE] = "\0";
+	void *cq_va, *psp_va;
+	u64 psp_ofst;
+	ssize_t ret;
+
+	if (frm_dump_info->eng_e > IMGSYS_NDD_ENG_WPE_LITE)
+		return;
+
+	if (!frm_dump_info->user_buffer)
+		return;
+
+	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, WPE_MEM_C_ID);
+	if (!cq_va)
+		return;
+
+	cq_va += frm_dump_info->cq_ofst[frm_dump_info->eng_e];
+
+	psp_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, WPE_MEM_C_ID);
+	if (!psp_va)
+		return;
+
+	psp_ofst = frm_dump_info->wpe_psp_ofst[frm_dump_info->eng_e];
+	psp_va += psp_ofst;
+
+	ret = snprintf(file_name, sizeof(file_name),
+		       "%s%s", frm_dump_info->fp, frm_dump_info->wpe_fp);
+	if (ret < 0 || ret >= sizeof(file_name))
+		return;
+
+	ret = copy_to_user(frm_dump_info->user_buffer, file_name, sizeof(file_name));
+	frm_dump_info->user_buffer += sizeof(file_name);
+
+	if (psp_ofst != 0) {
+		ret = copy_to_user(frm_dump_info->user_buffer,
+				   cq_va, WPE_PSP_END_OFST);
+		frm_dump_info->user_buffer += WPE_PSP_END_OFST;
+
+		ret = copy_to_user(frm_dump_info->user_buffer,
+				   psp_va, WPE_COEF_END_OFST - WPE_PSP_END_OFST);
+		frm_dump_info->user_buffer += (WPE_COEF_END_OFST - WPE_PSP_END_OFST);
+
+		ret = copy_to_user(frm_dump_info->user_buffer,
+				   cq_va + WPE_COEF_END_OFST, WPE_REG_RANGE - WPE_COEF_END_OFST);
+		frm_dump_info->user_buffer += (WPE_REG_RANGE - WPE_COEF_END_OFST);
+	} else {
+		ret = copy_to_user(frm_dump_info->user_buffer,
+				   cq_va, WPE_REG_RANGE);
+		frm_dump_info->user_buffer += WPE_REG_RANGE;
+	}
+}
+EXPORT_SYMBOL_GPL(imgsys_wpe_ndd_dump);
 
 void imgsys_wpe_uninit(struct mtk_imgsys_dev *imgsys_dev)
 {

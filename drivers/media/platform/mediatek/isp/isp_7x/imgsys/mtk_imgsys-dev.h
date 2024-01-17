@@ -187,7 +187,7 @@ struct mtk_imgsys_dev {
 	wait_queue_head_t flushing_waitq;
 
 	atomic_t num_composing;	/* increase after ipi */
-	/*MDP/GCE callback workqueue */
+	/* MDP/GCE callback workqueue */
 	struct workqueue_struct *mdpcb_wq;
 	/* for SCP driver  */
 	struct platform_device *scp_pdev;
@@ -433,6 +433,7 @@ struct swfrm_info_t {
 	struct mtk_imgsys_timeval eqtime;
 	int chan_id;
 	char *hw_ts_log;
+	struct completion *ndd_user_complete;
 } __attribute((__packed__));
 
 struct buf_va_info_t {

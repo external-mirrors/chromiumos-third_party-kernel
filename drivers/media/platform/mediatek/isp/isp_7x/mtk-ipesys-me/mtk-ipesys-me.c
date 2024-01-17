@@ -19,6 +19,8 @@
 #include <linux/of_address.h>
 #include <linux/clk.h>
 #include "mtk-ipesys-me.h"
+#include "mtk_imgsys-debug.h"
+#include "mtk_imgsys-engine.h"
 
 static struct clk_bulk_data imgsys_isp7_me_clks[] = {
 	{ .id = "ME_CG_IPE" },
@@ -70,6 +72,49 @@ void ipesys_me_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int engine
 	}
 }
 EXPORT_SYMBOL(ipesys_me_debug_dump);
+
+void ipesys_me_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
+				struct imgsys_ndd_frm_dump_info *frm_dump_info)
+{
+	char *me_name;
+	char file_name[NDD_FP_SIZE] = "\0";
+	void *reg_va;
+	ssize_t ret;
+
+	if (frm_dump_info->eng_e != IMGSYS_NDD_ENG_ME)
+		return;
+
+	reg_va = ioremap(frm_dump_info->cq_ofst[frm_dump_info->eng_e], ME_REG_RANGE);
+	if (!reg_va)
+		return;
+
+	me_name = frm_dump_info->user_buffer ? "REG_ME_me.reg" : "REG_ME_me.regKernel";
+
+	ret = snprintf(file_name, sizeof(file_name), "%s%s", frm_dump_info->fp, me_name);
+	if (ret < 0 || ret >= sizeof(file_name)) {
+		iounmap(reg_va);
+		return;
+	}
+
+	if (frm_dump_info->user_buffer) {
+		ret = copy_to_user(frm_dump_info->user_buffer, file_name, sizeof(file_name));
+		if (ret) {
+			iounmap(reg_va);
+			return;
+		}
+		frm_dump_info->user_buffer += sizeof(file_name);
+
+		ret = copy_to_user(frm_dump_info->user_buffer, reg_va, ME_REG_RANGE);
+		if (ret != 0) {
+			iounmap(reg_va);
+			return;
+		}
+		frm_dump_info->user_buffer += ME_REG_RANGE;
+	}
+
+	iounmap(reg_va);
+}
+EXPORT_SYMBOL(ipesys_me_ndd_dump);
 
 static int mtk_ipesys_me_probe(struct platform_device *pdev)
 {

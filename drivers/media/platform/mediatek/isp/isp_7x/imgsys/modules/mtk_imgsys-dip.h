@@ -10,6 +10,7 @@
 #define _MTK_DIP_DIP_H_
 
 #include "../mtk_imgsys-dev.h"
+#include "../mtk_imgsys-debug.h"
 
 /* DIP */
 #define TOP_CTL_OFFSET	0x0000
@@ -38,10 +39,12 @@
 #define N_WDMA_OFFSET	0x2000
 #define N_WDMA_RANGE	0x0DEC
 
+#define DIP_REG_RANGE 	0x17000
+
 void imgsys_dip_set_initial_value(struct mtk_imgsys_dev *imgsys_dev);
 void imgsys_dip_set_hw_initial_value(struct mtk_imgsys_dev *imgsys_dev);
-void imgsys_dip_debug_dump(struct mtk_imgsys_dev *imgsys_dev,
-			   unsigned int engine);
+void imgsys_dip_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int engine);
+void imgsys_dip_ndd_dump(struct mtk_imgsys_dev *imgsys_dev, struct imgsys_ndd_frm_dump_info *frm_dump_info);
 
 void imgsys_dip_uninit(struct mtk_imgsys_dev *imgsys_dev);
 

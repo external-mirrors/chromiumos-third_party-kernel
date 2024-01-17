@@ -27,6 +27,7 @@
 #include "mtk_imgsys-vnode_id.h"
 #include "mtk_imgsys-cmdq.h"
 #include "mtk_imgsys-module.h"
+#include "mtk_imgsys-debug.h"
 
 static int imgsys_quick_onoff_en;
 module_param(imgsys_quick_onoff_en, int, 0644);
@@ -191,23 +192,30 @@ static void cmdq_cb_done_worker(struct work_struct *work)
 {
 	struct mtk_imgsys_pipe *pipe;
 	struct swfrm_info_t *gwfrm_info = NULL;
-	struct gce_cb_work *gwork = NULL;
+	struct gce_cb_work *gwork;
 	struct img_sw_buffer swbuf_data;
 
 	gwork = container_of(work, struct gce_cb_work, work);
+	gwfrm_info = gwork->req_sbuf_kva;
 
-	pipe = (struct mtk_imgsys_pipe *)gwork->pipe;
-	if (!pipe->streaming) {
-		pr_info("%s pipe already streamoff\n", __func__);
-		return;
-	}
+	pipe = gwork->pipe;
+	if (!pipe->streaming)
+		goto out;
+
+	if (gwfrm_info->user_info[0].ndd_fp[0] != '\0')
+		wait_for_completion(gwfrm_info->ndd_user_complete);
 
 	/* send to HCP after frame done & del node from list */
-	gwfrm_info = (struct swfrm_info_t *)gwork->req_sbuf_kva;
 	swbuf_data.offset = gwfrm_info->req_sbuf_goft;
 	imgsys_send(pipe->imgsys_dev->scp_pdev, HCP_IMGSYS_DEQUE_DONE_ID,
 		    &swbuf_data, sizeof(struct img_sw_buffer),
 		    gwork->reqfd, 1);
+
+out:
+	if (gwfrm_info->user_info[0].ndd_fp[0] != '\0')
+		kfree(gwfrm_info->ndd_user_complete);
+
+	kfree(gwork);
 }
 
 static void imgsys_mdp_cb_func(struct imgsys_cb_data data,
@@ -216,14 +224,15 @@ static void imgsys_mdp_cb_func(struct imgsys_cb_data data,
 	struct mtk_imgsys_pipe *pipe;
 	struct mtk_imgsys_request *req;
 	struct mtk_imgsys_dev *imgsys_dev;
-	//struct swfrm_info_t *frm_info_cb;
 	struct swfrm_info_t *swfrminfo_cb;
-	struct gce_cb_work gwork;
+	struct gce_cb_work *gwork;
 
 	swfrminfo_cb = data.data;
 	pipe = (struct mtk_imgsys_pipe *)swfrminfo_cb->pipe;
-	if (!pipe->streaming)
+	if (!pipe->streaming) {
 		pr_info("%s pipe already streamoff\n", __func__);
+		return;
+	}
 
 	req = (struct mtk_imgsys_request *)(swfrminfo_cb->req);
 	if (!req) {
@@ -242,10 +251,16 @@ static void imgsys_mdp_cb_func(struct imgsys_cb_data data,
 	mtk_imgsys_notify(req, swfrminfo_cb->frm_owner);
 
 	if (swfrminfo_cb->hw_hang < 0) {
-		gwork.reqfd = swfrminfo_cb->request_fd;
-		gwork.req_sbuf_kva = swfrminfo_cb->req_sbuf_kva;
-		gwork.pipe = swfrminfo_cb->pipe;
-		cmdq_cb_done_worker(&gwork.work);
+		gwork = kzalloc(sizeof(*gwork), GFP_KERNEL);
+		if (!gwork)
+			return;
+
+		gwork->reqfd = swfrminfo_cb->request_fd;
+		gwork->req_sbuf_kva = swfrminfo_cb->req_sbuf_kva;
+		gwork->pipe = swfrminfo_cb->pipe;
+
+		INIT_WORK(&gwork->work, cmdq_cb_done_worker);
+		queue_work(req->imgsys_pipe->imgsys_dev->mdpcb_wq, &gwork->work);
 	}
 }
 
@@ -356,6 +371,13 @@ static void imgsys_scp_handler(void *data, unsigned int len, void *priv)
 	req->swfrm_info = swfrm_info;
 
 	up(&imgsys_dev->sem);
+
+	if (swfrm_info->user_info[0].ndd_fp[0] != '\0') {
+		swfrm_info->ndd_user_complete =
+			kzalloc(sizeof(swfrm_info->ndd_user_complete), GFP_KERNEL);
+		init_completion(swfrm_info->ndd_user_complete);
+		imgsys_ndd_swfrm_list_add(imgsys_dev, swfrm_info);
+	}
 
 	INIT_WORK(&req->runner_work, imgsys_runner_func);
 	queue_work(req->imgsys_pipe->imgsys_dev->runner_wq,

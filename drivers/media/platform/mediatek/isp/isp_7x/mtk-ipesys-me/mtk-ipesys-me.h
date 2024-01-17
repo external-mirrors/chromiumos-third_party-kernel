@@ -25,9 +25,12 @@ struct ipesys_me_device {
 #define ME_CTL_OFFSET      0x0000
 #define ME_CTL_RANGE       0xA10
 #define ME_CTL_RANGE_TF    0x120
+#define ME_REG_RANGE       0xA20
 
 void ipesys_me_set_initial_value(struct mtk_imgsys_dev *imgsys_dev);
 void ipesys_me_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int engine);
+void ipesys_me_ndd_dump(struct mtk_imgsys_dev *imgsys_dev, struct imgsys_ndd_frm_dump_info *frm_dump_info);
+
 void ipesys_me_uninit(struct mtk_imgsys_dev *imgsys_dev);
 
 #endif /* _MTK_IMGSYS_ME_H_ */

@@ -11,6 +11,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/remoteproc.h>
 
+#include "mtk-hcp.h"
+#include "mtk-hcp_isp71.h"
+#include "../mtk_imgsys-debug.h"
 #include "../mtk_imgsys-engine.h"
 #include "mtk_imgsys-pqdip.h"
 
@@ -21,7 +24,7 @@
 
 #define PQDIP_BASE_ADDR		0x15210000
 #define PQDIP_OFST		0x300000
-#define PQDIP_ALL_REG_CNT	0x6000
+#define PQDIP_REG_RANGE		0x6000
 
 #define PQDIP_CTL_OFST		0x0
 #define PQDIP_CQ_OFST		0x200
@@ -136,7 +139,7 @@ void imgsys_pqdip_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int eng
 	for (hw_idx = 0 ; hw_idx < PQDIP_HW_SET ; hw_idx++) {
 		pqdip_reg_base = gpqdip_reg_base[hw_idx];
 #ifdef DUMP_PQ_ALL
-		for (i = 0x0; i < PQDIP_ALL_REG_CNT; i += 0x10) {
+		for (i = 0x0; i < PQDIP_REG_RANGE; i += 0x10) {
 			dev_info(imgsys_dev->dev, "%s:  [0x%08x] 0x%08x 0x%08x 0x%08x 0x%08x",
 				 __func__,
 				 PQDIP_BASE_ADDR + PQDIP_OFST * hw_idx + i,
@@ -511,6 +514,57 @@ void imgsys_pqdip_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int eng
 	}
 }
 EXPORT_SYMBOL_GPL(imgsys_pqdip_debug_dump);
+
+void imgsys_pqdip_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
+			   struct imgsys_ndd_frm_dump_info *frm_dump_info)
+{
+	char *pqdip_name;
+	char file_name[NDD_FP_SIZE] = "\0";
+	ssize_t ret;
+	void *cq_va;
+
+	if (frm_dump_info->eng_e != IMGSYS_NDD_ENG_PQDIP_A &&
+	    frm_dump_info->eng_e != IMGSYS_NDD_ENG_PQDIP_B)
+		return;
+
+	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, PQDIP_MEM_C_ID);
+	if (!cq_va)
+		return;
+
+	cq_va += frm_dump_info->cq_ofst[frm_dump_info->eng_e];
+
+	switch (frm_dump_info->eng_e) {
+	case IMGSYS_NDD_ENG_PQDIP_A:
+		pqdip_name = frm_dump_info->user_buffer ?
+			"REG_PQDIP_A_pqdipa.reg" : "REG_PQDIP_A_pqdipa.regKernel";
+		break;
+	case IMGSYS_NDD_ENG_PQDIP_B:
+		pqdip_name = frm_dump_info->user_buffer ?
+			"REG_PQDIP_B_pqdipb.reg" : "REG_PQDIP_B_pqdipb.regKernel";
+		break;
+	default:
+		return;
+	}
+
+	ret = snprintf(file_name, sizeof(file_name), "%s%s", frm_dump_info->fp, pqdip_name);
+	if (ret < 0 || ret >= sizeof(file_name)) {
+		dev_err(imgsys_dev->dev, "wrong dip ndd file name %s\n", file_name);
+		return;
+	}
+
+	if (frm_dump_info->user_buffer) {
+		ret = copy_to_user(frm_dump_info->user_buffer, file_name, sizeof(file_name));
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += sizeof(file_name);
+
+		ret = copy_to_user(frm_dump_info->user_buffer, cq_va, PQDIP_REG_RANGE);
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += PQDIP_REG_RANGE;
+	}
+}
+EXPORT_SYMBOL_GPL(imgsys_pqdip_ndd_dump);
 
 void imgsys_pqdip_uninit(struct mtk_imgsys_dev *imgsys_dev)
 {

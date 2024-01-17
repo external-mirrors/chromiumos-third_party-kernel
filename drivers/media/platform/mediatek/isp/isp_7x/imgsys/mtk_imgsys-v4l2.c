@@ -1463,8 +1463,8 @@ static int mtk_imgsys_res_init(struct platform_device *pdev,
 					WQ_FREEZABLE,
 					"imgsys_mdp_callback");
 	if (!imgsys_dev->mdpcb_wq) {
-		dev_info(imgsys_dev->dev,
-			 "%s: unable to alloc mdpcb workqueue\n", __func__);
+		dev_err(imgsys_dev->dev,
+			"%s: unable to alloc mdpcb workqueue\n", __func__);
 		return -ENOMEM;
 	}
 
@@ -1474,8 +1474,8 @@ static int mtk_imgsys_res_init(struct platform_device *pdev,
 					WQ_FREEZABLE | WQ_HIGHPRI,
 					"imgsys_composer");
 	if (!imgsys_dev->composer_wq) {
-		dev_info(imgsys_dev->dev,
-			 "%s: unable to alloc composer workqueue\n", __func__);
+		dev_err(imgsys_dev->dev,
+			"%s: unable to alloc composer workqueue\n", __func__);
 		ret = -ENOMEM;
 		goto destroy_mdpcb_wq;
 	}
@@ -1486,8 +1486,8 @@ static int mtk_imgsys_res_init(struct platform_device *pdev,
 					WQ_FREEZABLE | WQ_HIGHPRI,
 					"imgsys_runner");
 	if (!imgsys_dev->runner_wq) {
-		dev_info(imgsys_dev->dev,
-			 "%s: unable to alloc runner workqueue\n", __func__);
+		dev_err(imgsys_dev->dev,
+			"%s: unable to alloc runner workqueue\n", __func__);
 		ret = -ENOMEM;
 		goto destroy_composer_wq;
 	}
@@ -1540,7 +1540,6 @@ static int __maybe_unused mtk_imgsys_pm_suspend(struct device *dev)
 		return -EBUSY;
 	}
 #ifdef NEED_PM
-
 	if (pm_runtime_suspended(dev)) {
 		dev_info(dev, "%s: pm_runtime_suspended is true, no action\n",
 			 __func__);
@@ -1884,6 +1883,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = imgsys_traw_set_initial_value,
 		.set = imgsys_traw_set_initial_value_hw,
 		.dump = imgsys_traw_debug_dump,
+		.ndddump = imgsys_traw_ndd_dump,
 		.uninit = imgsys_traw_uninit,
 	},
 	[IMGSYS_MOD_DIP] = {
@@ -1891,6 +1891,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = imgsys_dip_set_initial_value,
 		.set = imgsys_dip_set_hw_initial_value,
 		.dump = imgsys_dip_debug_dump,
+		.ndddump = imgsys_dip_ndd_dump,
 		.uninit = imgsys_dip_uninit,
 	},
 	[IMGSYS_MOD_PQDIP] = {
@@ -1898,6 +1899,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = imgsys_pqdip_set_initial_value,
 		.set = imgsys_pqdip_set_hw_initial_value,
 		.dump = imgsys_pqdip_debug_dump,
+		.ndddump = imgsys_pqdip_ndd_dump,
 		.uninit = imgsys_pqdip_uninit,
 	},
 	[IMGSYS_MOD_ME] = {
@@ -1905,6 +1907,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = ipesys_me_set_initial_value,
 		.set = NULL,
 		.dump = ipesys_me_debug_dump,
+		.ndddump = ipesys_me_ndd_dump,
 		.uninit = ipesys_me_uninit,
 	},
 	[IMGSYS_MOD_WPE] = {
@@ -1912,6 +1915,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = imgsys_wpe_set_initial_value,
 		.set = imgsys_wpe_set_hw_initial_value,
 		.dump = imgsys_wpe_debug_dump,
+		.ndddump = imgsys_wpe_ndd_dump,
 		.uninit = imgsys_wpe_uninit,
 	},
 	[IMGSYS_MOD_ADL] = {
@@ -1919,6 +1923,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = imgsys_adl_init,
 		.set = imgsys_adl_set,
 		.dump = imgsys_adl_debug_dump,
+		.ndddump = NULL,
 		.uninit = imgsys_adl_uninit,
 	},
 	/*pure sw usage for timeout debug dump*/
@@ -1927,6 +1932,7 @@ static const struct module_ops imgsys_isp7_modules[] = {
 		.init = imgsys_main_init,
 		.set = imgsys_main_set_init,
 		.dump = NULL,
+		.ndddump = NULL,
 		.uninit = imgsys_main_uninit,
 	},
 };

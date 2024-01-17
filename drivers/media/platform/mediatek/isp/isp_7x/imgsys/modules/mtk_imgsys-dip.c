@@ -12,6 +12,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/remoteproc.h>
 
+#include "mtk-hcp.h"
+#include "mtk-hcp_isp71.h"
 #include "../mtk_imgsys-engine.h"
 #include "../mtk_imgsys-hw.h"
 #include "mtk_imgsys-dip.h"
@@ -272,6 +274,50 @@ void imgsys_dip_debug_dump(struct mtk_imgsys_dev *imgsys_dev,
 		 ioread32((dip_reg_base + DIPCTL_DBG_OUT)));
 }
 EXPORT_SYMBOL_GPL(imgsys_dip_debug_dump);
+
+void imgsys_dip_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
+			 struct imgsys_ndd_frm_dump_info *frm_dump_info)
+{
+	char *dip_name;
+	char file_name[NDD_FP_SIZE] = "\0";
+	ssize_t ret;
+	void *cq_va;
+
+	if (frm_dump_info->eng_e != IMGSYS_NDD_ENG_DIP)
+		return;
+
+	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, DIP_MEM_C_ID);
+	if (!cq_va)
+		return;
+
+	cq_va += frm_dump_info->cq_ofst[frm_dump_info->eng_e];
+
+	dip_name = frm_dump_info->user_buffer ? "REG_DIP_dip.reg" : "REG_DIP_dip.regKernel";
+	ret = snprintf(file_name, sizeof(file_name), "%s%s", frm_dump_info->fp, dip_name);
+	if (ret < 0 || ret >= sizeof(file_name)) {
+		dev_err(imgsys_dev->dev, "wrong dip ndd file name %s\n", file_name);
+		return;
+	}
+
+	if (frm_dump_info->user_buffer) {
+		ret = copy_to_user(frm_dump_info->user_buffer, file_name, sizeof(file_name));
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += sizeof(file_name);
+
+		ret = copy_to_user(frm_dump_info->user_buffer, cq_va, 0x9000);
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += 0x48000 + 0x9000;
+
+		ret = copy_to_user(frm_dump_info->user_buffer,
+				   cq_va + 0x9000, DIP_REG_RANGE - 0x9000);
+		if (ret)
+			return;
+		frm_dump_info->user_buffer += DIP_REG_RANGE - 0x9000;
+	}
+}
+EXPORT_SYMBOL_GPL(imgsys_dip_ndd_dump);
 
 void imgsys_dip_uninit(struct mtk_imgsys_dev *imgsys_dev)
 {

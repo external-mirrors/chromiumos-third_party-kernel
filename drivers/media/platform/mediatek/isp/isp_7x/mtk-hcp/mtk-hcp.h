@@ -159,6 +159,8 @@ void *mtk_hcp_get_gce_mem_virt(struct platform_device *pdev);
 phys_addr_t mtk_hcp_get_gce_mem_size(struct platform_device *pdev);
 int mtk_hcp_get_init_info(struct platform_device *pdev, struct img_init_info *info);
 
+void *mtk_hcp_get_reserve_mem_virt(struct platform_device *pdev, unsigned int id);
+
 /**
  * struct hcp_desc - hcp descriptor
  *
@@ -222,6 +224,7 @@ struct mtk_hcp_data {
 	int (*get_gce)(void);
 	int (*put_gce)(void);
 	phys_addr_t (*get_gce_mem_size)(void);
+	void* (*get_reserve_mem_virt)(unsigned int id);
 };
 
 #define HCP_RESERVED_MEM  (1)

@@ -14,8 +14,9 @@
 
 void imgsys_pqdip_set_initial_value(struct mtk_imgsys_dev *imgsys_dev);
 void imgsys_pqdip_set_hw_initial_value(struct mtk_imgsys_dev *imgsys_dev);
-void imgsys_pqdip_debug_dump(struct mtk_imgsys_dev *imgsys_dev,
-			     unsigned int engine);
+void imgsys_pqdip_debug_dump(struct mtk_imgsys_dev *imgsys_dev, unsigned int engine);
+void imgsys_pqdip_ndd_dump(struct mtk_imgsys_dev *imgsys_dev, struct imgsys_ndd_frm_dump_info *frm_dump_info);
+
 void imgsys_pqdip_uninit(struct mtk_imgsys_dev *imgsys_dev);
 
 #endif /* _MTK_IMGSYS_PQDIP_H_ */
