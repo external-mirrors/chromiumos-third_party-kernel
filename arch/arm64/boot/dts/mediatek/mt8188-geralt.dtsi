@@ -231,6 +231,11 @@
 		enable-active-high;
 		gpio = <&pio 150 GPIO_ACTIVE_HIGH>;
 	};
+
+	mtk_fsource: fsource {
+		compatible = "mtk-fsource";
+		vfsource-supply = <&mt6359_vefuse_ldo_reg>;
+	};
 };
 
 &adsp {
