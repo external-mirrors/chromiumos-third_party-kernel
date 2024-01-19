@@ -3946,6 +3946,12 @@ R:	Guenter Roeck <groeck@chromium.org>
 F:	Documentation/devicetree/bindings/sound/google,cros-ec-codec.txt
 F:	sound/soc/codecs/cros_ec_codec.*
 
+CHROMEOS EC WATCHDOG
+M:	Lukasz Majczak <lma@chromium.org>
+L:	chrome-platform@lists.linux.dev
+S:	Maintained
+F:	drivers/watchdog/cros_ec_wdt.c
+
 CHRONTEL CH7322 CEC DRIVER
 M:	Jeff Chase <jnchase@google.com>
 L:	linux-media@vger.kernel.org
