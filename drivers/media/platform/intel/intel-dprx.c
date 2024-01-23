@@ -9,6 +9,8 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
+#include <linux/sched.h>
 #include <linux/delay.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-dv-timings.h>
@@ -43,6 +45,8 @@
 #define DPRX_IRQ_CLR	0xc
 #define DPRX_IRQ_AUX	0x1
 
+#define DPRX_SYNC_LOSS_TIMER_JIFFIES (HZ / 4) /* 250ms */
+
 struct intel_dprx {
 	struct device *dev;
 	void __iomem *iobase;
@@ -52,6 +56,9 @@ struct intel_dprx {
 	struct media_pad pads[4];
 
 	struct dp_sink_device sink_dev;
+
+	struct fwnode_handle *fbs[4];
+	struct timer_list sync_loss_timer;
 };
 
 static void dprx_write(struct intel_dprx *dprx, int addr, u32 val)
@@ -151,6 +158,20 @@ int intel_dprx_get_sym_lock(struct intel_dprx *dprx)
 int intel_dprx_get_interlane_align(struct intel_dprx *dprx)
 {
 	return (dprx_read(dprx, DPRX_RX_STATUS) >> 8) & 0x1;
+}
+
+static int intel_dprx_get_sync_loss(struct intel_dprx *dprx)
+{
+	return (dprx_read(dprx, DPRX_RX_STATUS) >> 16) & 0x1;
+}
+
+static void intel_dprx_reset_sync_loss(struct intel_dprx *dprx)
+{
+	u32 reg;
+
+	reg = dprx_read(dprx, DPRX_RX_STATUS);
+	reg |= 0x1 << 16;
+	dprx_write(dprx, DPRX_RX_STATUS, reg);
 }
 
 int intel_dprx_get_sink_status(struct intel_dprx *dprx)
@@ -502,6 +523,26 @@ static irqreturn_t dprx_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+void chv3_fb_fwnode_runtime_reset(struct fwnode_handle *node);
+
+static void dprx_sync_loss_handler(struct timer_list *timer)
+{
+	struct intel_dprx *dprx = container_of(timer, struct intel_dprx,
+					       sync_loss_timer);
+	int i;
+
+	if (intel_dprx_get_sync_loss(dprx)) {
+		intel_dprx_reset_sync_loss(dprx);
+		for (i = 0; i < 4; i++) {
+			if (dprx->fbs[i] != NULL)
+				chv3_fb_fwnode_runtime_reset(dprx->fbs[i]);
+		}
+	}
+
+	mod_timer(&dprx->sync_loss_timer,
+		  jiffies + DPRX_SYNC_LOSS_TIMER_JIFFIES);
+}
+
 static void dprx_init(struct intel_dprx *dprx)
 {
 	u32 reg;
@@ -530,6 +571,22 @@ static int dprx_init_pads(struct intel_dprx *dprx, int count)
 		dprx->pads[i].flags = MEDIA_PAD_FL_SOURCE;
 
 	return media_entity_pads_init(&dprx->subdev.entity, count, dprx->pads);
+}
+
+static void dprx_init_fbs(struct intel_dprx *dprx)
+{
+	struct fwnode_handle *fb;
+	int i = 0;
+
+	fwnode_graph_for_each_endpoint(dev_fwnode(dprx->dev), fb) {
+		if (i < 4) {
+			dprx->fbs[i] = fwnode_graph_get_remote_endpoint(fb);
+			i++;
+		}
+	}
+
+	for (; i < 4; i++)
+		dprx->fbs[i] = NULL;
 }
 
 int intel_dprx_probe(struct platform_device *pdev)
@@ -577,6 +634,8 @@ int intel_dprx_probe(struct platform_device *pdev)
 	if (res)
 		return res;
 
+	dprx_init_fbs(dprx);
+
 	res = v4l2_async_register_subdev(&dprx->subdev);
 	if (res)
 		return res;
@@ -585,9 +644,26 @@ int intel_dprx_probe(struct platform_device *pdev)
 
 	dp_sink_device_init(&dprx->sink_dev, dprx, has_mst ? 4 : 0);
 
+	timer_setup(&dprx->sync_loss_timer, dprx_sync_loss_handler, 0);
+	mod_timer(&dprx->sync_loss_timer,
+		  jiffies + DPRX_SYNC_LOSS_TIMER_JIFFIES);
+
 	writel(DPRX_IRQ_AUX, dprx->iobase_irq + DPRX_IRQ_MASK);
 
 	return 0;
+}
+
+static void intel_dprx_remove(struct platform_device *pdev)
+{
+	struct intel_dprx *dprx = platform_get_drvdata(pdev);
+	int i;
+
+	del_timer_sync(&dprx->sync_loss_timer);
+
+	for (i = 0; i < 4; i++) {
+		if (dprx->fbs[i] != NULL)
+			fwnode_handle_put(dprx->fbs[i]);
+	}
 }
 
 static const struct of_device_id intel_dprx_match_table[] = {
@@ -597,6 +673,7 @@ static const struct of_device_id intel_dprx_match_table[] = {
 
 static struct platform_driver intel_dprx_platform_driver = {
 	.probe = intel_dprx_probe,
+	.remove_new = intel_dprx_remove,
 	.driver = {
 		.name = "intel-dprx",
 		.of_match_table = intel_dprx_match_table,

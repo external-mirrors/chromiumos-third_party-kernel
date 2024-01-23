@@ -12,6 +12,8 @@
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
+#include <linux/sched.h>
 
 #include <linux/videodev2.h>
 #include <media/v4l2-ctrls.h>
@@ -69,6 +71,11 @@
 #define FB_IRQ_RESOLUTION	BIT(2)
 #define FB_IRQ_ERROR		BIT(3)
 
+/* Wait slightly longer for next irq than for the first one */
+#define FB_RESET_TIMER_NEXT_JIFFIES (HZ * 3 / 4) /* 750ms */
+#define FB_RESET_TIMER_FIRST_JIFFIES (HZ / 4) /* 250ms */
+#define FB_RESET_WA_DISABLED (-1)
+
 struct chv3_fb {
 	struct device *dev;
 	void __iomem *iobase;
@@ -89,6 +96,9 @@ struct chv3_fb {
 
 	struct list_head bufs;
 	spinlock_t bufs_lock;
+
+	struct timer_list reset_timer;
+	int irqs_since_reset;
 
 	struct mutex fb_lock;
 };
@@ -630,6 +640,13 @@ static irqreturn_t chv3_fb_isr(int irq, void *data)
 	if (!reg)
 		return IRQ_NONE;
 
+	if (fb->irqs_since_reset != FB_RESET_WA_DISABLED &&
+	    fb->irqs_since_reset < 2) {
+		mod_timer(&fb->reset_timer,
+			  jiffies + FB_RESET_TIMER_NEXT_JIFFIES);
+		fb->irqs_since_reset++;
+	}
+
 	if (reg & (FB_IRQ_BUFF0 | FB_IRQ_BUFF1))
 		chv3_fb_frame_irq(fb);
 	if (reg & FB_IRQ_RESOLUTION)
@@ -643,6 +660,81 @@ static irqreturn_t chv3_fb_isr(int irq, void *data)
 	writel(reg, fb->iobase_irq + FB_IRQ_CLR);
 
 	return IRQ_HANDLED;
+}
+
+static void chv3_fb_runtime_reset(struct chv3_fb *fb)
+{
+	unsigned long flags;
+	int retries = 5;
+	u32 dmaformat;
+
+	spin_lock_irqsave(&fb->bufs_lock, flags);
+
+	if (fb->irqs_since_reset != FB_RESET_WA_DISABLED)
+		fb->irqs_since_reset = 0;
+
+	dmaformat = readl(fb->iobase + FB_DMAFORMAT);
+
+	writel(0, fb->iobase + FB_EN);
+	writel(FB_RESET_BIT, fb->iobase + FB_RESET);
+	do {
+		writel(dmaformat, fb->iobase + FB_DMAFORMAT);
+		writel(FB_DATARATE_DOUBLE, fb->iobase + FB_DATARATE);
+		writel(FB_PIXELMODE_DOUBLE, fb->iobase + FB_PIXELMODE);
+		retries--;
+		/*
+		 * Due to bug in framebuffer, write right after reset may fail.
+		 * Check the write and retry if needed.
+		 */
+	} while (dmaformat != readl(fb->iobase + FB_DMAFORMAT) && retries > 0);
+
+	if (retries <= 0)
+		dev_warn(fb->dev, "Filed to write FB register after reset\n");
+
+	spin_unlock_irqrestore(&fb->bufs_lock, flags);
+}
+
+static struct platform_driver chv3_fb_platform_driver;
+
+void chv3_fb_fwnode_runtime_reset(struct fwnode_handle *node)
+{
+	struct device *dev = fwnode_get_next_parent_dev(node);
+	struct v4l2_device *v4l2_dev;
+
+	if (!dev) {
+		dev_warn(dev, "FB FW node reset no dev\n");
+		return;
+	}
+
+	if (dev->driver == &chv3_fb_platform_driver.driver) {
+		v4l2_dev = dev_get_drvdata(dev);
+		if (v4l2_dev) {
+			chv3_fb_runtime_reset(container_of(v4l2_dev,
+							   struct chv3_fb,
+							   v4l2_dev));
+		} else {
+			dev_warn(dev, "FB FW node reset no drv data\n");
+		}
+	} else {
+		dev_warn(dev, "FB FW node reset bad drv\n");
+	}
+
+	put_device(dev);
+}
+
+static void chv3_fb_timer_reset_handler(struct timer_list *timer)
+{
+	struct chv3_fb *fb = container_of(timer, struct chv3_fb, reset_timer);
+
+	if (fb->irqs_since_reset < 2) {
+		chv3_fb_runtime_reset(fb);
+		/*
+		 * If we are unlucky, we may not get any interrupt after
+		 * reset.
+		 */
+		mod_timer(&fb->reset_timer,
+			  jiffies + FB_RESET_TIMER_FIRST_JIFFIES);
+	}
 }
 
 static int chv3_fb_check_version(struct chv3_fb *fb)
@@ -851,10 +943,14 @@ static int chv3_fb_probe(struct platform_device *pdev)
 	writel(FB_RESET_BIT, fb->iobase + FB_RESET);
 	writel(FB_DATARATE_DOUBLE, fb->iobase + FB_DATARATE);
 	writel(FB_PIXELMODE_DOUBLE, fb->iobase + FB_PIXELMODE);
-	if (legacy_format)
+	if (legacy_format) {
 		writel(FB_DMAFORMAT_8BPC_LEGACY, fb->iobase + FB_DMAFORMAT);
-	else
+		fb->irqs_since_reset = FB_RESET_WA_DISABLED;
+	} else {
 		writel(FB_DMAFORMAT_8BPC, fb->iobase + FB_DMAFORMAT);
+		fb->irqs_since_reset = 0;
+		timer_setup(&fb->reset_timer, chv3_fb_timer_reset_handler, 0);
+	}
 
 	writel(FB_IRQ_ALL, fb->iobase_irq + FB_IRQ_MASK);
 
@@ -869,6 +965,9 @@ error:
 static void chv3_fb_remove(struct platform_device *pdev)
 {
 	struct chv3_fb *fb = platform_get_drvdata(pdev);
+
+	if (fb->irqs_since_reset != FB_RESET_WA_DISABLED)
+		del_timer_sync(&fb->reset_timer);
 
 	/* disable interrupts */
 	writel(0, fb->iobase_irq + FB_IRQ_MASK);
