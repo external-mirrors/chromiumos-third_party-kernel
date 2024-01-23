@@ -7,14 +7,18 @@
 #include <linux/crc-dp.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/sched.h>
 #include <media/v4l2-dv-timings.h>
 #include <media/v4l2-subdev.h>
 #include <drm/display/drm_dp.h>
 #include <drm/display/drm_dp_mst.h>
+
+#define DPRX_SYNC_LOSS_TIMER_JIFFIES (HZ / 4) /* 250ms */
 
 #define DPRX_MAX_EDID_BLOCKS	4
 
@@ -33,6 +37,7 @@
 #define DPRX_RX_CONTROL_LANE_COUNT_MASK		0x1f
 
 #define DPRX_RX_STATUS				0x001
+#define DPRX_RX_STATUS_SYNC_LOSS		16
 #define DPRX_RX_STATUS_INTERLANE_ALIGN		8
 #define DPRX_RX_STATUS_SYM_LOCK_SHIFT		4
 #define DPRX_RX_STATUS_SYM_LOCK(i)		(4 + i)
@@ -125,6 +130,9 @@ struct dprx {
 	struct media_pad pads[4];
 
 	struct dprx_sink sinks[4];
+
+	struct fwnode_handle *fbs[4];
+	struct timer_list sync_loss_timer;
 
 	int max_link_rate;
 	int max_lane_count;
@@ -1461,6 +1469,20 @@ static u8 dprx_read_lane_align_status(struct dprx *dprx)
 	return (dprx_read(dprx, DPRX_RX_STATUS) >> DPRX_RX_STATUS_INTERLANE_ALIGN) & 1;
 }
 
+static u8 dprx_get_sync_loss(struct dprx *dprx)
+{
+	return (dprx_read(dprx, DPRX_RX_STATUS) >> DPRX_RX_STATUS_SYNC_LOSS) & 1;
+}
+
+static void dprx_reset_sync_loss(struct dprx *dprx)
+{
+	u32 reg;
+
+	reg = dprx_read(dprx, DPRX_RX_STATUS);
+	reg |= 1 << DPRX_RX_STATUS_SYNC_LOSS;
+	dprx_write(dprx, DPRX_RX_STATUS, reg);
+}
+
 static u8 dprx_read_sink_status(struct dprx *dprx)
 {
 	return (dprx_read(dprx, DPRX_VBID(0)) >> DPRX_VBID_MSA_LOCK) & 1;
@@ -2057,6 +2079,25 @@ static const struct v4l2_subdev_ops dprx_subdev_ops = {
 	.pad = &dprx_pad_ops,
 };
 
+void chv3_fb_fwnode_runtime_reset(struct fwnode_handle *node);
+
+static void dprx_sync_loss_handler(struct timer_list *timer)
+{
+	struct dprx *dprx = container_of(timer, struct dprx, sync_loss_timer);
+	int i;
+
+	if (dprx_get_sync_loss(dprx)) {
+		dprx_reset_sync_loss(dprx);
+		for (i = 0; i < 4; i++) {
+			if (dprx->fbs[i] != NULL)
+				chv3_fb_fwnode_runtime_reset(dprx->fbs[i]);
+		}
+	}
+
+	mod_timer(&dprx->sync_loss_timer,
+		  jiffies + DPRX_SYNC_LOSS_TIMER_JIFFIES);
+}
+
 static const struct media_entity_operations dprx_entity_ops = {
 	.link_validate = v4l2_subdev_link_validate,
 	.get_fwnode_pad = v4l2_subdev_get_fwnode_pad_1_to_1,
@@ -2070,6 +2111,22 @@ static int dprx_init_pads(struct dprx *dprx)
 		dprx->pads[i].flags = MEDIA_PAD_FL_SOURCE;
 
 	return media_entity_pads_init(&dprx->subdev.entity, dprx->max_stream_count, dprx->pads);
+}
+
+static void dprx_init_fbs(struct dprx *dprx)
+{
+	struct fwnode_handle *fb;
+	int i = 0;
+
+	fwnode_graph_for_each_endpoint(dev_fwnode(dprx->dev), fb) {
+		if (i < 4) {
+			dprx->fbs[i] = fwnode_graph_get_remote_endpoint(fb);
+			i++;
+		}
+	}
+
+	for (; i < 4; i++)
+		dprx->fbs[i] = NULL;
 }
 
 static int dprx_probe(struct platform_device *pdev)
@@ -2140,6 +2197,12 @@ static int dprx_probe(struct platform_device *pdev)
 	dprx_set_hpd(dprx, 0);
 	dprx_reset_hw(dprx);
 
+	dprx_init_fbs(dprx);
+
+	timer_setup(&dprx->sync_loss_timer, dprx_sync_loss_handler, 0);
+	mod_timer(&dprx->sync_loss_timer,
+		  jiffies + DPRX_SYNC_LOSS_TIMER_JIFFIES);
+
 	dprx_set_irq(dprx, 1);
 
 	return 0;
@@ -2148,9 +2211,17 @@ static int dprx_probe(struct platform_device *pdev)
 static void dprx_remove(struct platform_device *pdev)
 {
 	struct dprx *dprx = platform_get_drvdata(pdev);
+	int i;
 
 	/* disable interrupts */
 	dprx_set_irq(dprx, 0);
+
+	del_timer_sync(&dprx->sync_loss_timer);
+
+	for (i = 0; i < 4; i++) {
+		if (dprx->fbs[i] != NULL)
+			fwnode_handle_put(dprx->fbs[i]);
+	}
 
 	v4l2_async_unregister_subdev(&dprx->subdev);
 }
