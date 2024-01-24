@@ -39,6 +39,7 @@ static struct snapshot_data {
 	bool platform_support;
 	bool free_bitmaps;
 	struct block_device *bdev;
+	struct bdev_handle *b_handle;
 	dev_t dev;
 } snapshot_state;
 
@@ -257,7 +258,7 @@ static int snapshot_set_swap_area(struct snapshot_data *data,
 static int snapshot_set_block_device(struct snapshot_data *data, __u32 device)
 {
 	dev_t dev;
-	struct block_device *bdev;
+	struct bdev_handle *b_handle;
 	int res;
 
 	if (swsusp_swap_in_use())
@@ -267,21 +268,21 @@ static int snapshot_set_block_device(struct snapshot_data *data, __u32 device)
 		return -EBUSY;
 
 	dev = new_decode_dev(device);
-	bdev = blkdev_get_by_dev(dev,
+	b_handle = bdev_open_by_dev(dev,
 				 BLK_OPEN_READ | BLK_OPEN_WRITE | BLK_OPEN_EXCL, &snapshot_state, NULL);
-	if (IS_ERR(bdev))
-		return PTR_ERR(bdev);
-
-	res = set_blocksize(bdev, PAGE_SIZE);
+	if (IS_ERR(b_handle))
+		return PTR_ERR(b_handle);
+	res = set_blocksize(b_handle->bdev, PAGE_SIZE);
 	if (res < 0) {
-		blkdev_put(bdev, &snapshot_state);
+		bdev_release(b_handle);
 		return res;
 	}
 
 	data->dev = dev;
-	data->bdev = bdev;
+	data->bdev = b_handle->bdev;
+	data->b_handle = b_handle;
 	pr_info("snapshot block device set to %02x:%02x: %lld blocks", MAJOR(dev), MINOR(dev),
-		i_size_read(bdev->bd_inode) >> PAGE_SHIFT);
+		i_size_read(b_handle->bdev->bd_inode) >> PAGE_SHIFT);
 	return 0;
 }
 
@@ -293,7 +294,7 @@ static int snapshot_release_block_device(struct snapshot_data *data)
 	if (!data->dev || !data->bdev)
 		return -ENODEV;
 
-	blkdev_put(data->bdev, &snapshot_state);
+	bdev_release(data->b_handle);
 	data->dev = 0;
 	data->bdev = NULL;
 
