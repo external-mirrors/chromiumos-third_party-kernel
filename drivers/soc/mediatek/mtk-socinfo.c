@@ -79,6 +79,16 @@ static int mtk_socinfo_create_socinfo_node(struct mtk_socinfo *mtk_socinfop)
 	return 0;
 }
 
+static int socinfo_nvmem_match(struct device *dev, const void *data)
+{
+	const char *name = dev_name(dev);
+	const char *expected = data;
+	struct device_node *node = dev->of_node;
+
+	return (memcmp(name, expected, strlen(expected)) == 0 &&
+		memcmp(node->name, "efuse", 5) == 0);
+}
+
 static u32 mtk_socinfo_read_cell(struct device *dev, const char *name)
 {
 	struct nvmem_device *nvmemp;
@@ -86,7 +96,7 @@ static u32 mtk_socinfo_read_cell(struct device *dev, const char *name)
 	u32 offset;
 	u32 cell_val = CELL_NOT_USED;
 
-	nvmemp = devm_nvmem_device_get(dev, "mtk-efuse0");
+	nvmemp = nvmem_device_find("mtk-efuse", socinfo_nvmem_match);
 	if (IS_ERR(nvmemp))
 		goto out;
 
@@ -98,10 +108,10 @@ static u32 mtk_socinfo_read_cell(struct device *dev, const char *name)
 		goto out;
 
 	nvmem_device_read(nvmemp, offset, sizeof(cell_val), &cell_val);
-
-	nvmem_device_put(nvmemp);
-
 out:
+	if (!IS_ERR(nvmemp))
+		nvmem_device_put(nvmemp);
+
 	return cell_val;
 }
 

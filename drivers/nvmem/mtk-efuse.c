@@ -54,6 +54,7 @@ static int mtk_efuse_probe(struct platform_device *pdev)
 	econfig.priv = priv;
 	econfig.dev = dev;
 	econfig.name = "mtk-efuse";
+	econfig.id = NVMEM_DEVID_AUTO;
 	nvmem = devm_nvmem_register(dev, &econfig);
 	if (IS_ERR(nvmem))
 		return PTR_ERR(nvmem);
