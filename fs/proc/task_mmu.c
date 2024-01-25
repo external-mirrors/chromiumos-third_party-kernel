@@ -2965,6 +2965,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 	enum reclaim_type type = 0;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long next = pmd_addr_end(addr, end);
+	unsigned int batch_count = 0;
 
 	if (data)
 		type = data->type;
@@ -3021,6 +3022,8 @@ huge_unlock:
 regular_page:
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+	if (!orig_pte)
+		return 0;
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
 		if (!data->nr_to_try)
 			break;
@@ -3031,6 +3034,16 @@ regular_page:
 		page = vm_normal_page(vma, addr, ptent);
 		if (!page)
 			continue;
+
+		if (++batch_count == SWAP_CLUSTER_MAX) {
+			batch_count = 0;
+			if (need_resched()) {
+				arch_leave_lazy_mmu_mode();
+				pte_unmap_unlock(orig_pte, ptl);
+				cond_resched();
+				goto regular_page;
+			}
+		}
 
 		if (PageTransCompound(page)) {
 			if (type != RECLAIM_SHMEM && page_mapcount(page) != 1)
