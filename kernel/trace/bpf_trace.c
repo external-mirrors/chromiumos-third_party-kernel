@@ -1475,7 +1475,7 @@ __bpf_kfunc int bpf_get_file_xattr(struct file *file, const char *name__str,
 	ret = inode_permission(&nop_mnt_idmap, dentry->d_inode, MAY_READ);
 	if (ret)
 		return ret;
-	return __vfs_getxattr(dentry, dentry->d_inode, name__str, value, value_len);
+	return __vfs_getxattr(&nop_mnt_idmap, dentry, dentry->d_inode, name__str, value, value_len, 0);
 }
 
 __bpf_kfunc_end_defs();
