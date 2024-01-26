@@ -990,7 +990,7 @@ out_timerfd:
 /*
  * Switch to low resolution mode
  */
-void hrtimer_switch_to_lres(void)
+static void hrtimer_switch_to_lres(void)
 {
 	struct hrtimer_cpu_base *base = this_cpu_ptr(&hrtimer_bases);
 
