@@ -32,6 +32,7 @@ place where this information is gathered.
    sysfs-platform_profile
    vduse
    futex2
+   isp/index
 
 .. only::  subproject and html
 
