@@ -58,7 +58,8 @@ struct libisp *libisp_open(const char *dev)
 		goto error;
 	}
 
-	isp->mem_fd = memfd_create("visptest-udmabuf", MFD_ALLOW_SEALING);
+	isp->mem_fd = memfd_create("visptest-udmabuf",
+				   MFD_NOEXEC_SEAL | MFD_ALLOW_SEALING);
 	if (isp->mem_fd < 0) {
 		pr_err("Cannot create memfd\n");
 		goto error;
