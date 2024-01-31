@@ -467,7 +467,7 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 			if (!smi_node)
 				return ERR_PTR(-EINVAL);
 
-			pd->smi[i] = syscon_node_to_regmap(smi_node);
+			pd->smi[i] = device_node_to_regmap(smi_node);
 			if (IS_ERR(pd->smi[i]))
 				return ERR_CAST(pd->smi[i]);
 		}
@@ -486,7 +486,7 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 			if (!larb_node)
 				return ERR_PTR(-EINVAL);
 
-			pd->larb[i] = syscon_node_to_regmap(larb_node);
+			pd->larb[i] = device_node_to_regmap(larb_node);
 			if (IS_ERR(pd->larb[i]))
 				return ERR_CAST(pd->larb[i]);
 		}
