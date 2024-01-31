@@ -32,7 +32,7 @@ run_visptest () {
 
 	echo "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-="
 
-	./visptest $arg0 $arg1
+	visptest $arg0 $arg1
 
 	dmesg | grep -qz "BUG: " && exit 1
 	dmesg | grep -qz "WARNING: " && exit 1
