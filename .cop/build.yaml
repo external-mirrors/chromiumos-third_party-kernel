@@ -9,7 +9,7 @@ steps:
   - |
         set -ve
         virtme-configkernel --defconfig
-        ./scripts/config -e ISP_VIRTUAL_DEVICE -e ISP
+        ./scripts/config -m ISP_VIRTUAL_DEVICE -e ISP
         ./scripts/config -e PROVE_LOCKING -e DEBUG_ATOMIC_SLEEP -e UNWINDER_ORC -e DEBUG_INFO -e DEBUG_INFO_REDUCED
         ./scripts/config -d MEDIA_SUPPORT -d MEDIA_TEST_SUPPORT -d V4L_TEST_DRIVERS
         ./scripts/config -d VIDEO_VIMC -d VIDEO_VIVID -d VIDEO_VIM2M
@@ -75,9 +75,9 @@ steps:
         cat > test.sh <<EOF
         set -ve
         dmesg -C
-        #        modprobe visp
-        #        rmmod visp
-        #        modprobe visp
+        modprobe visp
+        rmmod visp
+        modprobe visp
         cat /sys/devices/platform/visp.0/modalias
         /workspace/tools/isp/visp-test/visptest --exit_at test_add_valid_operations
         /workspace/tools/isp/visp-test/visptest --exit_at test_add_valid_rw_operations
