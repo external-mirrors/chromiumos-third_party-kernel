@@ -1049,6 +1049,7 @@ static void hci_error_reset(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev, error_reset);
 
+	hci_dev_hold(hdev);
 	BT_DBG("%s", hdev->name);
 
 	if (hdev->hw_error)
@@ -1056,10 +1057,10 @@ static void hci_error_reset(struct work_struct *work)
 	else
 		bt_dev_err(hdev, "hardware error 0x%2.2x", hdev->hw_error_code);
 
-	if (hci_dev_do_close(hdev))
-		return;
+	if (!hci_dev_do_close(hdev))
+		hci_dev_do_open(hdev);
 
-	hci_dev_do_open(hdev);
+	hci_dev_put(hdev);
 }
 
 void hci_uuids_clear(struct hci_dev *hdev)
@@ -1248,6 +1249,7 @@ struct smp_irk *hci_find_irk_by_rpa(struct hci_dev *hdev, bdaddr_t *rpa)
 	list_for_each_entry_rcu(irk, &hdev->identity_resolving_keys, list) {
 		if (smp_irk_matches(hdev, irk->val, rpa)) {
 			bacpy(&irk->rpa, rpa);
+			irk->rpa_timestamp = jiffies;
 			irk_to_return = irk;
 			goto done;
 		}
@@ -1394,6 +1396,7 @@ struct smp_irk *hci_add_irk(struct hci_dev *hdev, bdaddr_t *bdaddr,
 
 	memcpy(irk->val, val, 16);
 	bacpy(&irk->rpa, rpa);
+	irk->rpa_timestamp = jiffies;
 
 	return irk;
 }
@@ -1490,17 +1493,25 @@ static void hci_cmd_timeout(struct work_struct *work)
 	struct hci_dev *hdev = container_of(work, struct hci_dev,
 					    cmd_timer.work);
 
-	if (hdev->sent_cmd) {
-		struct hci_command_hdr *sent = (void *) hdev->sent_cmd->data;
-		u16 opcode = __le16_to_cpu(sent->opcode);
+	/* Don't trigger the timeout behavior if it happens while we're in
+	 * userchannel mode. Userspace is responsible for handling any command
+	 * timeouts.
+	 */
+	if (!(hci_dev_test_flag(hdev, HCI_USER_CHANNEL) &&
+	      test_bit(HCI_UP, &hdev->flags))) {
+		if (hdev->sent_cmd) {
+			struct hci_command_hdr *sent =
+				(void *)hdev->sent_cmd->data;
+			u16 opcode = __le16_to_cpu(sent->opcode);
 
-		bt_dev_err(hdev, "command 0x%4.4x tx timeout", opcode);
-	} else {
-		bt_dev_err(hdev, "command tx timeout");
+			bt_dev_err(hdev, "command 0x%4.4x tx timeout", opcode);
+		} else {
+			bt_dev_err(hdev, "command tx timeout");
+		}
+
+		if (hdev->cmd_timeout)
+			hdev->cmd_timeout(hdev);
 	}
-
-	if (hdev->cmd_timeout)
-		hdev->cmd_timeout(hdev);
 
 	atomic_set(&hdev->cmd_cnt, 1);
 	queue_work(hdev->workqueue, &hdev->cmd_work);
@@ -2479,6 +2490,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	hdev->adv_instance_cnt = 0;
 	hdev->cur_adv_instance = 0x00;
 	hdev->adv_instance_timeout = 0;
+	hdev->eir_max_name_len = 48;
 
 	hdev->advmon_allowlist_duration = 300;
 	hdev->advmon_no_filter_duration = 500;
@@ -4083,6 +4095,10 @@ static void hci_rx_work(struct work_struct *work)
 		 */
 		if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) &&
 		    !test_bit(HCI_INIT, &hdev->flags)) {
+			if (hdev->suspended) {
+				if (hdev->do_wakeup)
+					hdev->do_wakeup(hdev);
+			}
 			kfree_skb(skb);
 			continue;
 		}
