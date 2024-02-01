@@ -85,6 +85,8 @@ CFLAGS_patch-scs.o			+= -fno-asynchronous-unwind-tables -fno-unwind-tables
 $(obj)/vdso-wrap.o: $(obj)/vdso/vdso.so
 $(obj)/vdso32-wrap.o: $(obj)/vdso32/vdso.so
 
+obj-$(CONFIG_ALT_SYSCALL)		+= alt-syscall.o
+
 obj-y					+= probes/
 obj-y					+= head.o
 extra-y					+= vmlinux.lds
