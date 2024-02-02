@@ -921,7 +921,9 @@ static void write_aux_reply(struct aux_msg *rep, struct dp_aux_buf *buf)
 
 static u8 dpcd_caps[16] = {
 	0x14, // DPCD 1.4
-	0x1e, // Max link rate 8.1Gbps
+	// TODO(b:322961797): Temporary reduce max link rate to 5.4Gbps until
+	// issue with 8.1Gbps is resolved.
+	0x14, // Max link rate 5.4Gbps
 	0xc4, // Max lane count 4, TPS3, Enhanced frame cap
 	0x81, // Down-spread, TPS4
 	0x01, // 2 Receiver ports for SST (video & audio)
