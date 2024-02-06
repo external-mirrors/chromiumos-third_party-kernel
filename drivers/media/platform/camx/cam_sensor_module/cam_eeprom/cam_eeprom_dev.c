@@ -153,7 +153,7 @@ static int cam_eeprom_init_subdev(struct cam_eeprom_ctrl_t *e_ctrl)
 
 	e_ctrl->v4l2_dev_str.internal_ops = &cam_eeprom_internal_ops;
 	e_ctrl->v4l2_dev_str.ops = &cam_eeprom_subdev_ops;
-	strlcpy(e_ctrl->device_name, CAM_EEPROM_NAME,
+	strscpy(e_ctrl->device_name, CAM_EEPROM_NAME,
 		sizeof(e_ctrl->device_name));
 	e_ctrl->v4l2_dev_str.name = e_ctrl->device_name;
 	e_ctrl->v4l2_dev_str.sd_flags =
@@ -372,7 +372,7 @@ static int cam_eeprom_spi_driver_probe(struct spi_device *spi)
 	spi_setup(spi);
 
 	CAM_DBG(CAM_EEPROM, "irq[%d] cs[%x] CPHA[%x] CPOL[%x] CS_HIGH[%x]",
-		spi->irq, spi->chip_select, (spi->mode & SPI_CPHA) ? 1 : 0,
+		spi->irq, spi->chip_select[0], (spi->mode & SPI_CPHA) ? 1 : 0,
 		(spi->mode & SPI_CPOL) ? 1 : 0,
 		(spi->mode & SPI_CS_HIGH) ? 1 : 0);
 	CAM_DBG(CAM_EEPROM, "max_speed[%u]", spi->max_speed_hz);
