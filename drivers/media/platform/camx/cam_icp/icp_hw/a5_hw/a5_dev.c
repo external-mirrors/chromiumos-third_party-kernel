@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/mod_devicetable.h>
 #include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/timer.h>
 #include "a5_core.h"
 #include "a5_soc.h"
