@@ -93,7 +93,7 @@ static int op_jenc_vb2_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 	for (i = 0; i < pixfmt->num_planes; ++i)
 		sizes[i] = pixfmt->plane_fmt[i].sizeimage;
 
-	vq->min_buffers_needed = JENC_MIN_NUM_BUFS;
+	vq->min_queued_buffers = JENC_MIN_NUM_BUFS;
 
 	return rc;
 }
