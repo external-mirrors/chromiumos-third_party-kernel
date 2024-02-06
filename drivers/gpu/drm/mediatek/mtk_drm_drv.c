@@ -572,10 +572,10 @@ static void mtk_drm_kms_deinit(struct drm_device *drm)
 
 static const struct drm_ioctl_desc mtk_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MTK_GEM_CREATE, mtk_gem_create_ioctl,
-			  DRM_UNLOCKED | DRM_AUTH | DRM_RENDER_ALLOW),
+			  DRM_AUTH | DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MTK_GEM_MAP_OFFSET,
 			  mtk_gem_map_offset_ioctl,
-			  DRM_UNLOCKED | DRM_AUTH | DRM_RENDER_ALLOW),
+			  DRM_AUTH | DRM_RENDER_ALLOW),
 };
 
 DEFINE_DRM_GEM_FOPS(mtk_drm_fops);
