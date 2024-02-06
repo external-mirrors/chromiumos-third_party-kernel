@@ -284,7 +284,7 @@ size_t StringLCopy(IMG_CHAR *pszDest, const IMG_CHAR *pszSrc, size_t uDataSize);
 @Return         Size of the source string
  */ /**************************************************************************/
 #if defined(__QNXNTO__) || (defined(__linux__) && defined(__KERNEL__) && !defined(DEBUG))
-#define OSStringLCopy(a,b,c) strlcpy((a), (b), (c))
+#define OSStringLCopy(a,b,c) strscpy((a), (b), (c))
 #else /* defined(__QNXNTO__) ... */
 #define OSStringLCopy(a,b,c) StringLCopy((a), (b), (c))
 #endif /* defined(__QNXNTO__) ... */
