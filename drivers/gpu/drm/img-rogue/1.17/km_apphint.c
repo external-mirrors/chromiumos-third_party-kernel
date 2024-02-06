@@ -846,7 +846,7 @@ static int apphint_kparam_set(const char *val, const struct kernel_param *kp)
 	int result;
 
 	/* need to discard const in case of string comparison */
-	result = strlcpy(val_copy, val, APPHINT_BUFFER_SIZE);
+	result = strscpy(val_copy, val, APPHINT_BUFFER_SIZE);
 
 	get_apphint_id_from_action_addr(kp->arg, &id);
 	if (result < APPHINT_BUFFER_SIZE) {
@@ -1575,7 +1575,7 @@ int pvr_apphint_set_string(PVRSRV_DEVICE_NODE *device, APPHINT_ID ue, IMG_CHAR *
 															 apphint.val[ue + device_offset].private_data,
 															 pBuffer);
 		} else {
-			if (strlcpy(apphint.val[ue + device_offset].stored.STRING, pBuffer, size) < size) {
+			if (strscpy(apphint.val[ue + device_offset].stored.STRING, pBuffer, size) < size) {
 				error = 0;
 			}
 		}
