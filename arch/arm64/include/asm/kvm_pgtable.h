@@ -107,7 +107,7 @@ static inline bool kvm_pte_valid(kvm_pte_t pte)
 
 static inline bool kvm_pte_table(kvm_pte_t pte, u32 level)
 {
-	if (level == KVM_PGTABLE_MAX_LEVELS - 1)
+	if (level == KVM_PGTABLE_LAST_LEVEL)
 		return false;
 
 	if (!kvm_pte_valid(pte))
