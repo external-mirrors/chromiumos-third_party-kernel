@@ -25,7 +25,6 @@
 
 		reset-gpios = <&pio 156 GPIO_ACTIVE_LOW>;
 		vdd-supply = <&lcd_pp3300>;
-		reset-gpios = <&pio 156 GPIO_ACTIVE_LOW>;
 	};
 };
 
