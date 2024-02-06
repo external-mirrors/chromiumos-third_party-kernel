@@ -700,7 +700,7 @@ sync_pool_get(struct pvr_sync_native_sync_prim **_sync,
 	sync->id = atomic_inc_return(&pvr_sync_data.sync_id);
 	sync->type = type;
 
-	strlcpy(sync->class, class_name, sizeof(sync->class));
+	strscpy(sync->class, class_name, sizeof(sync->class));
 	/* It's crucial to reset the sync to zero */
 	set_sync_prim_value(sync, 0);
 	sync->next_value = 0;
@@ -1141,7 +1141,7 @@ pvr_sync_create_sync_data(struct pvr_sync_timeline *timeline,
 	sync_data->kernel->fence_sync->id =
 		SyncCheckpointGetId(sync_data->kernel->fence_sync->client_sync_checkpoint);
 	sync_data->kernel->fence_sync->type = SYNC_PT_FENCE_TYPE;
-	strlcpy(sync_data->kernel->fence_sync->class, pt_name,
+	strscpy(sync_data->kernel->fence_sync->class, pt_name,
 			sizeof(sync_data->kernel->fence_sync->class));
 
 	/* Update list (for debug ) */
@@ -1339,7 +1339,7 @@ pvr_sync_create_waiter_for_foreign_sync(int fd, PSYNC_CHECKPOINT_CONTEXT psSyncC
 	kernel->fence_sync->client_sync_checkpoint = checkpoint;
 
 	kernel->fence_sync->foreign_sync_fence = fence;
-	strlcpy(kernel->fence_sync->foreign_sync_fence_name,
+	strscpy(kernel->fence_sync->foreign_sync_fence_name,
 			fence->name,
 			sizeof(kernel->fence_sync->foreign_sync_fence_name));
 
@@ -1348,7 +1348,7 @@ pvr_sync_create_waiter_for_foreign_sync(int fd, PSYNC_CHECKPOINT_CONTEXT psSyncC
 	kernel->fence_sync->id =
 		SyncCheckpointGetId(kernel->fence_sync->client_sync_checkpoint);
 	kernel->fence_sync->type = SYNC_PT_FOREIGN_FENCE_TYPE;
-	strlcpy(kernel->fence_sync->class, fence->name, sizeof(kernel->fence_sync->class));
+	strscpy(kernel->fence_sync->class, fence->name, sizeof(kernel->fence_sync->class));
 
 	/* The custom waiter structure is freed in the waiter callback */
 	waiter = kmalloc(sizeof(*waiter), GFP_KERNEL);
@@ -2043,7 +2043,7 @@ int pvr_sync_api_rename(void *api_priv, void *user_data)
 	struct pvr_sync_rename_ioctl_data *data = user_data;
 
 	data->szName[sizeof(data->szName) - 1] = '\0';
-	strlcpy(timeline->obj->name, data->szName, sizeof(timeline->obj->name));
+	strscpy(timeline->obj->name, data->szName, sizeof(timeline->obj->name));
 
 	return 0;
 }
@@ -2393,7 +2393,7 @@ enum PVRSRV_ERROR_TAG pvr_sync_register_functions(void)
 		pvr_sync_free_checkpoint_list_mem;
 	pvr_sync_data.sync_checkpoint_ops.pfnDumpInfoOnStalledUFOs =
 		pvr_sync_dump_info_on_stalled_ufos;
-	strlcpy(pvr_sync_data.sync_checkpoint_ops.pszImplName,
+	strscpy(pvr_sync_data.sync_checkpoint_ops.pszImplName,
 		"pvr_sync2", SYNC_CHECKPOINT_IMPL_MAX_STRLEN);
 #if defined(PDUMP)
 	pvr_sync_data.sync_checkpoint_ops.pfnSyncFenceGetCheckpoints =

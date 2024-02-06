@@ -385,23 +385,23 @@ void DeviceMemSetBytes(void *pvDst, unsigned char ui8Value, size_t uSize)
 	}
 }
 
-#if !defined(__QNXNTO__) /* Ignore Neutrino as it uses strlcpy */
+#if !defined(__QNXNTO__) /* Ignore Neutrino as it uses strscpy */
 
 #if defined(__KERNEL__) && defined(__linux__)
 /*
  * In case of Linux kernel-mode in a debug build, choose the variant
- * of StringLCopy that uses strlcpy and logs truncation via a stack dump.
- * For Linux kernel-mode in a release build, strlcpy alone is used.
+ * of StringLCopy that uses strscpy and logs truncation via a stack dump.
+ * For Linux kernel-mode in a release build, strscpy alone is used.
  */
 #if defined(DEBUG)
 IMG_INTERNAL
 size_t StringLCopy(IMG_CHAR *pszDest, const IMG_CHAR *pszSrc, size_t uDataSize)
 {
 	/*
-	 * Let strlcpy handle any truncation cases correctly.
+	 * Let strscpy handle any truncation cases correctly.
 	 * We will definitely get a NUL-terminated string set in pszDest
 	 */
-	size_t  uSrcSize = strlcpy(pszDest, pszSrc, uDataSize);
+	size_t  uSrcSize = strscpy(pszDest, pszSrc, uDataSize);
 
 #if defined(PVR_DEBUG_STRLCPY)
 	/* Handle truncation by dumping calling stack if debug allows */
