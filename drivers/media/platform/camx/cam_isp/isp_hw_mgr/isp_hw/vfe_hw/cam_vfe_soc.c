@@ -132,7 +132,7 @@ int cam_vfe_init_soc_resources(struct cam_hw_soc_info *soc_info,
 
 	switch (soc_private->cpas_version) {
 	case CAM_CPAS_TITAN_175_V120:
-		strlcpy(cpas_register_param.identifier, "iferdi",
+		strscpy(cpas_register_param.identifier, "iferdi",
 			CAM_HW_IDENTIFIER_LENGTH);
 		rc = cam_cpas_register_client(&cpas_register_param);
 		if (rc) {
@@ -144,7 +144,7 @@ int cam_vfe_init_soc_resources(struct cam_hw_soc_info *soc_info,
 				cpas_register_param.client_handle;
 		}
 
-		strlcpy(cpas_register_param.identifier, "ifenrdi",
+		strscpy(cpas_register_param.identifier, "ifenrdi",
 			CAM_HW_IDENTIFIER_LENGTH);
 		rc = cam_cpas_register_client(&cpas_register_param);
 		if (rc) {
@@ -157,7 +157,7 @@ int cam_vfe_init_soc_resources(struct cam_hw_soc_info *soc_info,
 		}
 		break;
 	default:
-		strlcpy(cpas_register_param.identifier, "ife",
+		strscpy(cpas_register_param.identifier, "ife",
 			CAM_HW_IDENTIFIER_LENGTH);
 		rc = cam_cpas_register_client(&cpas_register_param);
 		if (rc) {
