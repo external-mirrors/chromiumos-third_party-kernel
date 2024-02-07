@@ -3906,7 +3906,6 @@ struct drm_i915_gem_create_ext_set_pat {
 	__u32 rsvd;
 };
 
-#include "i915_drm_downstream.h"
 #include "i915_drm_prelim.h"
 
 /* ID of the protected content session managed by i915 when PXP is active */
