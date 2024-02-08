@@ -831,6 +831,9 @@ static void verity_status(struct dm_target *ti, status_type_t type,
 			args++;
 		if (v->error_mode != DM_VERITY_MODE_EIO)
 			args++;
+		if (v->error_behavior >= DM_VERITY_ERROR_BEHAVIOR_EIO &&
+		    v->error_behavior <= DM_VERITY_ERROR_BEHAVIOR_NOTIFY)
+			args += 2;
 		if (verity_fec_is_enabled(v))
 			args += DM_VERITY_OPTS_FEC;
 		if (v->zero_digest)
@@ -873,6 +876,9 @@ static void verity_status(struct dm_target *ti, status_type_t type,
 				BUG();
 			}
 		}
+		if (v->error_behavior >= DM_VERITY_ERROR_BEHAVIOR_EIO &&
+		    v->error_behavior <= DM_VERITY_ERROR_BEHAVIOR_NOTIFY)
+			DMEMIT(" " DM_VERITY_OPT_ERROR_BEHAVIOR " %d", v->error_behavior);
 		if (v->zero_digest)
 			DMEMIT(" " DM_VERITY_OPT_IGN_ZEROES);
 		if (v->validated_blocks)
