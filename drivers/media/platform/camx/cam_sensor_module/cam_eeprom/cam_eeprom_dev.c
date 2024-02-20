@@ -372,7 +372,7 @@ static int cam_eeprom_spi_driver_probe(struct spi_device *spi)
 	spi_setup(spi);
 
 	CAM_DBG(CAM_EEPROM, "irq[%d] cs[%x] CPHA[%x] CPOL[%x] CS_HIGH[%x]",
-		spi->irq, spi->chip_select, (spi->mode & SPI_CPHA) ? 1 : 0,
+		spi->irq, spi->chip_select[0], (spi->mode & SPI_CPHA) ? 1 : 0,
 		(spi->mode & SPI_CPOL) ? 1 : 0,
 		(spi->mode & SPI_CS_HIGH) ? 1 : 0);
 	CAM_DBG(CAM_EEPROM, "max_speed[%u]", spi->max_speed_hz);
