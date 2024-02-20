@@ -910,15 +910,15 @@ static int snd_card_setup(struct usb_configuration *c,
 	pcm->info_flags = 0;
 	audio->pcm = pcm;
 
-	strlcpy(pcm->name, "USB gadget audio", sizeof(pcm->name));
+	strscpy(pcm->name, "USB gadget audio", sizeof(pcm->name));
 
 	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_PLAYBACK, &audio_playback_ops);
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV,
 				NULL, 0, 64 * 1024);
 
-	strlcpy(card->driver, "audio_source", sizeof(card->driver));
-	strlcpy(card->shortname, card->driver, sizeof(card->shortname));
-	strlcpy(card->longname, "USB accessory audio source",
+	strscpy(card->driver, "audio_source", sizeof(card->driver));
+	strscpy(card->shortname, card->driver, sizeof(card->shortname));
+	strscpy(card->longname, "USB accessory audio source",
 		sizeof(card->longname));
 
 	err = snd_card_register(card);
