@@ -27,6 +27,8 @@ static struct device *android_device;
 static int index;
 static int gadget_index;
 
+struct device *create_function_device(char *name);
+
 struct device *create_function_device(char *name)
 {
 	if (android_device && !IS_ERR(android_device))
