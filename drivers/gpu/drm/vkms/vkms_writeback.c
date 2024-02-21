@@ -177,7 +177,7 @@ int vkms_enable_writeback_connector(struct vkms_device *vkmsdev,
 
 	return drm_writeback_connector_init(
 		&vkmsdev->drm, wb, &vkms_wb_connector_funcs,
-		&vkms_wb_encoder_helper_funcs, vkms_wb_formats,
+		NULL, vkms_wb_formats,
 		ARRAY_SIZE(vkms_wb_formats),
 		BIT(drm_crtc_index(&vkms_crtc->base)));
 }
