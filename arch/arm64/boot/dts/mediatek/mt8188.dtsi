@@ -4123,6 +4123,8 @@
 			iommus = <&vdo_iommu M4U_PORT_L0_DISP_OVL0_RDMA0>;
 			mediatek,gce-client-reg =
 				<&gce0 SUBSYS_1c00XXXX 0x0000 0x1000>;
+			mboxes = <&gce0 10 CMDQ_THR_PRIO_1>;
+			mediatek,gce-events = <CMDQ_EVENT_VDO0_DISP_OVL0_O_FRAME_DONE>;
 		};
 
 		rdma0: rdma@1c002000 {
@@ -4576,6 +4578,8 @@
 				 <&vdosys1 MT8188_VDO1_RST_HDR_GFX_FE0_DL_ASYNC>,
 				 <&vdosys1 MT8188_VDO1_RST_HDR_GFX_FE1_DL_ASYNC>,
 				 <&vdosys1 MT8188_VDO1_RST_HDR_VDO_BE_DL_ASYNC>;
+			mboxes = <&gce0 11 CMDQ_THR_PRIO_1>;
+			mediatek,gce-events = <CMDQ_EVENT_VDO1_DISP_MIXER_FRAME_DONE_MM>;
 		};
 
 		padding0: padding@1c11d000 {
