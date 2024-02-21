@@ -861,6 +861,9 @@ static struct snd_pcm_ops audio_playback_ops = {
 };
 
 int audio_source_bind_config(struct usb_configuration *c,
+                struct audio_source_config *config);
+
+int audio_source_bind_config(struct usb_configuration *c,
 		struct audio_source_config *config)
 {
 	struct audio_dev *audio;
