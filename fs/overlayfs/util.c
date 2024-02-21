@@ -742,7 +742,7 @@ void ovl_copy_up_end(struct dentry *dentry)
 
 bool ovl_path_check_origin_xattr(struct ovl_fs *ofs, const struct path *path)
 {
-	int res;
+	ssize_t res;
 
 	res = ovl_path_getxattr(ofs, path, OVL_XATTR_ORIGIN, NULL, 0);
 
@@ -828,7 +828,7 @@ fail:
 char ovl_get_dir_xattr_val(struct ovl_fs *ofs, const struct path *path,
 			   enum ovl_xattr ox)
 {
-	int res;
+	ssize_t res;
 	char val;
 
 	if (!d_is_dir(path->dentry))
@@ -1236,7 +1236,7 @@ err:
 int ovl_check_metacopy_xattr(struct ovl_fs *ofs, const struct path *path,
 			     struct ovl_metacopy *data)
 {
-	int res;
+	ssize_t res;
 
 	/* Only regular files can have metacopy xattr */
 	if (!S_ISREG(d_inode(path->dentry)->i_mode))
@@ -1283,7 +1283,7 @@ int ovl_check_metacopy_xattr(struct ovl_fs *ofs, const struct path *path,
 
 	return res;
 out:
-	pr_warn_ratelimited("failed to get metacopy (%i)\n", res);
+	pr_warn_ratelimited("failed to get metacopy (%zi)\n", res);
 	return res;
 }
 
