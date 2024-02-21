@@ -241,6 +241,7 @@ int __pwmchip_add(struct pwm_chip *chip, struct module *owner)
 
 		pwm->chip = chip;
 		pwm->hwpwm = i;
+		pwm->state.output_type = PWM_OUTPUT_FIXED;
 	}
 
 	mutex_unlock(&pwm_lock);
