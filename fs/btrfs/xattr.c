@@ -387,7 +387,7 @@ static int btrfs_xattr_handler_get_security(const struct xattr_handler *handler,
 					    struct dentry *unused,
 					    struct inode *inode,
 					    const char *name, void *buffer,
-					    size_t size)
+					    size_t size, int flags)
 {
 	int ret;
 	bool is_cap = false;
