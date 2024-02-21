@@ -527,7 +527,26 @@ ashmem_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
 	return lru_count;
 }
 
-static struct shrinker *ashmem_shrinker;  
+static struct shrinker *ashmem_shrinker;
+
+static int __init ashmem_init_shrinker(void)
+{
+	ashmem_shrinker = shrinker_alloc(0, "android-ashmem");
+	if (!ashmem_shrinker)
+		return -ENOMEM;
+
+	ashmem_shrinker->count_objects = ashmem_shrink_count;
+	ashmem_shrinker->scan_objects = ashmem_shrink_scan;
+	/*
+	 * XXX (dchinner): I wish people would comment on why they need on
+	 * significant changes to the default value here
+	 */
+	ashmem_shrinker->seeks = DEFAULT_SEEKS * 4;
+
+	shrinker_register(ashmem_shrinker);
+
+	return 0;
+}
 
 static int set_prot_mask(struct ashmem_area *asma, unsigned long prot)
 {
