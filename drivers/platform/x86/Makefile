@@ -102,6 +102,7 @@ obj-$(CONFIG_ACPI_TOSHIBA)	+= toshiba_acpi.o
 obj-$(CONFIG_INSPUR_PLATFORM_PROFILE)	+= inspur_platform_profile.o
 
 # Laptop drivers
+obj-$(CONFIG_ACPI_CHROMEOS)	+= chromeos_acpi.o
 obj-$(CONFIG_ACPI_CMPC)		+= classmate-laptop.o
 obj-$(CONFIG_COMPAL_LAPTOP)	+= compal-laptop.o
 obj-$(CONFIG_LG_LAPTOP)		+= lg-laptop.o
