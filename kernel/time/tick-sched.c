@@ -956,8 +956,17 @@ static void tick_nohz_stop_tick(struct tick_sched *ts, int cpu)
 		hrtimer_start(&ts->sched_timer, expires,
 			      HRTIMER_MODE_ABS_PINNED_HARD);
 	} else {
-		hrtimer_set_expires(&ts->sched_timer, expires);
-		tick_program_event(expires, 1);
+		/*
+		 * hrtimer_set_expires() may have previously set the expiry
+		 * well into the future, however an unrelated wakeup + timer
+		 * queuing means now the hrtimer needs to be backtracked, or
+		 * we'll just miss events. Back track it to last_tick, and
+		 * then use hrtimer_forward to forward it past 'tick'.
+		 */
+		hrtimer_set_expires(&ts->sched_timer, ts->last_tick);
+		hrtimer_forward(&ts->sched_timer, expires, TICK_NSEC);
+		ts->next_tick = hrtimer_get_expires(&ts->sched_timer);
+		tick_program_event(ts->next_tick, 1);
 	}
 }
 
@@ -1406,12 +1415,14 @@ static void tick_nohz_lowres_handler(struct clock_event_device *dev)
 	tick_sched_do_timer(ts, now);
 	tick_sched_handle(ts, regs);
 
+	ts->last_tick = now;
 	/*
 	 * In dynticks mode, tick reprogram is deferred:
 	 * - to the idle task if in dynticks-idle
 	 * - to IRQ exit if in full-dynticks.
 	 */
 	if (likely(!ts->tick_stopped)) {
+                hrtimer_set_expires(&ts->sched_timer, ts->last_tick);
 		hrtimer_forward(&ts->sched_timer, now, TICK_NSEC);
 		tick_program_event(hrtimer_get_expires(&ts->sched_timer), 1);
 	}
@@ -1427,6 +1438,38 @@ static inline void tick_nohz_activate(struct tick_sched *ts, int mode)
 	if (!test_and_set_bit(0, &tick_nohz_active))
 		timers_update_nohz();
 }
+
+#if defined CONFIG_HIGH_RES_TIMERS && CONFIG_HZ >= 1000
+/**
+ * tick_nohz_hres_to_lres - switch from Highres to Lowres
+ */
+void tick_nohz_hres_to_lres(void)
+{
+	ktime_t next_tick;
+	struct tick_sched *ts = this_cpu_ptr(&tick_cpu_sched);
+	struct tick_device *td = this_cpu_ptr(&tick_cpu_device);
+
+	if (WARN_ON(ts->nohz_mode != NOHZ_MODE_HIGHRES))
+		return;
+
+	WARN_ON(td->mode != TICKDEV_MODE_ONESHOT);
+	WARN_ON(clockevent_get_state(td->evtdev) != CLOCK_EVT_STATE_ONESHOT);
+	td->evtdev->event_handler = tick_nohz_lowres_handler;
+
+	hrtimer_cancel(&ts->sched_timer);
+	hrtimer_set_expires(&ts->sched_timer, ts->last_tick);
+
+	/* Forward the time to expire in the future */
+	hrtimer_forward(&ts->sched_timer, ktime_get(), TICK_NSEC);
+	next_tick = hrtimer_get_expires(&ts->sched_timer);
+
+	tick_program_event(next_tick, 1);
+	tick_nohz_activate(ts, NOHZ_MODE_LOWRES);
+
+	if (ts->tick_stopped)
+		ts->next_tick = next_tick;
+}
+#endif
 
 /**
  * tick_nohz_switch_to_nohz - switch to NOHZ mode
