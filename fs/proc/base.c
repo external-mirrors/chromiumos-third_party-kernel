@@ -3304,6 +3304,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("smaps",      S_IRUGO, proc_pid_smaps_operations),
 	REG("smaps_rollup", S_IRUGO, proc_pid_smaps_rollup_operations),
 	REG("pagemap",    S_IRUSR, proc_pagemap_operations),
+	REG("totmaps",    S_IRUGO, proc_totmaps_operations),
 #endif
 #ifdef CONFIG_SECURITY
 	DIR("attr",       S_IRUGO|S_IXUGO, proc_attr_dir_inode_operations, proc_attr_dir_operations),
@@ -3710,6 +3711,9 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_KSM
 	ONE("ksm_merging_pages",  S_IRUSR, proc_pid_ksm_merging_pages),
 	ONE("ksm_stat",  S_IRUSR, proc_pid_ksm_stat),
+#endif
+#ifdef CONFIG_PROC_LATSENSE
+	REG("latency_sensitive",  S_IRUGO|S_IWUGO, proc_tid_latsense_operations),
 #endif
 };
 

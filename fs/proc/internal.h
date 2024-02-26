@@ -95,6 +95,9 @@ union proc_op {
 	int lsmid;
 };
 
+
+extern const struct file_operations proc_totmaps_operations;
+
 struct proc_inode {
 	struct pid *pid;
 	unsigned int fd;
@@ -146,6 +149,7 @@ unsigned name_to_int(const struct qstr *qstr);
  * array.c
  */
 extern const struct file_operations proc_tid_children_operations;
+extern const struct file_operations proc_tid_latsense_operations;
 
 extern void proc_task_name(struct seq_file *m, struct task_struct *p,
 			   bool escape);
@@ -291,6 +295,9 @@ struct proc_maps_private {
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct vma_iterator iter;
+#ifdef CONFIG_MMU
+	struct mem_size_stats *mss;
+#endif
 #ifdef CONFIG_NUMA
 	struct mempolicy *task_mempolicy;
 #endif

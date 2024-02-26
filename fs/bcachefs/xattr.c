@@ -352,7 +352,7 @@ out:
 
 static int bch2_xattr_get_handler(const struct xattr_handler *handler,
 				  struct dentry *dentry, struct inode *vinode,
-				  const char *name, void *buffer, size_t size)
+				  const char *name, void *buffer, size_t size, int flags)
 {
 	struct bch_inode_info *inode = to_bch_ei(vinode);
 	struct bch_fs *c = inode->v.i_sb->s_fs_info;
@@ -477,7 +477,7 @@ static int __bch2_xattr_bcachefs_get(const struct xattr_handler *handler,
 
 static int bch2_xattr_bcachefs_get(const struct xattr_handler *handler,
 				   struct dentry *dentry, struct inode *vinode,
-				   const char *name, void *buffer, size_t size)
+				   const char *name, void *buffer, size_t size, int flags)
 {
 	return __bch2_xattr_bcachefs_get(handler, dentry, vinode,
 					 name, buffer, size, false);
@@ -607,7 +607,7 @@ static const struct xattr_handler bch_xattr_bcachefs_handler = {
 static int bch2_xattr_bcachefs_get_effective(
 				const struct xattr_handler *handler,
 				struct dentry *dentry, struct inode *vinode,
-				const char *name, void *buffer, size_t size)
+				const char *name, void *buffer, size_t size, int flags)
 {
 	return __bch2_xattr_bcachefs_get(handler, dentry, vinode,
 					 name, buffer, size, true);

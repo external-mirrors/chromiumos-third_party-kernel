@@ -449,6 +449,8 @@ struct fuse_file_lock {
 #define FUSE_CREATE_SUPP_GROUP	(1ULL << 34)
 #define FUSE_HAS_EXPIRE_ONLY	(1ULL << 35)
 #define FUSE_DIRECT_IO_ALLOW_MMAP (1ULL << 36)
+/* to avoid conflicts, non-upstream flags should be in the rightmost bits */
+#define FUSE_PASSTHROUGH	(1ULL << 63)
 
 /* Obsolete alias for FUSE_DIRECT_IO_ALLOW_MMAP */
 #define FUSE_DIRECT_IO_RELAX	FUSE_DIRECT_IO_ALLOW_MMAP
@@ -626,6 +628,9 @@ enum fuse_opcode {
 	/* Reserved opcodes: helpful to detect structure endian-ness */
 	CUSE_INIT_BSWAP_RESERVED	= 1048576,	/* CUSE_INIT << 8 */
 	FUSE_INIT_BSWAP_RESERVED	= 436207616,	/* FUSE_INIT << 24 */
+
+	/* Chrome OS extensions */
+	FUSE_CHROMEOS_TMPFILE	= 0xffffffff,	/* u32::MAX */
 };
 
 enum fuse_notify_code {
@@ -756,6 +761,11 @@ struct fuse_create_in {
 	uint32_t	mode;
 	uint32_t	umask;
 	uint32_t	open_flags;	/* FUSE_OPEN_... */
+};
+
+struct fuse_chromeos_tmpfile_in {
+	uint32_t mode;
+	uint32_t umask;
 };
 
 struct fuse_open_out {
