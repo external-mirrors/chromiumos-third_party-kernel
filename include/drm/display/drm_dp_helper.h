@@ -653,6 +653,12 @@ enum drm_dp_quirk {
 	 * requires enabling DSC.
 	 */
 	DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC,
+	/**
+	 * @DP_DPCD_QUIRK_ENABLE_MST
+	 *
+	 * Source device will eanble MST transmission if designated sink devivce connected.
+	 */
+	DP_DPCD_QUIRK_ENABLE_MST,
 };
 
 /**

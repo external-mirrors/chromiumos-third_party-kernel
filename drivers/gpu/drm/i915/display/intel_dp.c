@@ -4015,6 +4015,12 @@ intel_dp_configure_mst(struct intel_dp *intel_dp)
 		&dp_to_dig_port(intel_dp)->base;
 	bool sink_can_mst = drm_dp_read_mst_cap(&intel_dp->aux, intel_dp->dpcd);
 
+	if (drm_dp_has_quirk(&intel_dp->desc, DP_DPCD_QUIRK_ENABLE_MST)) {
+		drm_dbg_kms(&i915->drm,	"[ENCODER:%d:%s] Source will enable MST with particular monitor.\n",
+			    encoder->base.base.id, encoder->base.name);
+		sink_can_mst = true;
+	}
+
 	drm_dbg_kms(&i915->drm,
 		    "[ENCODER:%d:%s] MST support: port: %s, sink: %s, modparam: %s\n",
 		    encoder->base.base.id, encoder->base.name,
