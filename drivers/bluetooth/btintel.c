@@ -3117,8 +3117,15 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 					&hdev->quirks);
 
 			err = btintel_legacy_rom_setup(hdev, &ver);
+			hdev->wbs_pkt_len = 24;
 			break;
 		case 0x0b:      /* SfP */
+			/* Apply the device specific controller quirk
+			 *
+			 * Use packet size 24 for the chip
+			 */
+			hdev->wbs_pkt_len = 24;
+			fallthrough;
 		case 0x11:      /* JfP */
 		case 0x12:      /* ThP */
 		case 0x13:      /* HrP */
@@ -3140,6 +3147,8 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 
 			err = btintel_bootloader_setup(hdev, &ver);
 			btintel_register_devcoredump_support(hdev);
+			if (ver.hw_variant == 0x0c)
+				hdev->wbs_pkt_len = 24;
 			break;
 		default:
 			bt_dev_err(hdev, "Unsupported Intel hw variant (%u)",
