@@ -8895,6 +8895,7 @@ static bool kvm_unprotect_and_retry_on_failure(struct kvm_vcpu *vcpu,
 					       gpa_t cr2_or_gpa,
 					       int emulation_type)
 {
+
 	if (!(emulation_type & EMULTYPE_ALLOW_RETRY_PF))
 		return false;
 
