@@ -585,6 +585,8 @@
 #define R_AX_PCIE_HRPWM_V1		0x30C0
 #define R_AX_PCIE_CRPWM			0x30C4
 
+#define R_BE_REG_PL1_ISR 0x34B4
+
 #define RTW89_PCI_TXBD_NUM_MAX		256
 #define RTW89_PCI_RXBD_NUM_MAX		256
 #define RTW89_PCI_TXWD_NUM_MAX		512
@@ -1105,6 +1107,7 @@ static inline bool rtw89_pci_ltr_is_err_reg_val(u32 val)
 }
 
 extern const struct dev_pm_ops rtw89_pm_ops;
+extern const struct dev_pm_ops rtw89_pm_ops_be;
 extern const struct rtw89_pci_ch_dma_addr_set rtw89_pci_ch_dma_addr_set;
 extern const struct rtw89_pci_ch_dma_addr_set rtw89_pci_ch_dma_addr_set_v1;
 extern const struct rtw89_pci_bd_ram rtw89_bd_ram_table_dual[RTW89_TXCH_NUM];

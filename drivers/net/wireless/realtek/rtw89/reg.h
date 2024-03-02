@@ -3767,6 +3767,19 @@
 #define B_BE_AUTOLOAD_SUS BIT(5)
 #define B_BE_AUTOLOAD_DIS BIT(4)
 
+#define R_BE_RSV_CTRL 0x001C
+#define B_BE_HR_BE_DBG GENMASK(23, 12)
+#define B_BE_R_SYM_DIS_PCIE_FLR BIT(9)
+#define B_BE_R_EN_HRST_PWRON BIT(8)
+#define B_BE_LOCK_ALL_EN BIT(7)
+#define B_BE_R_DIS_PRST BIT(6)
+#define B_BE_WLOCK_1C_BIT6 BIT(5)
+#define B_BE_WLOCK_40 BIT(4)
+#define B_BE_WLOCK_08 BIT(3)
+#define B_BE_WLOCK_04 BIT(2)
+#define B_BE_WLOCK_00 BIT(1)
+#define B_BE_WLOCK_ALL BIT(0)
+
 #define R_BE_EFUSE_CTRL 0x0030
 #define B_BE_EF_MODE_SEL_MASK GENMASK(31, 30)
 #define B_BE_EF_RDY BIT(29)
