@@ -1715,11 +1715,21 @@ static const char * const mt8196_pinctrl_register_base_names[] = {
 	"iocfg_lb2", "iocfg_tm1", "iocfg_tm2", "iocfg_tm3",
 };
 
+static const struct mtk_eint_hw mt8196_eint_hw = {
+	.port_mask	= 0xf,
+	.ports		= 3,
+	.ap_num		= 293,
+	.db_cnt		= 32,
+	.db_time	= debounce_time_mt6765,
+};
+
 static const struct mtk_pin_soc mt8196_data = {
 	.reg_cal	= mt8196_reg_cals,
 	.pins	= mtk_pins_mt8196,
+	.eint_pin = eint_pins_mt8196,
 	.npins	= ARRAY_SIZE(mtk_pins_mt8196),
 	.ngrps	= ARRAY_SIZE(mtk_pins_mt8196),
+	.eint_hw = &mt8196_eint_hw,
 	.nfuncs	= 8,
 	.gpio_m	= 0,
 	.base_names	= mt8196_pinctrl_register_base_names,
