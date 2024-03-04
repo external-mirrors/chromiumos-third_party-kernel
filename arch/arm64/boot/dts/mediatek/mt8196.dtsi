@@ -1370,6 +1370,86 @@
 			reg = <0 0x167a0000 0 0x1000>;
 		};
 
+		ufshci: ufshci@16810000 {
+			compatible = "mediatek,mt8183-ufshci";
+			reg = <0 0x16810000 0 0x2a00>;
+
+			interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 329 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 330 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 331 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 332 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 333 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 334 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 335 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 336 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks =
+					<&cksys_clk CLK_CK_SEL>,
+					<&cksys_clk CLK_CK_MAINPLL_D4_D2>,
+					<&cksys_clk CLK_CK_UNIVPLL_D5>,
+					<&cksys_clk CLK_CK_AES_UFSFDE_SEL>,
+					<&cksys_clk CLK_CK_UNIVPLL_D6>,
+					<&cksys_clk CLK_CK_MAINPLL_D4>,
+					<&ufscfg_ao_clk CLK_UFSAO_UNIPRO_TX_SYM_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_UNIPRO_RX_SYM0_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_UNIPRO_RX_SYM1_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_UNIPRO_SYS_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_UNIPRO_SAP_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_PHY_SAP_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_UFSHCI_UFS_UFS>,
+					<&ufscfg_ao_clk CLK_UFSAO_UFSHCI_AES_UFS>;
+			clock-names =
+					"ufs_sel",
+					"ufs_sel_min_src",
+					"ufs_sel_max_src",
+					"crypt_mux",
+					"crypt_lp",
+					"crypt_perf",
+					"unipro_tx_sym",
+					"unipro_rx_sym0",
+					"unipro_rx_sym1",
+					"unipro_sys",
+					"unipro_sap",
+					"ufs_phy_sap",
+					"ufshci_ufs",
+					"ufshci_aes";
+			freq-table-hz =
+					<273000000 499200000>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>,
+					<0 0>;
+			/* for clock scaling bind vcore */
+
+			/* 0.65V for clock scale up */
+			boost-crypt-vcore-min = <650000>;
+			vcc-supply = <&mt6363_vemc>;
+			vccq-supply = <&mt6363_vufs12>;
+			resets =	<&ufscfgao_rst 1>,
+					<&ufscfgao_rst 2>,
+					<&ufscfgao_rst 3>;
+			reset-names =	"unipro_rst",
+					"crypto_rst",
+					"hci_rst";
+
+			/*
+			 * Control mtcmos with rtff flow by ufs driver,
+			 * Instead of scpsys by PM flow.
+			 */
+			mediatek,ufs-rtff-mtcmos;
+			mediatek,ufs-boost-crypt;
+			mediatek,ufs-pmc-via-fastauto;
+		};
+
 		ufscfg_ao_sec_clk: syscon@16890000 {
 			/* TODO: Fix compatible in driver */
 			compatible = "mediatek,mt8196-ufscfg-ao-sec", "mediatek,mt8196-ufscfg_ao_sec", "syscon";
@@ -1382,6 +1462,27 @@
 			compatible = "mediatek,mt8196-ufscfg-ao", "mediatek,mt8196-ufscfg_ao", "syscon";
 			reg = <0 0x168a0000 0 0x1000>;
 			#clock-cells = <1>;
+
+			ufscfgao_rst: reset-controller {
+				compatible = "ti,syscon-reset";
+				#reset-cells = <1>;
+
+				ti,reset-bits = <
+					/* ufs mphy/ufschi/crypto/unipro reset */
+					/* 0: mphy */
+					0x48   8 0x4c   8 0 0
+					(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+					/* 1: unipro */
+					0x148  0 0x14c  0 0 0
+					(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+					/* 2: ufs-crypto */
+					0x148  1 0x14c  1 0 0
+					(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+					/* 3: ufshci */
+					0x148  2 0x14c  2 0 0
+					(ASSERT_SET | DEASSERT_SET | STATUS_NONE)
+					>;
+			};
 		};
 
 		pciephy0: phy@16900000 {
