@@ -199,12 +199,6 @@
 			"TP122",
 			"TP123",
 			"TP124";
-
-		mute {
-			gpio-hog;
-			gpios = <0 0>;
-			output-high;
-		};
 	};
 };
 
