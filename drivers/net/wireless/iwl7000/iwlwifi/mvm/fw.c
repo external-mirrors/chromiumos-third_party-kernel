@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -510,7 +510,6 @@ static void iwl_mvm_phy_filter_init(struct iwl_mvm *mvm,
 #endif
 }
 
-#if defined(CONFIG_ACPI) && defined(CONFIG_EFI)
 static void iwl_mvm_uats_init(struct iwl_mvm *mvm)
 {
 	u8 cmd_ver;
@@ -590,17 +589,6 @@ static int iwl_mvm_sgom_init(struct iwl_mvm *mvm)
 
 	return ret;
 }
-#else
-
-static int iwl_mvm_sgom_init(struct iwl_mvm *mvm)
-{
-	return 0;
-}
-
-static void iwl_mvm_uats_init(struct iwl_mvm *mvm)
-{
-}
-#endif
 
 static int iwl_send_phy_cfg_cmd(struct iwl_mvm *mvm)
 {
@@ -1298,7 +1286,7 @@ static void iwl_mvm_tas_init(struct iwl_mvm *mvm)
 	if (!iwl_is_tas_approved()) {
 		IWL_DEBUG_RADIO(mvm,
 				"System vendor '%s' is not in the approved list, disabling TAS in US and Canada.\n",
-				dmi_get_system_info(DMI_SYS_VENDOR));
+				dmi_get_system_info(DMI_SYS_VENDOR) ?: "<unknown>");
 		if ((!iwl_mvm_add_to_tas_block_list(data.block_list_array,
 						    &data.block_list_size,
 						    IWL_MCC_US)) ||
@@ -1312,7 +1300,7 @@ static void iwl_mvm_tas_init(struct iwl_mvm *mvm)
 	} else {
 		IWL_DEBUG_RADIO(mvm,
 				"System vendor '%s' is in the approved list.\n",
-				dmi_get_system_info(DMI_SYS_VENDOR));
+				dmi_get_system_info(DMI_SYS_VENDOR) ?: "<unknown>");
 	}
 
 	fw_ver = iwl_fw_lookup_cmd_ver(mvm->fw, cmd_id,
@@ -1473,7 +1461,7 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 
 	if (le32_to_cpu(cmd.oem_uhb_allow_bitmap) & IWL_UATS_VLP_AP_SUPPORTED ||
 	    le32_to_cpu(cmd.oem_uhb_allow_bitmap) & IWL_UATS_AFC_AP_SUPPORTED)
-		mvm->fwrt.uats_enabled = TRUE;
+		mvm->fwrt.uats_enabled = true;
 }
 
 void iwl_mvm_get_bios_tables(struct iwl_mvm *mvm)

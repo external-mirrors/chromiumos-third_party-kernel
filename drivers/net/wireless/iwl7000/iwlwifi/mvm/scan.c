@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -1379,11 +1379,14 @@ static void iwl_mvm_scan_umac_dwell(struct iwl_mvm *mvm,
 		cmd->ooc_priority = cpu_to_le32(IWL_SCAN_PRIORITY_EXT_2);
 }
 
-static u32 iwl_mvm_scan_umac_ooc_priority(struct iwl_mvm_scan_params *params)
+static u32 iwl_mvm_scan_umac_ooc_priority(int type)
 {
-	return iwl_mvm_is_regular_scan(params) ?
-		IWL_SCAN_PRIORITY_EXT_6 :
-		IWL_SCAN_PRIORITY_EXT_2;
+	if (type == IWL_MVM_SCAN_REGULAR)
+		return IWL_SCAN_PRIORITY_EXT_6;
+	if (type == IWL_MVM_SCAN_INT_MLO)
+		return IWL_SCAN_PRIORITY_EXT_4;
+
+	return IWL_SCAN_PRIORITY_EXT_2;
 }
 
 static void
@@ -2496,7 +2499,7 @@ static int iwl_mvm_scan_umac_v12(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 
 	mvm->scan_uid_status[uid] = type;
 
-	cmd->ooc_priority = cpu_to_le32(iwl_mvm_scan_umac_ooc_priority(params));
+	cmd->ooc_priority = cpu_to_le32(iwl_mvm_scan_umac_ooc_priority(type));
 	cmd->uid = cpu_to_le32(uid);
 
 	gen_flags = iwl_mvm_scan_umac_flags_v2(mvm, params, vif, type);
@@ -2533,7 +2536,7 @@ static int iwl_mvm_scan_umac_v14_and_above(struct iwl_mvm *mvm,
 
 	mvm->scan_uid_status[uid] = type;
 
-	cmd->ooc_priority = cpu_to_le32(iwl_mvm_scan_umac_ooc_priority(params));
+	cmd->ooc_priority = cpu_to_le32(iwl_mvm_scan_umac_ooc_priority(type));
 	cmd->uid = cpu_to_le32(uid);
 
 	gen_flags = iwl_mvm_scan_umac_flags_v2(mvm, params, vif, type);
@@ -2874,9 +2877,11 @@ static void iwl_mvm_fill_respect_p2p_go(struct iwl_mvm *mvm,
 	}
 }
 
-int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
-			   struct cfg80211_scan_request *req,
-			   struct ieee80211_scan_ies *ies)
+static int _iwl_mvm_single_scan_start(struct iwl_mvm *mvm,
+				      struct ieee80211_vif *vif,
+				      struct cfg80211_scan_request *req,
+				      struct ieee80211_scan_ies *ies,
+				      int type)
 {
 	struct iwl_host_cmd hcmd = {
 		.len = { iwl_mvm_scan_size(mvm), },
@@ -2894,7 +2899,7 @@ int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 		return -EBUSY;
 	}
 
-	ret = iwl_mvm_check_running_scans(mvm, IWL_MVM_SCAN_REGULAR);
+	ret = iwl_mvm_check_running_scans(mvm, type);
 	if (ret)
 		return ret;
 
@@ -2945,8 +2950,7 @@ int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 
 	iwl_mvm_scan_6ghz_passive_scan(mvm, &params, vif);
 
-	uid = iwl_mvm_build_scan_cmd(mvm, vif, &hcmd, &params,
-				     IWL_MVM_SCAN_REGULAR);
+	uid = iwl_mvm_build_scan_cmd(mvm, vif, &hcmd, &params, type);
 
 	if (uid < 0)
 		return uid;
@@ -2966,16 +2970,26 @@ int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	}
 
 	IWL_DEBUG_SCAN(mvm, "Scan request was sent successfully\n");
-	mvm->scan_status |= IWL_MVM_SCAN_REGULAR;
-	mvm->scan_vif = iwl_mvm_vif_from_mac80211(vif);
+	mvm->scan_status |= type;
+
+	if (type == IWL_MVM_SCAN_REGULAR) {
+		mvm->scan_vif = iwl_mvm_vif_from_mac80211(vif);
+		schedule_delayed_work(&mvm->scan_timeout_dwork,
+				      msecs_to_jiffies(SCAN_TIMEOUT));
+	}
 
 	if (params.enable_6ghz_passive)
 		mvm->last_6ghz_passive_scan_jiffies = jiffies;
 
-	schedule_delayed_work(&mvm->scan_timeout_dwork,
-			      msecs_to_jiffies(SCAN_TIMEOUT));
-
 	return 0;
+}
+
+int iwl_mvm_reg_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
+			   struct cfg80211_scan_request *req,
+			   struct ieee80211_scan_ies *ies)
+{
+	return _iwl_mvm_single_scan_start(mvm, vif, req, ies,
+					  IWL_MVM_SCAN_REGULAR);
 }
 
 int iwl_mvm_sched_scan_start(struct iwl_mvm *mvm,
@@ -3054,7 +3068,7 @@ int iwl_mvm_sched_scan_start(struct iwl_mvm *mvm,
 	for (i = 0; i < params.n_channels; i++) {
 		struct ieee80211_channel *channel = params.channels[i];
 
-		if (nl80211_is_6ghz(channel->band) &&
+		if (channel->band == NL80211_BAND_6GHZ &&
 		    !cfg80211_channel_is_psc(channel)) {
 			non_psc_included = true;
 			break;
@@ -3070,7 +3084,7 @@ int iwl_mvm_sched_scan_start(struct iwl_mvm *mvm,
 			return -ENOMEM;
 
 		for (i = j = 0; i < params.n_channels; i++) {
-			if (nl80211_is_6ghz(params.channels[i]->band) &&
+			if (params.channels[i]->band == NL80211_BAND_6GHZ &&
 			    !cfg80211_channel_is_psc(params.channels[i]))
 				continue;
 			params.channels[j++] = params.channels[i];
@@ -3108,6 +3122,23 @@ int iwl_mvm_sched_scan_start(struct iwl_mvm *mvm,
 	return ret;
 }
 
+static void iwl_mvm_find_link_selection_vif(void *_data, u8 *mac,
+					    struct ieee80211_vif *vif)
+{
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
+
+	if (ieee80211_vif_is_mld(vif) && mvmvif->authorized)
+		iwl_mvm_select_links(mvmvif->mvm, vif);
+}
+
+static void iwl_mvm_post_scan_link_selection(struct iwl_mvm *mvm)
+{
+	ieee80211_iterate_active_interfaces(mvm->hw,
+					    IEEE80211_IFACE_ITER_NORMAL,
+					    iwl_mvm_find_link_selection_vif,
+					    NULL);
+}
+
 void iwl_mvm_rx_umac_scan_complete_notif(struct iwl_mvm *mvm,
 					 struct iwl_rx_cmd_buffer *rxb)
 {
@@ -3139,6 +3170,8 @@ void iwl_mvm_rx_umac_scan_complete_notif(struct iwl_mvm *mvm,
 	} else if (mvm->scan_uid_status[uid] == IWL_MVM_SCAN_SCHED) {
 		ieee80211_sched_scan_stopped(mvm->hw);
 		mvm->sched_scan_pass_all = SCHED_SCAN_PASS_ALL_DISABLED;
+	} else if (mvm->scan_uid_status[uid] == IWL_MVM_SCAN_INT_MLO) {
+		IWL_DEBUG_SCAN(mvm, "Internal MLO scan completed\n");
 	}
 
 	mvm->scan_status &= ~mvm->scan_uid_status[uid];
@@ -3158,6 +3191,9 @@ void iwl_mvm_rx_umac_scan_complete_notif(struct iwl_mvm *mvm,
 		mvm->last_ebs_successful = false;
 
 	mvm->scan_uid_status[uid] = 0;
+
+	if (notif->status == IWL_SCAN_OFFLOAD_COMPLETED)
+		iwl_mvm_post_scan_link_selection(mvm);
 }
 
 void iwl_mvm_rx_umac_scan_iter_complete_notif(struct iwl_mvm *mvm,
@@ -3325,6 +3361,12 @@ void iwl_mvm_report_scan_aborted(struct iwl_mvm *mvm)
 			mvm->sched_scan_pass_all = SCHED_SCAN_PASS_ALL_DISABLED;
 			mvm->scan_uid_status[uid] = 0;
 		}
+		uid = iwl_mvm_scan_uid_by_status(mvm, IWL_MVM_SCAN_INT_MLO);
+		if (uid >= 0) {
+			IWL_DEBUG_SCAN(mvm, "Internal MLO scan aborted\n");
+			mvm->scan_uid_status[uid] = 0;
+		}
+
 		uid = iwl_mvm_scan_uid_by_status(mvm,
 						 IWL_MVM_SCAN_STOPPING_REGULAR);
 		if (uid >= 0)
@@ -3332,6 +3374,11 @@ void iwl_mvm_report_scan_aborted(struct iwl_mvm *mvm)
 
 		uid = iwl_mvm_scan_uid_by_status(mvm,
 						 IWL_MVM_SCAN_STOPPING_SCHED);
+		if (uid >= 0)
+			mvm->scan_uid_status[uid] = 0;
+
+		uid = iwl_mvm_scan_uid_by_status(mvm,
+						 IWL_MVM_SCAN_STOPPING_INT_MLO);
 		if (uid >= 0)
 			mvm->scan_uid_status[uid] = 0;
 
@@ -3404,5 +3451,52 @@ out:
 		mvm->sched_scan_pass_all = SCHED_SCAN_PASS_ALL_DISABLED;
 	}
 
+	return ret;
+}
+
+int iwl_mvm_int_mlo_scan_start(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
+			       struct ieee80211_channel **channels,
+			       size_t n_channels)
+{
+	struct cfg80211_scan_request *req = NULL;
+	struct ieee80211_scan_ies ies = {};
+	size_t size, i;
+	int ret;
+
+	lockdep_assert_held(&mvm->mutex);
+
+	IWL_DEBUG_SCAN(mvm, "Starting Internal MLO scan: n_channels=%zu\n",
+		       n_channels);
+
+	if (!vif->cfg.assoc || !ieee80211_vif_is_mld(vif))
+		return -EINVAL;
+
+	size = struct_size(req, channels, n_channels);
+	req = kzalloc(size, GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	/* set the requested channels */
+	for (i = 0; i < n_channels; i++)
+		req->channels[i] = channels[i];
+
+	req->n_channels = n_channels;
+
+	/* set the rates */
+	for (i = 0; i < NUM_NL80211_BANDS; i++)
+		if (mvm->hw->wiphy->bands[i])
+			req->rates[i] =
+				(1 << mvm->hw->wiphy->bands[i]->n_bitrates) - 1;
+
+	req->wdev = ieee80211_vif_to_wdev(vif);
+	req->wiphy = mvm->hw->wiphy;
+	req->scan_start = jiffies;
+	cfg80211_scan_request_set_tsf_report_link_id(req, -1);
+
+	ret = _iwl_mvm_single_scan_start(mvm, vif, req, &ies,
+					 IWL_MVM_SCAN_INT_MLO);
+	kfree(req);
+
+	IWL_DEBUG_SCAN(mvm, "Internal MLO scan: ret=%d\n", ret);
 	return ret;
 }
