@@ -882,12 +882,23 @@ static int hci_set_random_addr_sync(struct hci_dev *hdev, bdaddr_t *rpa)
 	err = __hci_cmd_sync_status(hdev, HCI_OP_LE_SET_RANDOM_ADDR,
 				    6, rpa, HCI_CMD_TIMEOUT);
 
-	if (err)
-		goto done;
-
-	/* Re-enable previously-active advertisements */
-	if (adv_enabled)
-		err = hci_resume_advertising_sync(hdev);
+	/* Re-enable previously-active advertisements.
+	 * We should always resume it regarding of the current err status;
+	 * Otherwise the adv would get stuck in the paused state and never
+	 * resumed.
+	 * hci_resume_advertising_sync always clears the hdev->
+	 * advertising_paused flag so no need to worry about it fails.
+	 */
+	if (adv_enabled) {
+		if (err) {
+			/* If HCI_OP_LE_SET_RANDOM_ADDR already failed, don't
+			 * overwrite err.
+			 */
+			hci_resume_advertising_sync(hdev);
+		} else {
+			err = hci_resume_advertising_sync(hdev);
+		}
+	}
 
 done:
 	return err;
