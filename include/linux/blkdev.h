@@ -1615,7 +1615,7 @@ int sync_blockdev_nowait(struct block_device *bdev);
 void sync_bdevs(bool wait);
 void bdev_statx(struct path *, struct kstat *, u32);
 void printk_all_partitions(void);
-int __init early_lookup_bdev(const char *pathname, dev_t *dev);
+int early_lookup_bdev(const char *pathname, dev_t *dev);
 #else
 static inline void invalidate_bdev(struct block_device *bdev)
 {
