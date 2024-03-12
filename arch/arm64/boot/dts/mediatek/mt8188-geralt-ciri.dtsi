@@ -142,14 +142,13 @@
 		compatible = "himax,hx83102j";
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins &touch_reset>;
+		panel = <&panel>;
 		reg = <0>;
 		spi-max-frequency = <12500000>;
 		status = "okay";
 		reset-gpios = <&pio 5  GPIO_ACTIVE_LOW>;
 		himax_gpio_irq = <&pio 143  IRQ_TYPE_LEVEL_LOW>;
 		himax,pid = <0x1002>;
-		himax,ic-det-delay-ms = <1000>;
-		himax,ic-resume-delay-ms = <150>;
 
 		interrupt-parent = <&pio>;
 		interrupts = <143 IRQ_TYPE_LEVEL_LOW>;
