@@ -527,7 +527,7 @@ ashmem_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
 	return lru_count;
 }
 
-static struct shrinker *ashmem_shrinker;  
+static struct shrinker *ashmem_shrinker;
 
 static int set_prot_mask(struct ashmem_area *asma, unsigned long prot)
 {
