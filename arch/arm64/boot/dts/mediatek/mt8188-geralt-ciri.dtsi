@@ -139,7 +139,7 @@
 	#size-cells = <0>;
 
 	touchscreen: hid_hx_common_spi@0 {
-		compatible = "himax,hid";
+		compatible = "himax,hx83102j";
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins &touch_reset>;
 		reg = <0>;
