@@ -1331,21 +1331,30 @@
 			clocks = <&infracfg_ao CLK_INFRA_AO_GCE2>;
 		};
 
-		scp: scp@10500000 {
-			compatible = "mediatek,mt8188-scp";
-			reg = <0 0x10500000 0 0x100000>,
-			      <0 0x10720000 0 0xe0000>;
-			reg-names = "sram", "cfg";
-			interrupts = <GIC_SPI 462 IRQ_TYPE_LEVEL_HIGH 0>;
-		};
-
-		scp_dual: scp-dual@105af000 {
-			compatible = "mediatek,mt8195-scp-dual";
-			reg = <0 0x105d0000 0 0x2f000>,
-			      <0 0x10720000 0 0xe0000>;
-			reg-names = "sram", "cfg";
-			interrupts = <GIC_SPI 463 IRQ_TYPE_LEVEL_HIGH 0>;
+		scp_cluster: scp@10500000 {
+			compatible = "mediatek,mt8188-scp-dual";
+			reg = <0 0x10720000 0 0xe0000>;
+			reg-names = "cfg";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0 0x10500000 0x100000>;
 			status = "disabled";
+
+			scp_c0: scp@0 {
+				compatible = "mediatek,scp-core";
+				reg = <0x0 0xd0000>;
+				reg-names = "sram";
+				interrupts = <GIC_SPI 462 IRQ_TYPE_LEVEL_HIGH 0>;
+				status = "disabled";
+			};
+
+			scp_c1: scp@d0000 {
+				compatible = "mediatek,scp-core";
+				reg = <0xd0000 0x2f000>;
+				reg-names = "sram";
+				interrupts = <GIC_SPI 463 IRQ_TYPE_LEVEL_HIGH 0>;
+				status = "disabled";
+			};
 		};
 
 		afe: afe@10b10000 {
@@ -2309,7 +2318,7 @@
 			#address-cells = <2>;
 			#size-cells = <2>;
 			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
-			mediatek,scp = <&scp_dual>;
+			mediatek,scp = <&scp_c1>;
 			iommus = <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_0>,
 				 <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_1>,
 				 <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_4P_0>,
@@ -2392,7 +2401,7 @@
 			      <0 0x15620000 0 0x00100>,	/* 15 IMGSYS_WPE3_DIP1 */
 			      <0 0x15110000 0 0x00100>,	/* 16 IMGSYS_DIP_TOP */
 			      <0 0x15130000 0 0x00100>;	/* 17 IMGSYS_DIP_TOP_NR */
-			mediatek,scp = <&scp_dual>;
+			mediatek,scp = <&scp_c1>;
 			mediatek,hcp = <&hcp>;
 			mediatek,larbs = <&larb9>,
 					 <&larb10>,
@@ -3507,7 +3516,7 @@
 			compatible = "mediatek,camisp";
 			reg = <0 0x16000000 0 0x1000>;
 			reg-names = "base";
-			mediatek,scp = <&scp_dual>;
+			mediatek,scp = <&scp_c1>;
 			power-domains = <&spm MT8188_POWER_DOMAIN_CAM_MAIN>;
 		};
 
@@ -3844,7 +3853,7 @@
 			compatible = "mediatek,mt8188-vcodec-dec";
 			reg = <0 0x18000000 0 0x1000>,          /* VDEC_SYS */
 			      <0 0x18004000 0 0x1000>;      /* VDEC_RACING_CTRL */
-			mediatek,scp = <&scp>;
+			mediatek,scp = <&scp_c0>;
 			iommus = <&vpp_iommu M4U_PORT_L23_HW_VDEC_UFO_ENC_EXT>;
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -4069,7 +4078,7 @@
 				 <&vdo_iommu M4U_PORT_L19_VENC_SUB_W_LUMA>,
 				 <&vdo_iommu M4U_PORT_L19_VENC_SUB_R_LUMA>;
 			interrupts = <GIC_SPI 353 IRQ_TYPE_LEVEL_HIGH 0>;
-			mediatek,scp = <&scp>;
+			mediatek,scp = <&scp_c0>;
 			clocks = <&vencsys CLK_VENC1_VENC>;
 			clock-names = "venc_clk";
 			assigned-clocks = <&topckgen CLK_TOP_VENC>;

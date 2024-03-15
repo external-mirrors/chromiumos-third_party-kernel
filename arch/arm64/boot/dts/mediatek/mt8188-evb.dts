@@ -428,19 +428,20 @@
 	regulator-max-microvolt = <550000>;
 };
 
-&scp {
+&scp_cluster {
+	status = "okay";
+};
+
+&scp_c0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&scp_pins>;
 	memory-region = <&scp_mem_reserved>;
 	status = "okay";
-
-	mediatek,scp-core = <&scp_dual 0>;
 };
 
-&scp_dual {
+&scp_c1 {
 	status = "okay";
 	memory-region = <&scp_dual_mem_reserved>;
-	mediatek,scp-core = <&scp 1>;
 	firmware-name = "scp-dual.img";
 };
 
