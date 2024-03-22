@@ -178,7 +178,8 @@ void mtk_ethdr_layer_config(struct device *dev, unsigned int idx,
 	if (state->base.pixel_blend_mode != DRM_MODE_BLEND_COVERAGE)
 		mix_con |= PREMULTI_SOURCE;
 
-	if (state->base.fb && !state->base.fb->format->has_alpha) {
+	if (state->base.pixel_blend_mode == DRM_MODE_BLEND_PIXEL_NONE ||
+	    (state->base.fb && !state->base.fb->format->has_alpha)) {
 		/*
 		 * Mixer doesn't support CONST_BLD mode,
 		 * use a trick to make the output equivalent
