@@ -23,8 +23,44 @@
 	#size-cells = <2>;
 
 	aliases {
+		blender0 = &disp_ovl0_blender0;
+		blender1 = &disp_ovl0_blender1;
+		blender2 = &disp_ovl0_blender2;
+		blender3 = &disp_ovl0_blender3;
+		blender4 = &disp_ovl0_blender4;
+		blender5 = &disp_ovl0_blender5;
+		blender6 = &disp_ovl0_blender6;
+		blender7 = &disp_ovl0_blender7;
+		blender8 = &disp_ovl0_blender8;
+		blender9 = &disp_ovl0_blender9;
+		blender10 = &disp_ovl1_blender0;
+		blender11 = &disp_ovl1_blender1;
+		blender12 = &disp_ovl1_blender2;
+		blender13 = &disp_ovl1_blender3;
+		blender14 = &disp_ovl1_blender4;
+		blender15 = &disp_ovl1_blender5;
+		blender16 = &disp_ovl1_blender6;
+		blender17 = &disp_ovl1_blender7;
+		blender18 = &disp_ovl1_blender8;
+		blender19 = &disp_ovl1_blender9;
 		dp-intf0 = &dp_intf0;
 		dvo0 = &disp_dvo0;
+		exdma2 = &disp_ovl0_exdma2;
+		exdma3 = &disp_ovl0_exdma3;
+		exdma4 = &disp_ovl0_exdma4;
+		exdma5 = &disp_ovl0_exdma5;
+		exdma6 = &disp_ovl0_exdma6;
+		exdma7 = &disp_ovl0_exdma7;
+		exdma8 = &disp_ovl0_exdma8;
+		exdma9 = &disp_ovl0_exdma9;
+		exdma12 = &disp_ovl1_exdma2;
+		exdma13 = &disp_ovl1_exdma3;
+		exdma14 = &disp_ovl1_exdma4;
+		exdma15 = &disp_ovl1_exdma5;
+		exdma16 = &disp_ovl1_exdma6;
+		exdma17 = &disp_ovl1_exdma7;
+		exdma18 = &disp_ovl1_exdma8;
+		exdma19 = &disp_ovl1_exdma9;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
 		i2c2 = &i2c2;
@@ -42,6 +78,22 @@
 		i2c14 = &i2c14;
 		mmc1 = &mmc1;
 		mmc2 = &mmc2;
+		mutex0 = &disp0_mutex;
+		mutex1 = &disp1_mutex;
+		mutex2 = &ovl0_mutex;
+		mutex3 = &ovl1_mutex;
+		outproc0 = &disp_ovl0_outproc0;
+		outproc1 = &disp_ovl0_outproc1;
+		outproc2 = &disp_ovl0_outproc2;
+		outproc3 = &disp_ovl0_outproc3;
+		outproc4 = &disp_ovl0_outproc4;
+		outproc5 = &disp_ovl0_outproc5;
+		outproc6 = &disp_ovl1_outproc0;
+		outproc7 = &disp_ovl1_outproc1;
+		outproc8 = &disp_ovl1_outproc2;
+		outproc9 = &disp_ovl1_outproc3;
+		outproc10 = &disp_ovl1_outproc4;
+		outproc11 = &disp_ovl1_outproc5;
 		serial0 = &uart0;
 		spi0 = &spi0;
 		spi1 = &spi1;
@@ -51,6 +103,7 @@
 		spi5 = &spi5;
 		spi6 = &spi6;
 		spi7 = &spi7;
+		vdisp-ao = &disp_vdisp_ao_config_clk;
 	};
 
 	cpus {
@@ -2147,10 +2200,29 @@
 		};
 
 		dispsys_config_clk: syscon@32000000 {
-			compatible = "mediatek,mt8196-mmsys0", "syscon";
+			compatible = "mediatek,mt8196-dispsys0", "syscon";
 			reg = <0 0x32000000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
+			mboxes = <&gce0 0 CMDQ_THR_PRIO_4>, <&gce0 1 CMDQ_THR_PRIO_4>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DIS0_DORMANT>;
 			#clock-cells = <1>;
+
+			async {
+				clocks = <&dispsys_config_clk CLK_MM_DISP_DLI_ASYNC0_DISP>,
+					 <&dispsys_config_clk CLK_MM_DISP_DLI_ASYNC1_DISP>,
+					 <&dispsys_config_clk CLK_MM_DISP_DLI_ASYNC8_DISP>,
+					 <&dispsys_config_clk CLK_MM_DISP_DLO_ASYNC1_DISP>,
+					 <&dispsys_config_clk CLK_MM_DISP_DLO_ASYNC2_DISP>,
+					 <&dispsys_config_clk CLK_MM_DISP_DLO_ASYNC3_DISP>;
+			};
+		};
+
+		disp0_mutex: mutex@32020000 {
+			compatible = "mediatek,mt8196-disp-mutex";
+			reg = <0 0x32020000 0 0x1000>;
+			clocks = <&dispsys_config_clk CLK_MM_DISP_MUTEX0_DISP>;
+			mediatek,gce-events = <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT0>,
+					      <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT1>;
 		};
 
 		smi_larb32: larb@32240000 {
@@ -2166,10 +2238,29 @@
 		};
 
 		dispsys1_config_clk: syscon@32400000 {
-			compatible = "mediatek,mt8196-mmsys1", "syscon";
+			compatible = "mediatek,mt8196-dispsys1", "syscon";
 			reg = <0 0x32400000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
+			mboxes = <&gce0 0 CMDQ_THR_PRIO_4>, <&gce0 1 CMDQ_THR_PRIO_4>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DIS1_DORMANT>;
 			#clock-cells = <1>;
+
+			async {
+				clocks = <&dispsys1_config_clk CLK_MM1_DISP_DLI_ASYNC21_DISP>,
+					 <&dispsys1_config_clk CLK_MM1_DISP_DLI_ASYNC22_DISP>,
+					 <&dispsys1_config_clk CLK_MM1_DISP_DLI_ASYNC23_DISP>;
+			};
+
+			top {
+				clocks = <&dispsys1_config_clk CLK_MM1_DISPSYS1_CONFIG_DISP>;
+				clock-names = "dispsys1_config";
+			};
+		};
+
+		disp1_mutex: mutex@32420000 {
+			compatible = "mediatek,mt8196-disp-mutex";
+			reg = <0 0x32420000 0 0x1000>;
+			clocks = <&dispsys1_config_clk CLK_MM1_DISP_MUTEX0_DISP>;
 		};
 
 		dp_intf0: dp-intf@32430000 {
@@ -2229,7 +2320,194 @@
 			compatible = "mediatek,mt8196-ovlsys-config", "mediatek,mt8196-ovlsys_config", "syscon";
 			reg = <0 0x32800000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
+			mboxes = <&gce0 0 CMDQ_THR_PRIO_4>, <&gce0 1 CMDQ_THR_PRIO_4>,
+				 <&gce0 8 CMDQ_THR_PRIO_4>, <&gce0 9 CMDQ_THR_PRIO_4>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
 			#clock-cells = <1>;
+
+			async {
+				clocks = <&ovlsys_config_clk CLK_OVL_DLO5_DISP>,
+					 <&ovlsys_config_clk CLK_OVL_DLO6_DISP>;
+			};
+		};
+
+		ovl0_mutex: mutex@32820000 {
+			compatible = "mediatek,mt8196-disp-mutex";
+			reg = <0 0x32820000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_MUTEX0_DISP>;
+			mediatek,gce-events = <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT0>,
+					      <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT1>;
+		};
+
+		disp_ovl0_exdma2: dma-controller@32850000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32850000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA2_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb0>;
+			iommus = <&mm_smmu 144>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma3: dma-controller@32860000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32860000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA3_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb1>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma4: dma-controller@32870000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32870000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA4_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb20>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma5: dma-controller@32880000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32880000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA5_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb21>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma6: dma-controller@32890000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32890000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA6_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb1 SMMU_L1_P3_OVL_RDMA6>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma7: dma-controller@328a0000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x328a0000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA7_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb0>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma8: dma-controller@328b0000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x328b0000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA8_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb21>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_exdma9: dma-controller@328c0000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x328c0000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA9_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
+			mediatek,larb = <&smi_larb20>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl0_blender0: blender@328d0000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x328d0000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER0_DISP>;
+		};
+
+		disp_ovl0_blender1: blender@328e0000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x328e0000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER1_DISP>;
+		};
+
+		disp_ovl0_blender2: blender@328f0000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x328f0000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER2_DISP>;
+		};
+
+		disp_ovl0_blender3: blender@32900000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32900000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER3_DISP>;
+		};
+
+		disp_ovl0_blender4: blender@32910000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32910000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER4_DISP>;
+		};
+
+		disp_ovl0_blender5: blender@32920000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32920000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER5_DISP>;
+		};
+
+		disp_ovl0_blender6: blender@32930000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32930000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER6_DISP>;
+		};
+
+		disp_ovl0_blender7: blender@32940000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32940000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER7_DISP>;
+		};
+
+		disp_ovl0_blender8: blender@32950000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32950000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER8_DISP>;
+		};
+
+		disp_ovl0_blender9: blender@32960000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32960000 0 0x1000>;
+			clocks = <&ovlsys_config_clk CLK_OVL_BLENDER9_DISP>;
+		};
+
+		disp_ovl0_outproc0: outproc@32970000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC0_DISP>;
+			interrupts = <GIC_SPI 450 IRQ_TYPE_LEVEL_HIGH 0>;
+			reg = <0 0x32970000 0 0x1000>;
+		};
+
+		disp_ovl0_outproc1: outproc@32980000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC1_DISP>;
+			interrupts = <GIC_SPI 451 IRQ_TYPE_LEVEL_HIGH 0>;
+			reg = <0 0x32980000 0 0x1000>;
+		};
+
+		disp_ovl0_outproc2: outproc@32990000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC2_DISP>;
+			reg = <0 0x32990000 0 0x1000>;
+		};
+
+		disp_ovl0_outproc3: outproc@329a0000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC3_DISP>;
+			reg = <0 0x329a0000 0 0x1000>;
+		};
+
+		disp_ovl0_outproc4: outproc@329b0000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC4_DISP>;
+			reg = <0 0x329b0000 0 0x1000>;
+		};
+
+		disp_ovl0_outproc5: outproc@329c0000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC5_DISP>;
+			reg = <0 0x329c0000 0 0x1000>;
 		};
 
 		smi_larb0: larb@32a60000 {
@@ -2285,12 +2563,190 @@
 			compatible = "mediatek,mt8196-ovlsys1-config", "mediatek,mt8196-ovlsys1_config", "syscon";
 			reg = <0 0x32c00000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
+			mboxes = <&gce0 2 CMDQ_THR_PRIO_4>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
 			#clock-cells = <1>;
 
 			async {
 				clocks = <&ovlsys1_config_clk CLK_OVL_DLO5_DISP>,
 					 <&ovlsys1_config_clk CLK_OVL_DLO6_DISP>;
 			};
+		};
+
+		ovl1_mutex: mutex@32c20000 {
+			compatible = "mediatek,mt8196-disp-mutex";
+			reg = <0 0x32c20000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_MUTEX0_DISP>;
+			mediatek,gce-events = <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT2>;
+		};
+
+		disp_ovl1_exdma2: dma-controller@32c50000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32c50000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA2_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb34>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma3: dma-controller@32c60000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32c60000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA3_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb35>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma4: dma-controller@32c70000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32c70000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA4_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb36>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma5: dma-controller@32c80000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32c80000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA5_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb37>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma6: dma-controller@32c90000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32c90000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA6_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb35>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma7: dma-controller@32ca0000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32ca0000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA7_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb34>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma8: dma-controller@32cb0000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32cb0000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA8_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb37>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_exdma9: dma-controller@32cc0000 {
+			compatible = "mediatek,mt8196-exdma";
+			reg = <0 0x32cc0000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_EXDMA9_DISP>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
+			mediatek,larb = <&smi_larb36>;
+			#dma-cells = <1>;
+		};
+
+		disp_ovl1_blender0: blender@32cd0000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32cd0000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER0_DISP>;
+		};
+
+		disp_ovl1_blender1: blender@32ce0000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32ce0000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER1_DISP>;
+		};
+
+		disp_ovl1_blender2: blender@32cf0000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32cf0000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER2_DISP>;
+		};
+
+		disp_ovl1_blender3: blender@32d00000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d00000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER3_DISP>;
+		};
+
+		disp_ovl1_blender4: blender@32d10000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d10000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER4_DISP>;
+		};
+
+		disp_ovl1_blender5: blender@32d20000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d20000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER5_DISP>;
+		};
+
+		disp_ovl1_blender6: blender@32d30000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d30000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER6_DISP>;
+		};
+
+		disp_ovl1_blender7: blender@32d40000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d40000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER7_DISP>;
+		};
+
+		disp_ovl1_blender8: blender@32d50000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d50000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER8_DISP>;
+		};
+
+		disp_ovl1_blender9: blender@32d60000 {
+			compatible = "mediatek,mt8196-blender";
+			reg = <0 0x32d60000 0 0x1000>;
+			clocks = <&ovlsys1_config_clk CLK_OVL_BLENDER9_DISP>;
+		};
+
+		disp_ovl1_outproc0: outproc@32d70000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys1_config_clk CLK_OVL_OUTPROC0_DISP>;
+			interrupts = <GIC_SPI 452 IRQ_TYPE_LEVEL_HIGH 0>;
+			reg = <0 0x32d70000 0 0x1000>;
+		};
+
+		disp_ovl1_outproc1: outproc@32d80000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys1_config_clk CLK_OVL_OUTPROC1_DISP>;
+			reg = <0 0x32d80000 0 0x1000>;
+		};
+
+		disp_ovl1_outproc2: outproc@32d90000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys1_config_clk CLK_OVL_OUTPROC2_DISP>;
+			reg = <0 0x32d90000 0 0x1000>;
+		};
+
+		disp_ovl1_outproc3: outproc@32da0000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys1_config_clk CLK_OVL_OUTPROC3_DISP>;
+			reg = <0 0x32da0000 0 0x1000>;
+		};
+
+		disp_ovl1_outproc4: outproc@32db0000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys1_config_clk CLK_OVL_OUTPROC4_DISP>;
+			reg = <0 0x32db0000 0 0x1000>;
+		};
+
+		disp_ovl1_outproc5: outproc@32dc0000 {
+			compatible = "mediatek,mt8196-outproc";
+			clocks = <&ovlsys1_config_clk CLK_OVL_OUTPROC5_DISP>;
+			reg = <0 0x32dc0000 0 0x1000>;
 		};
 
 		smi_larb34: larb@32e60000 {
