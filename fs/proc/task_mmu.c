@@ -2707,7 +2707,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		list_add(&page->lru, &page_list);
 huge_unlock:
 		spin_unlock(ptl);
-		reclaim_pages(&page_list);
+		reclaim_pages(&page_list, true);
 		return 0;
 	}
 
@@ -2781,7 +2781,7 @@ regular_page:
 		test_and_clear_page_young(page);
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);
-			reclaim_pages(&page_list);
+			reclaim_pages(&page_list, true);
 			isolated = 0;
 			pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 			orig_pte = pte;
@@ -2789,7 +2789,7 @@ regular_page:
 	}
 
 	pte_unmap_unlock(orig_pte, ptl);
-	reclaim_pages(&page_list);
+	reclaim_pages(&page_list, true);
 
 	cond_resched();
 	return 0;
