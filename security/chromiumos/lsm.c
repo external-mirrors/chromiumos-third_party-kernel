@@ -37,6 +37,7 @@
 #include <linux/security.h>
 #include <linux/shmem_fs.h>
 #include <uapi/linux/mount.h>
+#include <uapi/linux/lsm.h>
 
 #include "inode_mark.h"
 #include "utils.h"
@@ -312,10 +313,15 @@ static struct security_hook_list chromiumos_security_hooks[] = {
 	LSM_HOOK_INIT(locked_down, chromiumos_locked_down),
 };
 
+static const struct lsm_id chromiumos_lsmid = {
+       .name = "chromiumos",
+       .id = LSM_ID_CHROMIUMOS,
+};
+
 static int __init chromiumos_security_init(void)
 {
 	security_add_hooks(chromiumos_security_hooks,
-			   ARRAY_SIZE(chromiumos_security_hooks), "chromiumos");
+			   ARRAY_SIZE(chromiumos_security_hooks), &chromiumos_lsmid);
 
 	pr_info("enabled");
 
