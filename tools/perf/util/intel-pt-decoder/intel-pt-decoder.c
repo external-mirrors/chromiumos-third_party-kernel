@@ -1215,6 +1215,8 @@ static bool intel_pt_fup_event(struct intel_pt_decoder *decoder)
 	bool ret = false;
 
 	decoder->state.type &= ~INTEL_PT_BRANCH;
+	decoder->state.insn_op = INTEL_PT_OP_OTHER;
+	decoder->state.insn_len = 0;
 
 	if (decoder->set_fup_tx_flags) {
 		decoder->set_fup_tx_flags = false;
