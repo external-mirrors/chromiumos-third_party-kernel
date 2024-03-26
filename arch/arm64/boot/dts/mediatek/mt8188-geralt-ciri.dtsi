@@ -156,6 +156,18 @@
 	};
 };
 
+&thermal_zones {
+	soc_max {
+		trips {
+			target: target@1 {
+				temperature = <90000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+		};
+	};
+};
+
 &pio {
 	pinctrl-names = "default";
 
