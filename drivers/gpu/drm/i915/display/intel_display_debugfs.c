@@ -6,15 +6,18 @@
 #include <linux/string_helpers.h>
 
 #include <drm/drm_debugfs.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
 
 #include "hsw_ips.h"
 #include "i915_debugfs.h"
 #include "i915_irq.h"
 #include "i915_reg.h"
+#include "intel_crtc.h"
 #include "intel_de.h"
 #include "intel_crtc_state_dump.h"
 #include "intel_display_debugfs.h"
+#include "intel_display_debugfs_params.h"
 #include "intel_display_power.h"
 #include "intel_display_power_well.h"
 #include "intel_display_types.h"
@@ -30,7 +33,6 @@
 #include "intel_panel.h"
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
-#include "intel_sprite.h"
 #include "intel_wm.h"
 
 static inline struct drm_i915_private *node_to_i915(struct drm_info_node *node)
@@ -228,19 +230,18 @@ out:
 	seq_puts(m, "\n");
 }
 
-static void intel_dp_info(struct seq_file *m,
-			  struct intel_connector *intel_connector)
+static void intel_dp_info(struct seq_file *m, struct intel_connector *connector)
 {
-	struct intel_encoder *intel_encoder = intel_attached_encoder(intel_connector);
+	struct intel_encoder *intel_encoder = intel_attached_encoder(connector);
 	struct intel_dp *intel_dp = enc_to_intel_dp(intel_encoder);
-	const struct drm_property_blob *edid = intel_connector->base.edid_blob_ptr;
+	const struct edid *edid = drm_edid_raw(connector->detect_edid);
 
 	seq_printf(m, "\tDPCD rev: %x\n", intel_dp->dpcd[DP_DPCD_REV]);
 	seq_printf(m, "\taudio support: %s\n",
-		   str_yes_no(intel_connector->base.display_info.has_audio));
+		   str_yes_no(connector->base.display_info.has_audio));
 
 	drm_dp_downstream_debug(m, intel_dp->dpcd, intel_dp->downstream_ports,
-				edid ? edid->data : NULL, &intel_dp->aux);
+				edid, &intel_dp->aux);
 }
 
 static void intel_dp_mst_info(struct seq_file *m,
@@ -1092,11 +1093,13 @@ void intel_display_debugfs_register(struct drm_i915_private *i915)
 				 ARRAY_SIZE(intel_display_debugfs_list),
 				 minor->debugfs_root, minor);
 
+	intel_cdclk_debugfs_register(i915);
 	intel_dmc_debugfs_register(i915);
 	intel_fbc_debugfs_register(i915);
 	intel_hpd_debugfs_register(i915);
 	intel_psr_debugfs_register(i915);
 	intel_wm_debugfs_register(i915);
+	intel_display_debugfs_params(i915);
 }
 
 static int i915_panel_show(struct seq_file *m, void *data)

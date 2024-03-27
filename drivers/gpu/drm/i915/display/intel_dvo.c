@@ -217,11 +217,17 @@ intel_dvo_mode_valid(struct drm_connector *_connector,
 		     struct drm_display_mode *mode)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	struct intel_dvo *intel_dvo = intel_attached_dvo(connector);
 	const struct drm_display_mode *fixed_mode =
 		intel_panel_fixed_mode(connector, mode);
 	int max_dotclk = to_i915(connector->base.dev)->max_dotclk_freq;
 	int target_clock = mode->clock;
+	enum drm_mode_status status;
+
+	status = intel_cpu_transcoder_mode_valid(i915, mode);
+	if (status != MODE_OK)
+		return status;
 
 	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return MODE_NO_DBLESCAN;
@@ -319,7 +325,7 @@ intel_dvo_detect(struct drm_connector *_connector, bool force)
 	drm_dbg_kms(&i915->drm, "[CONNECTOR:%d:%s]\n",
 		    connector->base.base.id, connector->base.name);
 
-	if (!INTEL_DISPLAY_ENABLED(i915))
+	if (!intel_display_device_enabled(i915))
 		return connector_status_disconnected;
 
 	return intel_dvo->dev.dev_ops->detect(&intel_dvo->dev);
@@ -508,6 +514,8 @@ void intel_dvo_init(struct drm_i915_private *i915)
 		intel_connector_free(connector);
 		return;
 	}
+
+	assert_port_valid(i915, intel_dvo->dev.port);
 
 	encoder->type = INTEL_OUTPUT_DVO;
 	encoder->power_domain = POWER_DOMAIN_PORT_OTHER;

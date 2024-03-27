@@ -527,6 +527,7 @@ static ssize_t ti_sn_aux_transfer(struct drm_dp_aux *aux,
 	u32 request_val = AUX_CMD_REQ(msg->request);
 	u8 *buf = msg->buffer;
 	unsigned int len = msg->size;
+	unsigned int short_len;
 	unsigned int val;
 	int ret;
 	u8 addr_len[SN_AUX_LENGTH_REG + 1 - SN_AUX_ADDR_19_16_REG];
@@ -600,7 +601,8 @@ static ssize_t ti_sn_aux_transfer(struct drm_dp_aux *aux,
 	}
 
 	if (val & AUX_IRQ_STATUS_AUX_SHORT) {
-		ret = regmap_read(pdata->regmap, SN_AUX_LENGTH_REG, &len);
+		ret = regmap_read(pdata->regmap, SN_AUX_LENGTH_REG, &short_len);
+		len = min(len, short_len);
 		if (ret)
 			goto exit;
 	} else if (val & AUX_IRQ_STATUS_NAT_I2C_FAIL) {
@@ -631,6 +633,24 @@ exit:
 	return len;
 }
 
+static int ti_sn_aux_wait_hpd_asserted(struct drm_dp_aux *aux, unsigned long wait_us)
+{
+	/*
+	 * The HPD in this chip is a bit useless (See comment in
+	 * ti_sn65dsi86_enable_comms) so if our driver is expected to wait
+	 * for HPD, we just assume it's asserted after the wait_us delay.
+	 *
+	 * In case we are asked to wait forever (wait_us=0) take conservative
+	 * 500ms delay.
+	 */
+	if (wait_us == 0)
+		wait_us = 500000;
+
+	usleep_range(wait_us, wait_us + 1000);
+
+	return 0;
+}
+
 static int ti_sn_aux_probe(struct auxiliary_device *adev,
 			   const struct auxiliary_device_id *id)
 {
@@ -640,6 +660,7 @@ static int ti_sn_aux_probe(struct auxiliary_device *adev,
 	pdata->aux.name = "ti-sn65dsi86-aux";
 	pdata->aux.dev = &adev->dev;
 	pdata->aux.transfer = ti_sn_aux_transfer;
+	pdata->aux.wait_hpd_asserted = ti_sn_aux_wait_hpd_asserted;
 	drm_dp_aux_init(&pdata->aux);
 
 	ret = devm_of_dp_aux_populate_ep_devices(&pdata->aux);

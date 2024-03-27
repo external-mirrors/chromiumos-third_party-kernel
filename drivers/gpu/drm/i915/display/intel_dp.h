@@ -45,10 +45,15 @@ bool intel_dp_limited_color_range(const struct intel_crtc_state *crtc_state,
 int intel_dp_min_bpp(enum intel_output_format output_format);
 bool intel_dp_init_connector(struct intel_digital_port *dig_port,
 			     struct intel_connector *intel_connector);
+void intel_dp_connector_sync_state(struct intel_connector *connector,
+				   const struct intel_crtc_state *crtc_state);
 void intel_dp_set_link_params(struct intel_dp *intel_dp,
 			      int link_rate, int lane_count);
 int intel_dp_get_link_train_fallback_values(struct intel_dp *intel_dp,
 					    int link_rate, u8 lane_count);
+int intel_dp_get_active_pipes(struct intel_dp *intel_dp,
+			      struct drm_modeset_acquire_ctx *ctx,
+			      u8 *pipe_mask);
 int intel_dp_retrain_link(struct intel_encoder *encoder,
 			  struct drm_modeset_acquire_ctx *ctx);
 void intel_dp_set_power(struct intel_dp *intel_dp, u8 mode);

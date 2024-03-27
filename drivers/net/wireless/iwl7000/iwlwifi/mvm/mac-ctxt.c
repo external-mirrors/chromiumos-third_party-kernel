@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2023 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2024 Intel Corporation
  * Copyright (C) 2013-2014 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -269,11 +269,6 @@ int iwl_mvm_mac_ctxt_init(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 		ret = -EIO;
 		goto exit_fail;
 	}
-
-#ifdef CPTCFG_IWLWIFI_DEBUG_SESSION_PROT_FAIL
-	/* The third failure will send a udev event to user space */
-	mvmvif->session_prot_fail_num = 2;
-#endif
 
 	if (data.preferred_tsf != NUM_TSF_IDS)
 		mvmvif->tsf_id = data.preferred_tsf;
@@ -1655,10 +1650,22 @@ void iwl_mvm_rx_missed_beacons_notif(struct iwl_mvm *mvm,
 	 * TODO: the threshold should be adjusted based on latency conditions,
 	 * and/or in case of a CS flow on one of the other AP vifs.
 	 */
-	if (rx_missed_bcon > IWL_MVM_MISSED_BEACONS_THRESHOLD_LONG)
-		iwl_mvm_connection_loss(mvm, vif, "missed beacons");
-	else if (rx_missed_bcon_since_rx > IWL_MVM_MISSED_BEACONS_THRESHOLD)
-		ieee80211_beacon_loss(vif);
+	if (rx_missed_bcon >= IWL_MVM_MISSED_BEACONS_THRESHOLD_LONG) {
+		if (rx_missed_bcon_since_rx >= IWL_MVM_MISSED_BEACONS_SINCE_RX_THOLD) {
+			iwl_mvm_connection_loss(mvm, vif, "missed beacons");
+		} else {
+			IWL_WARN(mvm,
+				 "missed beacons exceeds threshold, but receiving data. Stay connected, Expect bugs.\n");
+			IWL_WARN(mvm,
+				 "missed_beacons:%d, missed_beacons_since_rx:%d\n",
+				 rx_missed_bcon, rx_missed_bcon_since_rx);
+		}
+	} else if (rx_missed_bcon_since_rx > IWL_MVM_MISSED_BEACONS_THRESHOLD) {
+		if (!iwl_mvm_has_new_tx_api(mvm))
+			ieee80211_beacon_loss(vif);
+		else
+			ieee80211_cqm_beacon_loss_notify(vif, GFP_ATOMIC);
+	}
 
 	iwl_dbg_tlv_time_point(&mvm->fwrt,
 			       IWL_FW_INI_TIME_POINT_MISSED_BEACONS, &tp_data);

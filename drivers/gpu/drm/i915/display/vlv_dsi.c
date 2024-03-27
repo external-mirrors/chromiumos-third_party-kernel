@@ -136,7 +136,7 @@ static ssize_t intel_dsi_host_transfer(struct mipi_dsi_host *host,
 	enum port port = intel_dsi_host->port;
 	struct mipi_dsi_packet packet;
 	ssize_t ret;
-	const u8 *header, *data;
+	const u8 *header;
 	i915_reg_t data_reg, ctrl_reg;
 	u32 data_mask, ctrl_mask;
 
@@ -145,7 +145,6 @@ static ssize_t intel_dsi_host_transfer(struct mipi_dsi_host *host,
 		return ret;
 
 	header = packet.header;
-	data = packet.payload;
 
 	if (msg->flags & MIPI_DSI_MSG_USE_LPM) {
 		data_reg = MIPI_LP_GEN_DATA(port);
@@ -1040,7 +1039,7 @@ static void bxt_dsi_get_pipe_config(struct intel_encoder *encoder,
 	unsigned int lane_count = intel_dsi->lane_count;
 	unsigned int bpp, fmt;
 	enum port port;
-	u16 hactive, hfp, hsync, hbp, vfp, vsync, vbp;
+	u16 hactive, hfp, hsync, hbp, vfp, vsync;
 	u16 hfp_sw, hsync_sw, hbp_sw;
 	u16 crtc_htotal_sw, crtc_hsync_start_sw, crtc_hsync_end_sw,
 				crtc_hblank_start_sw, crtc_hblank_end_sw;
@@ -1105,7 +1104,6 @@ static void bxt_dsi_get_pipe_config(struct intel_encoder *encoder,
 	/* vertical values are in terms of lines */
 	vfp = intel_de_read(dev_priv, MIPI_VFP_COUNT(port));
 	vsync = intel_de_read(dev_priv, MIPI_VSYNC_PADDING_COUNT(port));
-	vbp = intel_de_read(dev_priv, MIPI_VBP_COUNT(port));
 
 	adjusted_mode->crtc_htotal = hactive + hfp + hsync + hbp;
 	adjusted_mode->crtc_hsync_start = hfp + adjusted_mode->crtc_hdisplay;
@@ -1565,9 +1563,25 @@ static const struct drm_encoder_funcs intel_dsi_funcs = {
 	.destroy = intel_dsi_encoder_destroy,
 };
 
+static enum drm_mode_status vlv_dsi_mode_valid(struct drm_connector *connector,
+					       struct drm_display_mode *mode)
+{
+	struct drm_i915_private *i915 = to_i915(connector->dev);
+
+	if (IS_VALLEYVIEW(i915) || IS_CHERRYVIEW(i915)) {
+		enum drm_mode_status status;
+
+		status = intel_cpu_transcoder_mode_valid(i915, mode);
+		if (status != MODE_OK)
+			return status;
+	}
+
+	return intel_dsi_mode_valid(connector, mode);
+}
+
 static const struct drm_connector_helper_funcs intel_dsi_connector_helper_funcs = {
 	.get_modes = intel_dsi_get_modes,
-	.mode_valid = intel_dsi_mode_valid,
+	.mode_valid = vlv_dsi_mode_valid,
 	.atomic_check = intel_digital_connector_atomic_check,
 };
 

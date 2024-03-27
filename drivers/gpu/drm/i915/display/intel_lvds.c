@@ -150,7 +150,7 @@ static void intel_lvds_get_config(struct intel_encoder *encoder,
 	if (DISPLAY_VER(dev_priv) < 4) {
 		tmp = intel_de_read(dev_priv, PFIT_CONTROL);
 
-		crtc_state->gmch_pfit.control |= tmp & PANEL_8TO6_DITHER_ENABLE;
+		crtc_state->gmch_pfit.control |= tmp & PFIT_PANEL_8TO6_DITHER_ENABLE;
 	}
 
 	crtc_state->hw.adjusted_mode.crtc_clock = crtc_state->port_clock;
@@ -389,10 +389,15 @@ intel_lvds_mode_valid(struct drm_connector *_connector,
 		      struct drm_display_mode *mode)
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
+	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	const struct drm_display_mode *fixed_mode =
 		intel_panel_fixed_mode(connector, mode);
 	int max_pixclk = to_i915(connector->base.dev)->max_dotclk_freq;
 	enum drm_mode_status status;
+
+	status = intel_cpu_transcoder_mode_valid(i915, mode);
+	if (status != MODE_OK)
+		return status;
 
 	if (mode->flags & DRM_MODE_FLAG_DBLSCAN)
 		return MODE_NO_DBLESCAN;
@@ -794,8 +799,8 @@ static bool compute_is_dual_link_lvds(struct intel_lvds_encoder *lvds_encoder)
 	unsigned int val;
 
 	/* use the module option value if specified */
-	if (i915->params.lvds_channel_mode > 0)
-		return i915->params.lvds_channel_mode == 2;
+	if (i915->display.params.lvds_channel_mode > 0)
+		return i915->display.params.lvds_channel_mode == 2;
 
 	/* single channel LVDS is limited to 112 MHz */
 	if (fixed_mode->clock > 112999)
@@ -948,17 +953,8 @@ void intel_lvds_init(struct drm_i915_private *i915)
 	 */
 	mutex_lock(&i915->drm.mode_config.mutex);
 	if (vga_switcheroo_handler_flags() & VGA_SWITCHEROO_CAN_SWITCH_DDC) {
-		const struct edid *edid;
-
-		/* FIXME: Make drm_get_edid_switcheroo() return drm_edid */
-		edid = drm_get_edid_switcheroo(&connector->base,
-					       intel_gmbus_get_adapter(i915, pin));
-		if (edid) {
-			drm_edid = drm_edid_alloc(edid, (edid->extensions + 1) * EDID_LENGTH);
-			kfree(edid);
-		} else {
-			drm_edid = NULL;
-		}
+		drm_edid = drm_edid_read_switcheroo(&connector->base,
+						    intel_gmbus_get_adapter(i915, pin));
 	} else {
 		drm_edid = drm_edid_read_ddc(&connector->base,
 					     intel_gmbus_get_adapter(i915, pin));

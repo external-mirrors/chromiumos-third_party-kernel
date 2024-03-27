@@ -7484,7 +7484,8 @@ static int __init vmx_check_processor_compat(void)
 	return 0;
 }
 
-static u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
+static u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio,
+			  const struct kvm_memory_slot *slot)
 {
 	u8 cache;
 
@@ -7508,6 +7509,9 @@ static u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
 
 	if (is_mmio)
 		return MTRR_TYPE_UNCACHABLE << VMX_EPT_MT_EPTE_SHIFT;
+
+	if (slot->flags & KVM_MEM_NON_COHERENT_DMA)
+		return MTRR_TYPE_WRBACK << VMX_EPT_MT_EPTE_SHIFT;
 
 	if (!kvm_arch_has_noncoherent_dma(vcpu->kvm))
 		return (MTRR_TYPE_WRBACK << VMX_EPT_MT_EPTE_SHIFT) | VMX_EPT_IPAT_BIT;

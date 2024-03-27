@@ -11,7 +11,6 @@
 #include <drm/drm_plane.h>
 #include <drm/drm_vblank_work.h>
 
-#include "i915_irq.h"
 #include "i915_vgpu.h"
 #include "i9xx_plane.h"
 #include "icl_dsi.h"
@@ -21,6 +20,7 @@
 #include "intel_crtc.h"
 #include "intel_cursor.h"
 #include "intel_display_debugfs.h"
+#include "intel_display_irq.h"
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
 #include "intel_drrs.h"
@@ -35,7 +35,11 @@
 
 static void assert_vblank_disabled(struct drm_crtc *crtc)
 {
-	if (I915_STATE_WARN_ON(drm_crtc_vblank_get(crtc) == 0))
+	struct drm_i915_private *i915 = to_i915(crtc->dev);
+
+	if (I915_STATE_WARN(i915, drm_crtc_vblank_get(crtc) == 0,
+			    "[CRTC:%d:%s] vblank assertion failure (expected off, current on)\n",
+			    crtc->base.id, crtc->name))
 		drm_crtc_vblank_put(crtc);
 }
 
@@ -303,7 +307,7 @@ int intel_crtc_init(struct drm_i915_private *dev_priv, enum pipe pipe)
 		return PTR_ERR(crtc);
 
 	crtc->pipe = pipe;
-	crtc->num_scalers = RUNTIME_INFO(dev_priv)->num_scalers[pipe];
+	crtc->num_scalers = DISPLAY_RUNTIME_INFO(dev_priv)->num_scalers[pipe];
 
 	if (DISPLAY_VER(dev_priv) >= 9)
 		primary = skl_universal_plane_create(dev_priv, pipe,
@@ -455,46 +459,6 @@ int intel_usecs_to_scanlines(const struct drm_display_mode *adjusted_mode,
 			    1000 * adjusted_mode->crtc_htotal);
 }
 
-static int intel_mode_vblank_start(const struct drm_display_mode *mode)
-{
-	int vblank_start = mode->crtc_vblank_start;
-
-	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
-		vblank_start = DIV_ROUND_UP(vblank_start, 2);
-
-	return vblank_start;
-}
-
-static void intel_crtc_vblank_evade_scanlines(struct intel_atomic_state *state,
-					      struct intel_crtc *crtc,
-					      int *min, int *max, int *vblank_start)
-{
-	const struct intel_crtc_state *new_crtc_state =
-		intel_atomic_get_new_crtc_state(state, crtc);
-	const struct drm_display_mode *adjusted_mode = &new_crtc_state->hw.adjusted_mode;
-
-	if (new_crtc_state->vrr.enable) {
-		if (intel_vrr_is_push_sent(new_crtc_state))
-			*vblank_start = intel_vrr_vmin_vblank_start(new_crtc_state);
-		else
-			*vblank_start = intel_vrr_vmax_vblank_start(new_crtc_state);
-	} else {
-		*vblank_start = intel_mode_vblank_start(adjusted_mode);
-	}
-
-	/* FIXME needs to be calibrated sensibly */
-	*min = *vblank_start - intel_usecs_to_scanlines(adjusted_mode,
-							VBLANK_EVASION_TIME_US);
-	*max = *vblank_start - 1;
-
-	/*
-	 * M/N is double buffered on the transcoder's undelayed vblank,
-	 * so with seamless M/N we must evade both vblanks.
-	 */
-	if (new_crtc_state->seamless_m_n && intel_crtc_needs_fastset(new_crtc_state))
-		*min -= adjusted_mode->crtc_vblank_start - adjusted_mode->crtc_vdisplay;
-}
-
 /**
  * intel_pipe_update_start() - start update of a set of display registers
  * @state: the atomic state
@@ -512,14 +476,12 @@ void intel_pipe_update_start(struct intel_atomic_state *state,
 			     struct intel_crtc *crtc)
 {
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	const struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
-	long timeout = msecs_to_jiffies_timeout(1);
-	int scanline, min, max, vblank_start;
-	wait_queue_head_t *wq = drm_crtc_vblank_waitqueue(&crtc->base);
-	bool need_vlv_dsi_wa = (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) &&
-		intel_crtc_has_type(new_crtc_state, INTEL_OUTPUT_DSI);
-	DEFINE_WAIT(wait);
+	struct intel_vblank_evade_ctx evade;
+	int scanline;
 
 	intel_psr_lock(new_crtc_state);
 
@@ -529,9 +491,7 @@ void intel_pipe_update_start(struct intel_atomic_state *state,
 	if (intel_crtc_needs_vblank_work(new_crtc_state))
 		intel_crtc_vblank_work_init(new_crtc_state);
 
-	intel_crtc_vblank_evade_scanlines(state, crtc, &min, &max, &vblank_start);
-	if (min <= 0 || max <= 0)
-		goto irq_disable;
+	intel_vblank_evade_init(old_crtc_state, new_crtc_state, &evade);
 
 	if (drm_WARN_ON(&dev_priv->drm, drm_crtc_vblank_get(&crtc->base)))
 		goto irq_disable;
@@ -545,57 +505,13 @@ void intel_pipe_update_start(struct intel_atomic_state *state,
 
 	local_irq_disable();
 
-	crtc->debug.min_vbl = min;
-	crtc->debug.max_vbl = max;
+	crtc->debug.min_vbl = evade.min;
+	crtc->debug.max_vbl = evade.max;
 	trace_intel_pipe_update_start(crtc);
 
-	for (;;) {
-		/*
-		 * prepare_to_wait() has a memory barrier, which guarantees
-		 * other CPUs can see the task state update by the time we
-		 * read the scanline.
-		 */
-		prepare_to_wait(wq, &wait, TASK_UNINTERRUPTIBLE);
-
-		scanline = intel_get_crtc_scanline(crtc);
-		if (scanline < min || scanline > max)
-			break;
-
-		if (!timeout) {
-			drm_err(&dev_priv->drm,
-				"Potential atomic update failure on pipe %c\n",
-				pipe_name(crtc->pipe));
-			break;
-		}
-
-		local_irq_enable();
-
-		timeout = schedule_timeout(timeout);
-
-		local_irq_disable();
-	}
-
-	finish_wait(wq, &wait);
+	scanline = intel_vblank_evade(&evade);
 
 	drm_crtc_vblank_put(&crtc->base);
-
-	/*
-	 * On VLV/CHV DSI the scanline counter would appear to
-	 * increment approx. 1/3 of a scanline before start of vblank.
-	 * The registers still get latched at start of vblank however.
-	 * This means we must not write any registers on the first
-	 * line of vblank (since not the whole line is actually in
-	 * vblank). And unfortunately we can't use the interrupt to
-	 * wait here since it will fire too soon. We could use the
-	 * frame start interrupt instead since it will fire after the
-	 * critical scanline, but that would require more changes
-	 * in the interrupt code. So for now we'll just do the nasty
-	 * thing and poll for the bad scanline to pass us by.
-	 *
-	 * FIXME figure out if BXT+ DSI suffers from this as well
-	 */
-	while (need_vlv_dsi_wa && scanline == vblank_start)
-		scanline = intel_get_crtc_scanline(crtc);
 
 	crtc->debug.scanline_start = scanline;
 	crtc->debug.start_vbl_time = ktime_get();
@@ -706,15 +622,6 @@ void intel_pipe_update_end(struct intel_atomic_state *state,
 	 * vblank start instead of vmax vblank start.
 	 */
 	intel_vrr_send_push(new_crtc_state);
-
-	/*
-	 * Seamless M/N update may need to update frame timings.
-	 *
-	 * FIXME Should be synchronized with the start of vblank somehow...
-	 */
-	if (new_crtc_state->seamless_m_n && intel_crtc_needs_fastset(new_crtc_state))
-		intel_crtc_update_active_timings(new_crtc_state,
-						 new_crtc_state->vrr.enable);
 
 	local_irq_enable();
 

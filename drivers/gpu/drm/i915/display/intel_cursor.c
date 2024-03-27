@@ -21,6 +21,8 @@
 #include "intel_fb_pin.h"
 #include "intel_frontbuffer.h"
 #include "intel_psr.h"
+#include "intel_psr_regs.h"
+#include "intel_vblank.h"
 #include "skl_watermark.h"
 
 /* Cursor formats */
@@ -36,7 +38,7 @@ static u32 intel_cursor_base(const struct intel_plane_state *plane_state)
 	const struct drm_i915_gem_object *obj = intel_fb_obj(fb);
 	u32 base;
 
-	if (INTEL_INFO(dev_priv)->display.cursor_needs_physical)
+	if (DISPLAY_INFO(dev_priv)->cursor_needs_physical)
 		base = sg_dma_address(obj->mm.pages->sgl);
 	else
 		base = intel_plane_ggtt_offset(plane_state);
@@ -484,6 +486,35 @@ static int i9xx_check_cursor(struct intel_crtc_state *crtc_state,
 	return 0;
 }
 
+static void i9xx_cursor_disable_sel_fetch_arm(struct intel_plane *plane,
+					      const struct intel_crtc_state *crtc_state)
+{
+	struct drm_i915_private *dev_priv = to_i915(plane->base.dev);
+	enum pipe pipe = plane->pipe;
+
+	if (!crtc_state->enable_psr2_sel_fetch)
+		return;
+
+	intel_de_write_fw(dev_priv, PLANE_SEL_FETCH_CTL(pipe, plane->id), 0);
+}
+
+static void i9xx_cursor_update_sel_fetch_arm(struct intel_plane *plane,
+					     const struct intel_crtc_state *crtc_state,
+					     const struct intel_plane_state *plane_state)
+{
+	struct drm_i915_private *i915 = to_i915(plane->base.dev);
+	enum pipe pipe = plane->pipe;
+
+	if (!crtc_state->enable_psr2_sel_fetch)
+		return;
+
+	if (drm_rect_height(&plane_state->psr2_sel_fetch_area) > 0)
+		intel_de_write_fw(i915, PLANE_SEL_FETCH_CTL(pipe, plane->id),
+				  plane_state->ctl);
+	else
+		i9xx_cursor_disable_sel_fetch_arm(plane, crtc_state);
+}
+
 /* TODO: split into noarm+arm pair */
 static void i9xx_cursor_update_arm(struct intel_plane *plane,
 				   const struct intel_crtc_state *crtc_state,
@@ -531,10 +562,10 @@ static void i9xx_cursor_update_arm(struct intel_plane *plane,
 		skl_write_cursor_wm(plane, crtc_state);
 
 	if (plane_state)
-		intel_psr2_program_plane_sel_fetch_arm(plane, crtc_state,
-						       plane_state);
+		i9xx_cursor_update_sel_fetch_arm(plane, crtc_state,
+						 plane_state);
 	else
-		intel_psr2_disable_plane_sel_fetch_arm(plane, crtc_state);
+		i9xx_cursor_disable_sel_fetch_arm(plane, crtc_state);
 
 	if (plane->cursor.base != base ||
 	    plane->cursor.size != fbc_ctl ||
@@ -615,12 +646,14 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 {
 	struct intel_plane *plane = to_intel_plane(_plane);
 	struct intel_crtc *crtc = to_intel_crtc(_crtc);
+	struct drm_i915_private *i915 = to_i915(plane->base.dev);
 	struct intel_plane_state *old_plane_state =
 		to_intel_plane_state(plane->base.state);
 	struct intel_plane_state *new_plane_state;
 	struct intel_crtc_state *crtc_state =
 		to_intel_crtc_state(crtc->base.state);
 	struct intel_crtc_state *new_crtc_state;
+	struct intel_vblank_evade_ctx evade;
 	int ret;
 
 	/*
@@ -713,13 +746,25 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	 */
 	crtc_state->active_planes = new_crtc_state->active_planes;
 
-	/*
-	 * Technically we should do a vblank evasion here to make
-	 * sure all the cursor registers update on the same frame.
-	 * For now just make sure the register writes happen as
-	 * quickly as possible to minimize the race window.
-	 */
-	local_irq_disable();
+	intel_vblank_evade_init(crtc_state, crtc_state, &evade);
+
+	intel_psr_lock(crtc_state);
+
+	if (!drm_WARN_ON(&i915->drm, drm_crtc_vblank_get(&crtc->base))) {
+		/*
+		 * TODO: maybe check if we're still in PSR
+		 * and skip the vblank evasion entirely?
+		 */
+		intel_psr_wait_for_idle_locked(crtc_state);
+
+		local_irq_disable();
+
+		intel_vblank_evade(&evade);
+
+		drm_crtc_vblank_put(&crtc->base);
+	} else {
+		local_irq_disable();
+	}
 
 	if (new_plane_state->uapi.visible) {
 		intel_plane_update_noarm(plane, crtc_state, new_plane_state);
@@ -729,6 +774,8 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	}
 
 	local_irq_enable();
+
+	intel_psr_unlock(crtc_state);
 
 	intel_plane_unpin_fb(old_plane_state);
 
@@ -814,7 +861,7 @@ intel_cursor_plane_create(struct drm_i915_private *dev_priv,
 						   DRM_MODE_ROTATE_0 |
 						   DRM_MODE_ROTATE_180);
 
-	zpos = RUNTIME_INFO(dev_priv)->num_sprites[pipe] + 1;
+	zpos = DISPLAY_RUNTIME_INFO(dev_priv)->num_sprites[pipe] + 1;
 	drm_plane_create_zpos_immutable_property(&cursor->base, zpos);
 
 	if (DISPLAY_VER(dev_priv) >= 12)

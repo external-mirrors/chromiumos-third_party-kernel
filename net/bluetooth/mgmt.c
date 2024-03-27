@@ -2886,7 +2886,8 @@ static int load_link_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_link_key_info *key = &cp->keys[i];
 
-		if (key->addr.type != BDADDR_BREDR || key->type > 0x08)
+		/* Considering SMP over BREDR/LE, there is no need to check addr_type */
+		if (key->type > 0x08)
 			return mgmt_cmd_status(sk, hdev->id,
 					       MGMT_OP_LOAD_LINK_KEYS,
 					       MGMT_STATUS_INVALID_PARAMS);
@@ -7133,6 +7134,7 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 
 	for (i = 0; i < irk_count; i++) {
 		struct mgmt_irk_info *irk = &cp->irks[i];
+		u8 addr_type = le_addr_type(irk->addr.type);
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_IRK,
@@ -7142,8 +7144,12 @@ static int load_irks(struct sock *sk, struct hci_dev *hdev, void *cp_data,
 			continue;
 		}
 
+		/* When using SMP over BR/EDR, the addr type should be set to BREDR */
+		if (irk->addr.type == BDADDR_BREDR)
+			addr_type = BDADDR_BREDR;
+
 		hci_add_irk(hdev, &irk->addr.bdaddr,
-			    le_addr_type(irk->addr.type), irk->val,
+			    addr_type, irk->val,
 			    BDADDR_ANY);
 	}
 
@@ -7224,6 +7230,7 @@ static int load_long_term_keys(struct sock *sk, struct hci_dev *hdev,
 	for (i = 0; i < key_count; i++) {
 		struct mgmt_ltk_info *key = &cp->keys[i];
 		u8 type, authenticated;
+		u8 addr_type = le_addr_type(key->addr.type);
 
 		if (hci_is_blocked_key(hdev,
 				       HCI_BLOCKED_KEY_TYPE_LTK,
@@ -7258,8 +7265,12 @@ static int load_long_term_keys(struct sock *sk, struct hci_dev *hdev,
 			continue;
 		}
 
+		/* When using SMP over BR/EDR, the addr type should be set to BREDR */
+		if (key->addr.type == BDADDR_BREDR)
+			addr_type = BDADDR_BREDR;
+
 		hci_add_ltk(hdev, &key->addr.bdaddr,
-			    le_addr_type(key->addr.type), type, authenticated,
+			    addr_type, type, authenticated,
 			    key->val, key->enc_size, key->ediv, key->rand);
 	}
 
@@ -9258,13 +9269,7 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 					    void *data, u16 data_len)
 {
 	struct mgmt_cp_get_codec_capabilities *cp = data;
-	struct mgmt_rp_get_codec_capabilities *rp;
-	struct codec_list *c;
-	int i, num_rp_codecs;
-	int err;
-	size_t total_size = sizeof(struct mgmt_rp_get_codec_capabilities);
-	bool wbs_supported = false;
-	u8 *ptr;
+	struct mgmt_rp_get_codec_capabilities rp;
 	struct hci_dev *found_hdev;
 
 	found_hdev = floss_get_hdev(cp->hci_id);
@@ -9275,110 +9280,17 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 	if (!hdev)
 		return -EINVAL;
 
-	wbs_supported = test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+	rp.hci_id = hdev->id;
+	rp.transparent_wbs_supported =
+		test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+	rp.hci_data_path_id = 0;
+	if (hdev->get_data_path_id)
+		hdev->get_data_path_id(hdev, &rp.hci_data_path_id);
+	rp.wbs_pkt_len = hdev->wbs_pkt_len;
 
-	if (MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE + cp->num_codecs != data_len)
-		return -EINVAL;
-
-	// Determine total alloc size for supported codecs.
-	for (i = 0; i < cp->num_codecs; ++i) {
-		switch (cp->codecs[i]) {
-		case MGMT_SCO_CODEC_CVSD:
-			total_size += sizeof(struct mgmt_bt_codec);
-			break;
-		case MGMT_SCO_CODEC_MSBC_TRANSPARENT:
-			if (wbs_supported)
-				total_size += sizeof(struct mgmt_bt_codec);
-			break;
-		case MGMT_SCO_CODEC_MSBC:
-			if (wbs_supported) {
-				hci_dev_lock(hdev);
-				list_for_each_entry(c, &hdev->local_codecs, list) {
-					/* 0x01 - HCI Transport (Codec supported over
-					 *          BR/EDR SCO and eSCO)
-					 * 0x05 - mSBC Codec ID
-					 */
-					if (c->transport != 0x01 || c->id != 0x05)
-						continue;
-
-					total_size += sizeof(struct mgmt_bt_codec) + c->caps->len;
-					break;
-				}
-				hci_dev_unlock(hdev);
-			}
-			break;
-		default:
-			bt_dev_dbg(hdev, "Unknown codec %d", cp->codecs[i]);
-			break;
-		}
-	}
-
-	rp = kzalloc(total_size, GFP_KERNEL);
-	if (!rp)
-		return -ENOMEM;
-
-	rp->hci_id = hdev->id;
-
-	// Copy codec information to return.
-	ptr = (u8 *)rp->codecs;
-	for (i = 0, num_rp_codecs = 0; i < cp->num_codecs; ++i) {
-		struct mgmt_bt_codec *rc = (struct mgmt_bt_codec *)ptr;
-
-		switch (cp->codecs[i]) {
-		case MGMT_SCO_CODEC_CVSD:
-			rc->codec = cp->codecs[i];
-			ptr += sizeof(struct mgmt_bt_codec);
-			num_rp_codecs++;
-			break;
-		case MGMT_SCO_CODEC_MSBC_TRANSPARENT:
-			if (wbs_supported) {
-				rc->codec = cp->codecs[i];
-				rc->packet_size = hdev->wbs_pkt_len;
-				ptr += sizeof(struct mgmt_bt_codec);
-				num_rp_codecs++;
-			}
-			break;
-		case MGMT_SCO_CODEC_MSBC:
-			if (wbs_supported) {
-				hci_dev_lock(hdev);
-				list_for_each_entry(c, &hdev->local_codecs, list) {
-					if (c->transport != 0x01 || c->id != 0x05)
-						continue;
-
-					/* Need to read the support from the controller
-					 * and then assign to TRUE for now by default
-					 * enable it as TRUE
-					 */
-					rp->offload_capable = true;
-
-					if (hdev->get_data_path_id)
-						hdev->get_data_path_id(hdev, &rc->data_path);
-
-					rc->codec = cp->codecs[i];
-					rc->packet_size = c->len;
-					rc->data_length = c->caps->len;
-					memcpy(rc->data, c->caps, c->caps->len);
-					ptr += sizeof(struct mgmt_bt_codec) + c->caps->len;
-					num_rp_codecs++;
-					break;
-				}
-				hci_dev_unlock(hdev);
-			}
-			break;
-		default:
-			break;
-		}
-	}
-
-	// Only return the number of codecs actually written
-	rp->num_codecs = num_rp_codecs;
-
-	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-				MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
-				MGMT_STATUS_SUCCESS, rp, total_size);
-	kfree(rp);
-
-	return err;
+	return mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
+				 MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
+				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 }
 
 static int floss_notify_sco_connection_change(struct sock *sk,
@@ -9692,8 +9604,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	floss_get_sco_codec_capabilities,
 				   MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
 						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED |
-						HCI_MGMT_VAR_LEN },
+						HCI_MGMT_UNTRUSTED },
 	{ floss_notify_sco_connection_change,
 				   MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
 						HCI_MGMT_NO_HDEV |
@@ -9869,7 +9780,7 @@ void mgmt_new_link_key(struct hci_dev *hdev, struct link_key *key,
 
 	ev.store_hint = persistent;
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = BDADDR_BREDR;
+	ev.key.addr.type = link_to_bdaddr(key->link_type, key->bdaddr_type);
 	ev.key.type = key->type;
 	memcpy(ev.key.val, key->val, HCI_LINK_KEY_SIZE);
 	ev.key.pin_len = key->pin_len;
@@ -9920,7 +9831,7 @@ void mgmt_new_ltk(struct hci_dev *hdev, struct smp_ltk *key, bool persistent)
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &key->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, key->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(key->link_type, key->bdaddr_type);
 	ev.key.type = mgmt_ltk_type(key);
 	ev.key.enc_size = key->enc_size;
 	ev.key.ediv = key->ediv;
@@ -9949,7 +9860,7 @@ void mgmt_new_irk(struct hci_dev *hdev, struct smp_irk *irk, bool persistent)
 
 	bacpy(&ev.rpa, &irk->rpa);
 	bacpy(&ev.irk.addr.bdaddr, &irk->bdaddr);
-	ev.irk.addr.type = link_to_bdaddr(LE_LINK, irk->addr_type);
+	ev.irk.addr.type = link_to_bdaddr(irk->link_type, irk->addr_type);
 	memcpy(ev.irk.val, irk->val, sizeof(irk->val));
 
 	mgmt_event(MGMT_EV_NEW_IRK, hdev, &ev, sizeof(ev), NULL);
@@ -9978,7 +9889,7 @@ void mgmt_new_csrk(struct hci_dev *hdev, struct smp_csrk *csrk,
 		ev.store_hint = persistent;
 
 	bacpy(&ev.key.addr.bdaddr, &csrk->bdaddr);
-	ev.key.addr.type = link_to_bdaddr(LE_LINK, csrk->bdaddr_type);
+	ev.key.addr.type = link_to_bdaddr(csrk->link_type, csrk->bdaddr_type);
 	ev.key.type = csrk->type;
 	memcpy(ev.key.val, csrk->val, sizeof(csrk->val));
 

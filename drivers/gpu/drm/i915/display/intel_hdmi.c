@@ -40,7 +40,7 @@
 #include <drm/drm_edid.h>
 #include <drm/intel_lpe_audio.h>
 
-#include "i915_debugfs.h"
+#include "g4x_hdmi.h"
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_atomic.h"
@@ -1989,6 +1989,10 @@ intel_hdmi_mode_valid(struct drm_connector *connector,
 	bool ycbcr_420_only;
 	enum intel_output_format sink_format;
 
+	status = intel_cpu_transcoder_mode_valid(dev_priv, mode);
+	if (status != MODE_OK)
+		return status;
+
 	if ((mode->flags & DRM_MODE_FLAG_3D_MASK) == DRM_MODE_FLAG_3D_FRAME_PACKING)
 		clock *= 2;
 
@@ -2270,11 +2274,20 @@ static bool source_supports_scrambling(struct intel_encoder *encoder)
 	return intel_hdmi_source_max_tmds_clock(encoder) > 340000;
 }
 
+bool intel_hdmi_compute_has_hdmi_sink(struct intel_encoder *encoder,
+				      const struct intel_crtc_state *crtc_state,
+				      const struct drm_connector_state *conn_state)
+{
+	struct intel_hdmi *hdmi = enc_to_intel_hdmi(encoder);
+
+	return intel_has_hdmi_sink(hdmi, conn_state) &&
+		!intel_hdmi_is_cloned(crtc_state);
+}
+
 int intel_hdmi_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
 			      struct drm_connector_state *conn_state)
 {
-	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	struct drm_connector *connector = conn_state->connector;
@@ -2289,9 +2302,6 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 		return -EINVAL;
 
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
-	pipe_config->has_hdmi_sink =
-		intel_has_hdmi_sink(intel_hdmi, conn_state) &&
-		!intel_hdmi_is_cloned(pipe_config);
 
 	if (pipe_config->has_hdmi_sink)
 		pipe_config->has_infoframe = true;
@@ -2396,7 +2406,7 @@ intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector)
 {
 	struct drm_i915_private *dev_priv = to_i915(connector->dev);
 	struct intel_hdmi *hdmi = intel_attached_hdmi(to_intel_connector(connector));
-	enum port port = hdmi_to_dig_port(hdmi)->base.port;
+	struct intel_encoder *encoder = &hdmi_to_dig_port(hdmi)->base;
 	struct i2c_adapter *adapter =
 		intel_gmbus_get_adapter(dev_priv, hdmi->ddc_bus);
 	enum drm_dp_dual_mode_type type = drm_dp_dual_mode_detect(&dev_priv->drm, adapter);
@@ -2412,7 +2422,7 @@ intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector)
 	 */
 	if (type == DRM_DP_DUAL_MODE_UNKNOWN) {
 		if (!connector->force &&
-		    intel_bios_is_port_dp_dual_mode(dev_priv, port)) {
+		    intel_bios_encoder_supports_dp_dual_mode(encoder->devdata)) {
 			drm_dbg_kms(&dev_priv->drm,
 				    "Assuming DP dual mode adaptor presence based on VBT\n");
 			type = DRM_DP_DUAL_MODE_TYPE1_DVI;
@@ -2435,7 +2445,7 @@ intel_hdmi_dp_dual_mode_detect(struct drm_connector *connector)
 
 	/* Older VBTs are often buggy and can't be trusted :( Play it safe. */
 	if ((DISPLAY_VER(dev_priv) >= 8 || IS_HASWELL(dev_priv)) &&
-	    !intel_bios_is_port_dp_dual_mode(dev_priv, port)) {
+	    !intel_bios_encoder_supports_dp_dual_mode(encoder->devdata)) {
 		drm_dbg_kms(&dev_priv->drm,
 			    "Ignoring DP dual mode adaptor max TMDS clock for native HDMI port\n");
 		hdmi->dp_dual_mode.max_tmds_clock = 0;
@@ -2499,7 +2509,7 @@ intel_hdmi_detect(struct drm_connector *connector, bool force)
 	drm_dbg_kms(&dev_priv->drm, "[CONNECTOR:%d:%s]\n",
 		    connector->base.id, connector->name);
 
-	if (!INTEL_DISPLAY_ENABLED(dev_priv))
+	if (!intel_display_device_enabled(dev_priv))
 		return connector_status_disconnected;
 
 	wakeref = intel_display_power_get(dev_priv, POWER_DOMAIN_GMBUS);
@@ -2618,10 +2628,21 @@ static const struct drm_connector_funcs intel_hdmi_connector_funcs = {
 	.atomic_duplicate_state = intel_digital_connector_duplicate_state,
 };
 
+static int intel_hdmi_connector_atomic_check(struct drm_connector *connector,
+					     struct drm_atomic_state *state)
+{
+	struct drm_i915_private *i915 = to_i915(state->dev);
+
+	if (HAS_DDI(i915))
+		return intel_digital_connector_atomic_check(connector, state);
+	else
+		return g4x_hdmi_connector_atomic_check(connector, state);
+}
+
 static const struct drm_connector_helper_funcs intel_hdmi_connector_helper_funcs = {
 	.get_modes = intel_hdmi_get_modes,
 	.mode_valid = intel_hdmi_mode_valid,
-	.atomic_check = intel_digital_connector_atomic_check,
+	.atomic_check = intel_hdmi_connector_atomic_check,
 };
 
 static void
@@ -2889,7 +2910,8 @@ static u8 intel_hdmi_ddc_pin(struct intel_encoder *encoder)
 		ddc_pin = rkl_port_to_ddc_pin(dev_priv, port);
 	else if (DISPLAY_VER(dev_priv) == 9 && HAS_PCH_TGP(dev_priv))
 		ddc_pin = gen9bc_tgp_port_to_ddc_pin(dev_priv, port);
-	else if (IS_JSL_EHL(dev_priv) && HAS_PCH_TGP(dev_priv))
+	else if ((IS_JASPERLAKE(dev_priv) || IS_ELKHARTLAKE(dev_priv)) &&
+		 HAS_PCH_TGP(dev_priv))
 		ddc_pin = mcc_port_to_ddc_pin(dev_priv, port);
 	else if (INTEL_PCH_TYPE(dev_priv) >= PCH_ICP)
 		ddc_pin = icl_port_to_ddc_pin(dev_priv, port);

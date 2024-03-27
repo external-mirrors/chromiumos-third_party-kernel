@@ -4,6 +4,7 @@
  */
 
 #include "i915_drv.h"
+#include "i915_reg.h"
 #include "i9xx_wm.h"
 #include "intel_atomic.h"
 #include "intel_display.h"
@@ -2992,7 +2993,7 @@ static void ilk_wm_merge(struct drm_i915_private *dev_priv,
 
 	/* ILK: LP2+ must be disabled when FBC WM is disabled but FBC enabled */
 	if (DISPLAY_VER(dev_priv) == 5 && HAS_FBC(dev_priv) &&
-	    dev_priv->params.enable_fbc && !merged->fbc_wm_enabled) {
+	    dev_priv->display.params.enable_fbc && !merged->fbc_wm_enabled) {
 		for (level = 2; level < num_levels; level++) {
 			struct intel_wm_level *wm = &merged->wm[level];
 
@@ -3447,9 +3448,10 @@ void ilk_wm_sanitize(struct drm_i915_private *dev_priv)
 
 	drm_modeset_acquire_init(&ctx, 0);
 
-retry:
 	state->acquire_ctx = &ctx;
+	to_intel_atomic_state(state)->internal = true;
 
+retry:
 	/*
 	 * Hardware readout is the only time we don't want to calculate
 	 * intermediate watermarks (since we don't trust the current

@@ -1349,8 +1349,10 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 
 	/* Since the controller supports only one LE connection attempt at a
 	 * time, we return -EBUSY if there is any connection attempt running.
+	 * CHROMIUM: extend the restriction to BR/EDR connection to prevent
+	 * from race. Context: b/302233940.
 	 */
-	if (hci_lookup_le_connect(hdev))
+	if (hci_lookup_le_conn_conflict(hdev))
 		return ERR_PTR(-EBUSY);
 
 	/* If there's already a connection object but it's not in
@@ -1656,6 +1658,12 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst,
 
 		return ERR_PTR(-EOPNOTSUPP);
 	}
+
+	/* CHROMIUM: Prevent race caused by concurrent BREDR and LE connection.
+	 * Context: b/302233940.
+	 */
+	if (hci_lookup_le_connect(hdev))
+		return ERR_PTR(-EBUSY);
 
 	/* Reject outgoing connection to device with same BD ADDR against
 	 * CVE-2020-26555
@@ -2391,12 +2399,10 @@ static int hci_conn_auth(struct hci_conn *conn, __u8 sec_level, __u8 auth_type)
 		hci_send_cmd(conn->hdev, HCI_OP_AUTH_REQUESTED,
 			     sizeof(cp), &cp);
 
-		/* If we're already encrypted set the REAUTH_PEND flag,
-		 * otherwise set the ENCRYPT_PEND.
+		/* Set the ENCRYPT_PEND to trigger encryption after
+		 * authentication.
 		 */
-		if (test_bit(HCI_CONN_ENCRYPT, &conn->flags))
-			set_bit(HCI_CONN_REAUTH_PEND, &conn->flags);
-		else
+		if (!test_bit(HCI_CONN_ENCRYPT, &conn->flags))
 			set_bit(HCI_CONN_ENCRYPT_PEND, &conn->flags);
 	}
 

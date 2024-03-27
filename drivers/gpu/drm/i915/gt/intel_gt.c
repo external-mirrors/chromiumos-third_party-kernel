@@ -185,7 +185,7 @@ int intel_gt_init_hw(struct intel_gt *gt)
 	if (IS_HASWELL(i915))
 		intel_uncore_write(uncore,
 				   HSW_MI_PREDICATE_RESULT_2,
-				   IS_HSW_GT3(i915) ?
+				   IS_HASWELL_GT3(i915) ?
 				   LOWER_SLICE_ENABLED : LOWER_SLICE_DISABLED);
 
 	/* Apply the GT workarounds... */
@@ -451,7 +451,7 @@ void intel_gt_flush_ggtt_writes(struct intel_gt *gt)
 
 		spin_lock_irqsave(&uncore->lock, flags);
 		intel_uncore_posting_read_fw(uncore,
-					     RING_HEAD(RENDER_RING_BASE));
+					     RING_TAIL(RENDER_RING_BASE));
 		spin_unlock_irqrestore(&uncore->lock, flags);
 	}
 }
@@ -921,7 +921,7 @@ int intel_gt_probe_all(struct drm_i915_private *i915)
 	 */
 	gt->i915 = i915;
 	gt->name = "Primary GT";
-	gt->info.engine_mask = RUNTIME_INFO(i915)->platform_engine_mask;
+	gt->info.engine_mask = INTEL_INFO(i915)->platform_engine_mask;
 
 	gt_dbg(gt, "Setting up %s\n", gt->name);
 	ret = intel_gt_tile_setup(gt, phys_addr);

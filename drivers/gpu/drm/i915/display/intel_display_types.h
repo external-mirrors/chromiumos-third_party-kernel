@@ -233,13 +233,25 @@ struct intel_encoder {
 	 * Called during system suspend after all pending requests for the
 	 * encoder are flushed (for example for DP AUX transactions) and
 	 * device interrupts are disabled.
+	 * All modeset locks are held while the hook is called.
 	 */
 	void (*suspend)(struct intel_encoder *);
 	/*
+	 * Called without the modeset locks held after the suspend() hook for
+	 * all encoders have been called.
+	 */
+	void (*suspend_complete)(struct intel_encoder *encoder);
+	/*
 	 * Called during system reboot/shutdown after all the
 	 * encoders have been disabled and suspended.
+	 * All modeset locks are held while the hook is called.
 	 */
 	void (*shutdown)(struct intel_encoder *encoder);
+	/*
+	 * Called without the modeset locks held after the shutdown() hook for
+	 * all encoders have been called.
+	 */
+	void (*shutdown_complete)(struct intel_encoder *encoder);
 	/*
 	 * Enable/disable the clock to the port.
 	 */
@@ -591,6 +603,13 @@ struct intel_connector {
 	 * and active (i.e. dpms ON state). */
 	bool (*get_hw_state)(struct intel_connector *);
 
+	/*
+	 * Optional hook called during init/resume to sync any state
+	 * stored in the connector (eg. DSC state) wrt. the HW state.
+	 */
+	void (*sync_state)(struct intel_connector *connector,
+			   const struct intel_crtc_state *crtc_state);
+
 	/* Panel info for eDP and LVDS */
 	struct intel_panel panel;
 
@@ -651,6 +670,9 @@ struct intel_atomic_state {
 
 	struct __intel_global_objs_state *global_objs;
 	int num_global_objs;
+
+	/* Internal commit, as opposed to userspace/client initiated one */
+	bool internal;
 
 	bool dpll_set, modeset;
 
@@ -763,6 +785,8 @@ struct intel_plane_state {
 
 struct intel_initial_plane_config {
 	struct intel_framebuffer *fb;
+	struct intel_memory_region *mem;
+	resource_size_t phys_base;
 	struct i915_vma *vma;
 	unsigned int tiling;
 	int size;
@@ -1015,6 +1039,12 @@ struct intel_cx0pll_state {
 	bool ssc_enabled;
 };
 
+struct intel_csc_matrix {
+	u16 coeff[9];
+	u16 preoff[3];
+	u16 postoff[3];
+};
+
 struct intel_crtc_state {
 	/*
 	 * uapi (drm) state. This is the software state shown to userspace.
@@ -1056,6 +1086,8 @@ struct intel_crtc_state {
 	/* actual state of LUTs */
 	struct drm_property_blob *pre_csc_lut, *post_csc_lut;
 
+	struct intel_csc_matrix csc, output_csc;
+
 	/**
 	 * quirks - bitfield with hw state readout quirks
 	 *
@@ -1069,6 +1101,8 @@ struct intel_crtc_state {
 
 	unsigned fb_bits; /* framebuffers to flip */
 	bool update_pipe; /* can a fast modeset be performed? */
+	bool update_m_n; /* update M/N seamlessly during fastset? */
+	bool update_lrr; /* update TRANS_VTOTAL/etc. during fastset? */
 	bool disable_cxsr;
 	bool update_wm_pre, update_wm_post; /* watermarks are updated */
 	bool fifo_changed; /* FIFO split is changed */
@@ -1182,7 +1216,6 @@ struct intel_crtc_state {
 	/* m2_n2 for eDP downclock */
 	struct intel_link_m_n dp_m2_n2;
 	bool has_drrs;
-	bool seamless_m_n;
 
 	/* PSR is supported but might not be enabled due the lack of enabled planes */
 	bool has_psr;
@@ -1330,6 +1363,9 @@ struct intel_crtc_state {
 	/* enable pipe csc? */
 	bool csc_enable;
 
+	/* enable vlv/chv wgc csc? */
+	bool wgc_enable;
+
 	/* big joiner pipe bitmask */
 	u8 bigjoiner_pipes;
 
@@ -1368,7 +1404,7 @@ struct intel_crtc_state {
 
 	/* Variable Refresh Rate state */
 	struct {
-		bool enable;
+		bool enable, in_range;
 		u8 pipeline_full;
 		u16 flipline, vmin, vmax, guardband;
 	} vrr;
@@ -1854,10 +1890,6 @@ struct intel_dp_mst_encoder {
 	enum pipe pipe;
 	struct intel_digital_port *primary;
 	struct intel_connector *connector;
-};
-
-struct intel_load_detect_pipe {
-	struct drm_atomic_state *restore_state;
 };
 
 static inline struct intel_encoder *

@@ -412,7 +412,7 @@ static bool intel_crtc_can_enable_sagv(const struct intel_crtc_state *crtc_state
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 
-	if (!i915->params.enable_sagv)
+	if (!i915->display.params.enable_sagv)
 		return false;
 
 	if (DISPLAY_VER(i915) >= 12)
@@ -507,8 +507,8 @@ static u16 skl_ddb_entry_init(struct skl_ddb_entry *entry,
 
 static int intel_dbuf_slice_size(struct drm_i915_private *i915)
 {
-	return INTEL_INFO(i915)->display.dbuf.size /
-		hweight8(INTEL_INFO(i915)->display.dbuf.slice_mask);
+	return DISPLAY_INFO(i915)->dbuf.size /
+		hweight8(DISPLAY_INFO(i915)->dbuf.slice_mask);
 }
 
 static void
@@ -527,7 +527,7 @@ skl_ddb_entry_for_slices(struct drm_i915_private *i915, u8 slice_mask,
 	ddb->end = fls(slice_mask) * slice_size;
 
 	WARN_ON(ddb->start >= ddb->end);
-	WARN_ON(ddb->end > INTEL_INFO(i915)->display.dbuf.size);
+	WARN_ON(ddb->end > DISPLAY_INFO(i915)->dbuf.size);
 }
 
 static unsigned int mbus_ddb_offset(struct drm_i915_private *i915, u8 slice_mask)
@@ -2625,7 +2625,7 @@ skl_compute_ddb(struct intel_atomic_state *state)
 			    "Enabled dbuf slices 0x%x -> 0x%x (total dbuf slices 0x%x), mbus joined? %s->%s\n",
 			    old_dbuf_state->enabled_slices,
 			    new_dbuf_state->enabled_slices,
-			    INTEL_INFO(i915)->display.dbuf.slice_mask,
+			    DISPLAY_INFO(i915)->dbuf.slice_mask,
 			    str_yes_no(old_dbuf_state->joined_mbus),
 			    str_yes_no(new_dbuf_state->joined_mbus));
 	}
@@ -2900,7 +2900,7 @@ static int
 skl_compute_wm(struct intel_atomic_state *state)
 {
 	struct intel_crtc *crtc;
-	struct intel_crtc_state *new_crtc_state;
+	struct intel_crtc_state __maybe_unused *new_crtc_state;
 	int ret, i;
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
@@ -3698,7 +3698,8 @@ static int intel_sagv_status_show(struct seq_file *m, void *unused)
 	};
 
 	seq_printf(m, "SAGV available: %s\n", str_yes_no(intel_has_sagv(i915)));
-	seq_printf(m, "SAGV modparam: %s\n", str_enabled_disabled(i915->params.enable_sagv));
+	seq_printf(m, "SAGV modparam: %s\n",
+		   str_enabled_disabled(i915->display.params.enable_sagv));
 	seq_printf(m, "SAGV status: %s\n", sagv_status[i915->display.sagv.status]);
 	seq_printf(m, "SAGV block time: %d usec\n", i915->display.sagv.block_time_us);
 

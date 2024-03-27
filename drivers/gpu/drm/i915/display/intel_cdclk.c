@@ -471,7 +471,7 @@ static void hsw_get_cdclk(struct drm_i915_private *dev_priv,
 		cdclk_config->cdclk = 450000;
 	else if (freq == LCPLL_CLK_FREQ_450)
 		cdclk_config->cdclk = 450000;
-	else if (IS_HSW_ULT(dev_priv))
+	else if (IS_HASWELL_ULT(dev_priv))
 		cdclk_config->cdclk = 337500;
 	else
 		cdclk_config->cdclk = 540000;
@@ -1841,7 +1841,7 @@ static bool cdclk_compute_crawl_and_squash_midpoint(struct drm_i915_private *i91
 
 static bool pll_enable_wa_needed(struct drm_i915_private *dev_priv)
 {
-	return ((IS_DG2(dev_priv) || IS_METEORLAKE(dev_priv)) &&
+	return ((IS_DG2(dev_priv) || DISPLAY_VER_FULL(dev_priv) == IP_VER(14, 0)) &&
 		dev_priv->display.cdclk.hw.vco > 0 &&
 		HAS_CDCLK_SQUASH(dev_priv));
 }
@@ -3011,7 +3011,7 @@ int intel_cdclk_atomic_check(struct intel_atomic_state *state,
 {
 	const struct intel_cdclk_state *old_cdclk_state;
 	const struct intel_cdclk_state *new_cdclk_state;
-	struct intel_plane_state *plane_state;
+	struct intel_plane_state __maybe_unused *plane_state;
 	struct intel_plane *plane;
 	int ret;
 	int i;
@@ -3199,7 +3199,7 @@ static int intel_compute_max_dotclk(struct drm_i915_private *dev_priv)
  */
 void intel_update_max_cdclk(struct drm_i915_private *dev_priv)
 {
-	if (IS_JSL_EHL(dev_priv)) {
+	if (IS_JASPERLAKE(dev_priv) || IS_ELKHARTLAKE(dev_priv)) {
 		if (dev_priv->display.cdclk.hw.ref == 24000)
 			dev_priv->display.cdclk.max_cdclk_freq = 552000;
 		else
@@ -3244,9 +3244,9 @@ void intel_update_max_cdclk(struct drm_i915_private *dev_priv)
 		 */
 		if (intel_de_read(dev_priv, FUSE_STRAP) & HSW_CDCLK_LIMIT)
 			dev_priv->display.cdclk.max_cdclk_freq = 450000;
-		else if (IS_BDW_ULX(dev_priv))
+		else if (IS_BROADWELL_ULX(dev_priv))
 			dev_priv->display.cdclk.max_cdclk_freq = 450000;
-		else if (IS_BDW_ULT(dev_priv))
+		else if (IS_BROADWELL_ULT(dev_priv))
 			dev_priv->display.cdclk.max_cdclk_freq = 540000;
 		else
 			dev_priv->display.cdclk.max_cdclk_freq = 675000;
@@ -3433,6 +3433,27 @@ u32 intel_read_rawclk(struct drm_i915_private *dev_priv)
 	return freq;
 }
 
+static int i915_cdclk_info_show(struct seq_file *m, void *unused)
+{
+	struct drm_i915_private *i915 = m->private;
+
+	seq_printf(m, "Current CD clock frequency: %d kHz\n", i915->display.cdclk.hw.cdclk);
+	seq_printf(m, "Max CD clock frequency: %d kHz\n", i915->display.cdclk.max_cdclk_freq);
+	seq_printf(m, "Max pixel clock frequency: %d kHz\n", i915->max_dotclk_freq);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(i915_cdclk_info);
+
+void intel_cdclk_debugfs_register(struct drm_i915_private *i915)
+{
+	struct drm_minor *minor = i915->drm.primary;
+
+	debugfs_create_file("i915_cdclk_info", 0444, minor->debugfs_root,
+			    i915, &i915_cdclk_info_fops);
+}
+
 static const struct intel_cdclk_funcs mtl_cdclk_funcs = {
 	.get_cdclk = bxt_get_cdclk,
 	.set_cdclk = bxt_set_cdclk,
@@ -3582,7 +3603,7 @@ static const struct intel_cdclk_funcs i830_cdclk_funcs = {
  */
 void intel_init_cdclk_hooks(struct drm_i915_private *dev_priv)
 {
-	if (IS_METEORLAKE(dev_priv)) {
+	if (DISPLAY_VER(dev_priv) >= 14) {
 		dev_priv->display.funcs.cdclk = &mtl_cdclk_funcs;
 		dev_priv->display.cdclk.table = mtl_cdclk_table;
 	} else if (IS_DG2(dev_priv)) {
@@ -3590,10 +3611,10 @@ void intel_init_cdclk_hooks(struct drm_i915_private *dev_priv)
 		dev_priv->display.cdclk.table = dg2_cdclk_table;
 	} else if (IS_ALDERLAKE_P(dev_priv)) {
 		/* Wa_22011320316:adl-p[a0] */
-		if (IS_ADLP_DISPLAY_STEP(dev_priv, STEP_A0, STEP_B0)) {
+		if (IS_ALDERLAKE_P(dev_priv) && IS_DISPLAY_STEP(dev_priv, STEP_A0, STEP_B0)) {
 			dev_priv->display.cdclk.table = adlp_a_step_cdclk_table;
 			dev_priv->display.funcs.cdclk = &tgl_cdclk_funcs;
-		} else if (IS_ADLP_RPLU(dev_priv)) {
+		} else if (IS_RAPTORLAKE_U(dev_priv)) {
 			dev_priv->display.cdclk.table = rplu_cdclk_table;
 			dev_priv->display.funcs.cdclk = &rplu_cdclk_funcs;
 		} else {
@@ -3606,7 +3627,7 @@ void intel_init_cdclk_hooks(struct drm_i915_private *dev_priv)
 	} else if (DISPLAY_VER(dev_priv) >= 12) {
 		dev_priv->display.funcs.cdclk = &tgl_cdclk_funcs;
 		dev_priv->display.cdclk.table = icl_cdclk_table;
-	} else if (IS_JSL_EHL(dev_priv)) {
+	} else if (IS_JASPERLAKE(dev_priv) || IS_ELKHARTLAKE(dev_priv)) {
 		dev_priv->display.funcs.cdclk = &ehl_cdclk_funcs;
 		dev_priv->display.cdclk.table = icl_cdclk_table;
 	} else if (DISPLAY_VER(dev_priv) >= 11) {

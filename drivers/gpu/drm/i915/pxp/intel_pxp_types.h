@@ -90,7 +90,9 @@ struct intel_pxp {
 	 */
 	struct i915_pxp_component *pxp_component;
 
-	/* @dev_link: Enforce module relationship for power management ordering. */
+	/**
+	 * @dev_link: Enforce module relationship for power management ordering.
+	 */
 	struct device_link *dev_link;
 	/**
 	 * @mei_pxp_last_msg_interrupted: To catch and drop stale responses

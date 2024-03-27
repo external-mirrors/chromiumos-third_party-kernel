@@ -228,7 +228,7 @@ static ssize_t ps8640_aux_transfer_msg(struct drm_dp_aux *aux,
 	struct ps8640 *ps_bridge = aux_to_ps8640(aux);
 	struct regmap *map = ps_bridge->regmap[PAGE0_DP_CNTL];
 	struct device *dev = &ps_bridge->page[PAGE0_DP_CNTL]->dev;
-	unsigned int len = msg->size;
+	size_t len = msg->size;
 	unsigned int data;
 	unsigned int base;
 	int ret;
@@ -348,11 +348,12 @@ static ssize_t ps8640_aux_transfer_msg(struct drm_dp_aux *aux,
 				return ret;
 			}
 
-			buf[i] = data;
+			if (i < msg->size)
+				buf[i] = data;
 		}
 	}
 
-	return len;
+	return min(len, msg->size);
 }
 
 static ssize_t ps8640_aux_transfer(struct drm_dp_aux *aux,
@@ -363,6 +364,11 @@ static ssize_t ps8640_aux_transfer(struct drm_dp_aux *aux,
 	int ret;
 
 	pm_runtime_get_sync(dev);
+	ret = _ps8640_wait_hpd_asserted(ps_bridge, 200 * 1000);
+	if (ret) {
+		pm_runtime_put_sync_suspend(dev);
+		return ret;
+	}
 	ret = ps8640_aux_transfer_msg(aux, msg);
 	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);

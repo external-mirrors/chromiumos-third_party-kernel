@@ -12,6 +12,7 @@
 #include "intel_display_types.h"
 #include "intel_dpt.h"
 #include "intel_fb.h"
+#include "intel_frontbuffer.h"
 
 #define check_array_bounds(i915, a, i) drm_WARN_ON(&(i915)->drm, (i) >= ARRAY_SIZE(a))
 
@@ -760,7 +761,7 @@ bool intel_fb_modifier_uses_dpt(struct drm_i915_private *i915, u64 modifier)
 
 bool intel_fb_uses_dpt(const struct drm_framebuffer *fb)
 {
-	return fb && to_i915(fb->dev)->params.enable_dpt &&
+	return fb && to_i915(fb->dev)->display.params.enable_dpt &&
 		intel_fb_modifier_uses_dpt(to_i915(fb->dev), fb->modifier);
 }
 
@@ -1370,7 +1371,8 @@ plane_view_scanout_stride(const struct intel_framebuffer *fb, int color_plane,
 	struct drm_i915_private *i915 = to_i915(fb->base.dev);
 	unsigned int stride_tiles;
 
-	if (IS_ALDERLAKE_P(i915) || DISPLAY_VER(i915) >= 14)
+	if ((IS_ALDERLAKE_P(i915) || DISPLAY_VER(i915) >= 14) &&
+	    src_stride_tiles < dst_stride_tiles)
 		stride_tiles = src_stride_tiles;
 	else
 		stride_tiles = dst_stride_tiles;
@@ -1497,8 +1499,20 @@ static u32 calc_plane_remap_info(const struct intel_framebuffer *fb, int color_p
 
 			size += remap_info->size;
 		} else {
-			unsigned int dst_stride = plane_view_dst_stride_tiles(fb, color_plane,
-									      remap_info->width);
+			unsigned int dst_stride;
+
+			/*
+			 * The hardware automagically calculates the CCS AUX surface
+			 * stride from the main surface stride so can't really remap a
+			 * smaller subset (unless we'd remap in whole AUX page units).
+			 */
+			if (intel_fb_needs_pot_stride_remap(fb) &&
+			    intel_fb_is_ccs_modifier(fb->base.modifier))
+				dst_stride = remap_info->src_stride;
+			else
+				dst_stride = remap_info->width;
+
+			dst_stride = plane_view_dst_stride_tiles(fb, color_plane, dst_stride);
 
 			assign_chk_ovf(i915, remap_info->dst_stride, dst_stride);
 			color_plane_info->mapping_stride = dst_stride *
@@ -1601,7 +1615,7 @@ int intel_fill_fb_info(struct drm_i915_private *i915, struct intel_framebuffer *
 	for (i = 0; i < num_planes; i++) {
 		struct fb_plane_view_dims view_dims;
 		unsigned int width, height;
-		unsigned int cpp, size;
+		unsigned int size;
 		u32 offset;
 		int x, y;
 		int ret;
@@ -1618,7 +1632,6 @@ int intel_fill_fb_info(struct drm_i915_private *i915, struct intel_framebuffer *
 				return -EINVAL;
 		}
 
-		cpp = fb->base.format->cpp[i];
 		intel_fb_plane_dims(fb, i, &width, &height);
 
 		ret = convert_plane_offset_to_xy(fb, i, width, &x, &y);
