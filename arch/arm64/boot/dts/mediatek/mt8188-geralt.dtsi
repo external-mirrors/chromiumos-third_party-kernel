@@ -218,7 +218,7 @@
 
 		secure_cma_reserved: secure_cma_region {
 			compatible = "mediatek,secure_cma_chunkmem";
-			reg = <0 0x81000000 0 0x18000000>;
+			reg = <0 0xB5000000 0 0x18000000>;
 			reusable;
 		};
 	};
