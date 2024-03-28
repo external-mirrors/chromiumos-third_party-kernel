@@ -184,7 +184,7 @@
 		adsp_mem_reserved: adsp_mem_region {
 			compatible = "mediatek,adsp-reserved-memory";
 			no-map;
-			reg = <0 0x60000000 0 0xA00000>;
+			reg = <0 0x60000000 0 0xF00000>;
 		};
 
 		scp_mem_reserved: scp_mem_region {
