@@ -596,10 +596,22 @@
 			no-map;
 		};
 
+		gpueb_resv_mem: gpueb-reserved-memory@a0000000 {
+			compatible = "mediatek,gpueb-resv-mem";
+			reg = <0 0xa0000000 0 0x200000>; /* 2 MB */
+			no-map;
+		};
+
 		vcp_resv_mem: vcp-reserved-memory@a0200000 {
 			compatible = "mediatek,me-vcp-reserved";
 			reg = <0 0xa0200000 0 0x01e00000>; /* 30MB */
 			iommu-addresses = <0 0x00000000 1 0x40000000>; /* 1G */
+			no-map;
+		};
+
+		mali_protected: mali-protected@a2000000 { /* 16MB */
+			compatible = "mali-reserved";
+			reg = <0x0 0xa2000000 0x0 0x1000000>;
 			no-map;
 		};
 
@@ -625,6 +637,292 @@
 		method = "smc";
 	};
 
+	ged: ged {
+		compatible = "mediatek,ged";
+		gpufreq-supply = <&gpufreq>;
+	};
+
+	gpu_dcs: gpu-dcs {
+		compatible = "mediatek,gpu-dcs";
+	};
+
+	gpu_dvfs_mode: gpu-loading-mode {
+		compatible = "mediatek,gpu-loading-mode";
+		dvfs-loading-mode = <0>;
+		dvfs-workload-mode = <6>;
+	};
+
+	gpu_mali_opp: opp-table-gpu {
+		compatible = "operating-points-v2";
+
+		opp00 {
+			opp-hz = /bits/ 64 <1612000000>;
+			opp-microvolt = <795000>;
+		};
+
+		opp01 {
+			opp-hz = /bits/ 64 <1586000000>;
+			opp-microvolt = <790000>;
+		};
+
+		opp02 {
+			opp-hz = /bits/ 64 <1560000000>;
+			opp-microvolt = <785000>;
+		};
+
+		opp03 {
+			opp-hz = /bits/ 64 <1534000000>;
+			opp-microvolt = <780000>;
+		};
+
+		opp04 {
+			opp-hz = /bits/ 64 <1508000000>;
+			opp-microvolt = <770000>;
+		};
+
+		opp05 {
+			opp-hz = /bits/ 64 <1482000000>;
+			opp-microvolt = <765000>;
+		};
+
+		opp06 {
+			opp-hz = /bits/ 64 <1456000000>;
+			opp-microvolt = <760000>;
+		};
+
+		opp07 {
+			opp-hz = /bits/ 64 <1430000000>;
+			opp-microvolt = <750000>;
+		};
+
+		opp08 {
+			opp-hz = /bits/ 64 <1404000000>;
+			opp-microvolt = <745000>;
+		};
+
+		opp09 {
+			opp-hz = /bits/ 64 <1378000000>;
+			opp-microvolt = <740000>;
+		};
+
+		opp10 {
+			opp-hz = /bits/ 64 <1352000000>;
+			opp-microvolt = <735000>;
+		};
+
+		opp11 {
+			opp-hz = /bits/ 64 <1326000000>;
+			opp-microvolt = <730000>;
+		};
+
+		opp12 {
+			opp-hz = /bits/ 64 <1300000000>;
+			opp-microvolt = <720000>;
+		};
+
+		opp13 {
+			opp-hz = /bits/ 64 <1274000000>;
+			opp-microvolt = <715000>;
+		};
+
+		opp14 {
+			opp-hz = /bits/ 64 <1248000000>;
+			opp-microvolt = <710000>;
+		};
+
+		opp15 {
+			opp-hz = /bits/ 64 <1222000000>;
+			opp-microvolt = <705000>;
+		};
+
+		opp16 {
+			opp-hz = /bits/ 64 <1196000000>;
+			opp-microvolt = <695000>;
+		};
+
+		opp17 {
+			opp-hz = /bits/ 64 <1170000000>;
+			opp-microvolt = <690000>;
+		};
+
+		opp18 {
+			opp-hz = /bits/ 64 <1144000000>;
+			opp-microvolt = <685000>;
+		};
+
+		opp19 {
+			opp-hz = /bits/ 64 <1118000000>;
+			opp-microvolt = <680000>;
+		};
+
+		opp20 {
+			opp-hz = /bits/ 64 <1092000000>;
+			opp-microvolt = <670000>;
+		};
+
+		opp21 {
+			opp-hz = /bits/ 64 <1066000000>;
+			opp-microvolt = <665000>;
+		};
+
+		opp22 {
+			opp-hz = /bits/ 64 <1040000000>;
+			opp-microvolt = <660000>;
+		};
+
+		opp23 {
+			opp-hz = /bits/ 64 <1014000000>;
+			opp-microvolt = <655000>;
+		};
+
+		opp24 {
+			opp-hz = /bits/ 64 <988000000>;
+			opp-microvolt = <645000>;
+		};
+
+		opp25 {
+			opp-hz = /bits/ 64 <962000000>;
+			opp-microvolt = <640000>;
+		};
+
+		opp26 {
+			opp-hz = /bits/ 64 <936000000>;
+			opp-microvolt = <635000>;
+		};
+
+		opp27 {
+			opp-hz = /bits/ 64 <910000000>;
+			opp-microvolt = <630000>;
+		};
+
+		opp28 {
+			opp-hz = /bits/ 64 <884000000>;
+			opp-microvolt = <620000>;
+		};
+
+		opp29 {
+			opp-hz = /bits/ 64 <858000000>;
+			opp-microvolt = <615000>;
+		};
+
+		opp30 {
+			opp-hz = /bits/ 64 <832000000>;
+			opp-microvolt = <610000>;
+		};
+
+		opp31 {
+			opp-hz = /bits/ 64 <806000000>;
+			opp-microvolt = <605000>;
+		};
+
+		opp32 {
+			opp-hz = /bits/ 64 <780000000>;
+			opp-microvolt = <600000>;
+		};
+
+		opp33 {
+			opp-hz = /bits/ 64 <754000000>;
+			opp-microvolt = <590000>;
+		};
+
+		opp34 {
+			opp-hz = /bits/ 64 <728000000>;
+			opp-microvolt = <585000>;
+		};
+
+		opp35 {
+			opp-hz = /bits/ 64 <702000000>;
+			opp-microvolt = <580000>;
+		};
+
+		opp36 {
+			opp-hz = /bits/ 64 <676000000>;
+			opp-microvolt = <575000>;
+		};
+
+		opp37 {
+			opp-hz = /bits/ 64 <650000000>;
+			opp-microvolt = <560000>;
+		};
+
+		opp38 {
+			opp-hz = /bits/ 64 <624000000>;
+			opp-microvolt = <560000>;
+		};
+
+		opp39 {
+			opp-hz = /bits/ 64 <598000000>;
+			opp-microvolt = <555000>;
+		};
+
+		opp40 {
+			opp-hz = /bits/ 64 <572000000>;
+			opp-microvolt = <550000>;
+		};
+
+		opp41 {
+			opp-hz = /bits/ 64 <546000000>;
+			opp-microvolt = <540000>;
+		};
+
+		opp42 {
+			opp-hz = /bits/ 64 <520000000>;
+			opp-microvolt = <535000>;
+		};
+
+		opp43 {
+			opp-hz = /bits/ 64 <494000000>;
+			opp-microvolt = <530000>;
+		};
+
+		opp44 {
+			opp-hz = /bits/ 64 <468000000>;
+			opp-microvolt = <525000>;
+		};
+
+		opp45 {
+			opp-hz = /bits/ 64 <442000000>;
+			opp-microvolt = <515000>;
+		};
+
+		opp46 {
+			opp-hz = /bits/ 64 <416000000>;
+			opp-microvolt = <510000>;
+		};
+
+		opp47 {
+			opp-hz = /bits/ 64 <390000000>;
+			opp-microvolt = <505000>;
+		};
+
+		opp48 {
+			opp-hz = /bits/ 64 <364000000>;
+			opp-microvolt = <500000>;
+		};
+
+		opp49 {
+			opp-hz = /bits/ 64 <338000000>;
+			opp-microvolt = <490000>;
+		};
+	};
+
+	gpu_protected_memory_allocator: protected-memory-allocator {
+		compatible = "arm,protected-memory-allocator";
+		memory-region = <&mali_protected>;
+	};
+
+	gpufreq_wrapper: gpufreq-wrapper {
+		compatible = "mediatek,gpufreq-wrapper";
+		gpufreq-version = <2>;
+		dual-buck = <1>;
+		gpueb-support;
+		ghpm-supply = <&ghpm>;
+	};
+
+	mgm: mgm {
+		compatible = "arm,physical-memory-group-manager";
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -632,8 +930,26 @@
 		ranges;
 		dma-ranges = <0x0 0x0 0x0 0x0 0x10 0x0>;
 
+		qos: qos@11bb00 {
+			compatible = "mediatek,mt8196-qos";
+			reg = <0 0x0011bb00 0 0x100>,
+			      <0 0x0011b9c0 0 0x140>,
+			      <0 0x0011b920 0 0xa0>;
+			reg-names = "sram", "share_sram", "share_sram_ext";
+			mediatek,enable;
+			scmi-tinysys-supply = <&scmi_tinysys>;
+		};
+
 		csram_sys: csram-sysram@11bc00 {
 			reg = <0 0x11bc00 0 0x1400>; /* 5KB */
+		};
+
+		gpu_qos: gpu-qos@13f800 {
+			compatible = "mediatek,gpu-qos";
+			reg = <0 0x13f800 0 0x20>;
+			qos-mode = <0>;
+			qos-sysram-support;
+			qos-value = <0>;
 		};
 
 		cpu_mcucfg: mcusys-ao-cfg@c000000 {
@@ -3510,6 +3826,119 @@
 			status = "disabled";
 		};
 
+		gpu: gpu@48000000 {
+			compatible = "mediatek,mali-mt8196", "mediatek,mali";
+			reg = <0 0x48000000 0 0x480000>;
+			interrupts = <GIC_SPI 606 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 605 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 604 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 607 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 608 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 612 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "job",
+					  "mmu",
+					  "gpu",
+					  "event",
+					  "pwr",
+					  "gpueb_mbox1";
+			l2-hash-values = <0xb 0xe 0x0>;
+			physical-memory-group-manager = <&mgm>;
+			protected-memory-allocator = <&gpu_protected_memory_allocator>;
+			operating-points-v2 = <&gpu_mali_opp>;
+			#cooling-cells = <2>;
+			ged-supply = <&ged>;
+			system-coherency = <31>;
+			sleep-mode-enable;
+			firmware-idle-hysteresis-time-us = <0>;
+			default-glb-pwroff-timeout-us = <10>;
+			autosuspend-delay-ms = <10>;
+			adaptive-power-policy = <2>;
+			reset-exception-mask = <0x0>;
+			iter-trace-enable = <1>;
+			gpu-frame-base-optimize = <1>;
+
+			pbha {
+				propagate-bits = /bits/ 8 <0xf>;
+			};
+		};
+
+		gpufreq: gpufreq@48500000 {
+			compatible = "mediatek,gpufreq";
+			reg = <0 0x48500000 0 0x1000>,   /* MFG_TOP_CONFIG */
+			      <0 0x48600000 0 0x200000>, /* MFG_SMMU */
+			      <0 0x48800000 0 0x1000>,   /* MFG_VGPU_BUS_DBG_TRACKER */
+			      <0 0x4b190000 0 0x20000>,  /* MFG_GPUEB_BUS_DBG_TRACKER */
+			      <0 0x4b800000 0 0x10000>,  /* MFG_RPC */
+			      <0 0x4b810000 0 0x400>,    /* MFG_PLL */
+			      <0 0x4b810400 0 0x400>,    /* MFG_PLL_SC0 */
+			      <0 0x4b810800 0 0x400>,    /* MFG_PLL_SC1 */
+			      <0 0x4b840000 0 0x1000>,   /* MFG_HBVC */
+			      <0 0x4b860000 0 0x1000>,   /* MFG_VCORE_AO_CFG */
+			      <0 0x4b8b0000 0 0x1000>,   /* MFG_VCORE_DEVAPC */
+			      <0 0x4b900000 0 0x1000>,   /* MFG_VCORE_BUS_DBG_TRACKER */
+			      <0 0x0c000000 0 0x1000>,   /* MCUSYS_PAR_WRAP */
+			      <0 0x10000000 0 0x1000>,   /* CKSYS */
+			      <0 0x10404000 0 0x1000>,   /* NTH_EMICFG_AO_MEM */
+			      <0 0x10416000 0 0x1000>,   /* NTH_EMI_AO_DEBUG_CTRL */
+			      <0 0x10425000 0 0x1000>,   /* NTH_EMICFG */
+			      <0 0x10469000 0 0x1000>,   /* EMI */
+			      <0 0x10504000 0 0x1000>,   /* STH_EMICFG_AO_MEM */
+			      <0 0x10516000 0 0x1000>,   /* STH_EMI_AO_DEBUG_CTRL */
+			      <0 0x10525000 0 0x1000>,   /* STH_EMICFG */
+			      <0 0x10569000 0 0x1000>,   /* SUB_EMI */
+			      <0 0x10621000 0 0x1000>,   /* SEMI_MI32_SMI */
+			      <0 0x10622000 0 0x1000>,   /* NEMI_MI32_SMI */
+			      <0 0x10623000 0 0x1000>,   /* SEMI_MI33_SMI */
+			      <0 0x10624000 0 0x1000>,   /* NEMI_MI33_SMI */
+			      <0 0x10644000 0 0x1000>,   /* INFRA_AO_DEBUG_CTRL */
+			      <0 0x10645000 0 0x1000>,   /* EMI_INFRA_AO_BCRM */
+			      <0 0x10646000 0 0x1000>,   /* EMI_INFRA_AO_MEM */
+			      <0 0x10648000 0 0x1000>,   /* EMI_INFRA_CFG */
+			      <0 0x1c004000 0 0x10000>;  /* SLEEP */
+			reg-names = "mfg_top_config",
+				    "mfg_smmu",
+				    "mfg_vgpu_bus_trk",
+				    "mfg_gpueb_bus_trk",
+				    "mfg_rpc",
+				    "mfg_pll",
+				    "mfg_pll_sc0",
+				    "mfg_pll_sc1",
+				    "mfg_hbvc",
+				    "mfg_vcore_ao_cfg",
+				    "mfg_vcore_devapc",
+				    "mfg_vcore_bus_trk",
+				    "mcusys_par_wrap",
+				    "cksys",
+				    "nth_emicfg_ao_mem",
+				    "nth_emi_ao_debug_ctrl",
+				    "nth_emicfg",
+				    "emi",
+				    "sth_emicfg_ao_mem",
+				    "sth_emi_ao_debug_ctrl",
+				    "sth_emicfg",
+				    "sub_emi",
+				    "semi_mi32_smi",
+				    "nemi_mi32_smi",
+				    "semi_mi33_smi",
+				    "nemi_mi33_smi",
+				    "infra_ao_debug_ctrl",
+				    "emi_infra_ao_bcrm",
+				    "emi_infra_ao_mem",
+				    "emi_infra_cfg",
+				    "sleep";
+			gpufreq-wrapper-supply = <&gpufreq_wrapper>;
+		};
+
+		gpupdma: gpupdma@48540000 {
+			compatible = "mediatek,gpupdma";
+			reg = <0 0x48540000 0 0x2000>,
+			      <0 0x4b800704 0 0x4>,
+			      <0 0x13f840 0 0x28>;
+			ringbuf-page-order = <3>;
+			config-mode = <1>;
+			hw-semaphore-bit = <1>;
+		};
+
 		gpu_smmu: iommu@48600000 {
 			#iommu-cells = <1>;
 			compatible = "mediatek,mt8196-gpu-smmu", "arm,smmu-v3";
@@ -3517,6 +3946,99 @@
 			interrupts = <GIC_SPI 616 IRQ_TYPE_LEVEL_HIGH 0>;
 			interrupt-names = "combined";
 			status = "disabled";
+		};
+
+		gpueb: gpueb@4b000000 {
+			compatible = "mediatek,gpueb";
+			reg = <0 0x4b000000 0 0xa0000>,
+			      <0 0x4b09fd00 0 0x80>,
+			      <0 0x4b140100 0 0x200>,
+			      <0 0x4b120000 0 0x100>,
+			      <0 0x4b09fd80 0 0x280>,
+			      <0 0x4b170008 0 0x4>,  /* arbitrary addr to avoid error msg */
+			      <0 0x4b170004 0 0x4>,
+			      <0 0x4b170074 0 0x4>,
+			      <0 0x4b170000 0 0x4>,
+			      <0 0x4b170078 0 0x4>,
+			      <0 0x4b800504 0 0x4>;
+			reg-names = "gpueb_base",
+			            "gpueb_gpr_base",
+			            "gpueb_cfgreg_base",
+			            "gpueb_intc_base",
+			            "mbox0_base",
+			            "mbox0_init", /* dummy input for mtk_mbox_probe */
+			            "mbox0_set",
+			            "mbox0_clr",
+			            "mbox0_send",
+			            "mbox0_recv",
+			            "mfg0_pwr_con";
+			interrupts = <GIC_SPI 608 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "mbox0";
+
+			gpueb-support;
+			ghpm-support;
+			mbox-count = <1>;
+			mbox-size = <160>; /* 160 slot * 4 = 640 byte */
+			slot-size = <4>;   /* 1 slot = 4 bytes */
+			ts-mbox = <0>; /* mbox for timersync */
+
+			/* id, mbox, send_size */
+			send-table = <0 0 4>,
+				     <1 0 8>,
+				     <2 0 3>,
+				     <3 0 6>,
+				     <4 0 9>,
+				     <5 0 4>,
+				     <6 0 6>,
+				     <7 0 6>,
+				     <8 0 1>,
+				     <9 0 4>,
+				     <10 0 4>,
+				     <11 0 1>;
+			send-name-table = "IPI_ID_FAST_DVFS_EVENT",
+					  "IPI_ID_GPUFREQ",
+					  "IPI_ID_SLEEP",
+					  "IPI_ID_TIMER",
+					  "IPI_ID_FHCTL",
+					  "IPI_ID_CCF",
+					  "IPI_ID_GPUMPU",
+					  "IPI_ID_FAST_DVFS",
+					  "CH_IPIR_C_MET", /* = IPIS_C_MET on gpueb side */
+					  "CH_IPIS_C_MET", /* = IPIR_C_MET on gpueb side */
+					  "IPI_ID_BRISKET",
+					  "IPI_ID_PPB";
+
+			/* id, mbox, recv_size, recv_opt, cb_ctx_opt */
+			recv-table = <0 0 4 0 0>,
+				     <1 0 8 1 1>,
+				     <2 0 1 0 1>,
+				     <3 0 1 0 1>,
+				     <4 0 1 1 1>,
+				     <5 0 4 1 1>,
+				     <6 0 1 1 1>,
+				     <7 0 6 1 1>,
+				     <8 0 4 0 1>,
+				     <9 0 1 1 1>,
+				     <10 0 4 1 1>,
+				     <11 0 1 1 1>;
+			recv-name-table = "IPI_ID_FAST_DVFS_EVENT",
+					  "IPI_ID_GPUFREQ",
+					  "IPI_ID_SLEEP",
+					  "IPI_ID_TIMER",
+					  "IPI_ID_FHCTL",
+					  "IPI_ID_CCF",
+					  "IPI_ID_GPUMPU",
+					  "IPI_ID_FAST_DVFS",
+					  "CH_IPIR_C_MET", /* = IPIS_C_MET on gpueb side */
+					  "CH_IPIS_C_MET", /* = IPIR_C_MET on gpueb side */
+					  "IPI_ID_BRISKET",
+					  "IPI_ID_PPB";
+
+			gpueb-mem-table = <0 0x4000>,   /* 16KB */
+					  <1 0x180000>; /* 1.5MB */
+
+			gpueb-mem-name-table = "MEM_ID_GPUFREQ", /* GPUFREQ */
+					       "MEM_ID_LOG";     /* LOGGER */
 		};
 
 		mfgpll_pll_ctrl_clk: syscon@4b810000 {
@@ -3531,6 +4053,28 @@
 			compatible = "mediatek,mt8196-mfgpll-sc0-pll-ctrl", "mediatek,mt8196-mfgpll_sc0_pll_ctrl", "syscon";
 			reg = <0 0x4b810400 0 0x400>;
 			#clock-cells = <1>;
+		};
+
+		ghpm: ghpm@4b800000 {
+			compatible = "mediatek,ghpm";
+			reg =
+				<0 0x4b800000 0 0x1000>,
+				<0 0x4b860000 0 0x1000>,
+				<0 0x4b860128 0 0x4>,
+				<0 0x1c004ea8 0 0x4>,
+				<0 0x1c000070 0 0x4>,
+				<0 0x1c000074 0 0x4>,
+				<0 0x1c000078 0 0x4>;
+			reg-names =
+				"mfg_rpc",
+				"mfg_vcore_ao_config",
+				"mfg_mt8196_e2_id_con",
+				"spm_mfg0_pwr_con",
+				"clk_cfg_6",
+				"clk_cfg_6_set",
+				"clk_cfg_6_clr";
+
+			gpueb-supply = <&gpueb>;
 		};
 
 		mfgpll_sc1_pll_ctrl_clk: syscon@4b810800 {
