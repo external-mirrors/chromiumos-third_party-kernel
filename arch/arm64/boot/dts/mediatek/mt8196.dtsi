@@ -485,6 +485,13 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
+
+		vcp_resv_mem: vcp-reserved-memory@a0200000 {
+			compatible = "mediatek,me-vcp-reserved";
+			reg = <0 0xa0200000 0 0x01e00000>; /* 30MB */
+			iommu-addresses = <0 0x00000000 1 0x40000000>; /* 1G */
+			no-map;
+		};
 	};
 
 	timer: timer {
@@ -1898,6 +1905,197 @@
 			mediatek,skip-rpm-cb;
 		};
 
+		vcp: vcp@31800000 {
+			compatible = "mediatek,vcp";
+			reg = <0 0x31800000 0 0x60000>, /* sram */
+			      <0 0x31a04000 0 0xa000>, /* cfg */
+			      <0 0x31bd0000 0 0x1000>, /* cfg core */
+			      <0 0x31b80000 0 0x50000>, /* mbox base */
+			      <0 0x31a70020 0 0x100>, /* mbox init */
+			      <0 0x1c00091c 0 0x4>; /* vcp rdy */
+			reg-names = "sram",
+				    "cfg",
+				    "cfg_core",
+				    "mbox_base",
+				    "mbox_init",
+				    "vcp_vlp_ao_rsvd7";
+
+			interrupts = <GIC_SPI 787 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 789 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 790 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 791 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 792 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 793 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "wdt",
+					  "mbox0",
+					  "mbox1",
+					  "mbox2",
+					  "mbox3",
+					  "mbox4";
+
+			power-domains = <&scpsys MT8196_POWER_DOMAIN_MM_PROC_DORMANT>;
+			iommus = <&mm_smmu 160>;
+			memory-region = <&vcp_resv_mem>;
+
+			vcp-mem-tbl = <0 0x1a00000>, /* VCP_RTOS_MEM_ID 26MB */
+				      <1 0x30000>, /* VDEC_MEM_ID 192KB */
+				      <2 0x12000>, /* VENC_MEM_ID 72KB */
+				      <3 0x1000>; /* LOGGER 4KB*/
+
+			vcp@0 {
+				compatible = "mediatek,vcp-core";
+				twohart = <1>;
+				sram-offset = <0x0>;
+			};
+
+			vcp@31000 {
+				compatible = "mediatek,mmup-core";
+				twohart = <0>;
+				sram-offset = <0x031000>;
+			};
+
+			send_table: mtk-send-table {
+				mbox0-0 {
+					mbox-id = <0>;
+					chan-id = <0>;
+					msg-size = <18>;
+				};
+				mbox1-15 {
+					mbox-id = <1>;
+					chan-id = <15>;
+					msg-size = <8>;
+				};
+				mbox1-16 {
+					mbox-id = <1>;
+					chan-id = <16>;
+					msg-size = <18>;
+				};
+				mbox1-9 {
+					mbox-id = <1>;
+					chan-id = <9>;
+					msg-size = <2>;
+				};
+				mbox2-11 {
+					mbox-id = <2>;
+					chan-id = <11>;
+					msg-size = <18>;
+				};
+				mbox2-2 {
+					mbox-id = <2>;
+					chan-id = <2>;
+					msg-size = <2>;
+				};
+				mbox2-3 {
+					mbox-id = <2>;
+					chan-id = <3>;
+					msg-size = <3>;
+				};
+				mbox2-32 {
+					mbox-id = <2>;
+					chan-id = <32>;
+					msg-size = <2>;
+				};
+				mbox3-33 {
+					mbox-id = <3>;
+					chan-id = <33>;
+					msg-size = <2>;
+				};
+				mbox3-13 {
+					mbox-id = <3>;
+					chan-id = <13>;
+					msg-size = <2>;
+				};
+				mbox3-35 {
+					mbox-id = <3>;
+					chan-id = <35>;
+					msg-size = <2>;
+				};
+				mbox4-20 {
+					mbox-id = <4>;
+					chan-id = <20>;
+					msg-size = <2>;
+				};
+				mbox4-21 {
+					mbox-id = <4>;
+					chan-id = <21>;
+					msg-size = <3>;
+				};
+				mbox4-23 {
+					mbox-id = <4>;
+					chan-id = <23>;
+					msg-size = <2>;
+				};
+			};
+
+			recv_table: mtk-recv-table {
+				mbox0-1 {
+					mbox-id = <0>;
+					chan-id = <1>;
+					msg-size = <18>;
+					recv-opt = <0>;
+				};
+				mbox1-15 {
+					mbox-id = <1>;
+					chan-id = <15>;
+					msg-size = <8>;
+					recv-opt = <1>;
+				};
+				mbox1-17 {
+					mbox-id = <1>;
+					chan-id = <17>;
+					msg-size = <18>;
+					recv-opt = <0>;
+				};
+				mbox1-10 {
+					mbox-id = <1>;
+					chan-id = <10>;
+					msg-size = <2>;
+					recv-opt = <0>;
+				};
+				mbox2-12 {
+					mbox-id = <2>;
+					chan-id = <12>;
+					msg-size = <18>;
+					recv-opt = <0>;
+				};
+				mbox2-5 {
+					mbox-id = <2>;
+					chan-id = <5>;
+					msg-size = <1>;
+					recv-opt = <0>;
+				};
+				mbox2-2 {
+					mbox-id = <2>;
+					chan-id = <2>;
+					msg-size = <1>;
+					recv-opt = <1>;
+				};
+				mbox3-34 {
+					mbox-id = <3>;
+					chan-id = <34>;
+					msg-size = <2>;
+					recv-opt = <0>;
+				};
+				mbox3-14 {
+					mbox-id = <3>;
+					chan-id = <14>;
+					msg-size = <2>;
+					recv-opt = <0>;
+				};
+				mbox4-26 {
+					mbox-id = <4>;
+					chan-id = <26>;
+					msg-size = <1>;
+					recv-opt = <0>;
+				};
+				mbox4-20 {
+					mbox-id = <4>;
+					chan-id = <20>;
+					msg-size = <1>;
+					recv-opt = <1>;
+				};
+			};
+		};
 
 		mminfra_hwv: syscon@31a80000 {
 			/* TODO: Fix compatible in driver */
