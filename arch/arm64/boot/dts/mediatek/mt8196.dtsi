@@ -1023,6 +1023,25 @@
 			status = "disabled";
 		};
 
+		disp_pwm0: disp-pwm0@160b0000 {
+			compatible = "mediatek,mt8196-disp-pwm", "mediatek,mt8183-disp-pwm";
+			reg = <0 0x160b0000 0 0x1000>;
+			interrupts = <GIC_SPI 254 IRQ_TYPE_LEVEL_HIGH 0>;
+			#pwm-cells = <2>;
+			clocks = <&cksys_clk CLK_CK_DISP_PWM_SEL>;
+			clock-names = "main";
+			status = "disabled";
+		};
+
+		disp_pwm1: disp-pwm1@160c0000 {
+			compatible = "mediatek,mt8196-disp-pwm", "mediatek,mt8183-disp-pwm";
+			reg = <0 0x160c0000 0 0x1000>;
+			#pwm-cells = <2>;
+			clocks = <&cksys_clk CLK_CK_DISP_PWM_SEL>;
+			clock-names = "main";
+			status = "disabled";
+		};
+
 		spi0: spi@16110000 {
 			compatible = "mediatek,mt8196-spi";
 			reg = <0 0x16110000 0 0x100>;

@@ -15,6 +15,15 @@
 	model = "MediaTek MT8196 evaluation board";
 	compatible = "mediatek,mt8196-evb", "mediatek,mt8196";
 
+	backlight_lcd0: backlight-lcd0 {
+		compatible = "pwm-backlight";
+		brightness-levels = <0 1023>;
+		default-brightness-level = <576>;
+		enable-gpios = <&pio 32 GPIO_ACTIVE_HIGH>;
+		num-interpolated-steps = <1023>;
+		pwms = <&disp_pwm1 0 500000>;
+	};
+
 	/* chosen */
 	chosen: chosen {
 		stdout-path = "serial0:115200n8";
