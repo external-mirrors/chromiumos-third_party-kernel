@@ -145,6 +145,14 @@ enum mt7921_rxq_id {
 	MT7921_RXQ_MCU_WM = 0,
 };
 
+enum mt7921_reg_power_type {
+	MT_AP_UNSET = 0,
+	MT_AP_DEFAULT,
+	MT_AP_LPI,
+	MT_AP_SP,
+	MT_AP_VLP,
+};
+
 struct mt7921_sta {
 	struct mt76_wcid wcid; /* must be first */
 
@@ -245,6 +253,7 @@ struct mt7921_phy {
 	struct mib_stats mib;
 
 	u8 sta_work_count;
+	enum mt7921_reg_power_type power_type;
 
 	struct sk_buff_head scan_event_list;
 	struct delayed_work scan_work;
