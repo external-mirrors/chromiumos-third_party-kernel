@@ -1319,6 +1319,8 @@
 			interrupts = <GIC_SPI 226 IRQ_TYPE_LEVEL_HIGH 0>;
 			#mbox-cells = <2>;
 			clocks = <&infracfg_ao CLK_INFRA_AO_GCE>;
+			mboxes = <&gce0 15 CMDQ_THR_PRIO_1>;
+			mediatek,gce-events = <CMDQ_SYNC_TOKEN_SECURE_THR_EOF>;
 		};
 
 		gce1: mailbox@10330000 {
@@ -1822,6 +1824,8 @@
 			clock-names = "spi", "sf", "axi";
 			assigned-clocks = <&topckgen CLK_TOP_SPINOR>;
 			interrupts = <GIC_SPI 825 IRQ_TYPE_LEVEL_HIGH 0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
 			status = "disabled";
 		};
 
@@ -2507,6 +2511,116 @@
 			#clock-cells = <1>;
 		};
 
+		apusys_rv: remoteproc@19001000 {
+			compatible = "mediatek,mt8188-apusys-rv";
+			reg = <0 0x19001000 0 0x1000>, <0 0x19002000 0 0x10>;
+			reg-names = "apusys_rv", "apu_wdt";
+			memory-region = <&apu_reserve_memory>;
+			power-domains = <&apuspm 0>;
+			iommus = <&iommu_apu0 M4U_PORT_L0_APU_SECURE>;
+			interrupts = <GIC_SPI 425 IRQ_TYPE_LEVEL_HIGH 0>;
+			mboxes = <&apu_mailbox 0>;
+			mediatek,hw-logger = <&apusys_hw_logger>;
+			status = "disabled";
+
+			apu-ctrl {
+				compatible = "mediatek,apu-ctrl-rpmsg";
+				mediatek,rpmsg-name = "apu-ctrl-rpmsg";
+			};
+
+			apu-pwr-tx {
+				compatible = "mediatek,apupwr-tx-rpmsg";
+				mediatek,rpmsg-name = "apupwr-tx-rpmsg";
+			};
+
+			apu-pwr-rx {
+				compatible = "mediatek,apupwr-rx-rpmsg";
+				mediatek,rpmsg-name = "apupwr-rx-rpmsg";
+				apusys,thermal-zones = "apu";
+			};
+
+			apu-mdw {
+				compatible = "mediatek,apu-mdw-rpmsg";
+				mediatek,rpmsg-name = "apu-mdw-rpmsg";
+			};
+
+			apu-reviser {
+				compatible = "mediatek,apu-reviser-rpmsg";
+				mediatek,rpmsg-name = "apu-reviser-rpmsg";
+			};
+
+			apu-edma {
+				compatible = "mediatek,apu-edma-rpmsg";
+				mediatek,rpmsg-name = "apu-edma-rpmsg";
+			};
+
+			apu-mnoc {
+				compatible = "mediatek,apu-mnoc-rpmsg";
+				mediatek,rpmsg-name = "apu-mnoc-rpmsg";
+			};
+
+			mdla-tx-rpmsg {
+				compatible = "mediatek,mdla-tx-rpmsg";
+				mediatek,rpmsg-name = "mdla-tx-rpmsg";
+			};
+
+			mdla-rx-rpmsg {
+				compatible = "mediatek,mdla-rx-rpmsg";
+				mediatek,rpmsg-name = "mdla-rx-rpmsg";
+			};
+		};
+
+		iommu_apu0: iommu@19010000 {
+			compatible = "mediatek,mt8188-iommu-apu";
+			reg = <0 0x19010000 0 0x1000>;
+			interrupts = <GIC_SPI 433 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&clk26m>;
+			clock-names = "bclk";
+			#iommu-cells = <1>;
+			power-domains = <&apuspm 0>;
+			status = "disabled";
+		};
+
+		iommu_apu1: iommu@19015000 {
+			compatible = "mediatek,mt8188-iommu-apu";
+			reg = <0 0x19015000 0 0x1000>;
+			interrupts = <GIC_SPI 438 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&clk26m>;
+			clock-names = "bclk";
+			#iommu-cells = <1>;
+			power-domains = <&apuspm 0>;
+			status = "disabled";
+		};
+
+		apusys_hw_logger: apusys-hw-logger@0x19024000 {
+			compatible = "mediatek,apusys-hw-logger";
+			reg = <0 0x19024000 0 0x1000>;
+			interrupts = <GIC_SPI 424 IRQ_TYPE_LEVEL_HIGH 0>;
+			iommus = <&iommu_apu1 M4U_PORT_L1_APU_CODE>;
+			power-domains = <&apuspm 0>;
+			status = "disabled";
+		};
+
+		apu_mailbox: mailbox@190e1000 {
+			compatible = "mediatek,mt8188-apu-mailbox";
+			reg = <0 0x190e1000 0 0x1000>;
+			interrupts = <GIC_SPI 412 IRQ_TYPE_LEVEL_HIGH 0>;
+			#mbox-cells = <1>;
+		};
+
+		apuspm: power-controller@190f0000 {
+			compatible = "mediatek,mt8188-apu-pm", "syscon";
+			reg = <0 0x190f0000 0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#power-domain-cells = <1>;
+
+			apu_top: power-domain@0 {
+				reg = <0>;
+				#power-domain-cells = <0>;
+			};
+		};
+
 		vencsys: clock-controller@1a000000 {
 			compatible = "mediatek,mt8188-vencsys";
 			reg = <0 0x1a000000 0 0x1000>;
@@ -2642,7 +2756,7 @@
 
 		gamma0: gamma@1c006000 {
 			compatible = "mediatek,mt8188-disp-gamma",
-				     "mediatek,mt8173-disp-gamma";
+				     "mediatek,mt8195-disp-gamma";
 			reg = <0 0x1c006000 0 0x1000>;
 			interrupts = <GIC_SPI 642 IRQ_TYPE_LEVEL_HIGH 0>;
 			power-domains = <&spm MT8188_POWER_DOMAIN_VDOSYS0>;
@@ -2713,7 +2827,8 @@
 		vdosys0: syscon@1c01d000 {
 			compatible = "mediatek,mt8188-vdosys0", "syscon";
 			reg = <0 0x1c01d000 0 0x1000>;
-			mboxes = <&gce0 0 CMDQ_THR_PRIO_4>;
+			mboxes = <&gce0 0 CMDQ_THR_PRIO_4>,
+				 <&gce0 8 CMDQ_THR_PRIO_4>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			mediatek,gce-events =
@@ -2771,11 +2886,28 @@
 		vdosys1: syscon@1c100000 {
 			compatible = "mediatek,mt8188-vdosys1", "syscon";
 			reg = <0 0x1c100000 0 0x1000>;
-			mboxes = <&gce0 1 CMDQ_THR_PRIO_4>;
+			mboxes = <&gce0 1 CMDQ_THR_PRIO_4>,
+				 <&gce0 9 CMDQ_THR_PRIO_4>;
 			mediatek,gce-client-reg =
 				<&gce0 SUBSYS_1c10XXXX 0x0000 0x1000>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
+		};
+
+		mtk_apu_mem_code: mtk-apu-mem-code {
+			compatible = "mediatek,apu-mem-code";
+			type = <1>;
+			mask = /bits/ 64 <0x00000003ffffffff>;
+			iommus = <&iommu_apu0 M4U_PORT_L0_APU_CODE>;
+			status = "disabled";
+		};
+
+		mtk_apu_mem_data: mtk-apu-mem-data {
+			compatible = "mediatek,apu-mem-data";
+			type = <2>;
+			mask = /bits/ 64 <0x00000003ffffffff>;
+			iommus = <&iommu_apu0 M4U_PORT_L0_APU_DATA>;
+			status = "disabled";
 		};
 
 		mutex1: mutex@1c101000 {

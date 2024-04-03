@@ -11,8 +11,8 @@
 /delete-node/ &backlight_lcd0;
 /delete-node/ &pp3300_dx_edp;
 /delete-node/ &nau8825;
-/delete-node/ &max98390_rl;
-/delete-node/ &max98390_rr;
+/delete-node/ &max98390_3a;
+/delete-node/ &max98390_3b;
 
 &disp_dsi0 {
 	panel: panel1@0 {
@@ -45,25 +45,14 @@
 	};
 };
 
-&max98390_fl {
-	#sound-dai-cells = <0>;
-	compatible = "maxim,max98390";
-	reg = <0x39>;
-	sound-name-prefix = "Front Left";
-	reset-gpios = <&pio 118 1>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&max98390_pins_default>;
-	maxim,dsm_param_name = "dsm_param.bin";
-	status = "okay";
-};
-
-&max98390_fr {
-	#sound-dai-cells = <0>;
-	compatible = "maxim,max98390";
-	reg = <0x38>;
+&max98390_38 {
 	sound-name-prefix = "Front Right";
 	maxim,dsm_param_name = "dsm_param.bin";
-	status = "okay";
+};
+
+&max98390_39 {
+	sound-name-prefix = "Front Left";
+	maxim,dsm_param_name = "dsm_param.bin";
 };
 
 &mipi_tx_config0 {
@@ -127,8 +116,8 @@
 		dai-format = "i2s";
 		mediatek,clk-provider = "cpu";
 		codec {
-			sound-dai = <&max98390_fl>,
-				    <&max98390_fr>;
+			sound-dai = <&max98390_38>,
+				    <&max98390_39>;
 		};
 	};
 
