@@ -57,6 +57,10 @@ struct mtk_crtc {
 	u32				cmdq_event;
 	u32				cmdq_vblank_cnt;
 	wait_queue_head_t		cb_blocking_queue;
+
+	struct cmdq_client		sec_cmdq_client;
+	bool				sec_cmdq_working;
+	wait_queue_head_t		sec_cb_blocking_queue;
 #endif
 
 	struct device			*mmsys_dev[MAX_MMSYS];
@@ -80,6 +84,8 @@ struct mtk_crtc {
 	/* support crc */
 	struct mtk_ddp_comp		*crc_provider;
 	struct drm_vblank_work		crc_work;
+
+	bool				sec_on;
 };
 
 struct mtk_crtc_state {
@@ -174,23 +180,176 @@ static void mtk_drm_cmdq_pkt_destroy(struct cmdq_pkt *pkt)
 	dma_unmap_single(client->chan->mbox->dev, pkt->pa_base, pkt->buf_size,
 			 DMA_TO_DEVICE);
 	kfree(pkt->va_base);
+	cmdq_sec_pkt_free_sec_data(pkt);
 }
 #endif
+
+void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
+{
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	int i;
+	struct mtk_ddp_comp *ddp_first_comp;
+	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct cmdq_pkt *cmdq_handle;
+
+	if (!mtk_crtc->sec_cmdq_client.chan) {
+		dev_err(crtc->dev->dev,
+			"crtc-%d secure mbox channel is NULL\n", drm_crtc_index(crtc));
+		return;
+	}
+
+	if (!mtk_crtc->sec_on) {
+		dev_dbg(crtc->dev->dev, "crtc-%d is already disabled!\n", drm_crtc_index(crtc));
+		return;
+	}
+
+	/* This will be freed in ddp_cmdq_cb(), it doesn't need to be freed in this function */
+	cmdq_handle = kzalloc(sizeof(*cmdq_handle), GFP_KERNEL);
+	if (!cmdq_handle){
+		dev_err(crtc->dev->dev, "mtk_crtc %d failed to kzalloc secure cmdq packet\n",
+			  drm_crtc_index(&mtk_crtc->base));
+		return;
+	}
+
+	if (mtk_drm_cmdq_pkt_create(&mtk_crtc->sec_cmdq_client, cmdq_handle, PAGE_SIZE) < 0) {
+		dev_err(crtc->dev->dev, "mtk_crtc %d failed to create secure cmdq packet\n",
+			  drm_crtc_index(&mtk_crtc->base));
+		kfree(cmdq_handle);
+		return;
+	}
+
+	if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
+		dev_err(crtc->dev->dev, "mtk_crtc %d failed to create secure cmdq packet data\n",
+			  drm_crtc_index(&mtk_crtc->base));
+		mtk_drm_cmdq_pkt_destroy(cmdq_handle);
+		kfree(cmdq_handle);
+		return;
+	}
+
+	/*
+	 * Secure path only support DL mode, so we just wait
+	 * the first path frame done here
+	 */
+	cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
+	cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
+
+	ddp_first_comp = mtk_crtc->ddp_comp[0];
+	for (i = 0; i < mtk_crtc->layer_nr; i++) {
+		struct drm_plane *plane = &mtk_crtc->planes[i];
+		struct mtk_plane_state *plane_state = to_mtk_plane_state(plane->state);
+
+		/* make sure secure layer off before switching secure state */
+		if (plane_state->pending.is_secure) {
+			plane_state->pending.enable = false;
+			mtk_ddp_comp_layer_config(ddp_first_comp, i, plane_state,
+						  cmdq_handle);
+		}
+	}
+
+	cmdq_pkt_finalize(cmdq_handle);
+	dma_sync_single_for_device(mtk_crtc->sec_cmdq_client.chan->mbox->dev,
+				   cmdq_handle->pa_base,
+				   cmdq_handle->cmd_buf_size,
+				   DMA_TO_DEVICE);
+
+	mtk_crtc->sec_cmdq_working = true;
+	mbox_send_message(mtk_crtc->sec_cmdq_client.chan, cmdq_handle);
+	mbox_client_txdone(mtk_crtc->sec_cmdq_client.chan, 0);
+
+	/* Wait for sec state to be disabled by cmdq */
+	wait_event_timeout(mtk_crtc->sec_cb_blocking_queue,
+			   !mtk_crtc->sec_cmdq_working,
+			   msecs_to_jiffies(500));
+
+	mutex_lock(&mtk_crtc->hw_lock);
+	mtk_crtc->sec_on = false;
+	dev_dbg(crtc->dev->dev, "crtc-%d disable secure plane!\n", drm_crtc_index(crtc));
+	mutex_unlock(&mtk_crtc->hw_lock);
+#endif
+}
+
+static void mtk_crtc_plane_switch_sec_state(struct drm_crtc *crtc,
+					    struct drm_atomic_state *state)
+{
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	bool sec_on = false, cursor_update = false;
+	int i, plane_num = 0;
+	struct drm_crtc_state *new_crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct drm_plane *plane;
+	struct drm_plane_state *new_plane_state;
+
+	if (!mtk_crtc->sec_cmdq_client.chan){
+		dev_err(crtc->dev->dev, "%s %d: crtc-%d, no sec_cmdq_client!\n",
+			__func__, __LINE__, drm_crtc_index(crtc));
+		return;
+	}
+
+	/* check updating plane state */
+	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
+		if (!plane->state->crtc || !new_plane_state->crtc)
+			continue;
+
+		if(plane && plane->type == DRM_PLANE_TYPE_CURSOR)
+			cursor_update = true;
+
+		if (new_plane_state->fb && mtk_plane_fb_is_secure(new_plane_state->fb))
+			sec_on = true;
+
+		plane_num++;
+	}
+
+	dev_dbg(crtc->dev->dev, "%s %d: plane_num=%d, sec_on=%d, cursor_only=%d, crtc-%d\n",
+		__func__, __LINE__, plane_num, sec_on,
+		(plane_num == 1 && cursor_update), drm_crtc_index(crtc));
+
+	/* If no plane changed, not switching secure state */
+	if (plane_num == 0)
+		return;
+
+	/* If only the cursor is updated, not switching secure state */
+	if (plane_num == 1 && cursor_update)
+		return;
+
+	if (!sec_on) {
+		mtk_crtc_disable_secure_state(crtc);
+		return;
+	}
+
+	/* If crtc is going to be disabled, not switching to secure state */
+	if (new_crtc_state && !new_crtc_state->active)
+		return;
+
+	mutex_lock(&mtk_crtc->hw_lock);
+	mtk_crtc->sec_on = true;
+	mutex_unlock(&mtk_crtc->hw_lock);
+#endif
+}
 
 static void mtk_crtc_destroy(struct drm_crtc *crtc)
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct mtk_drm_private *priv = crtc->dev->dev_private;
 	int i;
+
+	priv = priv->all_drm_private[drm_crtc_index(crtc)];
 
 	for (i = 0; i < MAX_MMSYS; i++)
 		if (mtk_crtc->mutex[i])
 			mtk_mutex_put(mtk_crtc->mutex[i]);
+
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	mtk_drm_cmdq_pkt_destroy(&mtk_crtc->cmdq_handle);
 
 	if (mtk_crtc->cmdq_client.chan) {
 		mbox_free_channel(mtk_crtc->cmdq_client.chan);
 		mtk_crtc->cmdq_client.chan = NULL;
+	}
+
+	if (mtk_crtc->sec_cmdq_client.chan) {
+		device_link_remove(priv->dev, mtk_crtc->sec_cmdq_client.chan->mbox->dev);
+		mbox_free_channel(mtk_crtc->sec_cmdq_client.chan);
+		mtk_crtc->sec_cmdq_client.chan = NULL;
 	}
 #endif
 
@@ -351,13 +510,24 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 {
 	struct cmdq_cb_data *data = mssg;
 	struct cmdq_client *cmdq_cl = container_of(cl, struct cmdq_client, client);
-	struct mtk_crtc *mtk_crtc = container_of(cmdq_cl, struct mtk_crtc, cmdq_client);
+	struct mtk_crtc *mtk_crtc;
 	struct mtk_crtc_state *state;
 	unsigned int i;
 	unsigned long flags;
+	bool is_secure = (data->pkt && data->pkt->sec_data);
 
-	if (data->sta < 0)
+	if (data->sta < 0) {
+		if (is_secure) {
+			mtk_drm_cmdq_pkt_destroy(data->pkt);
+			kfree(data->pkt);
+		}
 		return;
+	}
+
+	if (is_secure)
+		mtk_crtc = container_of(cmdq_cl, struct mtk_crtc, sec_cmdq_client);
+	else
+		mtk_crtc = container_of(cmdq_cl, struct mtk_crtc, cmdq_client);
 
 	state = to_mtk_crtc_state(mtk_crtc->base.state);
 
@@ -399,6 +569,16 @@ ddp_cmdq_cb_out:
 	}
 
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
+
+	if (mtk_crtc->sec_cmdq_working) {
+		mtk_crtc->sec_cmdq_working = false;
+		wake_up(&mtk_crtc->sec_cb_blocking_queue);
+	}
+
+	if (is_secure) {
+		mtk_drm_cmdq_pkt_destroy(data->pkt);
+		kfree(data->pkt);
+	}
 
 	mtk_crtc->cmdq_vblank_cnt = 0;
 	wake_up(&mtk_crtc->cb_blocking_queue);
@@ -677,12 +857,13 @@ static void mtk_crtc_ddp_config(struct drm_crtc *crtc,
 static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	struct cmdq_pkt *cmdq_handle = &mtk_crtc->cmdq_handle;
+	struct cmdq_client cmdq_client;
+	struct cmdq_pkt *cmdq_handle;
 #endif
 	struct drm_crtc *crtc = &mtk_crtc->base;
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
 	unsigned int pending_planes = 0, pending_async_planes = 0;
-	int i;
+	int i, ret = 0;
 	unsigned long flags;
 
 	mutex_lock(&mtk_crtc->hw_lock);
@@ -726,14 +907,47 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 				mtk_mutex_release(mtk_crtc->mutex[i]);
 	}
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	if (mtk_crtc->cmdq_client.chan) {
+	if (mtk_crtc->sec_on) {
+		struct cmdq_sec_data *sec_data;
+
+		cmdq_handle = kzalloc(sizeof(*cmdq_handle), GFP_KERNEL);
+		if (!cmdq_handle) {
+			DRM_ERROR("mtk_crtc %d failed to kzalloc secure cmdq packet\n",
+				  drm_crtc_index(&mtk_crtc->base));
+			ret = -ENOMEM;
+			goto update_config_out;
+		}
+		if (mtk_drm_cmdq_pkt_create(&mtk_crtc->sec_cmdq_client,
+					    cmdq_handle, PAGE_SIZE) < 0) {
+			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet\n",
+				  drm_crtc_index(&mtk_crtc->base));
+			ret = -ENOMEM;
+			goto update_config_out;
+		}
+		if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
+			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet data\n",
+				  drm_crtc_index(&mtk_crtc->base));
+			ret = -ENOMEM;
+			goto update_config_out;
+		}
+		sec_data = (struct cmdq_sec_data *)cmdq_handle->sec_data;
+		sec_data->needs_vblank = needs_vblank;
+
+		cmdq_client = mtk_crtc->sec_cmdq_client;
+	} else if (mtk_crtc->cmdq_client.chan) {
 		mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
-		cmdq_handle->cmd_buf_size = 0;
+		mtk_crtc->cmdq_handle.cmd_buf_size = 0;
+
+		cmdq_client =  mtk_crtc->cmdq_client;
+		cmdq_handle = &mtk_crtc->cmdq_handle;
+	}
+
+	if (cmdq_client.chan) {
 		cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
 		cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
 		mtk_crtc_ddp_config(crtc, cmdq_handle);
 		cmdq_pkt_finalize(cmdq_handle);
-		dma_sync_single_for_device(mtk_crtc->cmdq_client.chan->mbox->dev,
+		dma_sync_single_for_device(cmdq_client.chan->mbox->dev,
 					   cmdq_handle->pa_base,
 					   cmdq_handle->cmd_buf_size,
 					   DMA_TO_DEVICE);
@@ -750,14 +964,22 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		mtk_crtc->config_updating = false;
 		spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
-		mbox_send_message(mtk_crtc->cmdq_client.chan, cmdq_handle);
-		mbox_client_txdone(mtk_crtc->cmdq_client.chan, 0);
+		mbox_send_message(cmdq_client.chan, cmdq_handle);
+		mbox_client_txdone(cmdq_client.chan, 0);
 	}
 #else
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 	mtk_crtc->config_updating = false;
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 #endif
+
+update_config_out:
+
+	if (ret) {
+		spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+		mtk_crtc->config_updating = false;
+		spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
+	}
 
 	mutex_unlock(&mtk_crtc->hw_lock);
 }
@@ -990,6 +1212,8 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 	if (!mtk_crtc->enabled)
 		return;
 
+	mtk_crtc_disable_secure_state(crtc);
+
 	for (i = 0; i < MAX_MMSYS; i++)
 		if (mtk_crtc->exist[i])
 			mmsys_cnt++;
@@ -1040,11 +1264,15 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 				  struct drm_atomic_state *state)
 {
+	struct mtk_drm_private *priv = crtc->dev->dev_private;
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
 	struct mtk_crtc_state *mtk_crtc_state = to_mtk_crtc_state(crtc_state);
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	unsigned long flags;
+
+	if (priv->data->has_secure)
+		mtk_crtc_plane_switch_sec_state(crtc, state);
 
 	if (mtk_crtc->event && mtk_crtc_state->base.event)
 		DRM_ERROR("new event while there is still a pending event\n");
@@ -1425,8 +1653,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 		if (ret) {
 			dev_dbg(dev, "mtk_crtc %d failed to get mediatek,gce-events property\n",
 				drm_crtc_index(&mtk_crtc->base));
-			mbox_free_channel(mtk_crtc->cmdq_client.chan);
-			mtk_crtc->cmdq_client.chan = NULL;
+			goto cmdq_err;
 		} else {
 			ret = mtk_drm_cmdq_pkt_create(&mtk_crtc->cmdq_client,
 						      &mtk_crtc->cmdq_handle,
@@ -1434,13 +1661,43 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 			if (ret) {
 				dev_dbg(dev, "mtk_crtc %d failed to create cmdq packet\n",
 					drm_crtc_index(&mtk_crtc->base));
-				mbox_free_channel(mtk_crtc->cmdq_client.chan);
-				mtk_crtc->cmdq_client.chan = NULL;
+				goto cmdq_err;
 			}
 		}
 
 		/* for sending blocking cmd in crtc disable */
 		init_waitqueue_head(&mtk_crtc->cb_blocking_queue);
+	}
+
+	if (priv->data->has_secure) {
+		mtk_crtc->sec_cmdq_client.client.dev = mtk_crtc->mmsys_dev[priv->data->mmsys_id];
+		mtk_crtc->sec_cmdq_client.client.tx_block = false;
+		mtk_crtc->sec_cmdq_client.client.knows_txdone = true;
+		mtk_crtc->sec_cmdq_client.client.rx_callback = ddp_cmdq_cb;
+		mtk_crtc->sec_cmdq_client.chan =
+			mbox_request_channel(&mtk_crtc->sec_cmdq_client.client, i + 1);
+		if (IS_ERR(mtk_crtc->sec_cmdq_client.chan)) {
+			dev_err(dev, "mtk_crtc %d failed to create sec mailbox client\n",
+				drm_crtc_index(&mtk_crtc->base));
+			mtk_crtc->sec_cmdq_client.chan = NULL;
+		}
+
+		if (mtk_crtc->sec_cmdq_client.chan) {
+			/* for sending blocking cmd in crtc disable */
+			init_waitqueue_head(&mtk_crtc->sec_cb_blocking_queue);
+		}
+	}
+
+cmdq_err:
+	if (ret) {
+		if (mtk_crtc->cmdq_client.chan) {
+			mbox_free_channel(mtk_crtc->cmdq_client.chan);
+			mtk_crtc->cmdq_client.chan = NULL;
+		}
+		if (mtk_crtc->sec_cmdq_client.chan) {
+			mbox_free_channel(mtk_crtc->sec_cmdq_client.chan);
+			mtk_crtc->sec_cmdq_client.chan = NULL;
+		}
 	}
 #endif
 

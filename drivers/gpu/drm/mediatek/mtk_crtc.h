@@ -45,6 +45,7 @@ struct mtk_crtc_crc {
 void mtk_crtc_commit(struct drm_crtc *crtc);
 int mtk_crtc_create(struct drm_device *drm_dev,
 		    enum mtk_crtc_path path_sel);
+void mtk_crtc_disable_secure_state(struct drm_crtc *crtc);
 int mtk_crtc_plane_check(struct drm_crtc *crtc, struct drm_plane *plane,
 			 struct mtk_plane_state *state);
 void mtk_crtc_async_update(struct drm_crtc *crtc, struct drm_plane *plane,
