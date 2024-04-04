@@ -3865,8 +3865,7 @@ void ext4_process_freed_data(struct super_block *sb, tid_t commit_tid)
 		list_for_each_entry(entry, &freed_data_list, efd_list) {
 			err = ext4_issue_discard(sb, entry->efd_group,
 						 entry->efd_start_cluster,
-						 entry->efd_count,
-						 &discard_bio);
+						 entry->efd_count);
 			if (err && err != -EOPNOTSUPP) {
 				ext4_msg(sb, KERN_WARNING, "discard request in"
 					 " group:%d block:%d count:%d failed"
