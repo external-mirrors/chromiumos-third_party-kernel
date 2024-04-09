@@ -774,6 +774,7 @@ int kbase_mem_evictable_init(struct kbase_context *kctx)
 
 	atomic_set(&kctx->evict_nents, 0);
 
+        kctx->reclaim = *shrinker_alloc(0, "kbase-mem-evictable");
 	kctx->reclaim.count_objects = kbase_mem_evictable_reclaim_count_objects;
 	kctx->reclaim.scan_objects = kbase_mem_evictable_reclaim_scan_objects;
 	kctx->reclaim.seeks = DEFAULT_SEEKS;
@@ -781,17 +782,14 @@ int kbase_mem_evictable_init(struct kbase_context *kctx)
 	 * struct shrinker does not define batch
 	 */
 	kctx->reclaim.batch = 0;
-#if KERNEL_VERSION(6, 0, 0) > LINUX_VERSION_CODE
-	register_shrinker(&kctx->reclaim);
-#else
-	register_shrinker(&kctx->reclaim, "mali-mem");
-#endif
+	shrinker_register(&kctx->reclaim);
 	return 0;
 }
 
 void kbase_mem_evictable_deinit(struct kbase_context *kctx)
 {
 	unregister_shrinker(&kctx->reclaim);
+        shrinker_free(&kctx->reclaim);
 }
 
 /**
