@@ -20,7 +20,7 @@
 
 menuconfig MALI
 	tristate "Mali Midgard series support"
-	depends on ARM64 && ARM64_PAGE_SHIFT=12
+	depends on ARM64 && PAGE_SHIFT=12
 	depends on !MALI_MIDGARD && MALI_MIDGARD!=m
 	select GPU_TRACEPOINTS if ANDROID
 	select DMA_SHARED_BUFFER
