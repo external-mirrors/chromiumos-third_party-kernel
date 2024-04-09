@@ -2998,7 +2998,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 			return 0;
 		}
 
-		if (isolate_lru_page(page))
+		if (!isolate_lru_page(page))
 			goto huge_unlock;
 
 		/*
@@ -3077,7 +3077,7 @@ regular_page:
 		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
 			continue;
 
-		if (isolate_lru_page(page))
+		if (!isolate_lru_page(page))
 			continue;
 
 		isolated++;
