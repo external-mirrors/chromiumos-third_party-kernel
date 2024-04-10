@@ -581,7 +581,7 @@ out1:
 	return err;
 }
 
-static int ssi_remove(struct platform_device *pd)
+static void ssi_remove(struct platform_device *pd)
 {
 	struct hsi_controller *ssi = platform_get_drvdata(pd);
 
@@ -595,8 +595,6 @@ static int ssi_remove(struct platform_device *pd)
 	platform_set_drvdata(pd, NULL);
 
 	pm_runtime_disable(&pd->dev);
-
-	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -652,7 +650,7 @@ MODULE_DEVICE_TABLE(of, omap_ssi_of_match);
 
 static struct platform_driver ssi_pdriver = {
 	.probe = ssi_probe,
-	.remove	= ssi_remove,
+	.remove_new = ssi_remove,
 	.driver	= {
 		.name	= "omap_ssi",
 		.pm     = DEV_PM_OPS,
