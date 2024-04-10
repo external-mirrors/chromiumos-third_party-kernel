@@ -175,18 +175,6 @@
 		#size-cells = <2>;
 		ranges;
 
-		adsp_dma_mem_reserved: adsp_dma_mem_region {
-			compatible = "shared-dma-pool";
-			reg = <0 0x61000000 0 0x100000>;
-			no-map;
-		};
-
-		adsp_mem_reserved: adsp_mem_region {
-			compatible = "mediatek,adsp-reserved-memory";
-			no-map;
-			reg = <0 0x60000000 0 0xF00000>;
-		};
-
 		scp_mem_reserved: scp_mem_region {
 			compatible = "shared-dma-pool";
 			reg = <0 0x50000000 0 0x2900000>;
@@ -194,13 +182,26 @@
 		};
 
 		apu_reserve_memory: apu-reserve-memory {
+			compatible = "shared-dma-pool";
 			reg = <0 0x55000000 0 0x1400000>;
+		};
+
+		adsp_mem_reserved: adsp_mem_region {
+			compatible = "mediatek,adsp-reserved-memory";
+			reg = <0 0x60000000 0 0xF00000>;
+			no-map;
 		};
 
 		afe_dma_mem_reserved: snd_dma_mem_region {
 			compatible = "shared-dma-pool";
-			no-map;
 			reg = <0 0x60F00000 0 0x100000>;
+			no-map;
+		};
+
+		adsp_dma_mem_reserved: adsp_dma_mem_region {
+			compatible = "shared-dma-pool";
+			reg = <0 0x61000000 0 0x100000>;
+			no-map;
 		};
 
 		scp_dual_mem_reserved: scp-dual-mem-region {
@@ -217,8 +218,8 @@
 
 		secure_cma_reserved: secure_cma_region {
 			compatible = "mediatek,secure_cma_chunkmem";
-			reusable;
 			reg = <0 0x81000000 0 0x18000000>;
+			reusable;
 		};
 	};
 
