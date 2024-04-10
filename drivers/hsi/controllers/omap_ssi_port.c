@@ -1259,7 +1259,7 @@ error:
 	return err;
 }
 
-static int ssi_port_remove(struct platform_device *pd)
+static void ssi_port_remove(struct platform_device *pd)
 {
 	struct hsi_port *port = platform_get_drvdata(pd);
 	struct omap_ssi_port *omap_port = hsi_port_drvdata(port);
@@ -1286,8 +1286,6 @@ static int ssi_port_remove(struct platform_device *pd)
 
 	pm_runtime_dont_use_autosuspend(&pd->dev);
 	pm_runtime_disable(&pd->dev);
-
-	return 0;
 }
 
 static int ssi_restore_divisor(struct omap_ssi_port *omap_port)
@@ -1422,7 +1420,7 @@ MODULE_DEVICE_TABLE(of, omap_ssi_port_of_match);
 
 struct platform_driver ssi_port_pdriver = {
 	.probe = ssi_port_probe,
-	.remove	= ssi_port_remove,
+	.remove_new = ssi_port_remove,
 	.driver	= {
 		.name	= "omap_ssi_port",
 		.of_match_table = omap_ssi_port_of_match,
