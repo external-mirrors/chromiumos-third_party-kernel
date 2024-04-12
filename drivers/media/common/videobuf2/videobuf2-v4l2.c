@@ -699,6 +699,8 @@ static void fill_buf_caps(struct vb2_queue *q, u32 *caps)
 	if (q->supports_requests)
 		*caps |= V4L2_BUF_CAP_SUPPORTS_REQUESTS;
 #endif
+	if (q->allow_restricted_mem && q->io_modes & VB2_DMABUF)
+		*caps |= V4L2_BUF_CAP_SUPPORTS_RESTRICTED_MEM;
 }
 
 static void validate_memory_flags(struct vb2_queue *q,
@@ -713,7 +715,7 @@ static void validate_memory_flags(struct vb2_queue *q,
 		*flags = 0;
 	} else {
 		/* Clear all unknown flags. */
-		*flags &= V4L2_MEMORY_FLAG_NON_COHERENT;
+		*flags &= V4L2_MEMORY_FLAG_NON_COHERENT | V4L2_MEMORY_FLAG_RESTRICTED;
 	}
 }
 
