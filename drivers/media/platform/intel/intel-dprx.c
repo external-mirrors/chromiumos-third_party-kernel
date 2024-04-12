@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -44,6 +45,8 @@
 #define DPRX_RX_STATUS_CR_LOCK_SHIFT		0
 #define DPRX_RX_STATUS_CR_LOCK(i)		(0 + i)
 
+#define DPRX_MSA_MVID(i)			(0x020 + 0x20 * (i))
+#define DPRX_MSA_NVID(i)			(0x021 + 0x20 * (i))
 #define DPRX_MSA_HTOTAL(i)			(0x022 + 0x20 * (i))
 #define DPRX_MSA_VTOTAL(i)			(0x023 + 0x20 * (i))
 #define DPRX_MSA_HSP(i)				(0x024 + 0x20 * (i))
@@ -2002,6 +2005,8 @@ static int dprx_query_dv_timings(struct v4l2_subdev *sd, unsigned int pad,
 	u32 hstart, vstart;
 	u32 vsp, vsw;
 	u32 hwidth, vheight;
+	u32 pixelclock;
+	u32 symbol_rate, nvid, mvid;
 
 	if (pad >= dprx->max_stream_count)
 		return -EINVAL;
@@ -2009,6 +2014,8 @@ static int dprx_query_dv_timings(struct v4l2_subdev *sd, unsigned int pad,
 	if (!((dprx_read(dprx, DPRX_VBID(pad)) >> DPRX_VBID_MSA_LOCK) & 1))
 		return -ENOLINK;
 
+	mvid    = dprx_read(dprx, DPRX_MSA_MVID(pad));
+	nvid    = dprx_read(dprx, DPRX_MSA_NVID(pad));
 	htotal  = dprx_read(dprx, DPRX_MSA_HTOTAL(pad));
 	vtotal  = dprx_read(dprx, DPRX_MSA_VTOTAL(pad));
 	hsp     = dprx_read(dprx, DPRX_MSA_HSP(pad));
@@ -2020,10 +2027,21 @@ static int dprx_query_dv_timings(struct v4l2_subdev *sd, unsigned int pad,
 	hwidth  = dprx_read(dprx, DPRX_MSA_HWIDTH(pad));
 	vheight = dprx_read(dprx, DPRX_MSA_VHEIGHT(pad));
 
+	/*
+	 * Link bandwidth for DP1.4 or lower is in units of 270 MHz. Our
+	 * encoding is 8b/10b, so we send one symbol per each 10 bits. Symbol
+	 * rate is 10 times lower than bandwidth so multiply it by 27 MHz to
+	 * get the symbol rate.
+	 */
+	symbol_rate = dprx_read_link_bw(dprx) * 27000000;
+	/* Pixelclock is mvid/nvid * symbol_rate, reorder for precision */
+	pixelclock = (u32)div_u64(mul_u32_u32(mvid, symbol_rate), nvid);
+
 	memset(timings, 0, sizeof(*timings));
 	timings->type = V4L2_DV_BT_656_1120;
 	timings->bt.width = hwidth;
 	timings->bt.height = vheight;
+	timings->bt.pixelclock = pixelclock;
 	timings->bt.polarities = (!vsp) | (!hsp) << 1;
 	timings->bt.hfrontporch = htotal - hstart - hwidth;
 	timings->bt.hsync = hsw;
