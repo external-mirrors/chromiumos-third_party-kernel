@@ -55,5 +55,6 @@ struct dma_heap *dma_heap_add(const struct dma_heap_export_info *exp_info);
 int dma_heap_add_cma(struct device *dev);
 
 #endif /* CONFIG_DMABUF_HEAPS_CMA */
+void dma_heap_put(struct dma_heap *heap);
 
 #endif /* _DMA_HEAPS_H */
