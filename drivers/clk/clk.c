@@ -197,7 +197,7 @@ static void clk_pm_runtime_put_all(void)
 	mutex_unlock(&clk_rpm_list_lock);
 }
 
-static void clk_core_rpm_init(struct clk_core *core)
+static void clk_pm_runtime_init(struct clk_core *core)
 {
 	struct device *dev = core->dev;
 
@@ -4309,7 +4309,7 @@ __clk_register(struct device *dev, struct device_node *np, struct clk_hw *hw)
 	core->ops = init->ops;
 
 	core->dev = dev;
-	clk_core_rpm_init(core);
+	clk_pm_runtime_init(core);
 	core->of_node = np;
 	if (dev && dev->driver)
 		core->owner = dev->driver->owner;

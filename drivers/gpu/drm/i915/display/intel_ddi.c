@@ -3248,7 +3248,7 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 		intel_ddi_enable_transcoder_func(encoder, crtc_state);
 
 	/* Enable/Disable DP2.0 SDP split config before transcoder */
-	intel_audio_sdp_split_update(encoder, crtc_state);
+	intel_audio_sdp_split_update(crtc_state);
 
 	intel_enable_transcoder(crtc_state);
 
@@ -3854,11 +3854,9 @@ static void mtl_ddi_get_config(struct intel_encoder *encoder,
 		crtc_state->port_clock = intel_mtl_tbt_calc_port_clock(encoder);
 	} else if (intel_is_c10phy(i915, phy)) {
 		intel_c10pll_readout_hw_state(encoder, &crtc_state->cx0pll_state.c10);
-		intel_c10pll_dump_hw_state(i915, &crtc_state->cx0pll_state.c10);
 		crtc_state->port_clock = intel_c10pll_calc_port_clock(encoder, &crtc_state->cx0pll_state.c10);
 	} else {
 		intel_c20pll_readout_hw_state(encoder, &crtc_state->cx0pll_state.c20);
-		intel_c20pll_dump_hw_state(i915, &crtc_state->cx0pll_state.c20);
 		crtc_state->port_clock = intel_c20pll_calc_port_clock(encoder, &crtc_state->cx0pll_state.c20);
 	}
 
@@ -4320,8 +4318,7 @@ static int intel_hdmi_reset_link(struct intel_encoder *encoder,
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	struct intel_hdmi *hdmi = enc_to_intel_hdmi(encoder);
 	struct intel_connector *connector = hdmi->attached_connector;
-	struct i2c_adapter *adapter =
-		intel_gmbus_get_adapter(dev_priv, hdmi->ddc_bus);
+	struct i2c_adapter *ddc = connector->base.ddc;
 	struct drm_connector_state *conn_state;
 	struct intel_crtc_state *crtc_state;
 	struct intel_crtc *crtc;
@@ -4362,7 +4359,7 @@ static int intel_hdmi_reset_link(struct intel_encoder *encoder,
 	    !try_wait_for_completion(&conn_state->commit->hw_done))
 		return 0;
 
-	ret = drm_scdc_readb(adapter, SCDC_TMDS_CONFIG, &config);
+	ret = drm_scdc_readb(ddc, SCDC_TMDS_CONFIG, &config);
 	if (ret < 0) {
 		drm_err(&dev_priv->drm, "[CONNECTOR:%d:%s] Failed to read TMDS config: %d\n",
 			connector->base.base.id, connector->base.name, ret);
