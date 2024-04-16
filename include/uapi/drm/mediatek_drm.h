@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0+ WITH Linux-syscall-note */
 /*
  * Copyright (c) 2015 MediaTek Inc.
  *
@@ -10,7 +11,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
 
 #ifndef _UAPI_MEDIATEK_DRM_H
 #define _UAPI_MEDIATEK_DRM_H
@@ -60,6 +60,5 @@ struct drm_mtk_gem_map_off {
 
 #define DRM_IOCTL_MTK_GEM_MAP_OFFSET	DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_MTK_GEM_MAP_OFFSET, struct drm_mtk_gem_map_off)
-
 
 #endif /* _UAPI_MEDIATEK_DRM_H */

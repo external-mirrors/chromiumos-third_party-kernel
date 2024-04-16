@@ -14,6 +14,15 @@
 #define CMDQ_ADDR_HIGH(addr)	((u32)(((addr) >> 16) & GENMASK(31, 0)))
 #define CMDQ_ADDR_LOW(addr)	((u16)(addr) | BIT(1))
 
+/*
+ * Every cmdq thread has its own SPRs (Specific Purpose Registers),
+ * so there are 4 * N (threads) SPRs in GCE that shares the same indexes below.
+ */
+#define CMDQ_THR_SPR_IDX0	(0)
+#define CMDQ_THR_SPR_IDX1	(1)
+#define CMDQ_THR_SPR_IDX2	(2)
+#define CMDQ_THR_SPR_IDX3	(3)
+
 struct cmdq_pkt;
 
 struct cmdq_client_reg {
@@ -174,6 +183,18 @@ int cmdq_pkt_write_s_mask_value(struct cmdq_pkt *pkt, u8 high_addr_reg_idx,
 				u16 addr_low, u32 value, u32 mask);
 
 /**
+ * cmdq_pkt_mem_move() - append memory move command to the CMDQ packet
+ * @pkt:	the CMDQ packet
+ * @src_addr:	source address
+ * @dst_addr:	destination address
+ *
+ * Appends a CMDQ command to copy the value found in `src_addr` to `dst_addr`.
+ *
+ * Return: 0 for success; else the error code is returned
+ */
+int cmdq_pkt_mem_move(struct cmdq_pkt *pkt, dma_addr_t src_addr, dma_addr_t dst_addr);
+
+/**
  * cmdq_pkt_wfe() - append wait for event command to the CMDQ packet
  * @pkt:	the CMDQ packet
  * @event:	the desired event type to wait
@@ -182,6 +203,21 @@ int cmdq_pkt_write_s_mask_value(struct cmdq_pkt *pkt, u8 high_addr_reg_idx,
  * Return: 0 for success; else the error code is returned
  */
 int cmdq_pkt_wfe(struct cmdq_pkt *pkt, u16 event, bool clear);
+
+/**
+ * cmdq_pkt_acquire_event() - append acquire event command to the CMDQ packet
+ * @pkt:	the CMDQ packet
+ * @event:	the desired event to be acquired
+ *
+ * User can use cmdq_pkt_acquire_event() as `mutex_lock` and cmdq_pkt_clear_event()
+ * as `mutex_unlock` to protect some `critical section` instructions between them.
+ * cmdq_pkt_acquire_event() would wait for event to be cleared.
+ * After event is cleared by cmdq_pkt_clear_event in other GCE threads,
+ * cmdq_pkt_acquire_event() would set event and keep executing next instruction.
+ *
+ * Return: 0 for success; else the error code is returned
+ */
+int cmdq_pkt_acquire_event(struct cmdq_pkt *pkt, u16 event);
 
 /**
  * cmdq_pkt_clear_event() - append clear event command to the CMDQ packet
@@ -233,6 +269,22 @@ int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys,
  */
 int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys,
 		       u16 offset, u32 value, u32 mask);
+
+/**
+ * cmdq_pkt_poll_addr() - Append blocking POLL command to CMDQ packet
+ * @pkt:	the CMDQ packet
+ * @addr:	the hardware register address
+ * @value:	the specified target register value
+ * @mask:	the specified target register mask
+ *
+ * Appends a polling (POLL) command to the CMDQ packet and asks the GCE
+ * to execute an instruction that checks for the specified `value` (with
+ * or without `mask`) to appear in the specified hardware register `addr`.
+ * All GCE threads will be blocked by this instruction.
+ *
+ * Return: 0 for success or negative error code
+ */
+int cmdq_pkt_poll_addr(struct cmdq_pkt *pkt, dma_addr_t addr, u32 value, u32 mask);
 
 /**
  * cmdq_pkt_assign() - Append logic assign command to the CMDQ packet, ask GCE

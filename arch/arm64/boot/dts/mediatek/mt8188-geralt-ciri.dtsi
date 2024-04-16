@@ -11,8 +11,8 @@
 /delete-node/ &backlight_lcd0;
 /delete-node/ &pp3300_dx_edp;
 /delete-node/ &nau8825;
-/delete-node/ &max98390_rl;
-/delete-node/ &max98390_rr;
+/delete-node/ &max98390_3a;
+/delete-node/ &max98390_3b;
 
 &disp_dsi0 {
 	panel: panel1@0 {
@@ -45,25 +45,14 @@
 	};
 };
 
-&max98390_fl {
-	#sound-dai-cells = <0>;
-	compatible = "maxim,max98390";
-	reg = <0x39>;
-	sound-name-prefix = "Front Left";
-	reset-gpios = <&pio 118 1>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&max98390_pins_default>;
-	maxim,dsm_param_name = "dsm_param.bin";
-	status = "okay";
-};
-
-&max98390_fr {
-	#sound-dai-cells = <0>;
-	compatible = "maxim,max98390";
-	reg = <0x38>;
+&max98390_38 {
 	sound-name-prefix = "Front Right";
 	maxim,dsm_param_name = "dsm_param.bin";
-	status = "okay";
+};
+
+&max98390_39 {
+	sound-name-prefix = "Front Left";
+	maxim,dsm_param_name = "dsm_param.bin";
 };
 
 &mipi_tx_config0 {
@@ -127,8 +116,8 @@
 		dai-format = "i2s";
 		mediatek,clk-provider = "cpu";
 		codec {
-			sound-dai = <&max98390_fl>,
-				    <&max98390_fr>;
+			sound-dai = <&max98390_38>,
+				    <&max98390_39>;
 		};
 	};
 
@@ -150,21 +139,34 @@
 	#size-cells = <0>;
 
 	touchscreen: hid_hx_common_spi@0 {
-		compatible = "himax,hid";
+		compatible = "himax,hx83102j";
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins &touch_reset>;
+		panel = <&panel>;
 		reg = <0>;
 		spi-max-frequency = <12500000>;
 		status = "okay";
 		reset-gpios = <&pio 5  GPIO_ACTIVE_LOW>;
 		himax_gpio_irq = <&pio 143  IRQ_TYPE_LEVEL_LOW>;
 		himax,pid = <0x1002>;
-		himax,ic-det-delay-ms = <1000>;
-		himax,ic-resume-delay-ms = <150>;
+		himax,firmware-name = "himax_i2chid_1002.bin";
+		firmware-name = "himax_i2chid_1002.bin";
 
 		interrupt-parent = <&pio>;
 		interrupts = <143 IRQ_TYPE_LEVEL_LOW>;
 		irq_flag = <0x02>;
+	};
+};
+
+&thermal_zones {
+	soc_max {
+		trips {
+			target: target@1 {
+				temperature = <90000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+		};
 	};
 };
 

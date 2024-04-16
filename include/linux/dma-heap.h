@@ -10,6 +10,7 @@
 #define _DMA_HEAPS_H
 
 #include <linux/cdev.h>
+#include <linux/device.h>
 #include <linux/types.h>
 
 struct dma_heap;
@@ -64,5 +65,14 @@ const char *dma_heap_get_name(struct dma_heap *heap);
  * @exp_info:		information needed to register this heap
  */
 struct dma_heap *dma_heap_add(const struct dma_heap_export_info *exp_info);
+
+#ifdef CONFIG_DMABUF_HEAPS_CMA
+/**
+ * dma_heap_add_cma - adds a device CMA heap to dmabuf heaps
+ * @dev:	device with a CMA heap to register
+ */
+int dma_heap_add_cma(struct device *dev);
+
+#endif /* CONFIG_DMABUF_HEAPS_CMA */
 
 #endif /* _DMA_HEAPS_H */
