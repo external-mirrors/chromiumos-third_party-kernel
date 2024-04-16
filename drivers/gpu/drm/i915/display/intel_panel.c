@@ -108,18 +108,23 @@ struct drm_display_mode *
 intel_panel_edid_fixed_mode(struct intel_connector *connector)
 {
 	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
-	const struct drm_display_mode *scan;
+	const struct drm_display_mode *scan, *best_mode = NULL;
 	struct drm_display_mode *fixed_mode;
 
 	if (list_empty(&connector->base.probed_modes))
 		return NULL;
 
-	/* prefer fixed mode from EDID if available */
+	/* Find the highest bandwidth mode among all preferred modes */
 	list_for_each_entry(scan, &connector->base.probed_modes, head) {
 		if ((scan->type & DRM_MODE_TYPE_PREFERRED) == 0)
 			continue;
 
-		fixed_mode = drm_mode_duplicate(&dev_priv->drm, scan);
+		if (!best_mode || scan->clock > best_mode->clock)
+			best_mode = scan;
+	}
+
+	if (best_mode) {
+		fixed_mode = drm_mode_duplicate(&dev_priv->drm, best_mode);
 		if (!fixed_mode)
 			return NULL;
 

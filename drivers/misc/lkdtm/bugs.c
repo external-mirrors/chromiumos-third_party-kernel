@@ -165,10 +165,11 @@ void lkdtm_SPINLOCKUP(void)
 	__release(&lock_me_up);
 }
 
-void lkdtm_HUNG_TASK(void)
+void __noreturn lkdtm_HUNG_TASK(void)
 {
 	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule();
+	BUG();
 }
 
 void lkdtm_CORRUPT_LIST_ADD(void)

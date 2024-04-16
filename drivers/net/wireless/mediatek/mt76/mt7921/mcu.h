@@ -76,6 +76,29 @@ struct mt7921_uni_txd {
 	u8 reserved2[4];
 } __packed __aligned(4);
 
+struct mt7921_fw_trailer {
+	u8 chip_id;
+	u8 eco_code;
+	u8 n_region;
+	u8 format_ver;
+	u8 format_flag;
+	u8 reserved[2];
+	char fw_ver[10];
+	char build_date[15];
+	u32 crc;
+} __packed;
+
+struct mt7921_fw_region {
+	__le32 decomp_crc;
+	__le32 decomp_len;
+	__le32 decomp_blk_sz;
+	u8 reserved[4];
+	__le32 addr;
+	__le32 len;
+	u8 feature_set;
+	u8 reserved1[15];
+} __packed;
+
 /* event table */
 enum {
 	MCU_EVENT_REG_ACCESS = 0x05,
@@ -104,11 +127,14 @@ struct mt7921_mcu_rxd {
 
 	u8 eid;
 	u8 seq;
-	__le16 __rsv;
 
+	u8 option;
+	u8 rsv;
 	u8 ext_eid;
 	u8 __rsv1[2];
 	u8 s2d_index;
+
+	u8 tlv[0];
 };
 
 struct mt7921_mcu_eeprom_info {

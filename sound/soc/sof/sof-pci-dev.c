@@ -78,6 +78,12 @@ static const struct dmi_system_id community_key_platforms[] = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Google"),
 		}
 	},
+	{
+		.ident = "Google firmware",
+		.matches = {
+			DMI_MATCH(DMI_BIOS_VERSION, "Google"),
+		}
+	},
 	{},
 };
 

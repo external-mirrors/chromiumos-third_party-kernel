@@ -24,7 +24,7 @@
 #include "mtk_vcodec_fw.h"
 
 module_param(mtk_v4l2_dbg_level, int, 0644);
-module_param(mtk_vcodec_dbg, bool, 0644);
+module_param(mtk_vcodec_dbg, int, 0644);
 
 static struct of_device_id mtk_vdec_drv_ids[] = {
 	{
@@ -204,6 +204,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->dev->vdec_pdata->init_vdec_params(ctx);
 
 	list_add(&ctx->list, &dev->ctx_list);
+	mtk_vcodec_dbgfs_create(ctx);
 
 	mutex_unlock(&dev->dev_mutex);
 	mtk_v4l2_debug(0, "%s decoder [%d]", dev_name(&dev->plat_dev->dev),
@@ -245,6 +246,7 @@ static int fops_vcodec_release(struct file *file)
 	v4l2_fh_exit(&ctx->fh);
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
 
+	mtk_vcodec_dbgfs_remove(dev, ctx->id);
 	list_del_init(&ctx->list);
 	kfree(ctx);
 	mutex_unlock(&dev->dev_mutex);
@@ -405,6 +407,7 @@ static int mtk_vcodec_probe(struct platform_device *pdev)
 	ret = component_master_add_with_match(&pdev->dev, &mtk_vdec_ops, match);
 	if (ret < 0)
 		goto err_component_match;
+	mtk_vcodec_dbgfs_init(dev, false);
 
 	return 0;
 err_component_match:
@@ -469,6 +472,7 @@ static int mtk_vcodec_dec_remove(struct platform_device *pdev)
 	if (dev->vfd_dec)
 		video_unregister_device(dev->vfd_dec);
 
+	mtk_vcodec_dbgfs_deinit(dev);
 	v4l2_device_unregister(&dev->v4l2_dev);
 	mtk_vcodec_release_dec_pm(dev);
 	mtk_vcodec_fw_release(dev->fw_handler);

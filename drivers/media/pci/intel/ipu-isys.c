@@ -29,9 +29,6 @@
 #include "ipu-dma.h"
 #include "ipu-isys.h"
 #include "ipu-isys-csi2.h"
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-#include "ipu-isys-tpg.h"
-#endif
 #include "ipu-isys-video.h"
 #include "ipu-platform-regs.h"
 #include "ipu-buttress.h"
@@ -47,9 +44,11 @@
 #define GDA_MEMOPEN_THRESHOLD_INDEX		3
 
 #define DEFAULT_DID_RATIO			90
-#define DEFAULT_LTR_VALUE			1023
+#define IPU6EP_LTR_VALUE			200
+#define IPU6EP_MTL_LTR_VALUE			1023
 #define DEFAULT_IWAKE_THRESHOLD			0x42
-#define MINIMUM_MEM_OPEN_THRESHOLD		0xc
+#define IPU6EP_MIN_MEMOPEN_TH			0x4
+#define IPU6EP_MTL_MIN_MEMOPEN_TH		0xc
 #define DEFAULT_MEM_OPEN_TIME			10
 #define ONE_THOUSAND_MICROSECOND		1000
 /* One page is 2KB, 8 x 16 x 16 = 2048B = 2KB */
@@ -146,10 +145,6 @@ skip_unregister_subdev:
 
 static void isys_unregister_subdevices(struct ipu_isys *isys)
 {
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	const struct ipu_isys_internal_tpg_pdata *tpg =
-	    &isys->pdata->ipdata->tpg;
-#endif
 	const struct ipu_isys_internal_csi2_pdata *csi2 =
 	    &isys->pdata->ipdata->csi2;
 	unsigned int i;
@@ -158,21 +153,12 @@ static void isys_unregister_subdevices(struct ipu_isys *isys)
 	for (i = 0; i < NR_OF_CSI2_BE_SOC_DEV; i++)
 		ipu_isys_csi2_be_soc_cleanup(&isys->csi2_be_soc[i]);
 
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	for (i = 0; i < tpg->ntpgs; i++)
-		ipu_isys_tpg_cleanup(&isys->tpg[i]);
-#endif
-
 	for (i = 0; i < csi2->nports; i++)
 		ipu_isys_csi2_cleanup(&isys->csi2[i]);
 }
 
 static int isys_register_subdevices(struct ipu_isys *isys)
 {
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	const struct ipu_isys_internal_tpg_pdata *tpg =
-	    &isys->pdata->ipdata->tpg;
-#endif
 	const struct ipu_isys_internal_csi2_pdata *csi2 =
 	    &isys->pdata->ipdata->csi2;
 	struct ipu_isys_csi2_be_soc *csi2_be_soc;
@@ -195,25 +181,6 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 
 		isys->isr_csi2_bits |= IPU_ISYS_UNISPART_IRQ_CSI2(i);
 	}
-
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	isys->tpg = devm_kcalloc(&isys->adev->dev, tpg->ntpgs,
-				 sizeof(*isys->tpg), GFP_KERNEL);
-	if (!isys->tpg) {
-		rval = -ENOMEM;
-		goto fail;
-	}
-
-	for (i = 0; i < tpg->ntpgs; i++) {
-		rval = ipu_isys_tpg_init(&isys->tpg[i], isys,
-					 isys->pdata->base +
-					 tpg->offsets[i],
-					 tpg->sels ? (isys->pdata->base +
-						      tpg->sels[i]) : NULL, i);
-		if (rval)
-			goto fail;
-	}
-#endif
 
 	for (k = 0; k < NR_OF_CSI2_BE_SOC_DEV; k++) {
 		rval = ipu_isys_csi2_be_soc_init(&isys->csi2_be_soc[k],
@@ -256,34 +223,6 @@ static int isys_register_subdevices(struct ipu_isys *isys)
 			}
 		}
 	}
-
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-	for (i = 0; i < tpg->ntpgs; i++) {
-		rval = media_create_pad_link(&isys->tpg[i].asd.sd.entity,
-					     TPG_PAD_SOURCE,
-					     &isys->csi2_be.asd.sd.entity,
-					     CSI2_BE_PAD_SINK, 0);
-		if (rval) {
-			dev_info(&isys->adev->dev,
-				 "can't create link between tpg and csi2_be\n");
-			goto fail;
-		}
-
-		for (k = 0; k < NR_OF_CSI2_BE_SOC_DEV; k++) {
-			csi2_be_soc = &isys->csi2_be_soc[k];
-			rval =
-			    media_create_pad_link(&isys->tpg[i].asd.sd.entity,
-						  TPG_PAD_SOURCE,
-						  &csi2_be_soc->asd.sd.entity,
-						  CSI2_BE_SOC_PAD_SINK, 0);
-			if (rval) {
-				dev_info(&isys->adev->dev,
-					 "can't create link tpg->be_soc\n");
-				goto fail;
-			}
-		}
-	}
-#endif
 
 	return 0;
 
@@ -421,7 +360,7 @@ void update_watermark_setting(struct ipu_isys *isys)
 	struct ltr_did ltrdid;
 	u16 calc_fill_time_us = 0, ltr = 0, did = 0;
 	enum ltr_did_type ltr_did_type;
-	u32 iwake_threshold, iwake_critical_threshold, page_num;
+	u32 iwake_threshold, iwake_critical_threshold, page_num, mem_threshold;
 	u32 mem_open_threshold = 0;
 	u64 threshold_bytes;
 	u64 isys_pb_datarate_mbs = 0;
@@ -469,8 +408,9 @@ void update_watermark_setting(struct ipu_isys *isys)
 	enable_iwake(isys, true);
 	calc_fill_time_us = (u16)(max_sram_size / isys_pb_datarate_mbs);
 
-	if (ipu_ver == IPU_VER_6EP_MTL) {
-		ltr = DEFAULT_LTR_VALUE;
+	if (ipu_ver == IPU_VER_6EP_MTL || ipu_ver == IPU_VER_6EP) {
+		ltr = (ipu_ver == IPU_VER_6EP_MTL) ?
+			IPU6EP_MTL_LTR_VALUE : IPU6EP_LTR_VALUE;
 		did = calc_fill_time_us * DEFAULT_DID_RATIO / 100;
 		ltr_did_type = LTR_ENHANNCE_IWAKE;
 	} else {
@@ -500,21 +440,23 @@ void update_watermark_setting(struct ipu_isys *isys)
 
 	set_iwake_ltrdid(isys, ltr, did, ltr_did_type);
 	mutex_lock(&iwake_watermark->mutex);
-	if (ipu_ver == IPU_VER_6EP_MTL)
+	if (ipu_ver == IPU_VER_6EP_MTL || ipu_ver == IPU_VER_6EP)
 		set_iwake_register(isys, GDA_IWAKE_THRESHOLD_INDEX,
 				   DEFAULT_IWAKE_THRESHOLD);
 	else
 		set_iwake_register(isys, GDA_IWAKE_THRESHOLD_INDEX,
 				   iwake_threshold);
 
-	if (ipu_ver == IPU_VER_6EP_MTL) {
+	if (ipu_ver == IPU_VER_6EP_MTL || ipu_ver == IPU_VER_6EP) {
 		/* Calculate number of pages that will be filled in 10 usec */
 		page_num = (DEFAULT_MEM_OPEN_TIME * isys_pb_datarate_mbs) /
 			    ISF_DMA_TOP_GDA_PROFERTY_PAGE_SIZE;
 		page_num += ((DEFAULT_MEM_OPEN_TIME * isys_pb_datarate_mbs) %
 			     ISF_DMA_TOP_GDA_PROFERTY_PAGE_SIZE) ? 1 : 0;
-		mem_open_threshold = max_t(u32, MINIMUM_MEM_OPEN_THRESHOLD,
-					   page_num);
+
+		mem_threshold = (ipu_ver == IPU_VER_6EP_MTL) ?
+			IPU6EP_MTL_MIN_MEMOPEN_TH : IPU6EP_MIN_MEMOPEN_TH;
+		mem_open_threshold = max_t(u32, mem_threshold, page_num);
 
 		dev_dbg(&isys->adev->dev, "%s mem_open_threshold: %u\n",
 			__func__, mem_open_threshold);
@@ -1221,6 +1163,7 @@ out_unregister_devices:
 	isys_iwake_watermark_cleanup(isys);
 	isys_unregister_devices(isys);
 out_remove_pkg_dir_shared_buffer:
+	cpu_latency_qos_remove_request(&isys->pm_qos);
 	if (!isp->secure_mode)
 		ipu_cpd_free_pkg_dir(adev, isys->pkg_dir,
 				     isys->pkg_dir_dma_addr,
@@ -1424,12 +1367,6 @@ int isys_isr_one(struct ipu_bus_device *adev)
 		if (pipe->csi2)
 			ipu_isys_csi2_sof_event(pipe->csi2);
 
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-#ifdef IPU_TPG_FRAME_SYNC
-		if (pipe->tpg)
-			ipu_isys_tpg_sof_event(pipe->tpg);
-#endif
-#endif
 		pipe->seq[pipe->seq_index].sequence =
 		    atomic_read(&pipe->sequence) - 1;
 		pipe->seq[pipe->seq_index].timestamp = ts;
@@ -1443,13 +1380,6 @@ int isys_isr_one(struct ipu_bus_device *adev)
 	case IPU_FW_ISYS_RESP_TYPE_FRAME_EOF:
 		if (pipe->csi2)
 			ipu_isys_csi2_eof_event(pipe->csi2);
-
-#ifdef CONFIG_VIDEO_INTEL_IPU_TPG
-#ifdef IPU_TPG_FRAME_SYNC
-		if (pipe->tpg)
-			ipu_isys_tpg_eof_event(pipe->tpg);
-#endif
-#endif
 
 		dev_dbg(&adev->dev,
 			"eof: handle %d: (index %u), timestamp 0x%16.16llx\n",

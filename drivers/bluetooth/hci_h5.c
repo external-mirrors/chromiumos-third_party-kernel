@@ -271,12 +271,39 @@ static int h5_close(struct hci_uart *hu)
 	return 0;
 }
 
+static bool h5_wakeup(struct hci_dev *hdev)
+{
+	struct hci_uart *hu = hci_get_drvdata(hdev);
+	bool wakeup;
+
+	wakeup = device_may_wakeup(&hu->serdev->ctrl->dev);
+	bt_dev_dbg(hu->hdev, "wakeup status : %d", wakeup);
+
+	return wakeup;
+}
+
+static void h5_do_wakeup(struct hci_dev *hdev)
+{
+	struct hci_uart *hu = hci_get_drvdata(hdev);
+
+	if (h5_wakeup(hdev))
+		pm_wakeup_event(&hu->serdev->ctrl->dev, 0);
+}
+
 static int h5_setup(struct hci_uart *hu)
 {
 	struct h5 *h5 = hu->priv;
+	struct hci_dev *hdev = hu->hdev;
+	int ret;
 
-	if (h5->vnd && h5->vnd->setup)
-		return h5->vnd->setup(h5);
+	if (h5->vnd && h5->vnd->setup) {
+		ret = h5->vnd->setup(h5);
+		if (!ret) {
+			hdev->wakeup = h5_wakeup;
+			hdev->do_wakeup = h5_do_wakeup;
+		}
+		return ret;
+	}
 
 	return 0;
 }

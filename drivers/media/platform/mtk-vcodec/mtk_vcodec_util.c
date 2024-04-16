@@ -13,7 +13,7 @@
 #include "mtk_vcodec_util.h"
 
 /* For encoder, this will enable logs in venc/*/
-bool mtk_vcodec_dbg;
+int mtk_vcodec_dbg;
 EXPORT_SYMBOL(mtk_vcodec_dbg);
 
 /* The log level of v4l2 encoder or decoder driver.

@@ -1471,9 +1471,6 @@ struct ext4_sb_info {
 	unsigned int s_mb_free_pending;
 	struct list_head s_freed_data_list;	/* List of blocks to be freed
 						   after commit completed */
-	struct list_head s_discard_list;
-	struct work_struct s_discard_work;
-	atomic_t s_retry_alloc_pending;
 
 	/* tunables */
 	unsigned long s_stripe;
@@ -1533,7 +1530,7 @@ struct ext4_sb_info {
 	struct task_struct *s_mmp_tsk;
 
 	/* record the last minlen when FITRIM is called. */
-	atomic_t s_last_trim_minblks;
+	unsigned long s_last_trim_minblks;
 
 	/* Reference to checksum algorithm driver via cryptoapi */
 	struct crypto_shash *s_chksum_driver;

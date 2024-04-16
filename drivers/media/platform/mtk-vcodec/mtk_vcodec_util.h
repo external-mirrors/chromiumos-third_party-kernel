@@ -26,7 +26,7 @@ struct mtk_vcodec_ctx;
 struct mtk_vcodec_dev;
 
 extern int mtk_v4l2_dbg_level;
-extern bool mtk_vcodec_dbg;
+extern int mtk_vcodec_dbg;
 
 
 #define mtk_v4l2_err(fmt, args...)                \

@@ -1004,6 +1004,8 @@ struct amdgpu_device {
 
 	/* s3/s4 mask */
 	bool                            in_suspend;
+	/* indicate amdgpu suspension status */
+	bool				suspend_complete;
 
 	/* record last mm index being written through WREG32*/
 	unsigned long last_mm_index;
