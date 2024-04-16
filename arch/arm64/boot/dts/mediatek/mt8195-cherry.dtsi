@@ -1472,12 +1472,14 @@
 };
 
 &xhci0 {
+	rx-fifo-depth = <3072>;
 	vusb33-supply = <&mt6359_vusb_ldo_reg>;
 	vbus-supply = <&usb_p0_vbus>;
 	status = "okay";
 };
 
 &xhci1 {
+	rx-fifo-depth = <3072>;
 	vusb33-supply = <&mt6359_vusb_ldo_reg>;
 	vbus-supply = <&usb_p1_vbus>;
 	mediatek,frame-cnt;

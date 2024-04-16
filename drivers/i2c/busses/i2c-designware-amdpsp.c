@@ -16,7 +16,7 @@
 #define PSP_MBOX_OFFSET		0x10570
 #define PSP_CMD_TIMEOUT_US	(500 * USEC_PER_MSEC)
 
-#define PSP_I2C_COOLDOWN_TIME_MS 100
+#define PSP_I2C_RESERVATION_TIME_MS 100
 
 #define PSP_I2C_REQ_BUS_CMD		0x64
 #define PSP_I2C_REQ_RETRY_CNT		400
@@ -163,9 +163,10 @@ static int psp_send_cmd(struct psp_i2c_req *req)
 /* Helper to verify status returned by PSP */
 static int check_i2c_req_sts(struct psp_i2c_req *req)
 {
-	int status;
+	u32 status;
 
-	status = readl(&req->hdr.status);
+	/* Status field in command-response buffer is updated by PSP */
+	status = READ_ONCE(req->hdr.status);
 
 	switch (status) {
 	case PSP_I2C_REQ_STS_OK:
@@ -242,7 +243,7 @@ cleanup:
 	return ret;
 }
 
-static void release_bus_now(void)
+static void release_bus(void)
 {
 	int status;
 
@@ -261,7 +262,6 @@ static void release_bus_now(void)
 
 static void psp_release_i2c_bus_deferred(struct work_struct *work)
 {
-
 	mutex_lock(&psp_i2c_access_mutex);
 
 	/*
@@ -271,7 +271,7 @@ static void psp_release_i2c_bus_deferred(struct work_struct *work)
 	if (psp_i2c_access_count)
 		goto cleanup;
 
-	release_bus_now();
+	release_bus();
 
 cleanup:
 	mutex_unlock(&psp_i2c_access_mutex);
@@ -291,8 +291,8 @@ static int psp_acquire_i2c_bus(void)
 	psp_i2c_access_count++;
 
 	/*
-	 * No need to request bus arbitration once we are inside cooldown
-	 * period.
+	 * No need to request bus arbitration once we are inside semaphore
+	 * reservation period.
 	 */
 	if (psp_i2c_sem_acquired)
 		goto cleanup;
@@ -304,7 +304,7 @@ static int psp_acquire_i2c_bus(void)
 	psp_i2c_sem_acquired = jiffies;
 
 	schedule_delayed_work(&release_queue,
-			      msecs_to_jiffies(PSP_I2C_COOLDOWN_TIME_MS));
+			      msecs_to_jiffies(PSP_I2C_RESERVATION_TIME_MS));
 
 	/*
 	 * In case of errors with PSP arbitrator psp_i2c_mbox_fail variable is
@@ -334,11 +334,11 @@ static void psp_release_i2c_bus(void)
 		goto cleanup;
 
 	/*
-	 * Send a release command to PSP if the cooldown timeout elapsed but x86 still
-	 * owns the ctrlr.
+	 * Send a release command to PSP if the semaphore reservation timeout
+	 * elapsed but x86 still owns the controller.
 	 */
 	if (!delayed_work_pending(&release_queue))
-		release_bus_now();
+		release_bus();
 
 cleanup:
 	mutex_unlock(&psp_i2c_access_mutex);

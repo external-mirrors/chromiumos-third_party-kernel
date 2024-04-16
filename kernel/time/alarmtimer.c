@@ -293,16 +293,14 @@ static int alarmtimer_suspend(struct device *dev)
 	now = rtc_tm_to_ktime(tm);
 
 	/*
-	 * If the RTC alarm timer only supports a limited time offset, set
-	 * the alarm time to the maximum supported value.
-	 * The system will wake up earlier than necessary and is expected
-	 * to go back to sleep if it has nothing to do.
-	 * It would be desirable to handle such early wakeups without fully
-	 * waking up the system, but it is unknown if this is even possible.
+	 * If the RTC alarm timer only supports a limited time offset, set the
+	 * alarm time to the maximum supported value.
+	 * The system may wake up earlier (possibly much earlier) than expected
+	 * when the alarmtimer runs. This is the best the kernel can do if
+	 * the alarmtimer exceeds the time that the rtc device can be programmed
+	 * for.
 	 */
-	if (rtc->alarm_offset_max &&
-	    rtc->alarm_offset_max * MSEC_PER_SEC < ktime_to_ms(min))
-		min = ms_to_ktime(rtc->alarm_offset_max * MSEC_PER_SEC);
+	min = rtc_bound_alarmtime(rtc, min);
 
 	now = ktime_add(now, min);
 

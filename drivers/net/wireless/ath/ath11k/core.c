@@ -101,6 +101,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.fw_wmi_diag_event = false,
 		.current_cc_support = false,
 		.bios_sar_capa = NULL,
+		.support_off_channel_tx = false,
 	},
 	{
 		.hw_rev = ATH11K_HW_IPQ6018_HW10,
@@ -169,6 +170,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.current_cc_support = false,
 		.bios_sar_capa = NULL,
 		.support_fw_mac_sequence = false,
+		.support_off_channel_tx = false,
 	},
 	{
 		.name = "qca6390 hw2.0",
@@ -235,6 +237,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.current_cc_support = true,
 		.bios_sar_capa = NULL,
 		.support_fw_mac_sequence = true,
+		.support_off_channel_tx = true,
 	},
 	{
 		.name = "qcn9074 hw1.0",
@@ -302,6 +305,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.current_cc_support = false,
 		.bios_sar_capa = NULL,
 		.support_fw_mac_sequence = false,
+		.support_off_channel_tx = false,
 	},
 	{
 		.name = "wcn6855 hw2.0",
@@ -368,6 +372,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.current_cc_support = true,
 		.bios_sar_capa = &ath11k_hw_sar_capa_wcn6855,
 		.support_fw_mac_sequence = true,
+		.support_off_channel_tx = true,
 	},
 	{
 		.name = "wcn6855 hw2.1",
@@ -437,6 +442,7 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.current_cc_support = true,
 		.bios_sar_capa = &ath11k_hw_sar_capa_wcn6855,
 		.support_fw_mac_sequence = true,
+		.support_off_channel_tx = true,
 	},
 };
 
@@ -1371,6 +1377,7 @@ static void ath11k_core_pre_reconfigure_recovery(struct ath11k_base *ab)
 		complete(&ar->completed_11d_scan);
 		complete(&ar->scan.started);
 		complete_all(&ar->scan.completed);
+		complete(&ar->scan.on_channel);
 		complete(&ar->peer_assoc_done);
 		complete(&ar->peer_delete_done);
 		complete(&ar->install_key_done);

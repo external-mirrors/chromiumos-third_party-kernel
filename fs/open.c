@@ -193,7 +193,7 @@ long do_sys_ftruncate(unsigned int fd, loff_t length, int small)
 	sb_start_write(inode->i_sb);
 	error = locks_verify_truncate(inode, f.file, length);
 	if (!error)
-		error = security_path_truncate(&f.file->f_path);
+		error = security_file_truncate(f.file);
 	if (!error)
 		error = do_truncate(dentry, length, ATTR_MTIME|ATTR_CTIME, f.file);
 	sb_end_write(inode->i_sb);

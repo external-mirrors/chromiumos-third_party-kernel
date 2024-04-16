@@ -32,11 +32,14 @@ static int clk_mt8183_mfg_probe(struct platform_device *pdev)
 	struct device_node *node = pdev->dev.of_node;
 
 	pm_runtime_enable(&pdev->dev);
+	pm_runtime_get_sync(&pdev->dev);
 
 	clk_data = mtk_alloc_clk_data(CLK_MFG_NR_CLK);
 
 	mtk_clk_register_gates_with_dev(node, mfg_clks, ARRAY_SIZE(mfg_clks),
 			clk_data, &pdev->dev);
+
+	pm_runtime_put_sync(&pdev->dev);
 
 	return of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
 }

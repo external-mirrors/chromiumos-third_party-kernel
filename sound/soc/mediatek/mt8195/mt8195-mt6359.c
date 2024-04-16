@@ -1561,6 +1561,7 @@ static const struct of_device_id mt8195_mt6359_dt_match[] = {
 	},
 	{},
 };
+MODULE_DEVICE_TABLE(of, mt8195_mt6359_dt_match);
 
 static const struct dev_pm_ops mt8195_mt6359_pm_ops = {
 	.poweroff = snd_soc_poweroff,

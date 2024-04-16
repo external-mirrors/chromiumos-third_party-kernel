@@ -36,3 +36,7 @@
 &rt5682 {
 	status = "okay";
 };
+
+&watchdog {
+	/delete-property/ mediatek,disable-extrst;
+};

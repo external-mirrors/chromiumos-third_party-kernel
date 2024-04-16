@@ -80,7 +80,7 @@ enum {
 
 struct ftrace_ops ftrace_list_end __read_mostly = {
 	.func		= ftrace_stub,
-	.flags		= FTRACE_OPS_FL_RECURSION_SAFE | FTRACE_OPS_FL_STUB,
+	.flags		= FTRACE_OPS_FL_STUB,
 	INIT_OPS_HASH(ftrace_list_end)
 };
 
@@ -866,7 +866,7 @@ static void unregister_ftrace_profiler(void)
 #else
 static struct ftrace_ops ftrace_profile_ops __read_mostly = {
 	.func		= function_profile_call,
-	.flags		= FTRACE_OPS_FL_RECURSION_SAFE | FTRACE_OPS_FL_INITIALIZED,
+	.flags		= FTRACE_OPS_FL_INITIALIZED,
 	INIT_OPS_HASH(ftrace_profile_ops)
 };
 
@@ -1040,8 +1040,7 @@ struct ftrace_ops global_ops = {
 	.local_hash.notrace_hash	= EMPTY_HASH,
 	.local_hash.filter_hash		= EMPTY_HASH,
 	INIT_OPS_HASH(global_ops)
-	.flags				= FTRACE_OPS_FL_RECURSION_SAFE |
-					  FTRACE_OPS_FL_INITIALIZED |
+	.flags				= FTRACE_OPS_FL_INITIALIZED |
 					  FTRACE_OPS_FL_PID,
 };
 
@@ -2410,7 +2409,7 @@ static void call_direct_funcs(unsigned long ip, unsigned long pip,
 
 struct ftrace_ops direct_ops = {
 	.func		= call_direct_funcs,
-	.flags		= FTRACE_OPS_FL_IPMODIFY | FTRACE_OPS_FL_RECURSION_SAFE
+	.flags		= FTRACE_OPS_FL_IPMODIFY
 			  | FTRACE_OPS_FL_DIRECT | FTRACE_OPS_FL_SAVE_REGS
 			  | FTRACE_OPS_FL_PERMANENT,
 	/*
@@ -6955,8 +6954,7 @@ void ftrace_init_trace_array(struct trace_array *tr)
 
 struct ftrace_ops global_ops = {
 	.func			= ftrace_stub,
-	.flags			= FTRACE_OPS_FL_RECURSION_SAFE |
-				  FTRACE_OPS_FL_INITIALIZED |
+	.flags			= FTRACE_OPS_FL_INITIALIZED |
 				  FTRACE_OPS_FL_PID,
 };
 
@@ -7011,7 +7009,7 @@ __ftrace_ops_list_func(unsigned long ip, unsigned long parent_ip,
 	struct ftrace_ops *op;
 	int bit;
 
-	bit = trace_test_and_set_recursion(TRACE_LIST_START);
+	bit = trace_test_and_set_recursion(ip, parent_ip, TRACE_LIST_START);
 	if (bit < 0)
 		return;
 
@@ -7086,7 +7084,7 @@ static void ftrace_ops_assist_func(unsigned long ip, unsigned long parent_ip,
 {
 	int bit;
 
-	bit = trace_test_and_set_recursion(TRACE_LIST_START);
+	bit = trace_test_and_set_recursion(ip, parent_ip, TRACE_LIST_START);
 	if (bit < 0)
 		return;
 
@@ -7114,11 +7112,11 @@ NOKPROBE_SYMBOL(ftrace_ops_assist_func);
 ftrace_func_t ftrace_ops_get_func(struct ftrace_ops *ops)
 {
 	/*
-	 * If the function does not handle recursion, needs to be RCU safe,
-	 * or does per cpu logic, then we need to call the assist handler.
+	 * If the function does not handle recursion or needs to be RCU safe,
+	 * then we need to call the assist handler.
 	 */
-	if (!(ops->flags & FTRACE_OPS_FL_RECURSION_SAFE) ||
-	    ops->flags & FTRACE_OPS_FL_RCU)
+	if (ops->flags & (FTRACE_OPS_FL_RECURSION |
+			  FTRACE_OPS_FL_RCU))
 		return ftrace_ops_assist_func;
 
 	return ops->func;
@@ -7131,11 +7129,13 @@ ftrace_filter_pid_sched_switch_probe(void *data, bool preempt,
 	struct trace_array *tr = data;
 	struct trace_pid_list *pid_list;
 	struct trace_pid_list *no_pid_list;
+	struct pid_namespace *filtered_ns;
 
 	pid_list = rcu_dereference_sched(tr->function_pids);
 	no_pid_list = rcu_dereference_sched(tr->function_no_pids);
+	filtered_ns = rcu_dereference_sched(tr->filtered_ns);
 
-	if (trace_ignore_this_task(pid_list, no_pid_list, next))
+	if (trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, next))
 		this_cpu_write(tr->array_buffer.data->ftrace_ignore_pid,
 			       FTRACE_PID_IGNORE);
 	else
@@ -7393,6 +7393,7 @@ static void ignore_task_cpu(void *data)
 	struct trace_array *tr = data;
 	struct trace_pid_list *pid_list;
 	struct trace_pid_list *no_pid_list;
+	struct pid_namespace *filtered_ns;
 
 	/*
 	 * This function is called by on_each_cpu() while the
@@ -7402,8 +7403,10 @@ static void ignore_task_cpu(void *data)
 					     mutex_is_locked(&ftrace_lock));
 	no_pid_list = rcu_dereference_protected(tr->function_no_pids,
 						mutex_is_locked(&ftrace_lock));
+	filtered_ns = rcu_dereference_protected(tr->filtered_ns,
+						mutex_is_locked(&ftrace_lock));
 
-	if (trace_ignore_this_task(pid_list, no_pid_list, current))
+	if (trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, current))
 		this_cpu_write(tr->array_buffer.data->ftrace_ignore_pid,
 			       FTRACE_PID_IGNORE);
 	else

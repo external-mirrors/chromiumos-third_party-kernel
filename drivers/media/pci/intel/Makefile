@@ -4,4 +4,3 @@
 #
 
 obj-y	+= ipu3/
-obj-y	+= ipu6/

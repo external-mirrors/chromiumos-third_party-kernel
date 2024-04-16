@@ -37,3 +37,7 @@
 	realtek,amic-delay-ms = <250>;
 	status = "okay";
 };
+
+&watchdog {
+	/delete-property/ mediatek,disable-extrst;
+};

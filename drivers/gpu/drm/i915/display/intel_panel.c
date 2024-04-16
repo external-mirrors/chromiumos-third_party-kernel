@@ -31,6 +31,8 @@
 #include <linux/kernel.h>
 #include <linux/pwm.h>
 
+#include <drm/drm_edid.h>
+
 #include "intel_backlight.h"
 #include "intel_connector.h"
 #include "intel_de.h"
@@ -659,9 +661,20 @@ intel_panel_mode_valid(struct intel_connector *connector,
 	return MODE_OK;
 }
 
-int intel_panel_init(struct intel_connector *connector)
+void intel_panel_init_alloc(struct intel_connector *connector)
 {
 	struct intel_panel *panel = &connector->panel;
+
+	connector->panel.vbt.panel_type = -1;
+	INIT_LIST_HEAD(&panel->fixed_modes);
+}
+
+int intel_panel_init(struct intel_connector *connector,
+		     const struct drm_edid *fixed_edid)
+{
+	struct intel_panel *panel = &connector->panel;
+
+	panel->fixed_edid = fixed_edid;
 
 	intel_backlight_init_funcs(panel);
 
@@ -677,6 +690,9 @@ void intel_panel_fini(struct intel_connector *connector)
 {
 	struct intel_panel *panel = &connector->panel;
 	struct drm_display_mode *fixed_mode, *next;
+
+	if (!IS_ERR_OR_NULL(panel->fixed_edid))
+		drm_edid_free(panel->fixed_edid);
 
 	intel_backlight_destroy(panel);
 

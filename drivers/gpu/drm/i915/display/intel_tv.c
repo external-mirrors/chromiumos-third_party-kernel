@@ -1872,7 +1872,6 @@ static const struct drm_encoder_funcs intel_tv_enc_funcs = {
 void
 intel_tv_init(struct drm_i915_private *dev_priv)
 {
-	struct drm_device *dev = &dev_priv->drm;
 	struct drm_connector *connector;
 	struct intel_tv *intel_tv;
 	struct intel_encoder *intel_encoder;
@@ -1940,10 +1939,10 @@ intel_tv_init(struct drm_i915_private *dev_priv)
 	 */
 	intel_connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 
-	drm_connector_init(dev, connector, &intel_tv_connector_funcs,
+	drm_connector_init(&dev_priv->drm, connector, &intel_tv_connector_funcs,
 			   DRM_MODE_CONNECTOR_SVIDEO);
 
-	drm_encoder_init(dev, &intel_encoder->base, &intel_tv_enc_funcs,
+	drm_encoder_init(&dev_priv->drm, &intel_encoder->base, &intel_tv_enc_funcs,
 			 DRM_MODE_ENCODER_TVDAC, "TV");
 
 	intel_encoder->compute_config = intel_tv_compute_config;
@@ -1984,20 +1983,20 @@ intel_tv_init(struct drm_i915_private *dev_priv)
 
 		tv_format_names[i] = tv_modes[i].name;
 	}
-	drm_mode_create_tv_properties(dev, i, tv_format_names);
+	drm_mode_create_tv_properties(&dev_priv->drm, i, tv_format_names);
 
-	drm_object_attach_property(&connector->base, dev->mode_config.tv_mode_property,
+	drm_object_attach_property(&connector->base, dev_priv->drm.mode_config.tv_mode_property,
 				   state->tv.mode);
 	drm_object_attach_property(&connector->base,
-				   dev->mode_config.tv_left_margin_property,
+				   dev_priv->drm.mode_config.tv_left_margin_property,
 				   state->tv.margins.left);
 	drm_object_attach_property(&connector->base,
-				   dev->mode_config.tv_top_margin_property,
+				   dev_priv->drm.mode_config.tv_top_margin_property,
 				   state->tv.margins.top);
 	drm_object_attach_property(&connector->base,
-				   dev->mode_config.tv_right_margin_property,
+				   dev_priv->drm.mode_config.tv_right_margin_property,
 				   state->tv.margins.right);
 	drm_object_attach_property(&connector->base,
-				   dev->mode_config.tv_bottom_margin_property,
+				   dev_priv->drm.mode_config.tv_bottom_margin_property,
 				   state->tv.margins.bottom);
 }

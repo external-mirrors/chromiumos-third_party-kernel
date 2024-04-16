@@ -33,7 +33,6 @@ struct mtk_plane_pending_state {
 	bool				async_dirty;
 	bool				async_config;
 	enum drm_color_encoding		color_encoding;
-	struct drm_framebuffer		*fb;
 };
 
 struct mtk_plane_state {

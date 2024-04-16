@@ -84,6 +84,12 @@ static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
+/*
+ * The minimum load balance interval in jiffies that must pass before a
+ * a periodic or nohz-idle balance happens.
+ */
+unsigned long __read_mostly sysctl_sched_min_load_balance_interval = 1UL;
+
 int sched_thermal_decay_shift;
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
@@ -134,6 +140,10 @@ int __weak arch_asym_cpu_priority(int cpu)
  * (default: 5 msec, units: microseconds)
  */
 unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
+#endif
+
+#ifdef CONFIG_SMP
+DEFINE_STATIC_KEY_TRUE(sched_aggressive_next_balance);
 #endif
 
 static inline void update_load_add(struct load_weight *lw, unsigned long inc)
@@ -3891,22 +3901,6 @@ static inline unsigned long task_util_est(struct task_struct *p)
 	return max(task_util(p), _task_util_est(p));
 }
 
-#ifdef CONFIG_UCLAMP_TASK
-static inline unsigned long uclamp_task_util(struct task_struct *p,
-					     unsigned long uclamp_min,
-					     unsigned long uclamp_max)
-{
-	return clamp(task_util_est(p), uclamp_min, uclamp_max);
-}
-#else
-static inline unsigned long uclamp_task_util(struct task_struct *p,
-					     unsigned long uclamp_min,
-					     unsigned long uclamp_max)
-{
-	return task_util_est(p);
-}
-#endif
-
 static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
 				    struct task_struct *p)
 {
@@ -6839,7 +6833,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu, int sy
 		goto fail;
 
 	sync_entity_load_avg(&p->se);
-	if (!uclamp_task_util(p, p_util_min, p_util_max))
+	if (!task_util_est(p) && p_util_min == 0)
 		goto unlock;
 
 	latency_sensitive = uclamp_latency_sensitive(p);
@@ -8539,7 +8533,8 @@ void update_group_capacity(struct sched_domain *sd, int cpu)
 	unsigned long interval;
 
 	interval = msecs_to_jiffies(sd->balance_interval);
-	interval = clamp(interval, 1UL, max_load_balance_interval);
+	interval = clamp(interval, sysctl_sched_min_load_balance_interval,
+			 max_load_balance_interval);
 	sdg->sgc->next_update = jiffies + interval;
 
 	if (!child) {
@@ -11060,7 +11055,7 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 	if (!READ_ONCE(this_rq->rd->overload) ||
 	    (sd && this_rq->avg_idle < sd->max_newidle_lb_cost)) {
 
-		if (sd)
+		if (static_branch_likely(&sched_aggressive_next_balance) && sd)
 			update_next_balance(sd, &next_balance);
 		rcu_read_unlock();
 
@@ -11080,7 +11075,8 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 		int continue_balancing = 1;
 		u64 domain_cost;
 
-		update_next_balance(sd, &next_balance);
+		if (static_branch_likely(&sched_aggressive_next_balance))
+			update_next_balance(sd, &next_balance);
 
 		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
 			break;
@@ -11094,6 +11090,10 @@ static int newidle_balance(struct rq *this_rq, struct rq_flags *rf)
 			t1 = sched_clock_cpu(this_cpu);
 			domain_cost = t1 - t0;
 			update_newidle_cost(sd, domain_cost);
+			if (!static_branch_likely(&sched_aggressive_next_balance)) {
+				sd->last_balance = jiffies;
+				update_next_balance(sd, &next_balance);
+			}
 
 			curr_cost += domain_cost;
 			t0 = t1;

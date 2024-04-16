@@ -231,9 +231,7 @@
 #define EDGE_SEL_EN			BIT(5)
 #define H_FRE_2N			BIT(25)
 
-#define DPI_MATRIX_SET	0xB4
 #define INT_MATRIX_SEL			BIT(0)
-#define INT_MATRIX_SEL_MASK		(0x1F << 0)
 #define RGB_TO_JPEG			0x00
 #define RGB_TO_FULL709			0x01
 #define RGB_TO_BT601			0x02
@@ -255,4 +253,9 @@
 #define RGB_TO_CERGB			0x1C
 #define MATRIX_BIT			BIT(8)
 #define EXT_MATRIX_EN			BIT(12)
+#define DPI_MATRIX_SET		0xB4
+#define INT_MATRIX_SEL_MASK		GENMASK(4, 0)
+#define MATRIX_SEL_RGB_TO_JPEG		0
+#define MATRIX_SEL_RGB_TO_BT601		2
+
 #endif /* __MTK_DPI_REGS_H */

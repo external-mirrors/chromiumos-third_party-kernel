@@ -32,7 +32,6 @@
 struct cros_ec_light_prox_state {
 	/* Shared by all sensors */
 	struct cros_ec_sensors_core_state core;
-	struct iio_chan_spec *channel;
 
 	u16 rgb_space[CROS_EC_SENSOR_MAX_AXIS];
 	struct calib_data rgb_calib[CROS_EC_SENSOR_MAX_AXIS];
@@ -463,8 +462,6 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
 
 	indio_dev->info = &cros_ec_light_prox_info;
 	state = iio_priv(indio_dev);
-	state->core.type = state->core.resp->info.type;
-	state->core.loc = state->core.resp->info.location;
 
 	/* Check if we need more sensors for RGB (or XYZ). */
 	state->core.param.cmd = MOTIONSENSE_CMD_INFO;

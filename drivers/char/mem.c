@@ -34,7 +34,6 @@
 #include <linux/pseudo_fs.h>
 #include <uapi/linux/magic.h>
 #include <linux/mount.h>
-#include <linux/low-mem-notify.h>
 
 #ifdef CONFIG_IA64
 # include <linux/efi.h>
@@ -986,9 +985,6 @@ static const struct memdev {
 	 [9] = { "urandom", 0666, &urandom_fops, FMODE_NOWAIT },
 #ifdef CONFIG_PRINTK
 	[11] = { "kmsg", 0644, &kmsg_fops, 0 },
-#endif
-#ifdef CONFIG_LOW_MEM_NOTIFY
-	[12] = { "chromeos-low-mem", 0666, &low_mem_notify_fops, 0 },
 #endif
 };
 

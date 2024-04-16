@@ -15,7 +15,6 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_flip_work.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
@@ -45,7 +44,6 @@ struct mtk_drm_crtc {
 
 	bool				pending_needs_vblank;
 	struct drm_pending_vblank_event	*event;
-	struct drm_flip_work		fb_put_work;
 
 	struct drm_plane		*planes;
 	unsigned int			layer_nr;
@@ -90,40 +88,27 @@ static inline struct mtk_crtc_state *to_mtk_crtc_state(struct drm_crtc_state *s)
 	return container_of(s, struct mtk_crtc_state, base);
 }
 
-static void mtk_crtc_fb_put_worker(struct drm_flip_work *work, void * val)
-{
-	struct drm_framebuffer *fb = val;
-
-	drm_framebuffer_put(fb);
-}
-
 static void mtk_drm_crtc_finish_page_flip(struct mtk_drm_crtc *mtk_crtc)
-{
-	struct drm_crtc *crtc = &mtk_crtc->base;
-
-	if (!mtk_crtc->event) {
-		DRM_WARN("crtc event 0x%px already free=== %s %d\n", mtk_crtc->event, __func__, __LINE__);
-		return;
-	}
-
-	drm_crtc_send_vblank_event(crtc, mtk_crtc->event);
-	drm_crtc_vblank_put(crtc);
-	mtk_crtc->event = NULL;
-}
-
-static void mtk_drm_finish_page_flip(struct mtk_drm_crtc *mtk_crtc)
 {
 	struct drm_crtc *crtc = &mtk_crtc->base;
 	unsigned long flags;
 
-	drm_crtc_handle_vblank(&mtk_crtc->base);
+	if (mtk_crtc->event) {
+		spin_lock_irqsave(&crtc->dev->event_lock, flags);
+		drm_crtc_send_vblank_event(crtc, mtk_crtc->event);
+		drm_crtc_vblank_put(crtc);
+		mtk_crtc->event = NULL;
+		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
+	}
+}
 
-	spin_lock_irqsave(&crtc->dev->event_lock, flags);
+static void mtk_drm_finish_page_flip(struct mtk_drm_crtc *mtk_crtc)
+{
+	drm_crtc_handle_vblank(&mtk_crtc->base);
 	if (!mtk_crtc->config_updating && mtk_crtc->pending_needs_vblank) {
 		mtk_drm_crtc_finish_page_flip(mtk_crtc);
 		mtk_crtc->pending_needs_vblank = false;
 	}
-	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 }
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
@@ -134,10 +119,9 @@ static int mtk_drm_cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *
 	dma_addr_t dma_addr;
 
 	pkt->va_base = kzalloc(size, GFP_KERNEL);
-	if (!pkt->va_base) {
-		kfree(pkt);
+	if (!pkt->va_base)
 		return -ENOMEM;
-	}
+
 	pkt->buf_size = size;
 	pkt->cl = (void *)client;
 
@@ -147,7 +131,6 @@ static int mtk_drm_cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *
 	if (dma_mapping_error(dev, dma_addr)) {
 		dev_err(dev, "dma map failed, size=%u\n", (u32)(u64)size);
 		kfree(pkt->va_base);
-		kfree(pkt);
 		return -ENOMEM;
 	}
 
@@ -163,7 +146,6 @@ static void mtk_drm_cmdq_pkt_destroy(struct cmdq_pkt *pkt)
 	dma_unmap_single(client->chan->mbox->dev, pkt->pa_base, pkt->buf_size,
 			 DMA_TO_DEVICE);
 	kfree(pkt->va_base);
-	kfree(pkt);
 }
 #endif
 
@@ -191,7 +173,6 @@ static void mtk_drm_crtc_destroy(struct drm_crtc *crtc)
 	}
 
 	drm_crtc_cleanup(crtc);
-	drm_flip_work_cleanup(&mtk_crtc->fb_put_work);
 }
 
 static void mtk_drm_crtc_reset(struct drm_crtc *crtc)
@@ -523,17 +504,6 @@ static void mtk_crtc_ddp_config(struct drm_crtc *crtc,
 							  cmdq_handle);
 			if (!cmdq_handle)
 				plane_state->pending.config = false;
-
-			if (plane_state->pending.fb) {
-				struct drm_mode_object *obj;
-
-				obj = &plane_state->pending.fb->base;
-				if (kref_read(&obj->refcount) > 1) {
-					drm_framebuffer_get(plane_state->pending.fb);
-					drm_flip_work_queue(&mtk_crtc->fb_put_work,
-							    plane_state->pending.fb);
-				}
-			}
 		}
 
 		if (!cmdq_handle)
@@ -559,17 +529,6 @@ static void mtk_crtc_ddp_config(struct drm_crtc *crtc,
 							  cmdq_handle);
 			if (!cmdq_handle)
 				plane_state->pending.async_config = false;
-
-			if (plane_state->pending.fb) {
-				struct drm_mode_object *obj;
-
-				obj = &plane_state->pending.fb->base;
-				if (kref_read(&obj->refcount) > 1) {
-					drm_framebuffer_get(plane_state->pending.fb);
-					drm_flip_work_queue(&mtk_crtc->fb_put_work,
-							    plane_state->pending.fb);
-				}
-			}
 		}
 
 		if (!cmdq_handle)
@@ -649,7 +608,6 @@ static void mtk_drm_crtc_update_config(struct mtk_drm_crtc *mtk_crtc,
 
 static void mtk_crtc_ddp_irq(void *data)
 {
-	int i;
 	struct drm_crtc *crtc = data;
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
@@ -665,14 +623,6 @@ static void mtk_crtc_ddp_irq(void *data)
 		mtk_crtc_ddp_config(crtc, NULL);
 #endif
 	mtk_drm_finish_page_flip(mtk_crtc);
-
-	for (i = 0; i < mtk_crtc->layer_nr; i++) {
-		struct drm_plane *plane = &mtk_crtc->planes[i];
-			struct mtk_plane_state *plane_state = to_mtk_plane_state(plane->state);
-
-		if (plane_state->pending.fb)
-			drm_flip_work_commit(&mtk_crtc->fb_put_work, system_unbound_wq);
-	}
 }
 
 static int mtk_drm_crtc_enable_vblank(struct drm_crtc *crtc)
@@ -790,6 +740,7 @@ static void mtk_drm_crtc_atomic_begin(struct drm_crtc *crtc,
 									  crtc);
 	struct mtk_crtc_state *mtk_crtc_state = to_mtk_crtc_state(crtc_state);
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	unsigned long flags;
 
 	if (mtk_crtc->event && mtk_crtc_state->base.event)
 		DRM_ERROR("new event while there is still a pending event\n");
@@ -797,7 +748,11 @@ static void mtk_drm_crtc_atomic_begin(struct drm_crtc *crtc,
 	if (mtk_crtc_state->base.event) {
 		mtk_crtc_state->base.event->pipe = drm_crtc_index(crtc);
 		WARN_ON(drm_crtc_vblank_get(crtc) != 0);
+
+		spin_lock_irqsave(&crtc->dev->event_lock, flags);
 		mtk_crtc->event = mtk_crtc_state->base.event;
+		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
+
 		mtk_crtc_state->base.event = NULL;
 	}
 }
@@ -991,8 +946,12 @@ int mtk_drm_crtc_create(struct drm_device *drm_dev,
 		mtk_crtc->ddp_comp[i] = comp;
 
 		if (comp->funcs) {
-			if (comp->funcs->gamma_set)
-				gamma_lut_size = MTK_LUT_SIZE;
+			if (comp->funcs->gamma_set && comp->funcs->gamma_get_lut_size) {
+				unsigned int lut_sz = mtk_ddp_gamma_get_lut_size(comp);
+
+				if (lut_sz)
+					gamma_lut_size = lut_sz;
+			}
 
 			if (comp->funcs->ctm_set)
 				has_ctm = true;
@@ -1025,7 +984,6 @@ int mtk_drm_crtc_create(struct drm_device *drm_dev,
 		drm_mode_crtc_set_gamma_size(&mtk_crtc->base, gamma_lut_size);
 	drm_crtc_enable_color_mgmt(&mtk_crtc->base, 0, has_ctm, gamma_lut_size);
 	mutex_init(&mtk_crtc->hw_lock);
-	drm_flip_work_init(&mtk_crtc->fb_put_work, "mtk_crtc_fb_put_work", mtk_crtc_fb_put_worker);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	i = (priv->data->mbox_index) ? priv->data->mbox_index[drm_crtc_index(&mtk_crtc->base)] :

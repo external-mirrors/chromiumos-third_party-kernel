@@ -196,6 +196,7 @@ struct ath11k_hw_params {
 	bool current_cc_support;
 	const struct cfg80211_sar_capa *bios_sar_capa;
 	bool support_fw_mac_sequence;
+	bool support_off_channel_tx;
 };
 
 struct ath11k_hw_ops {
