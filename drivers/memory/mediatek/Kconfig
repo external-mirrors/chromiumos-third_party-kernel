@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Memory devices
+#
+
+config MTK_SMPU
+	bool "Mediatek SMPU Driver"
+	default y
+	help
+	  Say Y here if you need mediatek smpu driver support.
+	  If you don't need, say N.
