@@ -2571,7 +2571,7 @@ static struct hid_driver mt_driver = {
 	.resume = pm_ptr(mt_resume),
 };
 
-static int __init mt_init(void)
+static int __init hid_mt_init(void)
 {
 	int ret;
 
@@ -2585,13 +2585,13 @@ static int __init mt_init(void)
 
 	return ret;
 }
-module_init(mt_init);
+module_init(hid_mt_init);
 
-static void __exit mt_exit(void)
+static void __exit hid_mt_exit(void)
 {
 	if (mt_mode_wq)
 		mt_destroy_lid_handler();
 
 	hid_unregister_driver(&mt_driver);
 }
-module_exit(mt_exit);
+module_exit(hid_mt_exit);
