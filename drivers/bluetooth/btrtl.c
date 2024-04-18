@@ -232,7 +232,7 @@ static const struct id_table ic_id_table[] = {
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xc, 0x8, HCI_UART),
 	  .config_needed = true,
 	  .has_rom_version = true,
-	  .has_msft_ext = true,
+	  .has_msft_ext = false,
 	  .fw_name  = "rtl_bt/rtl8822cs_fw",
 	  .cfg_name = "rtl_bt/rtl8822cs_config",
 	  .hw_info  = "rtl8822cs" },
@@ -241,7 +241,7 @@ static const struct id_table ic_id_table[] = {
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xc, 0xa, HCI_UART),
 	  .config_needed = true,
 	  .has_rom_version = true,
-	  .has_msft_ext = true,
+	  .has_msft_ext = false,
 	  .fw_name  = "rtl_bt/rtl8822cs_fw",
 	  .cfg_name = "rtl_bt/rtl8822cs_config",
 	  .hw_info  = "rtl8822cs" },
@@ -250,7 +250,7 @@ static const struct id_table ic_id_table[] = {
 	{ IC_INFO(RTL_ROM_LMP_8822B, 0xc, 0xa, HCI_USB),
 	  .config_needed = false,
 	  .has_rom_version = true,
-	  .has_msft_ext = true,
+	  .has_msft_ext = false,
 	  .fw_name  = "rtl_bt/rtl8822cu_fw",
 	  .cfg_name = "rtl_bt/rtl8822cu_config",
 	  .hw_info  = "rtl8822cu" },
@@ -1307,6 +1307,18 @@ void btrtl_set_quirks(struct hci_dev *hdev, struct btrtl_device_info *btrtl_dev)
 		rtl_dev_dbg(hdev, "WBS supported not enabled.");
 		break;
 	}
+
+	/* Disallow RTL8822 to remote wakeup, in order to enter
+	 * global suspend and save power.
+	 */
+	if (btrtl_dev->project_id == CHIP_ID_8822C)
+		set_bit(HCI_QUIRK_DISABLE_REMOTE_WAKE, &hdev->quirks);
+
+	/* Force RTL8852A to enable remote wakeup in order to prevent it from
+	 * resetting itself and taking longer to resume from suspend
+	 */
+	if (btrtl_dev->project_id == CHIP_ID_8852A)
+		set_bit(HCI_QUIRK_FORCE_REMOTE_WAKE, &hdev->quirks);
 
 	if (!btrtl_dev->ic_info)
 		return;
