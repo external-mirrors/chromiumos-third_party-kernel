@@ -281,7 +281,7 @@ static unsigned long mtk_mfg_get_static_power(unsigned long voltage)
 	if (!tz)
 		return 0;
 
-	if (tz->ops->get_temp(tz, &temperature))
+	if (tz->ops.get_temp(tz, &temperature))
 		dev_warn(mfg->dev, "Failed to read temperature\n");
 	do_div(temperature, 1000);
 
