@@ -2838,6 +2838,8 @@ struct cfg80211_assoc_link {
 	struct cfg80211_bss *bss;
 	const u8 *elems;
 	size_t elems_len;
+	bool disabled;
+	int error;
 };
 
 /**
