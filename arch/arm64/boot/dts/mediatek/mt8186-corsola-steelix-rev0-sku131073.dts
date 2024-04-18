@@ -5,7 +5,6 @@
 
 /dts-v1/;
 #include "mt8186-corsola-steelix.dtsi"
-#include "mt8186-corsola-ps8640.dtsi"
 
 / {
 	model = "Google Steelix rev0/rev1 sku131073 board";
