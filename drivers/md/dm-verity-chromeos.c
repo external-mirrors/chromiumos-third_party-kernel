@@ -136,7 +136,7 @@ static dev_t __ref get_boot_dev(void)
 static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 {
 	int ret = 0;
-	struct block_device *bdev;
+	struct file *bdev_file;
 	struct bio *bio;
 	struct page *page;
 	dev_t devt;
@@ -151,9 +151,9 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 
 	/* First we open the device for reading. */
 	dev_mode = BLK_OPEN_READ | BLK_OPEN_EXCL;
-	bdev = blkdev_get_by_dev(devt, dev_mode,
+	bdev_file = bdev_file_open_by_dev(devt, dev_mode,
 				 chromeos_invalidate_kernel_bio, NULL);
-	if (IS_ERR(bdev)) {
+	if (IS_ERR(bdev_file)) {
 		DMERR("invalidate_kernel: could not open device for reading");
 		dev_mode = 0;
 		ret = -1;
@@ -172,7 +172,7 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 		goto failed_to_alloc_page;
 	}
 
-	if (chromeos_invalidate_kernel_submit(bio, bdev,
+	if (chromeos_invalidate_kernel_submit(bio, file_bdev(bdev_file),
 					      REQ_OP_READ,
 					      REQ_SYNC,
 					      page)) {
@@ -193,11 +193,11 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 	memcpy(page_address(page), DMVERROR, strlen(DMVERROR));
 
 	/* The block dev was being changed on read. Let's reopen here. */
-	blkdev_put(bdev, chromeos_invalidate_kernel_bio);
+	fput(bdev_file);
 	dev_mode = BLK_OPEN_WRITE | BLK_OPEN_EXCL;
-	bdev = blkdev_get_by_dev(devt, dev_mode,
+	bdev_file = bdev_file_open_by_dev(devt, dev_mode,
 				 chromeos_invalidate_kernel_bio, NULL);
-	if (IS_ERR(bdev)) {
+	if (IS_ERR(bdev_file)) {
 		DMERR("invalidate_kernel: could not open device for writing");
 		dev_mode = 0;
 		ret = -1;
@@ -214,7 +214,7 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 	 * completion for the write is signaled only after the data has been
 	 * committed to non-volatile storage.
 	 */
-	if (chromeos_invalidate_kernel_submit(bio, bdev, REQ_OP_WRITE,
+	if (chromeos_invalidate_kernel_submit(bio, file_bdev(bdev_file), REQ_OP_WRITE,
 					      REQ_SYNC | REQ_FUA, page)) {
 		ret = -1;
 		goto failed_to_submit_write;
@@ -234,7 +234,7 @@ failed_to_alloc_page:
 	bio_put(bio);
 failed_bio_alloc:
 	if (dev_mode)
-		blkdev_put(bdev, chromeos_invalidate_kernel_bio);
+		fput(bdev_file);
 failed_to_read:
 	return ret;
 }
