@@ -563,6 +563,27 @@ static int vidioc_enum_framesizes(struct file *file, void *priv,
 		fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
 		fsize->stepwise = dec_pdata->vdec_formats[i].frmsize;
 
+		/*
+		 * (b/332235023): using the HW vcodec for 2K and 4K videos
+		 * causes system jank and hang, but on the other hand 4K
+		 * capability is necessary when the secured video path is
+		 * enabled.
+		 *
+		 * Add a workaround to temporarily limit the capability to
+		 * 1080p for the normal world.
+		 *
+		 * Add "if (!ctx->is_secure_playback)" around the lines below
+		 * when the secured video path changes comes in.
+		 *
+		 * To ensure the frame size can be properly configured for both
+		 * secured and normal world, the V4L2 s_ctrl should be called
+		 * before enumerating the frame sizes.
+		 */
+		fsize->stepwise.max_width =
+			min(MTK_VDEC_MAX_W, fsize->stepwise.max_width);
+		fsize->stepwise.max_height =
+			min(MTK_VDEC_MAX_H, fsize->stepwise.max_height);
+
 		mtk_v4l2_vdec_dbg(1, ctx, "%x, %d %d %d %d %d %d",
 				  ctx->dev->dec_capability, fsize->stepwise.min_width,
 				  fsize->stepwise.max_width, fsize->stepwise.step_width,
