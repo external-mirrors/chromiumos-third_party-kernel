@@ -1611,9 +1611,6 @@
 			phy-names = "pcie-phy";
 			power-domains = <&spm MT8195_POWER_DOMAIN_PCIE_MAC_P1>;
 
-			resets = <&infracfg_ao MT8195_INFRA_RST2_PCIE_P1_SWRST>;
-			reset-names = "mac";
-
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 7>;
 			interrupt-map = <0 0 0 1 &pcie_intc1 0>,
@@ -2016,6 +2013,22 @@
 					<&spm MT8195_POWER_DOMAIN_MFG6>;
 			power-domain-names = "core0", "core1", "core2", "core3", "core4";
 			status = "disabled";
+
+			/*
+			 * Power models are not part of upstream.
+			 * Following are required by proprietary Mali driver.
+			 */
+			power_model@0 {
+				compatible = "arm,mali-simple-power-model";
+				static-coefficient = <162868>;
+				dynamic-coefficient = <2649>;
+				ts = <(-199560) 37873 (-665) 9>;
+				thermal-zone = "gpu0-thermal";
+				};
+			power_model@1 {
+				compatible = "arm,mali-tnax-power-model";
+				scale = <5>;
+			};
 		};
 
 		mfgcfg: clock-controller@13fbf000 {
