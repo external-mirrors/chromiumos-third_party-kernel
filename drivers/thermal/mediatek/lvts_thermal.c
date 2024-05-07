@@ -80,8 +80,8 @@
 #define LVTS_SENSOR_MAX				4
 #define LVTS_GOLDEN_TEMP_MAX		62
 #define LVTS_GOLDEN_TEMP_DEFAULT	50
-#define LVTS_COEFF_A_MT8195			-250460
-#define LVTS_COEFF_B_MT8195			250460
+#define LVTS_COEFF_A				-250460
+#define LVTS_COEFF_B				250460
 
 #define LVTS_MSR_IMMEDIATE_MODE		0
 #define LVTS_MSR_FILTERED_MODE		1
@@ -94,7 +94,7 @@
 #define LVTS_MINIMUM_THRESHOLD		20000
 
 static int golden_temp = LVTS_GOLDEN_TEMP_DEFAULT;
-static int golden_temp_offset;
+static int coeff_b = LVTS_COEFF_B;
 
 struct lvts_sensor_data {
 	int dt_id;
@@ -112,8 +112,6 @@ struct lvts_ctrl_data {
 struct lvts_data {
 	const struct lvts_ctrl_data *lvts_ctrl;
 	int num_lvts_ctrl;
-	int temp_factor;
-	int temp_offset;
 };
 
 struct lvts_sensor {
@@ -128,7 +126,6 @@ struct lvts_sensor {
 
 struct lvts_ctrl {
 	struct lvts_sensor sensors[LVTS_SENSOR_MAX];
-	const struct lvts_data *lvts_data;
 	u32 calibration[LVTS_SENSOR_MAX];
 	u32 hw_tshut_raw_temp;
 	int num_lvts_sensor;
@@ -250,21 +247,21 @@ static void lvts_debugfs_exit(struct lvts_domain *lvts_td) { }
 
 #endif
 
-static int lvts_raw_to_temp(u32 raw_temp, int temp_factor)
+static int lvts_raw_to_temp(u32 raw_temp)
 {
 	int temperature;
 
-	temperature = ((s64)(raw_temp & 0xFFFF) * temp_factor) >> 14;
-	temperature += golden_temp_offset;
+	temperature = ((s64)(raw_temp & 0xFFFF) * LVTS_COEFF_A) >> 14;
+	temperature += coeff_b;
 
 	return temperature;
 }
 
-static u32 lvts_temp_to_raw(int temperature, int temp_factor)
+static u32 lvts_temp_to_raw(int temperature)
 {
-	u32 raw_temp = ((s64)(golden_temp_offset - temperature)) << 14;
+	u32 raw_temp = ((s64)(coeff_b - temperature)) << 14;
 
-	raw_temp = div_s64(raw_temp, -temp_factor);
+	raw_temp = div_s64(raw_temp, -LVTS_COEFF_A);
 
 	return raw_temp;
 }
@@ -272,9 +269,6 @@ static u32 lvts_temp_to_raw(int temperature, int temp_factor)
 static int lvts_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	struct lvts_sensor *lvts_sensor = thermal_zone_device_priv(tz);
-	struct lvts_ctrl *lvts_ctrl = container_of(lvts_sensor, struct lvts_ctrl,
-						   sensors[lvts_sensor->id]);
-	const struct lvts_data *lvts_data = lvts_ctrl->lvts_data;
 	void __iomem *msr = lvts_sensor->msr;
 	u32 value;
 	int rc;
@@ -307,7 +301,7 @@ static int lvts_get_temp(struct thermal_zone_device *tz, int *temp)
 	if (rc)
 		return -EAGAIN;
 
-	*temp = lvts_raw_to_temp(value & 0xFFFF, lvts_data->temp_factor);
+	*temp = lvts_raw_to_temp(value & 0xFFFF);
 
 	return 0;
 }
@@ -354,13 +348,10 @@ static bool lvts_should_update_thresh(struct lvts_ctrl *lvts_ctrl, int high)
 static int lvts_set_trips(struct thermal_zone_device *tz, int low, int high)
 {
 	struct lvts_sensor *lvts_sensor = thermal_zone_device_priv(tz);
-	struct lvts_ctrl *lvts_ctrl = container_of(lvts_sensor, struct lvts_ctrl,
-						   sensors[lvts_sensor->id]);
-	const struct lvts_data *lvts_data = lvts_ctrl->lvts_data;
+	struct lvts_ctrl *lvts_ctrl = container_of(lvts_sensor, struct lvts_ctrl, sensors[lvts_sensor->id]);
 	void __iomem *base = lvts_sensor->base;
-	u32 raw_low = lvts_temp_to_raw(low != -INT_MAX ? low : LVTS_MINIMUM_THRESHOLD,
-				       lvts_data->temp_factor);
-	u32 raw_high = lvts_temp_to_raw(high, lvts_data->temp_factor);
+	u32 raw_low = lvts_temp_to_raw(low != -INT_MAX ? low : LVTS_MINIMUM_THRESHOLD);
+	u32 raw_high = lvts_temp_to_raw(high);
 	bool should_update_thresh;
 
 	lvts_sensor->low_thresh = low;
@@ -701,7 +692,7 @@ static int lvts_calibration_read(struct device *dev, struct lvts_domain *lvts_td
 	return 0;
 }
 
-static int lvts_golden_temp_init(struct device *dev, u32 *value, int temp_offset)
+static int lvts_golden_temp_init(struct device *dev, u32 *value)
 {
 	u32 gt;
 
@@ -710,7 +701,7 @@ static int lvts_golden_temp_init(struct device *dev, u32 *value, int temp_offset
 	if (gt && gt < LVTS_GOLDEN_TEMP_MAX)
 		golden_temp = gt;
 
-	golden_temp_offset = golden_temp * 500 + temp_offset;
+	coeff_b = golden_temp * 500 + LVTS_COEFF_B;
 
 	return 0;
 }
@@ -733,7 +724,7 @@ static int lvts_ctrl_init(struct device *dev, struct lvts_domain *lvts_td,
 	 * The golden temp information is contained in the first chunk
 	 * of efuse data.
 	 */
-	ret = lvts_golden_temp_init(dev, (u32 *)lvts_td->calib, lvts_data->temp_offset);
+	ret = lvts_golden_temp_init(dev, (u32 *)lvts_td->calib);
 	if (ret)
 		return ret;
 
@@ -744,7 +735,6 @@ static int lvts_ctrl_init(struct device *dev, struct lvts_domain *lvts_td,
 	for (i = 0; i < lvts_data->num_lvts_ctrl; i++) {
 
 		lvts_ctrl[i].base = lvts_td->base + lvts_data->lvts_ctrl[i].offset;
-		lvts_ctrl[i].lvts_data = lvts_data;
 
 		ret = lvts_sensor_init(dev, &lvts_ctrl[i],
 				       &lvts_data->lvts_ctrl[i]);
@@ -768,8 +758,7 @@ static int lvts_ctrl_init(struct device *dev, struct lvts_domain *lvts_td,
 		 * after initializing the calibration.
 		 */
 		lvts_ctrl[i].hw_tshut_raw_temp =
-			lvts_temp_to_raw(lvts_data->lvts_ctrl[i].hw_tshut_temp,
-					 lvts_data->temp_factor);
+			lvts_temp_to_raw(lvts_data->lvts_ctrl[i].hw_tshut_temp);
 
 		lvts_ctrl[i].low_thresh = INT_MIN;
 		lvts_ctrl[i].high_thresh = INT_MIN;
@@ -1234,8 +1223,6 @@ static int lvts_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	golden_temp_offset = lvts_data->temp_offset;
-
 	ret = lvts_domain_init(dev, lvts_td, lvts_data);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to initialize the lvts domain\n");
@@ -1349,15 +1336,11 @@ static const struct lvts_ctrl_data mt8195_lvts_ap_data_ctrl[] = {
 static const struct lvts_data mt8195_lvts_mcu_data = {
 	.lvts_ctrl	= mt8195_lvts_mcu_data_ctrl,
 	.num_lvts_ctrl	= ARRAY_SIZE(mt8195_lvts_mcu_data_ctrl),
-	.temp_factor	= LVTS_COEFF_A_MT8195,
-	.temp_offset	= LVTS_COEFF_B_MT8195,
 };
 
 static const struct lvts_data mt8195_lvts_ap_data = {
 	.lvts_ctrl	= mt8195_lvts_ap_data_ctrl,
 	.num_lvts_ctrl	= ARRAY_SIZE(mt8195_lvts_ap_data_ctrl),
-	.temp_factor	= LVTS_COEFF_A_MT8195,
-	.temp_offset	= LVTS_COEFF_B_MT8195,
 };
 
 static const struct of_device_id lvts_of_match[] = {
