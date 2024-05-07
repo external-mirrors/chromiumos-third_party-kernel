@@ -58,7 +58,7 @@ struct cam_cdm_client *cam_cdm_lookup_client(struct cam_cdm *cdm, u32 idx)
 	return client;
 }
 
-int cam_cdm_insert_client(struct cam_cdm *cdm, struct cam_cdm_client *client)
+static int cam_cdm_insert_client(struct cam_cdm *cdm, struct cam_cdm_client *client)
 {
 	unsigned long flags;
 	int ret = -EINVAL;
@@ -90,7 +90,7 @@ int cam_cdm_insert_client(struct cam_cdm *cdm, struct cam_cdm_client *client)
 	return ret;
 }
 
-void cam_cdm_remove_client(struct cam_cdm *cdm, u32 idx)
+static void cam_cdm_remove_client(struct cam_cdm *cdm, u32 idx)
 {
 	struct cam_cdm_client *client;
 	unsigned long flags;
