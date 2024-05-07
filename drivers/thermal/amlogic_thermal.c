@@ -182,7 +182,7 @@ static int amlogic_thermal_disable(struct amlogic_thermal *data)
 static int amlogic_thermal_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	unsigned int tval;
-	struct amlogic_thermal *pdata = thermal_zone_device_priv(tz);
+	struct amlogic_thermal *pdata = tz->devdata;
 
 	if (!pdata)
 		return -EINVAL;
