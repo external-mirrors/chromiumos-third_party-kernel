@@ -1435,12 +1435,7 @@
 				static-coefficient = <162868>;
 				dynamic-coefficient = <2649>;
 				ts = <(-199560) 37873 (-665) 9>;
-				/*
-				 * TODO(b/329416346): Use a big core thermal
-				 * sensor as a WA before the multi sensor
-				 * support added on the upstream.
-				 */
-				thermal-zone = "cpu4-thermal";
+				thermal-zone = "soc_max";
 			};
 
 			power_model@1 {
