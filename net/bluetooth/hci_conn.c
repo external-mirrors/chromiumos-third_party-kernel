@@ -1586,7 +1586,7 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
 		return hci_connect_le(hdev, dst, dst_type,
 				false, sec_level,
 				HCI_LE_CONN_TIMEOUT,
-				HCI_ROLE_MASTER);
+				HCI_ROLE_MASTER, 0, 0);
 	}
 
 	BT_DBG("requesting refresh of dst_addr");
