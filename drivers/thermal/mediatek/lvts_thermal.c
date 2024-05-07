@@ -1216,7 +1216,7 @@ static int lvts_probe(struct platform_device *pdev)
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
-		return irq;
+		return dev_err_probe(dev, irq, "No irq resource\n");
 
 	ret = lvts_domain_init(dev, lvts_td, lvts_data);
 	if (ret)
