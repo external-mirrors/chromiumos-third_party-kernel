@@ -979,12 +979,14 @@ static void mtk_thermal_init_bank(struct mtk_thermal *mt, int num,
 
 static u64 of_get_phys_base(struct device_node *np)
 {
-	struct resource res;
+	u64 size64;
+	const __be32 *regaddr_p;
 
-	if (of_address_to_resource(np, 0, &res))
+	regaddr_p = of_get_address(np, 0, &size64, NULL);
+	if (!regaddr_p)
 		return OF_BAD_ADDR;
 
-	return res.start;
+	return of_translate_address(np, regaddr_p);
 }
 
 static int mtk_thermal_extract_efuse_v1(struct mtk_thermal *mt, u32 *buf)
