@@ -348,7 +348,6 @@ thermal_zone_device_register_with_trips(const char *, struct thermal_trip *, int
 					struct thermal_zone_params *, int, int);
 
 void *thermal_zone_device_priv(struct thermal_zone_device *tzd);
-const char *thermal_zone_device_type(struct thermal_zone_device *tzd);
 
 int thermal_zone_bind_cooling_device(struct thermal_zone_device *, int,
 				     struct thermal_cooling_device *,
@@ -422,11 +421,6 @@ static inline int thermal_zone_get_offset(
 { return -ENODEV; }
 
 static inline void *thermal_zone_device_priv(struct thermal_zone_device *tz)
-{
-	return NULL;
-}
-
-static inline const char *thermal_zone_device_type(struct thermal_zone_device *tzd)
 {
 	return NULL;
 }
