@@ -298,9 +298,9 @@ static int lvts_set_trips(struct thermal_zone_device *tz, int low, int high)
 	u32 raw_high = lvts_temp_to_raw(high);
 
 	/*
-	 * Low offset temperature threshold
+	 * Hot to normal temperature threshold
 	 *
-	 * LVTS_OFFSETL
+	 * LVTS_H2NTHRE
 	 *
 	 * Bits:
 	 *
@@ -309,13 +309,13 @@ static int lvts_set_trips(struct thermal_zone_device *tz, int low, int high)
 	if (low != -INT_MAX) {
 		pr_debug("%s: Setting low limit temperature interrupt: %d\n",
 			 thermal_zone_device_type(tz), low);
-		writel(raw_low, LVTS_OFFSETL(base));
+		writel(raw_low, LVTS_H2NTHRE(base));
 	}
 
 	/*
-	 * High offset temperature threshold
+	 * Hot temperature threshold
 	 *
-	 * LVTS_OFFSETH
+	 * LVTS_HTHRE
 	 *
 	 * Bits:
 	 *
@@ -323,7 +323,7 @@ static int lvts_set_trips(struct thermal_zone_device *tz, int low, int high)
 	 */
 	pr_debug("%s: Setting high limit temperature interrupt: %d\n",
 		 thermal_zone_device_type(tz), high);
-	writel(raw_high, LVTS_OFFSETH(base));
+	writel(raw_high, LVTS_HTHRE(base));
 
 	return 0;
 }
