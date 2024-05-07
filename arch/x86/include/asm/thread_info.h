@@ -90,7 +90,7 @@ struct thread_info {
 # ifdef CONFIG_IA32_EMULATION
 #  define INIT_THREAD_INFO_SYSCALL_COMPAT			\
 	.ia32_nr_syscalls	= IA32_NR_syscalls,		\
-	.ia32_sys_call_table	= ia32_sys_call_table,
+	.ia32_sys_call_table	= sys_call_table,
 # else
 #  define INIT_THREAD_INFO_SYSCALL_COMPAT /* */
 # endif

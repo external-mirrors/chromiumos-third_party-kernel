@@ -37,7 +37,7 @@ int arch_dup_sys_call_table(struct alt_sys_call_table *entry)
 				      sizeof(sys_call_ptr_t), GFP_KERNEL);
 	if (!entry->compat_table)
 		goto failed;
-	memcpy(entry->compat_table, ia32_sys_call_table,
+	memcpy(entry->compat_table, sys_call_table,
 	       entry->compat_size * sizeof(sys_call_ptr_t));
 #endif
 
@@ -63,7 +63,7 @@ int arch_set_sys_call_table(struct alt_sys_call_table *entry)
 	current_thread_info()->sys_call_table = entry->table;
 #ifdef CONFIG_IA32_EMULATION
 	current_thread_info()->ia32_nr_syscalls = entry->compat_size;
-	current_thread_info()->ia32_sys_call_table = entry->compat_table;
+	current_thread_info()->sys_call_table = entry->compat_table;
 #endif
 
 	return 0;
