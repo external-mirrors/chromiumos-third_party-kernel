@@ -66,6 +66,17 @@
 	regulator-max-microvolt = <1900000>;
 };
 
+&i2c_tunnel {
+	/delete-node/ sbs-battery@b;
+
+	battery: sbs-battery@f {
+		compatible = "sbs,sbs-battery";
+		reg = <0xf>;
+		sbs,i2c-retry-count = <2>;
+		sbs,poll-retry-count = <1>;
+	};
+};
+
 &i2c2 {
 	status = "disabled";
 };
