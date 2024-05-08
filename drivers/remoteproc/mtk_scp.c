@@ -4,6 +4,7 @@
 
 #include <asm/barrier.h>
 #include <linux/clk.h>
+#include <linux/dma-heap.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
@@ -1006,20 +1007,41 @@ EXPORT_SYMBOL_GPL(scp_mapping_dm_addr);
 
 static int scp_map_memory_region(struct mtk_scp *scp)
 {
-	int ret;
+	int ret, i, err;
 	const struct mtk_scp_sizes_data *scp_sizes;
+	struct device_node *node = scp->dev->of_node;
+	struct of_phandle_iterator it;
 
-	ret = of_reserved_mem_device_init(scp->dev);
+	i = 0;
+	of_for_each_phandle(&it, err, node, "memory-region", NULL, 0) {
+		ret = of_reserved_mem_device_init_by_idx(scp->dev, node, i);
 
-	/* reserved memory is optional. */
-	if (ret == -ENODEV) {
-		dev_info(scp->dev, "skipping reserved memory initialization.");
-		return 0;
+		if (ret) {
+			dev_err(scp->dev, "failed to assign memory-region: %s\n",
+				it.node->name);
+			of_node_put(it.node);
+			return -ENOMEM;
+		}
+
+#ifdef CONFIG_DMABUF_HEAPS_CMA
+		if (strstr(it.node->name, "cma")) {
+			/* Reserved cma memory region */
+			ret = dma_heap_add_cma(scp->dev);
+			if (ret) {
+				dev_err(scp->dev, "Failed to add reserved cma");
+				of_node_put(it.node);
+				return ret;
+			}
+		}
+#endif /* CONFIG_DMABUF_HEAPS_CMA */
+
+		i++;
 	}
 
-	if (ret) {
-		dev_err(scp->dev, "failed to assign memory-region: %d\n", ret);
-		return -ENOMEM;
+	/* reserved memory is optional. */
+	if (!i) {
+		dev_info(scp->dev, "skipping reserved memory initialization.");
+		return 0;
 	}
 
 	/* Reserved SCP code size */
