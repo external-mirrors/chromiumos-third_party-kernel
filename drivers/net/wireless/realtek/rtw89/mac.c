@@ -4430,8 +4430,7 @@ int rtw89_mac_add_vif(struct rtw89_dev *rtwdev, struct rtw89_vif *rtwvif)
 {
 	int ret;
 
-	rtwvif->mac_id = rtw89_core_acquire_bit_map(rtwdev->mac_id_map,
-						    RTW89_MAX_MAC_ID_NUM);
+	rtwvif->mac_id = rtw89_acquire_mac_id(rtwdev);
 	if (rtwvif->mac_id == RTW89_MAX_MAC_ID_NUM)
 		return -ENOSPC;
 
@@ -4442,7 +4441,7 @@ int rtw89_mac_add_vif(struct rtw89_dev *rtwdev, struct rtw89_vif *rtwvif)
 	return 0;
 
 release_mac_id:
-	rtw89_core_release_bit_map(rtwdev->mac_id_map, rtwvif->mac_id);
+	rtw89_release_mac_id(rtwdev, rtwvif->mac_id);
 
 	return ret;
 }
@@ -4452,7 +4451,7 @@ int rtw89_mac_remove_vif(struct rtw89_dev *rtwdev, struct rtw89_vif *rtwvif)
 	int ret;
 
 	ret = rtw89_mac_vif_deinit(rtwdev, rtwvif);
-	rtw89_core_release_bit_map(rtwdev->mac_id_map, rtwvif->mac_id);
+	rtw89_release_mac_id(rtwdev, rtwvif->mac_id);
 
 	return ret;
 }
