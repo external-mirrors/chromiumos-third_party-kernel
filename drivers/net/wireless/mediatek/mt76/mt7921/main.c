@@ -262,25 +262,6 @@ static int mt7921_start(struct ieee80211_hw *hw)
 	return err;
 }
 
-void mt7921_stop(struct ieee80211_hw *hw)
-{
-	struct mt792x_dev *dev = mt792x_hw_dev(hw);
-	struct mt792x_phy *phy = mt792x_hw_phy(hw);
-
-	cancel_delayed_work_sync(&phy->mt76->mac_work);
-
-	cancel_delayed_work_sync(&dev->pm.ps_work);
-	cancel_work_sync(&dev->pm.wake_work);
-	cancel_work_sync(&dev->reset_work);
-	mt76_connac_free_pending_tx_skbs(&dev->pm, NULL);
-
-	mt792x_mutex_acquire(dev);
-	clear_bit(MT76_STATE_RUNNING, &phy->mt76->state);
-	mt76_connac_mcu_set_mac_enable(&dev->mt76, 0, false, false);
-	mt792x_mutex_release(dev);
-}
-EXPORT_SYMBOL_GPL(mt7921_stop);
-
 static int
 mt7921_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
@@ -318,7 +299,7 @@ mt7921_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	mvif->sta.wcid.phy_idx = mvif->mt76.band_idx;
 	mvif->sta.wcid.hw_key_idx = -1;
 	mvif->sta.wcid.tx_info |= MT_WCID_TX_INFO_SET;
-	mt76_packet_id_init(&mvif->sta.wcid);
+	mt76_wcid_init(&mvif->sta.wcid);
 
 	mt7921_mac_wtbl_update(dev, idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
@@ -346,6 +327,19 @@ static void mt7921_roc_iter(void *priv, u8 *mac,
 
 	mt7921_mcu_abort_roc(phy, mvif, phy->roc_token_id);
 }
+
+void mt7921_roc_abort_sync(struct mt792x_dev *dev)
+{
+	struct mt792x_phy *phy = &dev->phy;
+
+	del_timer_sync(&phy->roc_timer);
+	cancel_work_sync(&phy->roc_work);
+	if (test_and_clear_bit(MT76_STATE_ROC, &phy->mt76->state))
+		ieee80211_iterate_active_interfaces(mt76_hw(dev),
+						    IEEE80211_IFACE_ITER_RESUME_ALL,
+						    mt7921_roc_iter, (void *)phy);
+}
+EXPORT_SYMBOL_GPL(mt7921_roc_abort_sync);
 
 void mt7921_roc_work(struct work_struct *work)
 {
@@ -1381,7 +1375,7 @@ static void mt7921_mgd_complete_tx(struct ieee80211_hw *hw,
 const struct ieee80211_ops mt7921_ops = {
 	.tx = mt792x_tx,
 	.start = mt7921_start,
-	.stop = mt7921_stop,
+	.stop = mt792x_stop,
 	.add_interface = mt7921_add_interface,
 	.remove_interface = mt792x_remove_interface,
 	.config = mt7921_config,
@@ -1440,5 +1434,6 @@ const struct ieee80211_ops mt7921_ops = {
 };
 EXPORT_SYMBOL_GPL(mt7921_ops);
 
+MODULE_DESCRIPTION("MediaTek MT7921 core driver");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Sean Wang <sean.wang@mediatek.com>");
