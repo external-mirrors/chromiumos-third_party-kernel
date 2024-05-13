@@ -370,6 +370,9 @@ static enum transmitter translate_encoder_to_transmitter(
 static uint8_t translate_dig_inst_to_pwrseq_inst(struct dc_link *link)
 {
 	uint8_t pwrseq_inst = 0xF;
+	struct dc_context *dc_ctx = link->dc->ctx;
+
+	DC_LOGGER_INIT(dc_ctx->logger);
 
 	switch (link->eng_id) {
 	case ENGINE_ID_DIGA:
