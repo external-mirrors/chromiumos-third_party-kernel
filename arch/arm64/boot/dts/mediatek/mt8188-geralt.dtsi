@@ -177,7 +177,7 @@
 
 		scp_mem_reserved: scp_mem_region {
 			compatible = "shared-dma-pool";
-			reg = <0 0x50000000 0 0x2900000>;
+			reg = <0 0x50000000 0 0x800000>;
 			no-map;
 		};
 
@@ -206,13 +206,13 @@
 
 		scp_dual_mem_reserved: scp-dual-mem-region {
 			compatible = "shared-dma-pool";
-			reg = <0 0x70000000 0 0x0C000000>;
+			reg = <0 0x70000000 0 0x0A000000>;
 			no-map;
 		};
 
 		scp_isp_cma_reserved: scp-isp-cma-region {
 			compatible = "shared-dma-pool";
-			reg = <0 0x7C000000 0 0x05000000>;
+			reg = <0 0x7A000000 0 0x05000000>;
 			reusable;
 		};
 
