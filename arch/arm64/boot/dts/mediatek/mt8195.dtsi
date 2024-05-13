@@ -3657,7 +3657,7 @@
 		adsp_mem_reserved: adsp_mem_region {
 			compatible = "mediatek,adsp-reserved-memory";
 			no-map;
-			reg = <0 0x60000000 0 0xE80000>;
+			reg = <0 0x60000000 0 0xD80000>;
 		};
 
 		adsp_dma_mem_reserved: adsp_dma_mem_region {
