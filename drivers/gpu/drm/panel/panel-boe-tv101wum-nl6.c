@@ -1949,11 +1949,11 @@ static const struct panel_desc starry_himax83102_j02_desc = {
 };
 
 static const struct drm_display_mode boe_tv110wum_default_mode = {
-	.clock = 167700,
+	.clock = 166400,
 	.hdisplay = 1200,
-	.hsync_start = 1200 + 75,
-	.hsync_end = 1200 + 75 + 20,
-	.htotal = 1200 + 75 + 20 + 65,
+	.hsync_start = 1200 + 65,
+	.hsync_end = 1200 + 65 + 20,
+	.htotal = 1200 + 65 + 20 + 65,
 	.vdisplay = 1920,
 	.vsync_start = 1920 + 115,
 	.vsync_end = 1920 + 115 + 8,
@@ -1977,11 +1977,11 @@ static const struct panel_desc boe_nv110wum_desc = {
 };
 
 static const struct drm_display_mode ivo_t109nw41_default_mode = {
-	.clock = 167700,
+	.clock = 166400,
 	.hdisplay = 1200,
 	.hsync_start = 1200 + 75,
 	.hsync_end = 1200 + 75 + 20,
-	.htotal = 1200 + 75 + 20 + 65,
+	.htotal = 1200 + 75 + 20 + 55,
 	.vdisplay = 1920,
 	.vsync_start = 1920 + 115,
 	.vsync_end = 1920 + 115 + 8,
