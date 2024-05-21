@@ -10,6 +10,7 @@
 #include <linux/sched/cpufreq.h>
 #include <linux/sched/deadline.h>
 #include <linux/sched.h>
+#include <linux/sched/latsense.h>
 #include <linux/sched/loadavg.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/rseq_api.h>
