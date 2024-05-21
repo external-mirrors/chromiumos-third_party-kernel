@@ -116,6 +116,7 @@
 
 &i2c2 {
 	i2c-scl-internal-delay-ns = <22000>;
+	pinctrl-names = "default";
 
 	/* second source component */
 	trackpad@2c {
@@ -174,6 +175,10 @@
 			pinmux = <PINMUX_GPIO96__FUNC_GPIO96>;
 			output-low;
 		};
+	        pins2 {
+		        /delete-property/ bias-pull-up;
+		        bias-disable;
+	        };
 	};
 
 	en_pp1000_edpbrdg: pp1000-edpbrdg-en-pins {
