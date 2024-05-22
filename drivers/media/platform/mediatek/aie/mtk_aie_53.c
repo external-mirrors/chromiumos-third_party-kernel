@@ -1613,6 +1613,7 @@ static int mtk_aie_resource_init(struct mtk_aie_dev *fd)
 	mutex_init(&fd->fd_lock);
 
 	init_completion(&fd->fd_job_finished);
+	complete_all(&fd->fd_job_finished);
 	INIT_DELAYED_WORK(&fd->job_timeout_work, mtk_aie_job_timeout_work);
 	init_waitqueue_head(&fd->flushing_waitq);
 	atomic_set(&fd->num_composing, 0);
