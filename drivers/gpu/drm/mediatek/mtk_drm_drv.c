@@ -37,6 +37,8 @@
 #define DRIVER_MAJOR 1
 #define DRIVER_MINOR 0
 
+#define DEFAULT_CURSOR_SIZE 512
+
 static const struct drm_mode_config_helper_funcs mtk_drm_mode_config_helpers = {
 	.atomic_commit_tail = drm_atomic_helper_commit_tail_rpm,
 };
@@ -541,8 +543,8 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	}
 
 	/* IGT will check if the cursor size is configured */
-	drm->mode_config.cursor_width = drm->mode_config.max_width;
-	drm->mode_config.cursor_height = drm->mode_config.max_height;
+	drm->mode_config.cursor_width = DEFAULT_CURSOR_SIZE;
+	drm->mode_config.cursor_height = DEFAULT_CURSOR_SIZE;
 
 	/* Use OVL device for all DMA memory allocations */
 	crtc = drm_crtc_from_index(drm, 0);
