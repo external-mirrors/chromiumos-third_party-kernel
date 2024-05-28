@@ -247,7 +247,7 @@ int chromiumos_update_inode_security_policy(
 
 	mutex_lock(&sbm->fsn_group->mark_mutex);
 
-	mark = fsnotify_find_mark(&inode->i_fsnotify_marks, sbm->fsn_group);
+	mark = fsnotify_find_mark(inode, FSNOTIFY_OBJ_TYPE_INODE, sbm->fsn_group);
 	if (mark) {
 		WRITE_ONCE(chromiumos_to_inode_mark(mark)->policies[type],
 				   policy);
@@ -322,7 +322,7 @@ enum chromiumos_inode_security_policy chromiumos_get_inode_security_policy(
 	rcu_read_lock();
 	while (1) {
 		struct fsnotify_mark *mark = fsnotify_find_mark(
-			&inode->i_fsnotify_marks, sbm->fsn_group);
+			inode, FSNOTIFY_OBJ_TYPE_INODE, sbm->fsn_group);
 		if (mark) {
 			struct chromiumos_inode_mark *inode_mark =
 				chromiumos_to_inode_mark(mark);
