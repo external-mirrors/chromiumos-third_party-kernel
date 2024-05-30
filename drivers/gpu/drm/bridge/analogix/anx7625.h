@@ -97,10 +97,16 @@
 #define N_VID_2 0xC5
 
 #define KEY_START_ADDR			0x9000
-#define KEY_RESERVED			416
 
-#define HDCP14KEY_START_ADDR		(KEY_START_ADDR + KEY_RESERVED)
+#define HDCP22KEY_START_ADDR		KEY_START_ADDR
+#define HDCP22KEY_SIZE			416
+#define HDCP22KEY_LOAD			0x62
+#define HDCP22KEY_RAM_ADDR		0x600
+
+#define HDCP14KEY_START_ADDR		(KEY_START_ADDR + HDCP22KEY_SIZE)
 #define HDCP14KEY_SIZE			624
+#define HDCP14KEY_LOAD			0x12
+#define HDCP14KEY_RAM_ADDR		0x00
 
 /***************************************************************/
 /* Register definition of device address 0x72 */
@@ -478,6 +484,7 @@ struct anx7625_data {
 	int hpd_high_cnt;
 	int dp_en;
 	int hdcp_cp;
+	bool hdcp_key_exist;
 	/* Lock for work queue */
 	struct mutex lock;
 	struct device *dev;
