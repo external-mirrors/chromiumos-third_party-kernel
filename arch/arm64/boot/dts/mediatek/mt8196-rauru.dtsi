@@ -168,6 +168,16 @@
 		regulator-always-on;
 		regulator-boot-on;
 	};
+
+	nau8318: speaker-codec {
+		compatible = "nuvoton,nau8318";
+		enable-gpios = <&pio 174 0>;/* EN_SPKR */
+		beep-enable-gpios = <&pio 175 0>;/* BEEP_ON */
+		#sound-dai-cells = <0>;
+
+		status = "disabled";
+	};
+
 };
 
 &cpu0 {
