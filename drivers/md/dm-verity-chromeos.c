@@ -80,7 +80,7 @@ static dev_t get_boot_dev_from_root_dev(struct block_device *root_bdev)
 {
 	/* Very basic sanity checking. This should be better. */
 	if (!root_bdev || MAJOR(root_bdev->bd_dev) == 254 ||
-	    root_bdev->bd_partno <= 1) {
+	    bdev_partno(root_bdev) <= 1) {
 		return 0;
 	}
 	return MKDEV(MAJOR(root_bdev->bd_dev), MINOR(root_bdev->bd_dev) - 1);
