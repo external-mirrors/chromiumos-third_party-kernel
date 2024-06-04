@@ -22,7 +22,7 @@ TRACE_EVENT(do_sys_open,
 	),
 
 	TP_fast_assign(
-		__assign_str(filename, filename);
+		__assign_str(filename);
 		__entry->flags = flags;
 		__entry->mode = mode;
 	),
@@ -42,7 +42,7 @@ TRACE_EVENT(open_exec,
 	),
 
 	TP_fast_assign(
-		__assign_str(filename, filename);
+		__assign_str(filename);
 	),
 
 	TP_printk("\"%s\"",
