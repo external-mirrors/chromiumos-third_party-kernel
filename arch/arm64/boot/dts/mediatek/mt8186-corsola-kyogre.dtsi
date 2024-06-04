@@ -6,6 +6,7 @@
 /dts-v1/;
 #include "mt8186-corsola.dtsi"
 #include "mt8186-corsola-it6505.dtsi"
+#include <dt-bindings/input/cros-ec-keyboard.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/input/gpio-keys.h>
 
@@ -35,6 +36,15 @@
 		#sound-dai-cells = <0>;
 		status = "okay";
 	};
+};
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+	>;
 };
 
 &dsi_out {
