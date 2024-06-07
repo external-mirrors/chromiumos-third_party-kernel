@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2024 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8196-rauru.dtsi"
+
+/ {
+	pp3300_edp_x: regulator-pp3300-edp-x {
+		compatible = "regulator-fixed";
+		regulator-name = "pp3300_edp_x";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		gpio = <&pio 172 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&edp_pp3300_pins>;
+		vin-supply = <&pp3300_z1>;
+	};
+};
+
+&i2c0 {
+	/* synaptics trackpad */
+	trackpad@2c  {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		interrupts-extended = <&pio 8 IRQ_TYPE_LEVEL_LOW>;
+		hid-descr-addr = <0x20>;
+		vcc-supply = <&mt6373_vcn33_2>;
+		wakeup-source;
+	};
+};
+
+&backlight {
+	status = "disabled";
+};
+
+&panel {
+	compatible = "samsung,atna33xc20";
+	enable-gpios = <&pio 216 GPIO_ACTIVE_HIGH>;
+	power-supply = <&pp3300_edp_x>;
+	/delete-property/ backlight;
+};
+
+&mt6373_vcn33_3 {
+	status = "disabled";
+};
+
+&pio {
+	edp_pp3300_pins: edp-pp3300-default-pins {
+		pins-vreg-en {
+			pinmux = <PINMUX_GPIO172__FUNC_GPIO172>;
+			output-high;
+		};
+	};
+};

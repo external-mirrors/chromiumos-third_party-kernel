@@ -115,5 +115,6 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8195-demo.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8195-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-rev0.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-navi-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8365-evk.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8516-pumpkin.dtb
