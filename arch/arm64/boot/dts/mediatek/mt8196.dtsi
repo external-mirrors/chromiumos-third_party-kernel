@@ -523,6 +523,19 @@
 		};
 	};
 
+	firmware: firmware {
+		mtk-svp-heap {
+			compatible = "mediatek,secure-heap";
+			memory-region = <&restricted_region>;
+		};
+
+		optee {
+			compatible = "linaro,optee-tz";
+			method = "smc";
+			interrupts-extended = <&gic GIC_SPI 955 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+	};
+
 	memory: memory@80000000 {
 		device_type = "memory";
 		reg = <0 0x80000000 0 0x40000000>;
@@ -573,6 +586,12 @@
 			compatible = "mediatek,me-vcp-reserved";
 			reg = <0 0xa0200000 0 0x01e00000>; /* 30MB */
 			iommu-addresses = <0 0x00000000 1 0x40000000>; /* 1G */
+			no-map;
+		};
+
+		restricted_region: secure-region@a3000000 {
+			compatible = "mediatek,dynamic-restricted-region";
+			reg = <0 0xa3000000 0 0x1bc00000>; /* 444MB */
 			no-map;
 		};
 	};
