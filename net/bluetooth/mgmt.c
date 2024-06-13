@@ -131,6 +131,7 @@ static const u16 mgmt_commands[] = {
 	MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI,
 	MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
 	MGMT_OP_NOTIFY_SCO_CONNECTION_CHANGE,
+	MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
 };
 
 static const u16 mgmt_events[] = {
@@ -3139,6 +3140,18 @@ unlock:
 	return err;
 }
 
+static int abort_conn_sync(struct hci_dev *hdev, void *data)
+{
+	struct hci_conn *conn;
+	u16 handle = PTR_ERR(data);
+
+	conn = hci_conn_hash_lookup_handle(hdev, handle);
+	if (!conn)
+		return 0;
+
+	return hci_abort_conn_sync(hdev, conn, HCI_ERROR_REMOTE_USER_TERM);
+}
+
 static int cancel_pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 			      u16 len)
 {
@@ -3189,7 +3202,8 @@ static int cancel_pair_device(struct sock *sk, struct hci_dev *hdev, void *data,
 					      le_addr_type(addr->type));
 
 	if (conn->conn_reason == CONN_REASON_PAIR_DEVICE)
-		hci_abort_conn(conn, HCI_ERROR_REMOTE_USER_TERM);
+		hci_cmd_sync_queue(hdev, abort_conn_sync, ERR_PTR(conn->handle),
+				   NULL);
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -8561,12 +8575,7 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 					    void *data, u16 data_len)
 {
 	struct mgmt_cp_get_codec_capabilities *cp = data;
-	struct mgmt_rp_get_codec_capabilities *rp;
-	int i, num_rp_codecs;
-	int err;
-	size_t total_size = sizeof(struct mgmt_rp_get_codec_capabilities);
-	bool wbs_supported = false;
-	u8 *ptr;
+	struct mgmt_rp_get_codec_capabilities rp;
 	struct hci_dev *found_hdev;
 
 	found_hdev = floss_get_hdev(cp->hci_id);
@@ -8577,68 +8586,15 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 	if (!hdev)
 		return -EINVAL;
 
-	wbs_supported =
+	rp.hci_id = hdev->id;
+	rp.transparent_wbs_supported =
 		test_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+	rp.hci_data_path_id = 0;  // Not supported on v4.19
+	rp.wbs_pkt_len = hdev->wbs_pkt_len;
 
-	if (MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE + cp->num_codecs != data_len)
-		return -EINVAL;
-
-	// Determine total alloc size for supported codecs.
-	for (i = 0; i < cp->num_codecs; ++i) {
-		switch (cp->codecs[i]) {
-		case MGMT_SCO_CODEC_CVSD:
-			total_size += sizeof(struct mgmt_bt_codec);
-			break;
-		case MGMT_SCO_CODEC_MSBC_TRANSPARENT:
-			if (wbs_supported)
-				total_size += sizeof(struct mgmt_bt_codec);
-			break;
-		default:
-			bt_dev_dbg(hdev, "Unknown codec %d", cp->codecs[i]);
-			break;
-		}
-	}
-
-	rp = kzalloc(total_size, GFP_KERNEL);
-	if (!rp)
-		return -ENOMEM;
-
-	rp->hci_id = hdev->id;
-	rp->offload_capable = false;
-
-	// Copy codec information to return.
-	ptr = (u8 *)rp->codecs;
-	for (i = 0, num_rp_codecs = 0; i < cp->num_codecs; ++i) {
-		struct mgmt_bt_codec *rc = (struct mgmt_bt_codec *)ptr;
-
-		switch (cp->codecs[i]) {
-		case MGMT_SCO_CODEC_CVSD:
-			rc->codec = cp->codecs[i];
-			ptr += sizeof(*rc);
-			num_rp_codecs++;
-			break;
-		case MGMT_SCO_CODEC_MSBC_TRANSPARENT:
-			if (wbs_supported) {
-				rc->codec = cp->codecs[i];
-				rc->packet_size = hdev->wbs_pkt_len;
-				ptr += sizeof(*rc);
-				num_rp_codecs++;
-			}
-			break;
-		default:
-			break;
-		}
-	}
-
-	// Only return the number of codecs actually written
-	rp->num_codecs = num_rp_codecs;
-
-	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-				MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
-				MGMT_STATUS_SUCCESS, rp, total_size);
-	kfree(rp);
-
-	return err;
+	return mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
+				 MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
+				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 }
 
 static int floss_notify_sco_connection_change(struct sock *sk,
@@ -8759,6 +8715,53 @@ static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, voi
 	hci_dev_unlock(hdev);
 
 	return 0;
+}
+
+static int sco_force_retrans_effort(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
+{
+	struct mgmt_cp_sco_force_retrans_effort *cp = data;
+	struct hci_conn *acl;
+
+	bt_dev_dbg(hdev, "sock %p", sk);
+
+	hci_dev_lock(hdev);
+
+	acl = hci_conn_hash_lookup_ba(hdev, ACL_LINK, &cp->addr.bdaddr);
+
+	if (!acl) {
+		bt_dev_err(hdev, "%s: no acl found for %pMR",
+			   __func__, &cp->addr.bdaddr);
+		goto failed;
+	}
+
+	switch (cp->retrans_effort) {
+	/* optimize for power consumption and optimize for link quality
+	 * require esco
+	 */
+	case 0x01:
+	case 0x02:
+		if (!lmp_esco_capable(acl))
+			goto failed;
+		/* fall through */
+	/* No retransmission and Don’t care don't require esco  */
+	case 0x00:
+	case 0xFF:
+		break;
+	default:
+		goto failed;
+	}
+
+	acl->force_retrans_effort = cp->retrans_effort;
+	bt_dev_info(hdev, "set retrans effort to %d for %pMR", acl->force_retrans_effort,
+		    &cp->addr.bdaddr);
+
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+					MGMT_STATUS_SUCCESS);
+failed:
+	hci_dev_unlock(hdev);
+	return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SCO_FORCE_RETRANS_EFFORT,
+			       MGMT_STATUS_INVALID_PARAMS);
 }
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
@@ -8897,8 +8900,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	floss_get_sco_codec_capabilities,
 				   MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
 						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED |
-						HCI_MGMT_VAR_LEN },
+						HCI_MGMT_UNTRUSTED },
 	{ floss_notify_sco_connection_change,
 				   MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
 						HCI_MGMT_NO_HDEV |
@@ -8910,6 +8912,9 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	[MGMT_OP_SCO_FORCE_RETRANS_EFFORT] = {
+	sco_force_retrans_effort,
+				   MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE },
 };
 
 void mgmt_index_added(struct hci_dev *hdev)

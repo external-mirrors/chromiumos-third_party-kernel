@@ -301,3 +301,16 @@ Description:
 
 		Using this sysfs file will override any values that were
 		set using the kernel command line for disk offset.
+
+What:		/sys/power/sync_on_suspend
+Date:		October 2019
+Contact:	Jonas Meurer <jonas@freesources.org>
+Description:
+		This file controls whether or not the kernel will sync()
+		filesystems during system suspend (after freezing user space
+		and before suspending devices).
+
+		Writing a "1" to this file enables the sync() and writing a "0"
+		disables it.  Reads from the file return the current value.
+		The default is "1" if the build-time "SUSPEND_SKIP_SYNC" config
+		flag is unset, or "0" otherwise.
