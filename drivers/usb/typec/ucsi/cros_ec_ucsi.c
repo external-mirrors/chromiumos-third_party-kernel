@@ -18,6 +18,9 @@
 
 #include "ucsi.h"
 
+#define COMMAND_PENDING	1
+#define ACK_PENDING	2
+
 /* MAX_EC_DATA_SIZE is the number of bytes that can be read from or written to
  * in the UCSI data structure using a single host command to the EC.
  */
