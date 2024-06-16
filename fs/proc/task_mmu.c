@@ -3010,8 +3010,8 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 
 		/* Clear all the references to make sure it gets reclaimed */
 		pmdp_test_and_clear_young(vma, addr, pmd);
-		ClearPageReferenced(page);
-		test_and_clear_page_young(page);
+		folio_clear_referenced(page_folio(page));
+		folio_test_clear_young(page_folio(page));
 		list_add(&page->lru, &page_list);
 huge_unlock:
 		spin_unlock(ptl);
@@ -3085,8 +3085,8 @@ regular_page:
 		list_add(&page->lru, &page_list);
 		/* Clear all the references to make sure it gets reclaimed */
 		ptep_test_and_clear_young(vma, addr, pte);
-		ClearPageReferenced(page);
-		test_and_clear_page_young(page);
+                folio_clear_referenced(page_folio(page));
+                folio_test_clear_young(page_folio(page));
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);
 			reclaim_pages(&page_list);
