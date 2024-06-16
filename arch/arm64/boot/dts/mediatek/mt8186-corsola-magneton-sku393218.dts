@@ -7,8 +7,8 @@
 #include "mt8186-corsola-steelix.dtsi"
 
 / {
-	model = "Google Magneton board";
-	compatible = "google,steelix-sku393221", "google,steelix-sku393218",
+	model = "Google Magneton sku393218/393221 board";
+	compatible = "google,steelix-sku393218", "google,steelix-sku393221",
 		     "google,steelix", "mediatek,mt8186";
 	chassis-type = "laptop";
 };
