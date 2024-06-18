@@ -36,6 +36,7 @@
 &pen_insert {
 	/* Insert = high, eject = low */
 	gpios = <&pio 18 GPIO_ACTIVE_HIGH>;
+	wakeup-event-action = <EV_ACT_DEASSERTED>;
 };
 
 &touchscreen {
