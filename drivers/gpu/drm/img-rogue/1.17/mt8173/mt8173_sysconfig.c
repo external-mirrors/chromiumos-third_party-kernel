@@ -63,6 +63,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "mt8173_mfgsys.h"
 
+#include "../../../../thermal/thermal_core.h"
+
 #define SYS_RGX_ACTIVE_POWER_LATENCY_MS 10
 #define RGX_HW_CORE_CLOCK_SPEED 395000000
 
