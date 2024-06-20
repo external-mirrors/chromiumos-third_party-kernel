@@ -995,6 +995,55 @@
 			#clock-cells = <1>;
 		};
 
+		mcupm: mcupm@c240000 {
+			compatible = "mediatek,mt8196-mcupm";
+			reg = <0 0x0c240000 0 0x50000>,
+			      <0 0x0c2cf600 0 0xa0>,
+			      <0 0x0c242004 0 0x4>,
+			      <0 0x0c242018 0 0x4>,
+			      <0 0x0c242000 0 0x4>,
+			      <0 0x0c242010 0 0x4>;
+			reg-names = "mcupm_base",
+				    "mbox0_base",
+				    "mbox0_set",
+				    "mbox0_clr",
+				    "mbox0_send",
+				    "mbox0_recv";
+			interrupts = <GIC_SPI 48 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 49 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 50 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 51 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 52 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 53 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 54 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 55 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 56 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 57 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 58 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 59 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 60 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 61 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "mbox0",
+					  "mbox1",
+					  "mbox2",
+					  "mbox3",
+					  "mbox4",
+					  "mbox5",
+					  "mbox6",
+					  "mbox7",
+					  "mbox8",
+					  "mbox9",
+					  "mbox10",
+					  "mbox11",
+					  "mbox12",
+					  "mbox13",
+					  "mbox14",
+					  "mbox15";
+			mediatek,mbox-extend = <16>;
+		};
+
 		performance: performance-controller@c2c0f20 {
 			compatible = "mediatek,cpufreq-hw";
 			reg = <0 0xc2c0f20 0 0x120>,
