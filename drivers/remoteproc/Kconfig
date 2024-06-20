@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 menu "Remoteproc drivers"
 
+source "drivers/remoteproc/mcupm/Kconfig"
+
 config REMOTEPROC
 	bool "Support for Remote Processor subsystem"
 	depends on HAS_DMA
