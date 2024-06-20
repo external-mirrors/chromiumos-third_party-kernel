@@ -22,6 +22,7 @@
 #include <linux/string.h>
 #include <linux/thermal.h>
 #include "soc_temp_lvts.h"
+#include "../thermal_core.h"
 
 static int lvts_raw_to_temp(struct lvts_formula_coeff *co, unsigned int msr_raw)
 {

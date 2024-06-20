@@ -22,6 +22,7 @@
 #include <linux/string.h>
 #include <linux/thermal.h>
 #include "soc_temp_lvts_mt8192.h"
+#include "../thermal_core.h"
 
 /*==================================================
  * Definition or macro function
