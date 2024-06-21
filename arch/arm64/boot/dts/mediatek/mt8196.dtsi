@@ -995,6 +995,16 @@
 			#clock-cells = <1>;
 		};
 
+		fdvfs: fdvfs@c220400 {
+			compatible = "mediatek,fdvfs";
+			reg = <0 0x0c220400 0 0x20>,
+				<0 0x0c220420 0 0x4>,
+				<0 0x0c2c2034 0 0x4>;
+			reg-names = "fdvfs-reg",
+				"fdvfs-cci-reg",
+				"fdvfs-support";
+		};
+
 		mcupm: mcupm@c240000 {
 			compatible = "mediatek,mt8196-mcupm";
 			reg = <0 0x0c240000 0 0x50000>,
@@ -1045,7 +1055,7 @@
 		};
 
 		performance: performance-controller@c2c0f20 {
-			compatible = "mediatek,cpufreq-hw";
+			compatible = "mediatek,cpufreq-hw-v1";
 			reg = <0 0xc2c0f20 0 0x120>,
 			      <0 0xc2c1040 0 0x120>,
 			      <0 0xc2c1160 0 0x120>;
@@ -1053,6 +1063,23 @@
 				    "performance-domain1",
 				    "performance-domain2";
 			#performance-domain-cells = <1>;
+		};
+
+		cpuhvfs: cpuhvfs@c2c2310 {
+			compatible = "mediatek,cpufreq-hybrid";
+			reg = <0 0x0c2c2310 0 0xc00>,
+			      <0 0x0c2c0f10 0 0x1400>,
+			      <0 0x0c2c4850 0 0x800>,
+			      <0 0x0c2c2e50 0 0xc0>;
+			reg-names = "USRAM", "CSRAM", "ESRAM", "FREQ_HW_STATE";
+
+			/* pll mcucfg */
+			mcucfg-ver = <0>;
+			apmixedsys = <&cpu_pll>;
+			clk-div-base = <&cpu_mcucfg>;
+
+			/* csram sysram base */
+			csram-sys-base = <&csram_sys>;
 		};
 
 		gic: interrupt-controller@c400000 {
