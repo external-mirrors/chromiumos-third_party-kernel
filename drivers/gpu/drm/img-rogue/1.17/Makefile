@@ -9,5 +9,7 @@ ccflags-y += \
  -I$(img_basedir)/km \
  -D__linux__
 
+ccflags-$(CONFIG_DRM_POWERVR_ROGUE_1_17) += -Wno-cast-function-type-strict
+
 include $(img_basedir)/pvrsrvkm.mk
 include $(img_basedir)/mt8173/Makefile
