@@ -695,7 +695,7 @@ static ssize_t output_type_show(struct device *child,
                             struct device_attribute *attr,
                             char *buf)
 {
-       const struct pwm_device *pwm = pwm_from_device(child);
+       const struct pwm_device *pwm = pwm_from_dev(child);
        const char *output_type = "unknown";
        struct pwm_state state;
 
