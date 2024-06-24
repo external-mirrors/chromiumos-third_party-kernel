@@ -43,6 +43,9 @@
 		blender17 = &disp_ovl1_blender7;
 		blender18 = &disp_ovl1_blender8;
 		blender19 = &disp_ovl1_blender9;
+		ccorr0 = &disp_ccorr0;
+		ccorr1 = &disp_ccorr1;
+		dither0 = &disp_dither0;
 		dp-intf0 = &dp_intf0;
 		dvo0 = &disp_dvo0;
 		exdma2 = &disp_ovl0_exdma2;
@@ -61,6 +64,7 @@
 		exdma17 = &disp_ovl1_exdma7;
 		exdma18 = &disp_ovl1_exdma8;
 		exdma19 = &disp_ovl1_exdma9;
+		gamma0 = &disp_gamma0;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
 		i2c2 = &i2c2;
@@ -105,6 +109,7 @@
 		spi5 = &spi5;
 		spi6 = &spi6;
 		spi7 = &spi7;
+		tdshp0 = &disp_tdshp0;
 		vdisp-ao = &disp_vdisp_ao_config_clk;
 	};
 
@@ -2228,6 +2233,39 @@
 			clocks = <&dispsys_config_clk CLK_MM_DISP_MUTEX0_DISP>;
 			mediatek,gce-events = <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT0>,
 					      <CMDQ_EVENT_DISP1_STREAM_DONE_ENG_EVENT1>;
+		};
+
+		disp_ccorr0: disp-ccorr@32090000 {
+			compatible = "mediatek,mt8196-disp-ccorr";
+			reg = <0 0x32090000 0 0x1000>;
+			clocks = <&dispsys_config_clk CLK_MM_DISP_CCORR0_PQ>;
+		};
+
+		disp_ccorr1: disp-ccorr@320a0000 {
+			compatible = "mediatek,mt8196-disp-ccorr";
+			reg = <0 0x320a0000 0 0x1000>;
+			clocks = <&dispsys_config_clk CLK_MM_DISP_CCORR1_PQ>;
+		};
+
+		disp_dither0: disp-dither@32110000 {
+			compatible = "mediatek,mt8196-disp-dither",
+				     "mediatek,mt8183-disp-dither";
+			reg = <0 0x32110000 0 0x1000>;
+			interrupts = <GIC_SPI 471 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&dispsys_config_clk CLK_MM_DISP_DITHER0_PQ>;
+		};
+
+		disp_gamma0: disp-gamma@32130000 {
+			compatible = "mediatek,mt8196-disp-gamma",
+				     "mediatek,mt8195-disp-gamma";
+			reg = <0 0x32130000 0 0x1000>;
+			clocks = <&dispsys_config_clk CLK_MM_DISP_GAMMA0_PQ>;
+		};
+
+		disp_tdshp0: disp-tdshp@321e0000 {
+			compatible = "mediatek,mt8196-disp-tdshp";
+			reg = <0 0x321e0000 0 0x1000>;
+			clocks = <&dispsys_config_clk CLK_MM_DISP_TDSHP0_PQ>;
 		};
 
 		disp_postmask0: postmask@32180000 {
