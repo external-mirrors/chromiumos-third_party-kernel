@@ -88,9 +88,7 @@ static bool vkms_get_vblank_timestamp(struct drm_crtc *crtc,
 				      int *max_error, ktime_t *vblank_time,
 				      bool in_vblank_irq)
 {
-	struct drm_device *dev = crtc->dev;
 	struct vkms_crtc *vkms_crtc = drm_crtc_to_vkms_crtc(crtc);
-	struct vkms_device *vkmsdev = drm_device_to_vkms_device(dev);
 	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
 
 	if (!READ_ONCE(vblank->enabled)) {
