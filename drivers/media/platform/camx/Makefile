@@ -1,6 +1,6 @@
 subdir-ccflags-y := \
-	-I$(srctree)/$(src)/include \
-	-I$(srctree)/$(src)/include/uapi
+	-I$(src)/include \
+	-I$(src)/include/uapi
 
 obj-$(CONFIG_SPECTRA_CAMERA) += \
 	cam_core/ \
