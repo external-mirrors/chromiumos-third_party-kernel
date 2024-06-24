@@ -19,6 +19,7 @@
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/of.h>
+#include <linux/vmalloc.h>
 #include <cam_sensor_cmn_header.h>
 #include <cam_req_mgr_util.h>
 #include <cam_req_mgr_interface.h>
