@@ -301,11 +301,11 @@ int mtk_gem_map_offset_ioctl(struct drm_device *drm, void *data,
 int mtk_gem_create_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
 {
-	struct mtk_drm_gem_obj *mtk_gem;
+	struct mtk_gem_obj *mtk_gem;
 	struct drm_mtk_gem_create *args = data;
 	int ret;
 
-	mtk_gem = mtk_drm_gem_create(dev, args->size, false);
+	mtk_gem = mtk_gem_create(dev, args->size, false);
 	if (IS_ERR(mtk_gem))
 		return PTR_ERR(mtk_gem);
 
@@ -323,6 +323,6 @@ int mtk_gem_create_ioctl(struct drm_device *dev, void *data,
 	return 0;
 
 err_handle_create:
-	mtk_drm_gem_free_object(&mtk_gem->base);
+	mtk_gem_free_object(&mtk_gem->base);
 	return ret;
 }
