@@ -12,6 +12,7 @@
 #include <linux/dma-buf.h>
 #include <linux/iosys-map.h>
 #include <media/cam_req_mgr.h>
+#include <linux/vmalloc.h>
 
 #include "cam_req_mgr_dev.h"
 #include "cam_debug_util.h"
