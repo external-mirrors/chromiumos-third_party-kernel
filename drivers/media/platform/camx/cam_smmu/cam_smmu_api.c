@@ -24,6 +24,7 @@
 #include <linux/genalloc.h>
 #include <linux/platform_device.h>
 #include <linux/scatterlist.h>
+#include <linux/vmalloc.h>
 #include <uapi/media/cam_req_mgr.h>
 #include <linux/debugfs.h>
 #include "cam_smmu_api.h"
