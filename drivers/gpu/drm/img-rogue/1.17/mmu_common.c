@@ -2810,7 +2810,6 @@ MMU_MapPages(MMU_CONTEXT *psMMUContext,
 	IMG_UINT32 uiPTEIndex = 0;
 	IMG_UINT32 uiPageSize = (1 << uiLog2HeapPageSize);
 	IMG_UINT32 uiLoop = 0;
-	IMG_UINT32 ui32MappedCount = 0;
 	IMG_DEVMEM_OFFSET_T uiPgOffset = 0;
 	IMG_UINT32 uiFlushEnd = 0, uiFlushStart = 0;
 
@@ -3106,7 +3105,6 @@ MMU_MapPages(MMU_CONTEXT *psMMUContext,
 						sDevVAddr.uiAddr,
 						uiPgOffset * uiPageSize));
 
-				ui32MappedCount++;
 			}
 		}
 
@@ -3138,10 +3136,6 @@ MMU_MapPages(MMU_CONTEXT *psMMUContext,
 	                                 psMMUContext,
 	                                 MMU_LEVEL_1,
 	                                 IMG_FALSE);
-
-#if defined(PDUMP)
-	PDUMPCOMMENT(psDevNode, "Wired up %d Page Table entries (out of %d)", ui32MappedCount, ui32MapPageCount);
-#endif /*PDUMP*/
 
 	return PVRSRV_OK;
 
