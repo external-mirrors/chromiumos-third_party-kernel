@@ -1222,8 +1222,6 @@ patternProperties:
     description: Theobroma Systems Design und Consulting GmbH
   "^tyan,.*":
     description: Tyan Computer Corporation
-  "^tyhx,.*":
-    description: NanjingTianyihexin Electronics Ltd.
   "^u-blox,.*":
     description: u-blox
   "^u-boot,.*":
