@@ -866,9 +866,6 @@ err_unsupported:
 static void _GpuTraceProcessPackets(PVRSRV_RGXDEV_INFO *psDevInfo,
 		void *pBuffer, IMG_UINT32 ui32ReadLen)
 {
-	IMG_UINT32			ui32TlPackets = 0;
-	IMG_UINT32			ui32HWPerfPackets = 0;
-	IMG_UINT32			ui32HWPerfPacketsSent = 0;
 	void				*pBufferEnd;
 	PVRSRVTL_PPACKETHDR psHDRptr;
 	PVRSRVTL_PACKETTYPE ui16TlType;
@@ -905,9 +902,7 @@ static void _GpuTraceProcessPackets(PVRSRV_RGXDEV_INFO *psDevInfo,
 				{
 					if (ValidAndEmitFTraceEvent(psDevInfo, psHWPerfPkt))
 					{
-						ui32HWPerfPacketsSent++;
 					}
-					ui32HWPerfPackets++;
 					psHWPerfPkt = RGX_HWPERF_GET_NEXT_PACKET(psHWPerfPkt);
 				}
 				while (psHWPerfPkt < psHWPerfEnd);
@@ -924,12 +919,7 @@ static void _GpuTraceProcessPackets(PVRSRV_RGXDEV_INFO *psDevInfo,
 		}
 
 		psHDRptr = GET_NEXT_PACKET_ADDR(psHDRptr);
-		ui32TlPackets++;
 	}
-
-	PVR_DPF((PVR_DBG_VERBOSE, "_GpuTraceProcessPackets: TL "
-			"Packets processed %03d, HWPerf packets %03d, sent %03d",
-			ui32TlPackets, ui32HWPerfPackets, ui32HWPerfPacketsSent));
 
 	PVR_DPF_RETURN;
 }

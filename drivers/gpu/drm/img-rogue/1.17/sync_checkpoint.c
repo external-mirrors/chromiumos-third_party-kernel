@@ -2876,7 +2876,7 @@ static IMG_UINT32 _CleanCheckpointPool(_SYNC_CHECKPOINT_CONTEXT *psContext)
 	DECLARE_DLLIST(sCleanupList);
 	DLLIST_NODE *psThis, *psNext;
 	OS_SPINLOCK_FLAGS uiFlags;
-	IMG_UINT32 ui32ItemsFreed = 0, ui32NullScpCount = 0, __maybe_unused ui32PoolCount;
+	IMG_UINT32 ui32ItemsFreed = 0, __maybe_unused ui32PoolCount;
 	IMG_BOOL bPoolValid;
 
 	/* Acquire sync checkpoint pool lock */
@@ -2904,10 +2904,6 @@ static IMG_UINT32 _CleanCheckpointPool(_SYNC_CHECKPOINT_CONTEXT *psContext)
 			 * from the list so it's safe to use sListNode here */
 			dllist_add_to_head(&sCleanupList, &psCheckpoint->sListNode);
 		}
-		else
-		{
-			ui32NullScpCount++;
-		}
 	}
 
 	/* Release sync checkpoint pool lock */
@@ -2919,12 +2915,6 @@ static IMG_UINT32 _CleanCheckpointPool(_SYNC_CHECKPOINT_CONTEXT *psContext)
 	PVR_DPF((PVR_DBG_WARNING, "%s psContext=<%p>, bSyncCheckpointPoolValid=%d, "
 	        "uiSyncCheckpointPoolCount=%d", __func__, (void *) psContext,
 	        bPoolValid, ui32PoolCount));
-
-	if (ui32NullScpCount > 0)
-	{
-		PVR_DPF((PVR_DBG_WARNING, "%s pool contained %u NULL entries", __func__,
-		        ui32NullScpCount));
-	}
 #endif
 
 	dllist_foreach_node(&sCleanupList, psThis, psNext)
