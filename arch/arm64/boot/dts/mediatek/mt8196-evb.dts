@@ -55,9 +55,31 @@
 &dp_intf0 {
 	status = "okay";
 
-	port {
-		dp_intf0_out: endpoint {
-			remote-endpoint = <&dptx_in>;
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			disp1_dp_intf0_out: endpoint {
+				remote-endpoint = <&dptx_in0>;
+			};
+		};
+	};
+};
+
+&dp_intf1 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			disp1_dp_intf1_out: endpoint {
+				remote-endpoint = <&dptx_in1>;
+			};
 		};
 	};
 };
@@ -75,13 +97,21 @@
 		port@0 {
 			reg = <0>;
 
-			dptx_in: endpoint {
-				remote-endpoint = <&dp_intf0_out>;
+			dptx_in0: endpoint {
+				remote-endpoint = <&disp1_dp_intf0_out>;
 			};
 		};
 
 		port@1 {
 			reg = <1>;
+
+			dptx_in1: endpoint {
+				remote-endpoint = <&disp1_dp_intf1_out>;
+			};
+		};
+
+		port@2 {
+			reg = <2>;
 
 			dptx_out: endpoint {
 				data-lanes = <0 1 2 3>;
@@ -274,7 +304,7 @@
 &pio {
 	dptx_pin: dptx-default-pins {
 		pins-hpd {
-			pinmux = <PINMUX_GPIO118__FUNC_DP_TX_HPD>;
+			pinmux = <PINMUX_GPIO32__FUNC_DP_TX_HPD>;
 		};
 	};
 
