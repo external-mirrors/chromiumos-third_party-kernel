@@ -47,6 +47,7 @@
 		ccorr1 = &disp_ccorr1;
 		dither0 = &disp_dither0;
 		dp-intf0 = &dp_intf0;
+		dp-intf1 = &dp_intf1;
 		dvo0 = &disp_dvo0;
 		exdma2 = &disp_ovl0_exdma2;
 		exdma3 = &disp_ovl0_exdma3;
@@ -2342,6 +2343,33 @@
 			num = <0>;
 			phys = <&dp_tx>;
 			phy-names = "dp_tx";
+		};
+
+		dp_intf1: dp-intf@32440000 {
+			compatible = "mediatek,mt8196-dp-intf";
+			reg = <0 0x32440000 0 0x1000>;
+			interrupts = <GIC_SPI 464 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&dispsys1_config_clk CLK_MM1_DISP_DP_INTF1>,
+				 <&dispsys1_config_clk CLK_MM1_MOD5>,
+				 <&cksys_gp2_clk CLK_CK2_DP1_SEL>,
+				 <&cksys_gp2_clk CLK_CK2_TVDPLL2_D4>,
+				 <&cksys_gp2_clk CLK_CK2_TVDPLL2_D8>,
+				 <&cksys_gp2_clk CLK_CK2_TVDPLL2_D16>,
+				 <&apmixedsys_gp2_clk CLK_APMIXED2_TVDPLL2>,
+				 <&cksys_clk CLK_CK_TCK_26M_MX9>;
+			clock-names = "hf_fmm_ck",
+				      "hf_fdp_ck",
+				      "mux_dp",
+				      "tvdpll_d4",
+				      "tvdpll_d8",
+				      "tvdpll_d16",
+				      "dpi_ck",
+				      "dpi_26m";
+			num = <1>;
+			no-next-bridge;
+			phys = <&dp_tx>;
+			phy-names = "dp_tx";
+			status = "disabled";
 		};
 
 		disp_dvo0: disp-dvo0@324c0000 {
