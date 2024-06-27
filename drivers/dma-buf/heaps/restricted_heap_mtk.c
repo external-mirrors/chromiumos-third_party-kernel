@@ -9,8 +9,10 @@
 #include <linux/cma.h>
 #include <linux/dma-buf.h>
 #include <linux/err.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/tee_drv.h>
 #include <linux/uuid.h>
@@ -20,6 +22,7 @@
 #define TZ_TA_MEM_UUID_MTK		"4477588a-8476-11e2-ad15-e41f1390d676"
 
 #define TEE_PARAM_NUM			4
+#define TEE_RESULT_OOM			0xFFFF000C
 
 enum mtk_secure_mem_type {
 	/*
@@ -29,8 +32,9 @@ enum mtk_secure_mem_type {
 	MTK_SECURE_MEMORY_TYPE_CM_TZ	= 1,
 	/*
 	 * MediaTek dynamic chunk memory carved out from CMA.
-	 * In normal case, the CMA could be used in kernel; When SVP start, we will
-	 * allocate whole this CMA and pass whole the CMA PA and size into TEE to
+	 * In normal case, the CMA could be used in kernel. When SVP start,
+	 * The CMA reserved memory will be divided into several blocks in TEE.
+	 * We will allocate a block and pass the block PA and size into TEE to
 	 * protect it, then the detail memory management also is inside the TEE.
 	 */
 	MTK_SECURE_MEMORY_TYPE_CM_CMA	= 2,
@@ -72,20 +76,37 @@ enum mtk_secure_buffer_tee_cmd {
 	 *
 	 * [in]  value[0].a: The secure handle of this buffer, It's value[3].a of
 	 *                   MTK_TZCMD_SECMEM_ZALLOC.
-	 * [out] value[1].a: The array of sg items (struct mtk_tee_scatterlist).
+	 * [inout] [in]  value[1].mem.buffer: sg_shm.
+	 *               value[1].mem.size: size of sg_shm.
+	 *         [out] value[1].mem.buffer: the array of sg items (struct mtk_tee_scatterlist).
+	 *               value[1].mem.size: size of sg items.
 	 */
 	MTK_TZCMD_SECMEM_RETRIEVE_SG	= 0x10002,
+
+	/*
+	 * Get secure region number.
+	 *
+	 * [in]   value[0].a: The CMA reserved memory start address.
+	 *        value[0].b: The total size of CMA reserved memory.
+	 * [out]  value[0].a: The total region number of secure CMA.
+	 */
+	MTK_TZCMD_SECMEM_GET_REGION_NUM	= 0x10003,
 };
 
 struct mtk_restricted_heap_data {
-	struct tee_context	*tee_ctx;
-	u32			tee_session;
+	struct tee_context		*tee_ctx;
+	u32				tee_session;
 
-	const enum mtk_secure_mem_type mem_type;
+	const enum mtk_secure_mem_type	mem_type;
 
-	struct page		*cma_page;
-	unsigned long		cma_used_size;
-	struct mutex		lock; /* lock for cma_used_size */
+	u32				cma_page_index; /* index of cma_pages array */
+	u32				cma_used_size;
+	u32				cma_hold_size; /* size of blocks held by dma heap */
+	u32				cma_hold_block_mask; /* bit mask of blocks held by dma heap */
+	u32				cma_block_size; /* size per block */
+	u32				cma_block_count; /* number of blocks */
+	struct mutex			lock; /* lock for cma_used_size */
+	bool				oom_retry; /* true if TEE return OOM */
 };
 
 static int mtk_tee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
@@ -141,9 +162,101 @@ static int mtk_tee_service_call(struct tee_context *tee_ctx, u32 session,
 
 	ret = tee_client_invoke_func(tee_ctx, &arg, params);
 	if (ret < 0 || arg.ret) {
-		pr_err("%s: cmd 0x%x ret %d:%x.\n", __func__, command, ret, arg.ret);
-		ret = -EOPNOTSUPP;
+		pr_err("%s: cmd 0x%x ret %d:%x\n", __func__, command, ret, arg.ret);
+		if (arg.ret == TEE_RESULT_OOM)
+			ret = -ENOMEM;
+		else
+			ret = -EOPNOTSUPP;
 	}
+	return ret;
+}
+
+static int mtk_tee_get_cma_region_num(struct restricted_heap *heap)
+{
+	struct mtk_restricted_heap_data *data = heap->priv_data;
+	struct tee_param params[TEE_PARAM_NUM] = {0};
+	int ret = 0;
+
+	/*
+	 * Send the start address and total size of CMA reserved memory
+	 * to TEE at the first time. And get secure region number from TEE.
+	 */
+	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INOUT;
+	params[0].u.value.a = heap->cma_paddr;
+	params[0].u.value.b = heap->cma_size;
+	ret = mtk_tee_service_call(data->tee_ctx, data->tee_session,
+				   MTK_TZCMD_SECMEM_GET_REGION_NUM, params);
+	if (ret)
+		return ret;
+	data->cma_block_count = params[0].u.value.a;
+	if (data->cma_block_count == 0)
+		return -EINVAL;
+	data->cma_block_size = roundup(heap->cma_size / data->cma_block_count, SZ_4M);
+	data->cma_page_index = 0;
+
+	return ret;
+}
+
+static int mtk_restricted_memory_cma_allocate(struct restricted_heap *heap,
+					      struct restricted_buffer *buf)
+{
+	struct mtk_restricted_heap_data *data = heap->priv_data;
+	unsigned long block_start, block_size, cm_mem_end;
+	int ret = 0, i;
+
+	if (!data->cma_block_count) {
+		ret = mtk_tee_get_cma_region_num(heap);
+		if (ret) {
+			pr_err("%s: failed to get cma region num %d\n",
+			       __func__, ret);
+			return ret;
+		}
+	}
+
+	/*
+	 * The reserved memory will be divided into several blocks in TEE.
+	 * Allocate a block from CMA when allocating buffer return OOM in TEE.
+	 * The variable "cma_hold_size" and "cma_used_size" will be
+	 * increased. Actually the memory allocating is within the TEE.
+	 */
+	cm_mem_end = heap->cma_paddr + heap->cma_size;
+	mutex_lock(&data->lock);
+	if ((buf->size + data->cma_used_size) > heap->cma_size) {
+		pr_err("%s: failed used 0x%x total_size 0x%lx needed 0x%lx\n",
+			__func__, data->cma_used_size, heap->cma_size, buf->size);
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
+	if (((buf->size + data->cma_used_size) > data->cma_hold_size) || data->oom_retry) {
+		for (i = 0; i < data->cma_block_count; ++i) {
+			if (data->cma_hold_block_mask & BIT(i))
+				continue;
+
+			block_start = heap->cma_paddr + data->cma_block_size * i;
+			block_size = min(data->cma_block_size, cm_mem_end - block_start);
+			ret = alloc_contig_range(PFN_DOWN(block_start),
+						 PFN_DOWN(block_start + block_size),
+						 MIGRATE_CMA, GFP_KERNEL);
+			if (ret) {
+				pr_err("%s: failed to alloc block %d mask 0x%x, ret %d\n",
+					__func__, i, data->cma_hold_block_mask, ret);
+				continue;
+			}
+			data->cma_hold_block_mask |= BIT(i);
+			data->cma_hold_size += block_size;
+			data->cma_page_index = i;
+			break;
+		}
+	}
+	if (data->oom_retry) {
+		data->oom_retry = false;
+		goto out_unlock;
+	}
+	data->cma_used_size += buf->size;
+
+out_unlock:
+	/* TODO: Free the previous successful case. */
+	mutex_unlock(&data->lock);
 	return ret;
 }
 
@@ -169,6 +282,7 @@ static int mtk_tee_secmem_free(struct restricted_heap *rheap, u64 restricted_add
 static int mtk_tee_restrict_memory(struct restricted_heap *rheap, struct restricted_buffer *buf)
 {
 	struct mtk_restricted_heap_data *data = rheap->priv_data;
+	unsigned long block_start, block_size, cm_mem_end;
 	struct tee_param params[TEE_PARAM_NUM] = {0};
 	struct mtk_tee_scatterlist *tee_sg_item;
 	struct mtk_tee_scatterlist *tee_sg_buf;
@@ -176,8 +290,8 @@ static int mtk_tee_restrict_memory(struct restricted_heap *rheap, struct restric
 	struct tee_shm *sg_shm;
 	struct scatterlist *sg;
 	phys_addr_t pa_tee;
+	int ret = 0, index;
 	u64 r_addr;
-	int ret;
 
 	/* Alloc the secure buffer and get the sg-list number from TEE */
 	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
@@ -186,18 +300,47 @@ static int mtk_tee_restrict_memory(struct restricted_heap *rheap, struct restric
 	params[1].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
 	params[1].u.value.a = data->mem_type;
 	params[2].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INOUT;
-	if (rheap->cma && data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA) {
-		params[2].u.value.a = rheap->cma_paddr;
-		params[2].u.value.b = rheap->cma_size;
-	}
-	params[3].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
-	ret = mtk_tee_service_call(data->tee_ctx, data->tee_session,
-				   MTK_TZCMD_SECMEM_ZALLOC, params);
-	if (ret)
-		return -ENOMEM;
 
-	sg_num = params[2].u.value.a;
+	do {
+		if (rheap->cma && data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA) {
+			mutex_lock(&data->lock);
+			index = data->cma_page_index;
+			mutex_unlock(&data->lock);
+			cm_mem_end = rheap->cma_paddr + rheap->cma_size;
+			block_start = rheap->cma_paddr + index * data->cma_block_size;
+			block_size = min(data->cma_block_size, cm_mem_end - block_start);
+			params[2].u.value.a = block_start;
+			params[2].u.value.b = block_size;
+		}
+		params[3].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
+		ret = mtk_tee_service_call(data->tee_ctx, data->tee_session,
+					   MTK_TZCMD_SECMEM_ZALLOC, params);
+		if (!ret)
+			break;
+		else if (ret != -ENOMEM) {
+			/* TODO: Free the previous block in fail case. */
+			pr_err("%s failed to alloc buffer in TEE %d\n", __func__, ret);
+			return ret;
+		}
+
+		/* Try again when return OOM in TEE */
+		if (!rheap->cma || data->mem_type != MTK_SECURE_MEMORY_TYPE_CM_CMA)
+			return ret;
+
+		/*
+		 * TEE may require more memory to save meta data which just is a structure for secure video,
+		 * thus try to alloc a new block here. If this is successful, the mtk_tee_service_call
+		 * in next loop always will be successful.
+		 */
+		mutex_lock(&data->lock);
+		data->oom_retry = true;
+		mutex_unlock(&data->lock);
+		ret = mtk_restricted_memory_cma_allocate(rheap, buf);
+		if (ret) /* In OOM case, try allocate new block again, If fails, return directly. */
+			return ret;
+	} while (!ret);
 	r_addr = params[3].u.value.a;
+	sg_num = params[2].u.value.a;
 
 	/* If there is only one entry, It means the buffer is continuous, Get the PA directly. */
 	if (sg_num == 1) {
@@ -282,45 +425,33 @@ mtk_restricted_memory_free(struct restricted_heap *rheap, struct restricted_buff
 {
 }
 
-static int mtk_restricted_memory_cma_allocate(struct restricted_heap *rheap,
-					      struct restricted_buffer *buf)
-{
-	struct mtk_restricted_heap_data *data = rheap->priv_data;
-	int ret = 0;
-	/*
-	 * Allocate CMA only when allocating buffer for the first time, and just
-	 * increase cma_used_size at the other time, Actually the memory
-	 * allocating is within the TEE.
-	 */
-	mutex_lock(&data->lock);
-	if (!data->cma_used_size) {
-		data->cma_page = cma_alloc(rheap->cma, rheap->cma_size >> PAGE_SHIFT,
-					   get_order(PAGE_SIZE), false);
-		if (!data->cma_page) {
-			ret = -ENOMEM;
-			goto out_unlock;
-		}
-	} else if (data->cma_used_size + buf->size > rheap->cma_size) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
-	data->cma_used_size += buf->size;
-
-out_unlock:
-	mutex_unlock(&data->lock);
-	return ret;
-}
-
 static void mtk_restricted_memory_cma_free(struct restricted_heap *rheap,
 					   struct restricted_buffer *buf)
 {
 	struct mtk_restricted_heap_data *data = rheap->priv_data;
+	unsigned long block_start, block_size, cm_mem_end;
+	int i;
 
+	cm_mem_end = rheap->cma_paddr + rheap->cma_size;
 	mutex_lock(&data->lock);
 	data->cma_used_size -= buf->size;
-	if (!data->cma_used_size)
-		cma_release(rheap->cma, data->cma_page,
-			    rheap->cma_size >> PAGE_SHIFT);
+
+	if (!data->cma_used_size) {
+		for (i = 0; i < data->cma_block_count; ++i) {
+			if (!(data->cma_hold_block_mask & BIT(i)))
+				continue;
+
+			block_start = rheap->cma_paddr + data->cma_block_size * i;
+			block_size = min(data->cma_block_size, cm_mem_end - block_start);
+			free_contig_range(PFN_DOWN(block_start), block_size >> PAGE_SHIFT);
+		}
+		data->cma_page_index = 0;
+		data->cma_hold_size = 0;
+		data->cma_block_count = 0;
+		data->cma_hold_block_mask = 0;
+		data->oom_retry = false;
+	}
+
 	mutex_unlock(&data->lock);
 }
 
