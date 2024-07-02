@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (c) 2023 MediaTek Inc.
+ */
+#include <dt-bindings/iio/mt635x-auxadc.h>
+#include <dt-bindings/spmi/spmi.h>
+
+&spmi {
+	/* TODO: add mt6363_dynamic_loading_throttling after bring up*/
+	mt6316_6: mt6316@6 {
+		compatible = "mediatek,mt6316";
+		reg = <0x6 SPMI_USID>;
+
+		mt6316_6_regulator: mt6316-6-regulator {
+			compatible = "mediatek,mt6316-6-regulator";
+			buck-size = <3>;
+
+			mt6316_6_vbuck1: vbuck1 {
+				regulator-name = "6_vbuck1";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+
+			mt6316_6_vbuck3: vbuck3 {
+				regulator-name = "6_vbuck3";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+		};
+	};
+
+	mt6316_7: mt6316@7 {
+		compatible = "mediatek,mt6316";
+		reg = <0x7 SPMI_USID>;
+
+		mt6316_7_regulator: mt6316-7-regulator {
+			compatible = "mediatek,mt6316-7-regulator";
+			buck-size = <1>;
+
+			mt6316_7_vbuck1: vbuck1 {
+				regulator-name = "7_vbuck1";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+		};
+	};
+
+	mt6316_8: mt6316@8 {
+		compatible = "mediatek,mt6316";
+		reg = <0x8 SPMI_USID>;
+
+		mt6316_8_regulator: mt6316-8-regulator {
+			compatible = "mediatek,mt6316-8-regulator";
+			buck-size = <3>;
+
+			mt6316_8_vbuck1: vbuck1 {
+				regulator-name = "8_vbuck1";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+
+			mt6316_8_vbuck3: vbuck3 {
+				regulator-name = "8_vbuck3";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+		};
+	};
+
+	mt6316_15: mt6316@15 {
+		compatible = "mediatek,mt6316";
+		reg = <0xf SPMI_USID>;
+
+		mt6316_15_regulator: mt6316-15-regulator {
+			compatible = "mediatek,mt6316-15-regulator";
+			buck-size = <3>;
+
+			mt6316_15_vbuck1: vbuck1 {
+				regulator-name = "15_vbuck1";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6316_15_vbuck3: vbuck3 {
+				regulator-name = "15_vbuck3";
+				regulator-enable-ramp-delay = <256>;
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+		};
+	};
+};

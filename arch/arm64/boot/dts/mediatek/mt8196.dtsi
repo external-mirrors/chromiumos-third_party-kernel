@@ -14,6 +14,7 @@
 #include <dt-bindings/pinctrl/mt8196-pinfunc.h>
 #include <dt-bindings/power/mt8196-power.h>
 #include <dt-bindings/reset/ti-syscon.h>
+#include <dt-bindings/spmi/spmi.h>
 
 / {
 	compatible = "mediatek,mt8196";
@@ -1674,6 +1675,28 @@
 			reg = <0 0x1c016000 0 0x1000>;
 			hw-voter-regmap = <&hwv>;
 			#clock-cells = <1>;
+		};
+
+		spmi: spmi@1c01a000 {
+			compatible = "mediatek,mt8196-spmi";
+			reg = <0 0x1c01a000 0 0x0008ff>,
+			      <0 0x1c01c000 0 0x000100>,
+			      <0 0x1c018000 0 0x0008ff>,
+			      <0 0x1c01c800 0 0x000100>;
+			reg-names = "pmif", "spmimst","pmif-p","spmimst-p";
+			interrupts-extended = <&pio 291 IRQ_TYPE_LEVEL_HIGH>,
+					      <&pio 292 IRQ_TYPE_LEVEL_HIGH>,
+					      <&gic GIC_SPI 412 IRQ_TYPE_LEVEL_HIGH 0>,
+					      <&gic GIC_SPI 691 IRQ_TYPE_LEVEL_HIGH 0>,
+					      <&gic GIC_SPI 413 IRQ_TYPE_LEVEL_HIGH 0>,
+					      <&gic GIC_SPI 692 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "rcs_irq","rcs_irq_p","pmif_irq","spmi_nack_irq","pmif_p_irq","spmi_p_nack_irq";
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			irq-event-en = <0x0 0x0 0x0 0x0 0x0>;
+			spmi-dev-mask = <0x85c0>;
+			#address-cells = <2>;
+			#size-cells = <0>;
 		};
 
 		devapc_vlp: devapc@1c032000 {
