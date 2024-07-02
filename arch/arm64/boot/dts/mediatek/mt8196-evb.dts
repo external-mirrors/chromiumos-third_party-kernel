@@ -5,6 +5,10 @@
  */
 /dts-v1/;
 #include "mt8196.dtsi"
+#include "mt6316.dtsi"
+#include "mt6363.dtsi"
+#include "mt6373.dtsi"
+#include "mt6685.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 
 / {
@@ -25,6 +29,153 @@
 		enable-active-high;
 	};
 };
+
+&main_pmic {
+	pmic-lvsys-notify {
+		compatible = "mediatek,mt6363-lvsys-notify";
+	};
+};
+
+&mt6363_vbuck1 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck2 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck4 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck5 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck6 {
+	regulator-always-on;
+};
+
+&mt6363_vsram_digrf {
+	regulator-always-on;
+};
+
+&mt6363_vsram_modem {
+	regulator-always-on;
+};
+
+&mt6363_vsram_cpub {
+	regulator-always-on;
+};
+
+&mt6363_vsram_cpul {
+	regulator-always-on;
+};
+
+&mt6363_vsram_apu {
+	regulator-always-on;
+};
+
+&mt6363_vsram_mdfe {
+	regulator-always-on;
+};
+
+&mt6363_vcn15 {
+	regulator-always-on;
+};
+
+&mt6363_vemc {
+	regulator-always-on;
+};
+
+&mt6363_vufs12 {
+	regulator-always-on;
+};
+
+&mt6363_vufs18 {
+	regulator-always-on;
+};
+
+&mt6363_vm18 {
+	regulator-always-on;
+};
+
+&mt6363_vrf12 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck2 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck4 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck5 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck6 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck7 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck0 {
+	/delete-property/ regulator-always-on;
+};
+
+&mt6373_vbuck8 {
+	/delete-property/ regulator-always-on;
+};
+
+&mt6373_vbuck4_ufs {
+	status = "disabled";
+};
+
+&mt6373_vmc {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <3100000>;
+	status = "okay";
+};
+
+&mt6373_vmch_eint_high {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <3100000>;
+	status = "okay";
+};
+
+&mt6373_vrfio18_aif {
+	regulator-always-on;
+};
+
+&mt6685_rtc {
+	status = "okay";
+};
+
+&mt6363_vbuck1_sshub {
+	status = "disabled";
+};
+
+&mt6363_vbuck2_sshub {
+	status = "disabled";
+};
+
+&mt6363_vbuck4_sshub {
+	status = "disabled";
+};
+
+&mt6373_vmch_eint_low {
+	status = "disabled";
+};
+
+&mt6373_vmch {
+	status = "disabled";
+};
+
 
 &nor_flash {
 	pinctrl-names = "default";

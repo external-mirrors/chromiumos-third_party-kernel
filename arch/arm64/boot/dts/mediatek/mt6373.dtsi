@@ -1,0 +1,279 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (c) 2023 MediaTek Inc.
+ */
+#include <dt-bindings/iio/mt635x-auxadc.h>
+#include <dt-bindings/spmi/spmi.h>
+
+&spmi {
+	second_pmic@5 {
+		compatible = "mediatek,mt6373";
+		reg = <0x5 SPMI_USID>;
+		interrupts = <5>;
+		#address-cells = <0>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		mt6373_adc: mt6373-auxadc {
+			compatible = "mediatek,mt6373-auxadc";
+			#io-channel-cells = <1>;
+
+			chip-temp {
+				channel = <AUXADC_CHIP_TEMP>;
+			};
+
+			vcore-temp {
+				channel = <AUXADC_VCORE_TEMP>;
+			};
+
+			vproc-temp {
+				channel = <AUXADC_VPROC_TEMP>;
+			};
+
+			vgpu-temp {
+				channel = <AUXADC_VGPU_TEMP>;
+			};
+
+			vin1-open {
+				channel = <AUXADC_VIN1>;
+				pures = <ADC_PURES_OPEN>;
+			};
+
+			vin1-30k {
+				channel = <AUXADC_VIN1>;
+				pures = <ADC_PURES_30K>;
+			};
+
+			vin2-open {
+				channel = <AUXADC_VIN2>;
+				pures = <ADC_PURES_OPEN>;
+			};
+
+			vin3-open {
+				channel = <AUXADC_VIN3>;
+				pures = <ADC_PURES_OPEN>;
+			};
+
+			vin4-open {
+				channel = <AUXADC_VIN4>;
+				pures = <ADC_PURES_OPEN>;
+			};
+
+			vin5-open {
+				channel = <AUXADC_VIN5>;
+				pures = <ADC_PURES_OPEN>;
+			};
+		};
+
+		mt6373_efuse: mt6373-efuse {
+			compatible = "mediatek,mt6373-efuse";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			mt6373_thermal_efuse: mt6373_e_data {
+				reg = <0x5e 10>;
+			};
+		};
+
+		mt6373_consys: mt6373-consys {
+			compatible = "mediatek,mt6373-consys";
+		};
+
+		mt6373_pio: mt6373-pinctrl {
+			compatible = "mediatek,mt6373-pinctrl";
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&mt6373_pio 0 0 14>;
+		};
+
+		mt6373regulator: regulators {
+			compatible = "mediatek,mt6373-regulator";
+
+			mt6373_vbuck0: vbuck0 {
+				regulator-name = "mt6373_vbuck0";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+
+			mt6373_vbuck1: vbuck1 {
+				regulator-name = "mt6373_vbuck1";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck2: vbuck2 {
+				regulator-name = "mt6373_vbuck2";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck3: vbuck3 {
+				regulator-name = "mt6373_vbuck3";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck4: vbuck4 {
+				regulator-name = "mt6373_vbuck4";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck4_ufs: vbuck4-ufs {
+				regulator-name = "mt6373_vbuck4_ufs";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck5: vbuck5 {
+				regulator-name = "mt6373_vbuck5";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck6: vbuck6 {
+				regulator-name = "mt6373_vbuck6";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck7: vbuck7 {
+				regulator-name = "mt6373_vbuck7";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck8: vbuck8 {
+				regulator-name = "mt6373_vbuck8";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vbuck9: vbuck9 {
+				regulator-name = "mt6373_vbuck9";
+				regulator-allowed-modes = <0 1 2>;
+			};
+
+			mt6373_vusb: vusb {
+				regulator-name = "mt6373_vusb";
+				regulator-allowed-modes = <0 2>;
+				regulator-always-on;
+			};
+
+			mt6373_vaux18: vaux18 {
+				regulator-name = "mt6373_vaux18";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vrf13_aif: vrf13-aif {
+				regulator-name = "mt6373_vrf13_aif";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vrf18_aif: vrf18-aif {
+				regulator-name = "mt6373_vrf18_aif";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vrfio18_aif: vrfio18-aif {
+				regulator-name = "mt6373_vrfio18_aif";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vrf09_aif: vrf09-aif {
+				regulator-name = "mt6373_vrf09_aif";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vrf12_aif: vrf12-aif {
+				regulator-name = "mt6373_vrf12_aif";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vant18: vant18 {
+				regulator-name = "mt6373_vant18";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vsram_digrf_aif: vsram-digrf-aif {
+				regulator-name = "mt6373_vsram_digrf_aif";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vibr: vibr {
+				regulator-name = "mt6373_vibr";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vio28: vio28 {
+				regulator-name = "mt6373_vio28";
+				regulator-allowed-modes = <0 2>;
+				regulator-always-on;
+			};
+
+			mt6373_vfp: vfp {
+				regulator-name = "mt6373_vfp";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vtp: vtp {
+				regulator-name = "mt6373_vtp";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vmch: vmch {
+				regulator-name = "mt6373_vmch";
+				regulator-allowed-modes = <0 2>;
+				status = "disabled";
+			};
+
+			mt6373_vmc: vmc {
+				regulator-name = "mt6373_vmc";
+				regulator-allowed-modes = <0 2>;
+				status = "disabled";
+			};
+
+			mt6373_vaud18: vaud18 {
+				regulator-name = "mt6373_vaud18";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vsim1: vsim1 {
+				regulator-name = "mt6373_vsim1";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vsim2: vsim2 {
+				regulator-name = "mt6373_vsim2";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vcn33_1: vcn33-1 {
+				regulator-name = "mt6373_vcn33_1";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vcn33_2: vcn33-2 {
+				regulator-name = "mt6373_vcn33_2";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vcn33_3: vcn33-3 {
+				regulator-name = "mt6373_vcn33_3";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vcn18io: vcn18io {
+				regulator-name = "mt6373_vcn18io";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vefuse: vefuse {
+				regulator-name = "mt6373_vefuse";
+				regulator-allowed-modes = <0 2>;
+			};
+
+			mt6373_vmch_eint_high: vmch-eint-high {
+				regulator-name = "mt6373_vmch_eint_high";
+				regulator-allowed-modes = <0 2>;
+				status = "disabled";
+			};
+
+			mt6373_vmch_eint_low: vmch-eint-low {
+				regulator-name = "mt6373_vmch_eint_low";
+				regulator-allowed-modes = <0 2>;
+				status = "disabled";
+			};
+		};
+	};
+};
