@@ -2565,99 +2565,6 @@ struct walk_data {
 	enum reclaim_type type;
 };
 
-static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
-				unsigned long end, struct mm_walk *walk)
-{
-	pte_t *orig_pte, *pte, ptent;
-	spinlock_t *ptl;
-	struct page *page;
-	struct vm_area_struct *vma = walk->vma;
-	struct mm_struct *mm = vma->vm_mm;
-	unsigned long next = pmd_addr_end(addr, end);
-
-	ptl = pmd_trans_huge_lock(pmd, vma);
-	if (ptl) {
-		if (!pmd_present(*pmd))
-			goto huge_unlock;
-
-		if (is_huge_zero_pmd(*pmd))
-			goto huge_unlock;
-
-		page = pmd_page(*pmd);
-		if (page_mapcount(page) > 1)
-			goto huge_unlock;
-
-		if (next - addr != HPAGE_PMD_SIZE) {
-			int err;
-
-			get_page(page);
-			spin_unlock(ptl);
-			lock_page(page);
-			err = split_huge_page(page);
-			unlock_page(page);
-			put_page(page);
-			if (!err)
-				goto regular_page;
-			return 0;
-		}
-
-		pmdp_test_and_clear_young(vma, addr, pmd);
-		folio_deactivate(page_folio(page));
-huge_unlock:
-		spin_unlock(ptl);
-		return 0;
-	}
-
-regular_page:
-
-	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
-	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
-		ptent = *pte;
-
-		if (!pte_present(ptent))
-			continue;
-
-		page = vm_normal_page(vma, addr, ptent);
-		if (!page)
-			continue;
-
-		if (PageTransCompound(page))  {
-			if (page_mapcount(page) != 1)
-				break;
-			get_page(page);
-			if (!trylock_page(page)) {
-				put_page(page);
-				break;
-			}
-			pte_unmap_unlock(orig_pte, ptl);
-			if (split_huge_page(page)) {
-				unlock_page(page);
-				put_page(page);
-				pte_offset_map_lock(mm, pmd, addr, &ptl);
-				break;
-			}
-			unlock_page(page);
-			put_page(page);
-			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
-			pte--;
-			addr -= PAGE_SIZE;
-			continue;
-		}
-
-		VM_BUG_ON_PAGE(PageTransCompound(page), page);
-
-		if (page_mapcount(page) > 1)
-			continue;
-
-		ptep_test_and_clear_young(vma, addr, pte);
-		folio_deactivate(page_folio(page));
-	}
-	pte_unmap_unlock(orig_pte, ptl);
-	cond_resched();
-	return 0;
-}
-
-
 static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
@@ -2812,7 +2719,9 @@ regular_page:
 static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned long nr_to_try)
 {
 	struct vm_area_struct *start, *vma;
-	struct mm_walk_ops reclaim_walk = {};
+	struct mm_walk_ops reclaim_walk = {
+		.pmd_entry = reclaim_pte_range,
+	};
 	struct walk_data reclaim_data = {
 		.type = type,
 		.nr_to_try = nr_to_try,
@@ -2860,10 +2769,6 @@ static void reclaim_mm(struct mm_struct *mm, enum reclaim_type type, unsigned lo
 
 			if (shmem_file(vma->vm_file) && type != RECLAIM_SHMEM)
 				goto next;
-
-			reclaim_walk.pmd_entry = reclaim_pte_range;
-		} else {
-			reclaim_walk.pmd_entry = deactivate_pte_range;
 		}
 
 		/*
