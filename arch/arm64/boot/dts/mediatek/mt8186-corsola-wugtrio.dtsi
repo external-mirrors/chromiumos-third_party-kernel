@@ -9,6 +9,7 @@
 
 /delete-node/ &en_pp6000_mipi_disp_150ma;
 /delete-node/ &pp6000_mipi_disp_150ma_fixed_pins;
+/delete-node/ &cbas;
 
 &i2c4 {
 	status = "okay";
