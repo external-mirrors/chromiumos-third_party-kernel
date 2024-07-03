@@ -1172,6 +1172,11 @@
 				 <PINMUX_GPIO243__FUNC_PCIE_CLKREQN>;
 			bias-pull-up;
 		};
+
+		wifi-kill {
+			pinmux = <PINMUX_GPIO249__FUNC_GPIO249>;
+			output-high;
+		};
 	};
 
 	pcie1_pins: pcie1-pins {
@@ -1236,6 +1241,11 @@
 		pins-enable {
 			pinmux = <PINMUX_GPIO28__FUNC_GPIO28>;
 			bias-pull-up;
+		};
+
+		bt-kill {
+			pinmux = <PINMUX_GPIO248__FUNC_GPIO248>;
+			output-high;
 		};
 	};
 };
