@@ -10,6 +10,7 @@
 #include <media/v4l2-vp9.h>
 
 #include "../mtk_vcodec_dec.h"
+#include "../../common/mtk_vcodec_fw_vcp.h"
 #include "../../common/mtk_vcodec_intr.h"
 #include "../vdec_drv_base.h"
 #include "../vdec_drv_if.h"
@@ -23,6 +24,7 @@
 
 #define VP9_TILE_BUF_SIZE 4096
 #define VP9_PROB_BUF_SIZE 2560
+#define VP9_PROB_BUF_4K_SIZE 3840
 #define VP9_COUNTS_BUF_SIZE 16384
 
 #define HDR_FLAG(x) (!!((hdr)->flags & V4L2_VP9_FRAME_FLAG_##x))
@@ -514,8 +516,14 @@ static int vdec_vp9_slice_init_default_frame_ctx(struct vdec_vp9_slice_instance 
 	if (!ctx || !vsi)
 		return -EINVAL;
 
-	remote_frame_ctx = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
-						     (u32)vsi->default_frame_ctx);
+	if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP) {
+		remote_frame_ctx =
+			(struct vdec_vp9_slice_frame_ctx *)((unsigned char *)instance->core_vsi +
+			 VCODEC_VSI_LEN);
+		vdec_vp9_slice_default_frame_ctx = remote_frame_ctx;
+	} else
+		remote_frame_ctx = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
+							     (u32)vsi->default_frame_ctx);
 	if (!remote_frame_ctx) {
 		mtk_vdec_err(ctx, "failed to map default frame ctx\n");
 		return -EINVAL;
@@ -588,7 +596,7 @@ static int vdec_vp9_slice_alloc_working_buffer(struct vdec_vp9_slice_instance *i
 	 * use released buffers
 	 */
 
-	size = (max_sb_w * max_sb_h + 2) * 576;
+	size = (max_sb_w * max_sb_h + 4) * 576;
 	for (i = 0; i < 2; i++) {
 		if (instance->mv[i].va)
 			mtk_vcodec_mem_free(ctx, &instance->mv[i]);
@@ -613,7 +621,9 @@ static int vdec_vp9_slice_alloc_working_buffer(struct vdec_vp9_slice_instance *i
 	}
 
 	if (!instance->prob.va) {
-		instance->prob.size = VP9_PROB_BUF_SIZE;
+		instance->prob.size = (ctx->dev->chip_name == MTK_VDEC_MT8196) ?
+				       VP9_PROB_BUF_4K_SIZE : VP9_PROB_BUF_SIZE;
+
 		if (mtk_vcodec_mem_alloc(ctx, &instance->prob))
 			goto err;
 	}
@@ -1864,15 +1874,17 @@ static int vdec_vp9_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 {
 	struct vdec_vp9_slice_instance *instance;
 	struct vdec_vp9_slice_init_vsi *vsi;
+	struct mtk_vcodec_fw *fw_handler;
 	int ret;
 
 	instance = kzalloc(sizeof(*instance), GFP_KERNEL);
 	if (!instance)
 		return -ENOMEM;
 
+	fw_handler = ctx->dev->fw_handler;
 	instance->ctx = ctx;
-	instance->vpu.id = SCP_IPI_VDEC_LAT;
-	instance->vpu.core_id = SCP_IPI_VDEC_CORE;
+	instance->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_handler->type, MTK_VDEC_LAT0);
+	instance->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_handler->type, MTK_VDEC_CORE);
 	instance->vpu.ctx = ctx;
 	instance->vpu.codec_type = ctx->current_codec;
 
@@ -1902,8 +1914,11 @@ static int vdec_vp9_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 		}
 		instance->irq = 0;
 	} else {
-		instance->core_vsi = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
-							       (u32)vsi->core_vsi);
+		if (mtk_vcodec_fw_get_type(fw_handler) == VCP)
+			instance->core_vsi = mtk_vcodec_vcp_get_vsi(fw_handler, 0);
+		else
+			instance->core_vsi = mtk_vcodec_fw_map_dm_addr(fw_handler,
+								       (u32)vsi->core_vsi);
 		if (!instance->core_vsi) {
 			mtk_vdec_err(ctx, "failed to get VP9 normal core vsi\n");
 			ret = -EINVAL;
