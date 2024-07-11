@@ -3646,6 +3646,45 @@
 			larb-port-real-time-type = <0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 1>;
 		};
 
+		video_codec: video@36000000 {
+			compatible = "mediatek,mt8196-vcodec-dec";
+			mediatek,vcp = <&vcp>;
+			iommus = <&mm_smmu 177>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			reg = <0 0x36000000 0 0x1000>,
+				<0 0x36098000 0 0x1000>;
+			ranges = <0 0 0 0x36000000 0 0x26000>;
+
+			video-codec@10000 {
+				compatible = "mediatek,mtk-vcodec-lat";
+				reg = <0 0x10000 0 0x800>;
+				interrupts = <GIC_SPI 676 IRQ_TYPE_LEVEL_HIGH 0>;
+				clocks = <&cksys_gp2_clk CLK_CK2_VDEC_SEL>,
+					<&vdec_soc_gcon_base_clk CLK_VDE1_VDEC_CKEN>,
+					<&vdec_soc_gcon_base_clk CLK_VDE1_LAT_CKEN>,
+					<&cksys_gp2_clk CLK_CK2_MAINPLL2_D4>;
+				clock-names = "sel", "vdec", "lat", "top";
+				assigned-clocks = <&cksys_gp2_clk CLK_CK2_VDEC_SEL>;
+				assigned-clock-parents = <&cksys_gp2_clk CLK_CK2_MAINPLL2_D4>;
+				power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VDE0>;
+			};
+
+			video-codec@25000 {
+				compatible = "mediatek,mtk-vcodec-core";
+				reg = <0 0x25000 0 0x1000>;		/* VDEC_CORE_MISC */
+				interrupts = <GIC_SPI 673 IRQ_TYPE_LEVEL_HIGH 0>;
+				clocks = <&cksys_gp2_clk CLK_CK2_VDEC_SEL>,
+					<&vdec_gcon_base_clk CLK_VDE2_LAT_CKEN>,
+					<&vdec_gcon_base_clk CLK_VDE2_VDEC_CKEN>,
+					<&cksys_gp2_clk CLK_CK2_MAINPLL2_D4>;
+				clock-names = "sel", "vdec", "lat", "top";
+				assigned-clocks = <&cksys_gp2_clk CLK_CK2_VDEC_SEL>;
+				assigned-clock-parents = <&cksys_gp2_clk CLK_CK2_MAINPLL2_D4>;
+				power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VDE1>;
+			};
+		};
+
 		smi_larb5: larb@3600d000 {
 			compatible = "mediatek,mt8196-smi-larb";
 			reg = <0 0x3600d000 0 0x1000>;
