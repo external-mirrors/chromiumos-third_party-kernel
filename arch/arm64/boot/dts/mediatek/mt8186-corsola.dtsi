@@ -317,7 +317,7 @@
 	proc-supply = <&mt6366_vproc11_reg>;
 };
 
-&dpi {
+&dpi0 {
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&dpi_pins_default>;
 	pinctrl-1 = <&dpi_pins_sleep>;
@@ -497,6 +497,13 @@
 		pinctrl-0 = <&bt_pins_reset>;
 		reset-gpios = <&pio 155 GPIO_ACTIVE_LOW>;
 	};
+
+	bt_reset: bt-reset {
+		compatible = "mediatek,mt7921s-bluetooth";
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_pins_reset>;
+		reset-gpios = <&pio 155 GPIO_ACTIVE_LOW>;
+	};
 };
 
 &nor_flash {
@@ -505,6 +512,7 @@
 	pinctrl-0 = <&nor_pins_default>;
 	#address-cells = <1>;
 	#size-cells = <0>;
+	assigned-clock-parents = <&topckgen CLK_TOP_MAINPLL_D7_D4>;
 	status = "okay";
 
 	flash@0 {
