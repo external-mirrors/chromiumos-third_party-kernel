@@ -37,9 +37,11 @@
 #include "t7xx_modem_ops.h"
 #include "t7xx_pci.h"
 #include "t7xx_pcie_mac.h"
+#include "t7xx_port_devlink.h"
 #include "t7xx_port_proxy.h"
 #include "t7xx_reg.h"
 #include "t7xx_state_monitor.h"
+#include "t7xx_uevent.h"
 
 #define FSM_DRM_DISABLE_DELAY_MS		200
 #define FSM_EVENT_POLL_INTERVAL_MS		20
@@ -249,6 +251,10 @@ static void t7xx_lk_stage_event_handling(struct t7xx_fsm_ctl *ctl, unsigned int 
 		port->port_conf->ops->enable_chl(port);
 
 		t7xx_cldma_start(md_ctrl);
+		if (lk_event == LK_EVENT_CREATE_PD_PORT)
+			t7xx_uevent_send(dev, T7XX_UEVENT_MODEM_FASTBOOT_DUMP_MODE);
+		else
+			t7xx_uevent_send(dev, T7XX_UEVENT_MODEM_FASTBOOT_DL_MODE);
 
 		if (lk_event == LK_EVENT_CREATE_POST_DL_PORT)
 			t7xx_mode_update(md->t7xx_dev, T7XX_FASTBOOT_DOWNLOAD);
@@ -332,6 +338,7 @@ static void fsm_routine_ready(struct t7xx_fsm_ctl *ctl)
 	ctl->curr_state = FSM_STATE_READY;
 	t7xx_fsm_broadcast_ready_state(ctl);
 	t7xx_mode_update(md->t7xx_dev, T7XX_READY);
+	t7xx_uevent_send(&md->t7xx_dev->pdev->dev, T7XX_UEVENT_MODEM_READY);
 	t7xx_md_event_notify(md, FSM_READY);
 }
 
