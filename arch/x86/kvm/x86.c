@@ -207,13 +207,6 @@ module_param(pvsched_max_kerncs_us, uint, 0644);
 unsigned int pvsched_max_taskprio_us = 500000;
 module_param(pvsched_max_taskprio_us, uint, 0644);
 
-static enum hrtimer_restart boost_throttle_timer_fn(struct hrtimer *data)
-{
-	struct vcpu_pv_sched *pv_sched = container_of(data, struct vcpu_pv_sched, boost_thr_timer);
-
-	trace_kvm_pvsched_hrtimer_expire(pv_sched);
-	return HRTIMER_NORESTART;
-}
 #endif
 
 /*
@@ -11055,20 +11048,6 @@ static inline void kvm_vcpu_do_pv_sched(struct kvm_vcpu *vcpu)
 	}
 }
 
-static void kvm_vcpu_pv_sched_init(struct kvm_vcpu *vcpu)
-{
-	kvm_arch_vcpu_set_kerncs_prio(&vcpu->arch, VCPU_KERN_CS_PRIO);
-	kvm_arch_vcpu_set_kerncs_policy(&vcpu->arch, VCPU_KERN_CS_POLICY);
-	kvm_arch_vcpu_set_default_sched_attr(&vcpu->arch, kvm_vcpu_get_sched(vcpu));
-
-	hrtimer_init(&vcpu->arch.pv_sched.boost_thr_timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS_HARD);
-	vcpu->arch.pv_sched.boost_thr_timer.function = boost_throttle_timer_fn;
-}
-
-static void kvm_vcpu_pv_sched_fini(struct kvm_vcpu *vcpu)
-{
-	hrtimer_cancel(&vcpu->arch.pv_sched.boost_thr_timer);
-}
 #else
 static inline void record_vcpu_pv_sched(struct kvm_vcpu *vcpu) { }
 static inline void kvm_vcpu_do_pv_sched(struct kvm_vcpu *vcpu) { }
