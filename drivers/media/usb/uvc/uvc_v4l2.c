@@ -122,7 +122,7 @@ static int uvc_ioctl_xu_ctrl_map(struct uvc_video_chain *chain,
 	}
 	memcpy(map->entity, xmap->entity, sizeof(map->entity));
 	map->selector = xmap->selector;
-	map->size = xmap->size;
+	map->data_size = xmap->size;
 	map->offset = xmap->offset;
 	map->v4l2_type = xmap->v4l2_type;
 	map->data_type = xmap->data_type;
@@ -1053,7 +1053,10 @@ static int uvc_ioctl_query_ext_ctrl(struct file *file, void *fh,
 	qec->step = qc.step;
 	qec->default_value = qc.default_value;
 	qec->flags = qc.flags;
-	qec->elem_size = 4;
+	if (qc.type == V4L2_CTRL_TYPE_RECT)
+		qec->elem_size = sizeof(struct v4l2_rect);
+	else
+		qec->elem_size = 4;
 	qec->elems = 1;
 	qec->nr_of_dims = 0;
 	memset(qec->dims, 0, sizeof(qec->dims));
@@ -1094,17 +1097,16 @@ static int uvc_ioctl_g_ext_ctrls(struct file *file, void *fh,
 	if (ret < 0)
 		return ret;
 
-	if (ctrls->which == V4L2_CTRL_WHICH_DEF_VAL) {
+	switch (ctrls->which) {
+	case V4L2_CTRL_WHICH_DEF_VAL:
+	case V4L2_CTRL_WHICH_MIN_VAL:
+	case V4L2_CTRL_WHICH_MAX_VAL:
 		for (i = 0; i < ctrls->count; ++ctrl, ++i) {
-			struct v4l2_queryctrl qc = { .id = ctrl->id };
-
-			ret = uvc_query_v4l2_ctrl(chain, &qc);
+			ret = uvc_ctrl_get_boundary(chain, ctrl, ctrls->which);
 			if (ret < 0) {
 				ctrls->error_idx = i;
 				return ret;
 			}
-
-			ctrl->value = qc.default_value;
 		}
 
 		return 0;
