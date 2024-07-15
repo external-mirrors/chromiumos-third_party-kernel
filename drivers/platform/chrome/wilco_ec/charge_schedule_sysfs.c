@@ -301,7 +301,7 @@ static const struct attribute_group *wilco_charge_schedule_attr_groups[] = {
 
 static int wilco_charge_schedule_probe(struct platform_device *pdev)
 {
-	return devm_device_add_groups(&pdev->dev,
+	return device_add_groups(&pdev->dev,
 				      wilco_charge_schedule_attr_groups);
 }
 
