@@ -523,6 +523,30 @@ DEFINE_EVENT_SCHEDSTAT(sched_stat_template, sched_stat_blocked,
 	     TP_ARGS(tsk, delay));
 
 /*
+ * Tracepoint for recording the cause of uninterruptible sleep.
+ */
+TRACE_EVENT(sched_blocked_reason,
+
+	TP_PROTO(struct task_struct *tsk),
+
+	TP_ARGS(tsk),
+
+	TP_STRUCT__entry(
+		__field( pid_t,	pid	)
+		__field( void*, caller	)
+		__field( bool, io_wait	)
+	),
+
+	TP_fast_assign(
+		__entry->pid	= tsk->pid;
+		__entry->caller = (void *)__get_wchan(tsk);
+		__entry->io_wait = tsk->in_iowait;
+	),
+
+	TP_printk("pid=%d iowait=%d caller=%pS", __entry->pid, __entry->io_wait, __entry->caller)
+);
+
+/*
  * Tracepoint for accounting runtime (time the task is executing
  * on a CPU).
  */
@@ -823,6 +847,32 @@ DECLARE_TRACE(sched_compute_energy_tp,
 	TP_PROTO(struct task_struct *p, int dst_cpu, unsigned long energy,
 		 unsigned long max_util, unsigned long busy_time),
 	TP_ARGS(p, dst_cpu, energy, max_util, busy_time));
+
+#ifdef CONFIG_PARAVIRT_SCHED
+#include <linux/kvm_para.h>
+TRACE_EVENT(sched_pvsched_vcpu_update,
+	TP_PROTO(union vcpu_sched_attr *attr),
+	TP_ARGS(attr),
+
+	TP_STRUCT__entry(
+		__field(int,	sched_policy)
+		__field(int,	rt_priority)
+		__field(int,	sched_nice)
+		__field(int,	kern_cs)
+	),
+
+	TP_fast_assign(
+		__entry->sched_policy = attr->sched_policy;
+		__entry->rt_priority = attr->rt_priority;
+		__entry->sched_nice = attr->sched_nice;
+		__entry->kern_cs = attr->kern_cs;
+	),
+
+	TP_printk("policy: %d, rt_prio: %d, nice: %d, kerncs=%x",
+		__entry->sched_policy, __entry->rt_priority,
+		__entry->sched_nice, __entry->kern_cs)
+);
+#endif /* CONFIG_PARAVIRT_SCHED */
 
 #endif /* _TRACE_SCHED_H */
 
