@@ -9,6 +9,7 @@
 #include <media/videobuf2-dma-contig.h>
 
 #include "../mtk_vcodec_dec.h"
+#include "../../common/mtk_vcodec_fw_vcp.h"
 #include "../../common/mtk_vcodec_intr.h"
 #include "../vdec_drv_base.h"
 #include "../vdec_drv_if.h"
@@ -792,8 +793,13 @@ static int vdec_av1_slice_init_cdf_table(struct vdec_av1_slice_instance *instanc
 		return ret;
 
 	if (!instance->ctx->is_secure_playback) {
-		remote_cdf_table = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
-							     (u32)vsi->cdf_table_addr);
+		if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP)
+			remote_cdf_table = (unsigned char *)instance->core_vsi +
+					    VCODEC_AV1_TABLE_START;
+		else
+			remote_cdf_table = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
+				(u32)vsi->cdf_table_addr);
+
 		if (IS_ERR(remote_cdf_table)) {
 			mtk_vdec_err(ctx, "failed to map cdf table\n");
 			mtk_vcodec_mem_free(ctx, &instance->cdf_table);
@@ -826,8 +832,12 @@ static int vdec_av1_slice_init_iq_table(struct vdec_av1_slice_instance *instance
 		return ret;
 
 	if (!instance->ctx->is_secure_playback) {
-		remote_iq_table = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
-							    (u32)vsi->iq_table_addr);
+		if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP)
+			remote_iq_table = (unsigned char *)instance->core_vsi +
+				VCODEC_AV1_TABLE_START + AV1_CDF_TABLE_SIZE;
+		else
+			remote_iq_table = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
+				(u32)vsi->iq_table_addr);
 		if (IS_ERR(remote_iq_table)) {
 			mtk_vdec_err(ctx, "failed to map iq table\n");
 			mtk_vcodec_mem_free(ctx, &instance->iq_table);
@@ -1811,12 +1821,10 @@ static int vdec_av1_slice_setup_core_buffer(struct vdec_av1_slice_instance *inst
 {
 	struct vb2_buffer *vb;
 	struct vb2_queue *vq;
-	int w, h, plane;
+	int plane;
 	int i;
 
 	plane = instance->ctx->q_data[MTK_Q_DATA_DST].fmt->num_planes;
-	w = vsi->frame.uh.upscaled_width;
-	h = vsi->frame.uh.frame_height;
 
 	/* frame buffer */
 	vsi->fb.y.dma_addr = fb->base_y.dma_addr;
@@ -1910,8 +1918,17 @@ static int vdec_av1_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 		return -ENOMEM;
 
 	instance->ctx = ctx;
-	instance->vpu.id = SCP_IPI_VDEC_LAT;
-	instance->vpu.core_id = SCP_IPI_VDEC_CORE;
+	if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP) {
+		instance->vpu.id =
+			mtk_vcodec_fw_get_ipi_id(instance->ctx->dev->fw_handler->type,
+				MTK_VDEC_LAT0);
+		instance->vpu.core_id =
+			mtk_vcodec_fw_get_ipi_id(instance->ctx->dev->fw_handler->type,
+				MTK_VDEC_CORE);
+	} else {
+		instance->vpu.id = SCP_IPI_VDEC_LAT;
+		instance->vpu.core_id = SCP_IPI_VDEC_CORE;
+	}
 	instance->vpu.ctx = ctx;
 	instance->vpu.codec_type = ctx->current_codec;
 
@@ -1930,8 +1947,11 @@ static int vdec_av1_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 	}
 	instance->init_vsi = vsi;
 	if (ctx->is_secure_playback)
-		instance->core_vsi = mtk_vcodec_dec_get_shm_buffer_va(ctx->dev, MTK_VDEC_CORE,
-								      OPTEE_DATA_INDEX);
+		instance->core_vsi =
+			mtk_vcodec_dec_get_shm_buffer_va(ctx->dev, MTK_VDEC_CORE,
+							 OPTEE_DATA_INDEX);
+	else if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP)
+		instance->core_vsi = mtk_vcodec_vcp_get_vsi(ctx->dev->fw_handler, 0);
 	else
 		instance->core_vsi = mtk_vcodec_fw_map_dm_addr(ctx->dev->fw_handler,
 							       (u32)vsi->core_vsi);
@@ -1941,10 +1961,6 @@ static int vdec_av1_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 		ret = -EINVAL;
 		goto error_vsi;
 	}
-
-	if (vsi->vsi_size != sizeof(struct vdec_av1_slice_vsi))
-		mtk_vdec_err(ctx, "remote vsi size 0x%x mismatch! expected: 0x%zx\n",
-			     vsi->vsi_size, sizeof(struct vdec_av1_slice_vsi));
 
 	instance->irq_enabled = !ctx->is_secure_playback;
 	instance->inneracing_mode = IS_VDEC_INNER_RACING(instance->ctx->dev->dec_capability);
