@@ -12,7 +12,7 @@
 / {
 	model = "Google wugtrio sku3/unprovisioned board";
 	compatible = "google,wugtrio-sku3", "google,wugtrio-sku2147483639",
-		     "google,wugtrio", "mediatek,mt8186";
+		     "google,wugtrio-sku5", "google,wugtrio", "mediatek,mt8186";
 };
 
 &panel {

@@ -14,14 +14,14 @@
 &i2c4 {
 	status = "okay";
 	clock-frequency = <400000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c4_pins &sar_sensor_pins>;
 
-	ap_sar_sensor: hx9023s@28 {
+	hx9023s@28 {
 		compatible = "tyhx,hx9023s";
 		reg = <0x28>;
-		pinctrl-names = "default";
 		pinctrl-0 = <&sar_sensor_pins>;
-		interrupt-parent = <&pio>;
-		interrupts = <5 IRQ_TYPE_EDGE_FALLING>;
+		interrupts-extended = <&pio 5 IRQ_TYPE_LEVEL_LOW>;
 
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -29,6 +29,15 @@
 			reg = <1>;
 			single-channel = <1>;
 		};
+	};
+
+	sx9324@2c {
+		compatible = "semtech,sx9324";
+		reg = <0x2c>;
+		#io-channel-cells = <1>;
+		interrupts-extended = <&pio 5 IRQ_TYPE_LEVEL_LOW>;
+		vdd-supply = <&mt6366_vio18_reg>;
+		svdd-supply = <&mt6366_vio18_reg>;
 	};
 };
 
