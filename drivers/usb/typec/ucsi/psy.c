@@ -204,13 +204,23 @@ static int ucsi_psy_get_usb_type(struct ucsi_connector *con,
 
 	val->intval = POWER_SUPPLY_USB_TYPE_C;
 	if (flags & UCSI_CONSTAT_CONNECTED &&
-	    UCSI_CONSTAT_PWR_OPMODE(flags) == UCSI_CONSTAT_PWR_OPMODE_PD)
+	    UCSI_CONSTAT_PWR_OPMODE(flags) == UCSI_CONSTAT_PWR_OPMODE_PD) {
+		for (int i = 0; i < con->num_pdos; i++) {
+			if (pdo_type(con->src_pdos[i]) == PDO_TYPE_FIXED &&
+			    con->src_pdos[i] & PDO_FIXED_DUAL_ROLE) {
+				val->intval = POWER_SUPPLY_USB_TYPE_PD_DRP;
+				return 0;
+			}
+		}
+
 		val->intval = POWER_SUPPLY_USB_TYPE_PD;
+	}
 
 	return 0;
 }
 
-static int ucsi_psy_get_charge_type(struct ucsi_connector *con, union power_supply_propval *val)
+static int ucsi_psy_get_charge_type(struct ucsi_connector *con,
+				    union power_supply_propval *val)
 {
 	if (!(con->status.flags & UCSI_CONSTAT_CONNECTED)) {
 		val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
@@ -287,7 +297,7 @@ int ucsi_register_port_psy(struct ucsi_connector *con)
 
 	con->psy_desc.name = psy_name;
 	con->psy_desc.type = POWER_SUPPLY_TYPE_USB;
-	con->psy_desc.usb_types = BIT(POWER_SUPPLY_USB_TYPE_C)  |
+	con->psy_desc.usb_types = BIT(POWER_SUPPLY_USB_TYPE_C) |
 				  BIT(POWER_SUPPLY_USB_TYPE_PD) |
 				  BIT(POWER_SUPPLY_USB_TYPE_PD_PPS);
 	con->psy_desc.properties = ucsi_psy_props;
