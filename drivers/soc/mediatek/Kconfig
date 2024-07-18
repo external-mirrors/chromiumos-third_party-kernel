@@ -7,6 +7,31 @@ menu "MediaTek SoC drivers"
 
 source "drivers/soc/mediatek/apusys/Kconfig"
 
+config MTK_DVFSRC
+	tristate "MediaTek DVFSRC Support"
+	depends on ARCH_MEDIATEK
+	select PM_GENERIC_DOMAINS if PM
+	depends on MTK_SCPSYS
+	help
+	  Say yes here to add support for the MediaTek DVFSRC (dynamic voltage
+	  and frequency scaling resource collector) found
+	  on different MediaTek SoCs. The DVFSRC is a proprietary
+	  hardware which is used to collect all the requests from
+	  system and turn into the decision of minimum Vcore voltage
+	  and minimum DRAM frequency to fulfill those requests.
+
+config MTK_DVFSRC_START
+	tristate "MediaTek DVFSRC Support"
+	depends on ARCH_MEDIATEK
+	select PM_GENERIC_DOMAINS if PM
+	depends on MTK_SCPSYS
+	depends on MTK_DVFSRC
+	help
+	  Say yes here to release Bandwitch for MediaTek DVFSRC,
+	  the system will run in highest opp when you disable the config.
+	  Please check all the requests from system is correct,
+	  otherwise, the system may be hang.
+
 config MTK_CMDQ
 	tristate "MediaTek CMDQ Support"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
