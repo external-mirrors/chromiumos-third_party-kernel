@@ -15,8 +15,117 @@
 		enable-active-high;
 		gpio = <&pio 172 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&edp_pp3300_pins>;
+		pinctrl-0 = <&pp3300_edp_pin>;
 		vin-supply = <&pp3300_z1>;
+	};
+
+	pp1000_dpbrdg: regulator-pp1000-dpbrdg {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1000_dpbrdg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp1000_dpbrdg_pin>;
+		enable-active-high;
+		regulator-boot-on;
+		gpio = <&pio 82 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&pp3300_z1>;
+	};
+
+	pp1800_dpbrdg: regulator-pp1800-dpbrdg-dx {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_dpbrdg_dx";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp1800_dpbrdg_pin>;
+		enable-active-high;
+		regulator-boot-on;
+		gpio = <&pio 84 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&mt6363_vio18>;
+	};
+
+	pp3300_dpbrdg: regulator-pp3300-dp-dx {
+		compatible = "regulator-fixed";
+		regulator-name = "pp3300_dpbrdg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp3300_dpbrdg_pin>;
+		enable-active-high;
+		regulator-boot-on;
+		gpio = <&pio 83 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&pp3300_z1>;
+	};
+};
+
+&i2c4 {
+	anx_bridge: anx7625@58 {
+		compatible = "analogix,anx7625";
+		reg = <0x58>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&anx7625_pins>;
+		enable-gpios = <&pio 81 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 86 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 14 IRQ_TYPE_LEVEL_LOW>;
+		vdd10-supply = <&pp1000_dpbrdg>;
+		vdd18-supply = <&pp1800_dpbrdg>;
+		vdd33-supply = <&pp3300_dpbrdg>;
+		analogix,audio-enable;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				anx7625_dp_in: endpoint {
+					remote-endpoint = <&dsi_out>;
+				};
+			};
+		};
+
+		switches {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			switch@0 {
+				compatible = "typec-switch";
+				reg = <0>;
+				mode-switch;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						anx_typec0: endpoint {
+							remote-endpoint = <&typec_port0>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
+
+&dsi0 {
+	status = "okay";
+
+	port {
+		dsi_out: endpoint {
+			remote-endpoint = <&anx7625_dp_in>;
+		};
+	};
+};
+
+&usb_c0 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+
+			typec_port0: endpoint {
+				remote-endpoint = <&anx_typec0>;
+			};
+		};
 	};
 };
 
@@ -100,10 +209,45 @@
 };
 
 &pio {
-	edp_pp3300_pins: edp-pp3300-default-pins {
-		pins-vreg-en {
+	anx7625_pins: anx7625-pins {
+		pins-bus {
+			pinmux = <PINMUX_GPIO81__FUNC_GPIO81>,
+				 <PINMUX_GPIO86__FUNC_GPIO86>;
+			output-low;
+		};
+
+		pins-in {
+			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	pp3300_edp_pin: pp3300-edp-pins {
+		pins-en {
 			pinmux = <PINMUX_GPIO172__FUNC_GPIO172>;
 			output-high;
+		};
+	};
+
+	pp1000_dpbrdg_pin: pp1000-dpbrdg-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO82__FUNC_GPIO82>;
+			output-low;
+		};
+	};
+
+	pp1800_dpbrdg_pin: pp1800-dpbrdg-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO84__FUNC_GPIO84>;
+			output-low;
+		};
+	};
+
+	pp3300_dpbrdg_pin: en-pp3300-dpbrdg-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO83__FUNC_GPIO83>;
+			output-low;
 		};
 	};
 };
