@@ -1,9 +1,0 @@
-drivers/tty/serial/serial_core.ko
-drivers/tty/serial/max310x.ko
-drivers/tty/serial/sccnxp.ko
-drivers/tty/serial/serial_mctrl_gpio.ko
-drivers/tty/serial/kgdboc.ko
-drivers/tty/serial/8250/8250.ko
-drivers/tty/serial/8250/8250_base.ko
-drivers/tty/serial/8250/8250_pci.ko
-drivers/tty/serial/8250/8250_mid.ko

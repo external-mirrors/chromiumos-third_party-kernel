@@ -1,5 +1,0 @@
-drivers/devfreq/governor_simpleondemand.ko
-drivers/devfreq/governor_performance.ko
-drivers/devfreq/governor_powersave.ko
-drivers/devfreq/governor_userspace.ko
-drivers/devfreq/governor_passive.ko

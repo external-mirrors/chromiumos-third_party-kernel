@@ -1,8 +1,0 @@
-drivers/acpi/ac.ko
-drivers/acpi/button.ko
-drivers/acpi/fan.ko
-drivers/acpi/processor.ko
-drivers/acpi/thermal.ko
-drivers/acpi/battery.ko
-drivers/acpi/hed.ko
-drivers/acpi/acpi_dbg.ko

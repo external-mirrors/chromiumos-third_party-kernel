@@ -1,2 +1,0 @@
-drivers/watchdog/watchdog.ko
-drivers/watchdog/pretimeout_noop.ko

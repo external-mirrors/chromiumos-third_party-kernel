@@ -1,6 +1,0 @@
-drivers/net/tun.ko
-drivers/net/xen-netfront.ko
-drivers/net/phy/libphy.ko
-drivers/net/phy/fixed_phy.ko
-drivers/net/ppp/ppp_generic.ko
-drivers/net/slip/slhc.ko

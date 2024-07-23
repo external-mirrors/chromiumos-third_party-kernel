@@ -1,9 +1,0 @@
-drivers/cpufreq/cpufreq_performance.ko
-drivers/cpufreq/cpufreq_powersave.ko
-drivers/cpufreq/cpufreq_userspace.ko
-drivers/cpufreq/cpufreq_ondemand.ko
-drivers/cpufreq/cpufreq_conservative.ko
-drivers/cpufreq/acpi-cpufreq.ko
-drivers/cpufreq/powernow-k8.ko
-drivers/cpufreq/pcc-cpufreq.ko
-drivers/cpufreq/speedstep-centrino.ko
