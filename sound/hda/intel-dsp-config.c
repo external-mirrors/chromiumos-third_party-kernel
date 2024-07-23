@@ -16,7 +16,7 @@
 static int dsp_driver;
 
 module_param(dsp_driver, int, 0444);
-MODULE_PARM_DESC(dsp_driver, "Force the DSP driver for Intel DSP (0=auto, 1=legacy, 2=SST, 3=SOF)");
+MODULE_PARM_DESC(dsp_driver, "Force the DSP driver for Intel DSP (0=auto, 1=legacy, 2=SST, 3=SOF, 4=AVS)");
 
 #define FLAG_SST			BIT(0)
 #define FLAG_SOF			BIT(1)
@@ -142,7 +142,9 @@ static const struct config_entry config_table[] = {
 
 /*
  * Geminilake uses legacy HDAudio driver except for Google
- * Chromebooks and devices based on the ES8336 codec
+ * Chromebooks and devices based on the ES8336 codec. The Azulle Access 4
+ * uses the same audio card but does not support ES8336 and should use
+ * the legacy HDAudio driver.
  */
 /* Geminilake */
 #if IS_ENABLED(CONFIG_SND_SOC_SOF_GEMINILAKE)
@@ -157,6 +159,20 @@ static const struct config_entry config_table[] = {
 				}
 			},
 			{}
+		}
+	},
+	{
+		.flags = 0,
+		.device = PCI_DEVICE_ID_INTEL_HDA_GML,
+		.dmi_table = (const struct dmi_system_id []) {
+			{
+				.ident = "Azulle Access 4",
+				.matches = {
+					DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Azulle"),
+					DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Access4"),
+				}
+			},
+		{}
 		}
 	},
 	{

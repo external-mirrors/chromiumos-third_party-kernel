@@ -3,14 +3,16 @@
  * Copyright (c) 2015 MediaTek Inc.
  */
 
-#ifndef MTK_DRM_DDP_COMP_H
-#define MTK_DRM_DDP_COMP_H
+#ifndef MTK_DDP_COMP_H
+#define MTK_DDP_COMP_H
 
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
 #include <linux/soc/mediatek/mtk-mmsys.h>
 #include <linux/soc/mediatek/mtk-mutex.h>
+
+#include <drm/drm_modes.h>
 
 struct device;
 struct device_node;
@@ -85,6 +87,7 @@ struct mtk_ddp_comp_funcs {
 	void (*add)(struct device *dev, struct mtk_mutex *mutex);
 	void (*remove)(struct device *dev, struct mtk_mutex *mutex);
 	unsigned int (*encoder_index)(struct device *dev);
+	enum drm_mode_status (*mode_valid)(struct device *dev, const struct drm_display_mode *mode);
 };
 
 struct mtk_ddp_comp {
@@ -124,6 +127,15 @@ static inline void mtk_ddp_comp_clk_disable(struct mtk_ddp_comp *comp)
 {
 	if (comp->funcs && comp->funcs->clk_disable)
 		comp->funcs->clk_disable(comp->dev);
+}
+
+static inline
+enum drm_mode_status mtk_ddp_comp_mode_valid(struct mtk_ddp_comp *comp,
+					     const struct drm_display_mode *mode)
+{
+	if (comp && comp->funcs && comp->funcs->mode_valid)
+		return comp->funcs->mode_valid(comp->dev, mode);
+	return MODE_OK;
 }
 
 static inline void mtk_ddp_comp_config(struct mtk_ddp_comp *comp,
@@ -314,8 +326,7 @@ static inline void mtk_ddp_comp_encoder_index_set(struct mtk_ddp_comp *comp)
 
 int mtk_ddp_comp_get_id(struct device_node *node,
 			enum mtk_ddp_comp_type comp_type);
-unsigned int mtk_drm_find_possible_crtc_by_comp(struct drm_device *drm,
-						struct device *dev);
+unsigned int mtk_find_possible_crtcs(struct drm_device *drm, struct device *dev);
 int mtk_ddp_comp_init(struct device_node *comp_node, struct mtk_ddp_comp *comp,
 		      unsigned int comp_id);
 enum mtk_ddp_comp_type mtk_ddp_comp_get_type(unsigned int comp_id);
@@ -328,4 +339,4 @@ void mtk_ddp_write_relaxed(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 void mtk_ddp_write_mask(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 			struct cmdq_client_reg *cmdq_reg, void __iomem *regs,
 			unsigned int offset, unsigned int mask);
-#endif /* MTK_DRM_DDP_COMP_H */
+#endif /* MTK_DDP_COMP_H */

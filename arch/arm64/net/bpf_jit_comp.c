@@ -1648,7 +1648,7 @@ skip_init_ctx:
 			prog->jited_len = 0;
 			goto out_off;
 		}
-		bpf_jit_binary_lock_ro(header);
+		(void) bpf_jit_binary_lock_ro(header);
 	} else {
 		jit_data->ctx = ctx;
 		jit_data->image = image_ptr;
