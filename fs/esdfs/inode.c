@@ -240,6 +240,7 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct dentry *lower_old_dir_dentry = NULL;
 	struct dentry *lower_new_dir_dentry = NULL;
 	struct dentry *trap = NULL;
+	struct renamedata rd;
 	struct path lower_old_path, lower_new_path;
 	int mask;
 	const struct cred *creds;
@@ -296,9 +297,14 @@ static int esdfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		goto out;
 	}
 
-	err = vfs_rename(lower_old_dir_dentry->d_inode, lower_old_dentry,
-			 lower_new_dir_dentry->d_inode, lower_new_dentry,
-			 NULL, flags);
+	rd.old_dir         = lower_old_dir_dentry->d_inode;
+	rd.old_dentry      = lower_old_dentry;
+	rd.new_dir         = lower_new_dir_dentry->d_inode;
+	rd.new_dentry      = lower_new_dentry;
+	rd.delegated_inode = NULL;
+	rd.flags           = flags;
+	err = vfs_rename(&rd);
+
 	if (err)
 		goto out;
 

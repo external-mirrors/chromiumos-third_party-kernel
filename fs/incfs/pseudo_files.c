@@ -5,6 +5,7 @@
 
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/fdtable.h>
 #include <linux/namei.h>
 #include <linux/poll.h>
 #include <linux/syscalls.h>
@@ -403,7 +404,7 @@ static int dir_relative_path_resolve(
 		LOOKUP_FOLLOW | LOOKUP_DIRECTORY, result_path, NULL);
 
 out:
-	ksys_close(dir_fd);
+	close_fd(dir_fd);
 	if (error)
 		pr_debug("incfs: %s %d\n", __func__, error);
 	return error;
