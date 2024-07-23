@@ -32,6 +32,7 @@
 #include <drm/drm_util.h>
 
 struct drm_crtc;
+struct drm_plane_size_hint;
 struct drm_printer;
 struct drm_modeset_acquire_ctx;
 
@@ -842,5 +843,9 @@ drm_plane_get_damage_clips(const struct drm_plane_state *state)
 	return (struct drm_mode_rect *)((state && state->fb_damage_clips) ?
 					state->fb_damage_clips->data : NULL);
 }
+
+int drm_plane_add_size_hints_property(struct drm_plane *plane,
+				      const struct drm_plane_size_hint *hints,
+				      int num_hints);
 
 #endif
