@@ -1204,6 +1204,12 @@
 			#interrupt-cells = <2>;
 		};
 
+		memory-controller@10236000 {
+			compatible = "mediatek,mt8196-dramc";
+			reg = <0 0x10236000 0 0x2000>, /* anaphy base */
+			      <0 0x10238000 0 0x2000>;  /* ddrphy base */
+		};
+
 		devapc_apinfra_dramc: devapc@102f3000 {
 			compatible = "mediatek,mt8196-devapc";
 			reg = <0 0x102f3000 0 0x1000>;
