@@ -2,6 +2,15 @@
 #
 # Memory devices
 #
+config MEDIATEK_MC
+	bool "MediaTek Memory Controller support"
+	help
+	  This option allows to enable MediaTek memory controller drivers.
+	  These could be controllers for DRAM, SMPU and others.
+	  Say Y here if you need mediatek memory controller driver support.
+	  If you don't need, say N.
+
+if MEDIATEK_MC
 
 config MTK_SMPU
 	bool "Mediatek SMPU Driver"
@@ -9,3 +18,13 @@ config MTK_SMPU
 	help
 	  Say Y here if you need mediatek smpu driver support.
 	  If you don't need, say N.
+config MTK_DRAMC
+	tristate "MediaTek DRAMC driver"
+	default y
+	help
+	  This option selects the MediaTek DRAMC driver, which provides
+	  an interface for reporting the current data rate of DRAM.
+	  Select Y here if you need support for the MediaTek DRAMC driver.
+	  If you don't need, select N.
+
+endif
