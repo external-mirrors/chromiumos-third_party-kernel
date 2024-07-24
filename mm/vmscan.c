@@ -3849,7 +3849,6 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq,
 	struct lru_gen_mm_state *mm_state = get_mm_state(lruvec);
 
 	VM_WARN_ON_ONCE(seq > READ_ONCE(lrugen->max_seq));
-        kernfs_notify(lru_gen_admin_node);
 
 	if (!mm_state)
 		return inc_max_seq(lruvec, seq, can_swap, force_scan);
@@ -3888,6 +3887,7 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long seq,
 done:
 	if (success) {
 		success = inc_max_seq(lruvec, seq, can_swap, force_scan);
+		kernfs_notify(lru_gen_admin_node);
 		WARN_ON_ONCE(!success);
 	}
 
