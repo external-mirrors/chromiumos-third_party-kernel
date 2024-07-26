@@ -47,6 +47,58 @@
 	status = "disabled";
 };
 
+&afe {
+	/* Only for ETDM in/out 4 */
+	etdm-out-ch = <2>;
+	etdm-in-ch = <2>;
+	etdm-out-sync = <0>; /* 0: disable; 1: enable */
+	etdm-in-sync = <0>; /* 0: disable; 1: enable */
+	etdm-ip-mode = <0>; /* 0: One IP multi-channel 1: Multi-IP 2-channel */
+	status = "okay";
+};
+
+&sound {
+	compatible = "mediatek,mt8196-rt5682s-sound";
+	model = "mt8196_tas2563_5682";
+	mediatek,adsp = <&adsp>;
+	/*
+	 * TODO: Remove deprecated mediatek,dai-link, use audio-routing and
+	 * update UCM config.
+	 **/
+	mediatek,dai-link = "AFE_SOF_DL_24CH", "AFE_SOF_DL1", "AFE_SOF_UL0",
+			"AFE_SOF_UL1", "AFE_SOF_UL2", "HDMI_FE", "I2SIN6_BE",
+			"I2SOUT4_BE", "I2SOUT6_BE", "AP_DMIC_BE", "AP_DMIC_CH34_BE",
+			"TDM_DPTX_BE";
+	status = "okay";
+
+	dai-link-0 {
+		link-name = "I2SOUT6_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682s>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN6_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682s>;
+		};
+	};
+
+	dai-link-2 {
+		link-name = "I2SOUT4_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&quad_tas2563>;
+		};
+	};
+};
+
 &pio {
 	edp_pp3300_pins: edp-pp3300-default-pins {
 		pins-vreg-en {
