@@ -13,6 +13,7 @@
 
 #define MTK_DBG_VCODEC_STR "[MTK_VCODEC]"
 #define MTK_DBG_V4L2_STR "[MTK_V4L2]"
+#define MTK_DBG_VCP_STR "[MTK_VCP]"
 
 struct mtk_vcodec_mem {
 	size_t size;

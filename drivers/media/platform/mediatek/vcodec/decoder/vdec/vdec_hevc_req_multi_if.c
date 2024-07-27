@@ -13,6 +13,7 @@
 #include "../vdec_drv_base.h"
 #include "../vdec_drv_if.h"
 #include "../vdec_vpu_if.h"
+#include "../../common/mtk_vcodec_fw_vcp.h"
 
 /* the size used to store hevc wrap information */
 #define VDEC_HEVC_WRAP_SZ (532 * SZ_1K)
@@ -860,6 +861,7 @@ static int vdec_hevc_slice_setup_core_buffer(struct vdec_hevc_slice_inst *inst,
 static int vdec_hevc_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 {
 	struct vdec_hevc_slice_inst *inst;
+	enum mtk_vcodec_fw_type fw_type;
 	int err, vsi_size;
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
@@ -868,8 +870,9 @@ static int vdec_hevc_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 
 	inst->ctx = ctx;
 
-	inst->vpu.id = SCP_IPI_VDEC_LAT;
-	inst->vpu.core_id = SCP_IPI_VDEC_CORE;
+	fw_type = inst->ctx->dev->fw_handler->type;
+	inst->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_LAT0);
+	inst->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_CORE);
 	inst->vpu.ctx = ctx;
 	inst->vpu.codec_type = ctx->current_codec;
 	inst->vpu.capture_type = ctx->capture_fourcc;
@@ -883,8 +886,11 @@ static int vdec_hevc_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 	vsi_size = round_up(sizeof(struct vdec_hevc_slice_vsi), VCODEC_DEC_ALIGNED_64);
 	inst->vsi = inst->vpu.vsi;
 	if (ctx->is_secure_playback)
-		inst->vsi_core = mtk_vcodec_dec_get_shm_buffer_va(ctx->dev, MTK_VDEC_CORE,
-								  OPTEE_DATA_INDEX);
+		inst->vsi_core =
+			mtk_vcodec_dec_get_shm_buffer_va(ctx->dev, MTK_VDEC_CORE,
+							 OPTEE_DATA_INDEX);
+	else if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP)
+		inst->vsi_core = mtk_vcodec_vcp_get_vsi(ctx->dev->fw_handler, 0);
 	else
 		inst->vsi_core =
 			(struct vdec_hevc_slice_vsi *)(((char *)inst->vpu.vsi) + vsi_size);

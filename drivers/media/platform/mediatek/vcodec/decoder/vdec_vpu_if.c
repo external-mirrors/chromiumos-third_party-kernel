@@ -8,6 +8,7 @@
 #include "vdec_drv_if.h"
 #include "vdec_ipi_msg.h"
 #include "vdec_vpu_if.h"
+#include "../common/mtk_vcodec_fw_vcp.h"
 
 static void handle_init_ack_msg(const struct vdec_vpu_ipi_init_ack *msg)
 {
@@ -21,6 +22,8 @@ static void handle_init_ack_msg(const struct vdec_vpu_ipi_init_ack *msg)
 	if (vpu->ctx->is_secure_playback)
 		vpu->vsi = mtk_vcodec_dec_get_shm_buffer_va(vpu->ctx->dev, MTK_VDEC_LAT0,
 							    OPTEE_DATA_INDEX);
+	else if (mtk_vcodec_fw_get_type(vpu->ctx->dev->fw_handler) == VCP)
+		vpu->vsi = mtk_vcodec_vcp_get_vsi(vpu->ctx->dev->fw_handler, 1);
 	else
 		vpu->vsi = mtk_vcodec_fw_map_dm_addr(vpu->ctx->dev->fw_handler,
 						     msg->vpu_inst_addr);
@@ -264,6 +267,7 @@ int vpu_dec_init(struct vdec_vpu_inst *vpu)
 	msg.msg_id = AP_IPIMSG_DEC_INIT;
 	msg.ap_inst_addr = (unsigned long)vpu;
 	msg.codec_type = vpu->codec_type;
+	msg.shared_iova = vpu->ctx->dev->fw_handler->vcp->iova_addr;
 
 	mtk_vdec_debug(vpu->ctx, "vdec_inst=%p", vpu);
 

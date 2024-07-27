@@ -16,6 +16,7 @@
 #include "../vdec_drv_if.h"
 #include "../vdec_vpu_if.h"
 #include "vdec_h264_req_common.h"
+#include "../../common/mtk_vcodec_fw_vcp.h"
 
 /**
  * enum vdec_h264_core_dec_err_type  - core decode error type
@@ -576,6 +577,7 @@ static int vdec_h264_slice_setup_core_buffer(struct vdec_h264_slice_inst *inst,
 static int vdec_h264_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 {
 	struct vdec_h264_slice_inst *inst;
+	enum mtk_vcodec_fw_type fw_type;
 	int err, vsi_size;
 	unsigned char *temp;
 
@@ -585,8 +587,9 @@ static int vdec_h264_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 
 	inst->ctx = ctx;
 
-	inst->vpu.id = SCP_IPI_VDEC_LAT;
-	inst->vpu.core_id = SCP_IPI_VDEC_CORE;
+	fw_type = inst->ctx->dev->fw_handler->type;
+	inst->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_LAT0);
+	inst->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_CORE);
 	inst->vpu.ctx = ctx;
 	inst->vpu.codec_type = ctx->current_codec;
 	inst->vpu.capture_type = ctx->capture_fourcc;
@@ -600,6 +603,9 @@ static int vdec_h264_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 	if (ctx->is_secure_playback) {
 		inst->vsi_core_ex = mtk_vcodec_dec_get_shm_buffer_va(ctx->dev, MTK_VDEC_CORE,
 								     OPTEE_DATA_INDEX);
+	} else if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP) {
+		inst->vsi_ex = inst->vpu.vsi;
+		inst->vsi_core_ex = mtk_vcodec_vcp_get_vsi(ctx->dev->fw_handler, 0);
 	} else {
 		if (IS_VDEC_SUPPORT_EX(ctx->dev->dec_capability)) {
 			vsi_size = sizeof(struct vdec_h264_slice_vsi_ex);

@@ -14,6 +14,8 @@ struct mtk_vcodec_fw {
 	struct platform_device *pdev;
 	struct mtk_scp *scp;
 	enum mtk_vcodec_fw_use fw_use;
+
+	struct mtk_vcp *vcp;
 };
 
 struct mtk_vcodec_fw_ops {

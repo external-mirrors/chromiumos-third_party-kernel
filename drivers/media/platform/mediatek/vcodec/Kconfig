@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
+config VIDEO_MEDIATEK_VCODEC_VCP
+	bool
+
 config VIDEO_MEDIATEK_VCODEC_SCP
 	bool
 
@@ -15,12 +18,14 @@ config VIDEO_MEDIATEK_VCODEC
 	# The two following lines ensure we have the same state ("m" or "y") as
 	# our dependencies, to avoid missing symbols during link.
 	depends on VIDEO_MEDIATEK_VPU || !VIDEO_MEDIATEK_VPU
+	depends on MTK_VCP_RPROC || !MTK_VCP_RPROC
 	depends on MTK_SCP || !MTK_SCP
 	depends on MTK_SMI || (COMPILE_TEST && MTK_SMI=n)
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	select VIDEO_MEDIATEK_VCODEC_VPU if VIDEO_MEDIATEK_VPU
 	select VIDEO_MEDIATEK_VCODEC_SCP if MTK_SCP
+	select VIDEO_MEDIATEK_VCODEC_VCP if MTK_VCP_RPROC
 	select V4L2_H264
 	select V4L2_VP9
 	select MEDIA_CONTROLLER
