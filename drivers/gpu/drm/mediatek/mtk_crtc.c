@@ -1635,13 +1635,12 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 	spin_lock_init(&mtk_crtc->config_lock);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	i = priv->mbox_index++;
 	mtk_crtc->cmdq_client.client.dev = mtk_crtc->mmsys_dev[priv->data->mmsys_id];
 	mtk_crtc->cmdq_client.client.tx_block = false;
 	mtk_crtc->cmdq_client.client.knows_txdone = true;
 	mtk_crtc->cmdq_client.client.rx_callback = ddp_cmdq_cb;
 	mtk_crtc->cmdq_client.chan =
-			mbox_request_channel(&mtk_crtc->cmdq_client.client, i);
+			mbox_request_channel(&mtk_crtc->cmdq_client.client, priv->mbox_index);
 	if (IS_ERR(mtk_crtc->cmdq_client.chan)) {
 		dev_dbg(dev, "mtk_crtc %d failed to create mailbox client, writing register by CPU now\n",
 			drm_crtc_index(&mtk_crtc->base));
@@ -1651,7 +1650,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 	if (mtk_crtc->cmdq_client.chan) {
 		ret = of_property_read_u32_index(priv->mutex_node,
 						 "mediatek,gce-events",
-						 i,
+						 priv->mbox_index,
 						 &mtk_crtc->cmdq_event);
 		if (ret) {
 			dev_dbg(dev, "mtk_crtc %d failed to get mediatek,gce-events property\n",
@@ -1670,15 +1669,18 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 
 		/* for sending blocking cmd in crtc disable */
 		init_waitqueue_head(&mtk_crtc->cb_blocking_queue);
+		priv->mbox_index++;
 	}
 
 	if (priv->data->has_secure) {
+		if (priv->sec_mbox_index == 0)
+			priv->sec_mbox_index = priv->data->sec_mbox_index;
 		mtk_crtc->sec_cmdq_client.client.dev = mtk_crtc->mmsys_dev[priv->data->mmsys_id];
 		mtk_crtc->sec_cmdq_client.client.tx_block = false;
 		mtk_crtc->sec_cmdq_client.client.knows_txdone = true;
 		mtk_crtc->sec_cmdq_client.client.rx_callback = ddp_cmdq_cb;
 		mtk_crtc->sec_cmdq_client.chan =
-			mbox_request_channel(&mtk_crtc->sec_cmdq_client.client, i + 1);
+			mbox_request_channel(&mtk_crtc->sec_cmdq_client.client, priv->sec_mbox_index);
 		if (IS_ERR(mtk_crtc->sec_cmdq_client.chan)) {
 			dev_err(dev, "mtk_crtc %d failed to create sec mailbox client\n",
 				drm_crtc_index(&mtk_crtc->base));
@@ -1688,6 +1690,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 		if (mtk_crtc->sec_cmdq_client.chan) {
 			/* for sending blocking cmd in crtc disable */
 			init_waitqueue_head(&mtk_crtc->sec_cb_blocking_queue);
+			priv->sec_mbox_index++;
 		}
 	}
 

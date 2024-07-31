@@ -65,6 +65,7 @@ struct mtk_mmsys_driver_data {
 	u16 min_width;
 	u16 min_height;
 	bool has_secure;
+	unsigned int sec_mbox_index;
 	const char *secure_heap;
 };
 
@@ -84,6 +85,7 @@ struct mtk_drm_private {
 	const struct mtk_mmsys_driver_data *data;
 	struct drm_atomic_state *suspend_state;
 	unsigned int mbox_index;
+	unsigned int sec_mbox_index;
 	struct mtk_drm_private **all_drm_private;
 };
 
