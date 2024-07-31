@@ -357,6 +357,7 @@ static const struct mtk_mmsys_driver_data mt8188_vdosys0_driver_data = {
 	.min_height = 1,
 	.mmsys_dev_num = 1,
 	.has_secure = true,
+	.sec_mbox_index = 1,
 	.secure_heap = "restricted_mtk_cma",
 };
 
@@ -376,6 +377,7 @@ static const struct mtk_mmsys_driver_data mt8195_vdosys0_driver_data = {
 	.min_width = 1,
 	.min_height = 1,
 	.has_secure = true,
+	.sec_mbox_index = 1,
 	.secure_heap = "restricted_mtk_cma",
 };
 
@@ -388,6 +390,7 @@ static const struct mtk_mmsys_driver_data mt8195_vdosys1_driver_data = {
 	.min_width = 2, /* 2-pixel align when ethdr is bypassed */
 	.min_height = 1,
 	.has_secure = true,
+	.sec_mbox_index = 1,
 	.secure_heap = "restricted_mtk_cma",
 };
 
@@ -406,6 +409,7 @@ static const struct mtk_mmsys_driver_data mt8196_dispsys0_driver_data = {
 	.max_width = 8191,
 	.min_width = 2, /* 2-pixel align when ethdr is bypassed */
 	.min_height = 1,
+	.secure_heap = "restricted_mtk_cma",
 };
 
 static const struct mtk_mmsys_driver_data mt8196_dispsys1_driver_data = {
@@ -425,6 +429,7 @@ static const struct mtk_mmsys_driver_data mt8196_dispsys1_driver_data = {
 	.max_width = 8191,
 	.min_width = 2, /* 2-pixel align when ethdr is bypassed */
 	.min_height = 1,
+	.secure_heap = "restricted_mtk_cma",
 };
 
 static const struct mtk_mmsys_driver_data mt8196_ovlsys0_driver_data = {
@@ -439,6 +444,9 @@ static const struct mtk_mmsys_driver_data mt8196_ovlsys0_driver_data = {
 	.max_width = 8191,
 	.min_width = 2, /* 2-pixel align when ethdr is bypassed */
 	.min_height = 1,
+	.has_secure = true,
+	.sec_mbox_index = 2,
+	.secure_heap = "restricted_mtk_cma",
 };
 
 static const struct mtk_mmsys_driver_data mt8196_ovlsys1_driver_data = {
@@ -450,6 +458,9 @@ static const struct mtk_mmsys_driver_data mt8196_ovlsys1_driver_data = {
 	.max_width = 8191,
 	.min_width = 2, /* 2-pixel align when ethdr is bypassed */
 	.min_height = 1,
+	.has_secure = true,
+	.sec_mbox_index = 1,
+	.secure_heap = "restricted_mtk_cma",
 };
 
 static const struct of_device_id mtk_drm_of_ids[] = {
