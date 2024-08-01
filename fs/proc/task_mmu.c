@@ -2878,7 +2878,7 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 			goto huge_unlock;
 
 		page = pmd_page(*pmd);
-		if (page_mapcount(page) > 1)
+		if (folio_precise_page_mapcount(page_folio(page),page) > 1)
 			goto huge_unlock;
 
 		if (next - addr != HPAGE_PMD_SIZE) {
@@ -2916,7 +2916,7 @@ regular_page:
 			continue;
 
 		if (PageTransCompound(page))  {
-			if (page_mapcount(page) != 1)
+			if (folio_precise_page_mapcount(page_folio(page),page) != 1)
 				break;
 			get_page(page);
 			if (!trylock_page(page)) {
@@ -2940,7 +2940,7 @@ regular_page:
 
 		VM_BUG_ON_PAGE(PageTransCompound(page), page);
 
-		if (page_mapcount(page) > 1)
+		if (folio_precise_page_mapcount(page_folio(page),page) > 1)
 			continue;
 
 		ptep_test_and_clear_young(vma, addr, pte);
@@ -2979,7 +2979,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 			goto huge_unlock;
 
 		page = pmd_page(*pmd);
-		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
+		if (type != RECLAIM_SHMEM && folio_precise_page_mapcount(page_folio(page),page) > 1)
 			goto huge_unlock;
 
 		if (!data->nr_to_try)
@@ -3046,7 +3046,7 @@ regular_page:
 		}
 
 		if (PageTransCompound(page)) {
-			if (type != RECLAIM_SHMEM && page_mapcount(page) != 1)
+			if (type != RECLAIM_SHMEM && folio_precise_page_mapcount(page_folio(page),page) != 1)
 				break;
 			get_page(page);
 			if (!trylock_page(page)) {
@@ -3074,7 +3074,7 @@ regular_page:
 		if (!PageLRU(page))
 			continue;
 
-		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
+		if (type != RECLAIM_SHMEM && folio_precise_page_mapcount(page_folio(page),page) > 1)
 			continue;
 
 		if (!isolate_lru_page(page))
