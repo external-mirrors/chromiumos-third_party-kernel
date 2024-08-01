@@ -1184,6 +1184,7 @@ static int btusb_recv_bulk(struct btusb_data *data, void *buffer, int count)
 	struct sk_buff *skb;
 	unsigned long flags;
 	int err = 0;
+	u16 wMaxPacketSize = le16_to_cpu(data->isoc_rx_ep->wMaxPacketSize);
 
 	spin_lock_irqsave(&data->rxlock, flags);
 	skb = data->acl_skb;
@@ -1282,7 +1283,6 @@ static int btusb_recv_isoc(struct btusb_data *data, void *buffer, int count)
 	struct sk_buff *skb;
 	unsigned long flags;
 	int err = 0;
-	u16 wMaxPacketSize = le16_to_cpu(data->isoc_rx_ep->wMaxPacketSize);
 
 	spin_lock_irqsave(&data->rxlock, flags);
 	skb = data->sco_skb;
