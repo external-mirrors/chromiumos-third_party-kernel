@@ -8242,7 +8242,7 @@ static bool ieee80211_mgd_csa_in_process(struct ieee80211_sub_if_data *sdata,
 
 	if (ieee80211_mgd_csa_present(sdata,
 				      rcu_dereference(bss->proberesp_ies),
-				      cur_channel, cfg80211_bss_proberesp_ecsa_stuck(bss))) {
+				      cur_channel, bss->proberesp_ecsa_stuck)) {
 		ret = true;
 		goto out;
 	}
