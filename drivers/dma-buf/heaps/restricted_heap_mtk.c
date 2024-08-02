@@ -11,6 +11,7 @@
 #include <linux/err.h>
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/of_fdt.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -29,15 +30,21 @@ enum mtk_secure_mem_type {
 	 * MediaTek static chunk memory carved out for TrustZone. The memory
 	 * management is inside the TEE.
 	 */
-	MTK_SECURE_MEMORY_TYPE_CM_TZ	= 1,
+	MTK_SECURE_MEMORY_TYPE_CM_TZ		= 1,
 	/*
-	 * MediaTek dynamic chunk memory carved out from CMA.
+	 * MediaTek dynamic chunk memory and static carveout memory share the
+	 * same memory type enum. The flag 'is_carveout' in heap priv_data is
+	 * used to distinguish these two memory types.
+	 * Case1: MediaTek dynamic chunk memory carved out from CMA.
 	 * In normal case, the CMA could be used in kernel. When SVP start,
 	 * The CMA reserved memory will be divided into several blocks in TEE.
 	 * We will allocate a block and pass the block PA and size into TEE to
 	 * protect it, then the detail memory management also is inside the TEE.
+	 * Case2: MediaTek static carveout memory.
+	 * The carveout memory could only be used by SVP. The detail memory
+	 * management is also inside the TEE.
 	 */
-	MTK_SECURE_MEMORY_TYPE_CM_CMA	= 2,
+	MTK_SECURE_MEMORY_TYPE_CM_CMA		= 2,
 };
 
 /* This structure also is synchronized with tee, thus not use the phys_addr_t */
@@ -107,6 +114,7 @@ struct mtk_restricted_heap_data {
 	u32				cma_block_count; /* number of blocks */
 	struct mutex			lock; /* lock for cma_used_size */
 	bool				oom_retry; /* true if TEE return OOM */
+	bool				is_carveout; /* true if it's carveout memory */
 };
 
 static int mtk_tee_ctx_match(struct tee_ioctl_version_data *ver, const void *data)
@@ -182,8 +190,8 @@ static int mtk_tee_get_cma_region_num(struct restricted_heap *heap)
 	 * to TEE at the first time. And get secure region number from TEE.
 	 */
 	params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INOUT;
-	params[0].u.value.a = heap->cma_paddr;
-	params[0].u.value.b = heap->cma_size;
+	params[0].u.value.a = heap->resv_paddr;
+	params[0].u.value.b = heap->resv_size;
 	ret = mtk_tee_service_call(data->tee_ctx, data->tee_session,
 				   MTK_TZCMD_SECMEM_GET_REGION_NUM, params);
 	if (ret)
@@ -191,20 +199,20 @@ static int mtk_tee_get_cma_region_num(struct restricted_heap *heap)
 	data->cma_block_count = params[0].u.value.a;
 	if (data->cma_block_count == 0)
 		return -EINVAL;
-	data->cma_block_size = roundup(heap->cma_size / data->cma_block_count, SZ_4M);
+	data->cma_block_size = roundup(heap->resv_size / data->cma_block_count, SZ_4M);
 	data->cma_page_index = 0;
 
 	return ret;
 }
 
-static int mtk_restricted_memory_cma_allocate(struct restricted_heap *heap,
-					      struct restricted_buffer *buf)
+static int mtk_restricted_memory_resv_allocate(struct restricted_heap *heap,
+					       struct restricted_buffer *buf)
 {
 	struct mtk_restricted_heap_data *data = heap->priv_data;
 	unsigned long block_start, block_size, cm_mem_end;
 	int ret = 0, i;
 
-	if (!data->cma_block_count) {
+	if (!data->is_carveout && !data->cma_block_count) {
 		ret = mtk_tee_get_cma_region_num(heap);
 		if (ret) {
 			pr_err("%s: failed to get cma region num %d\n",
@@ -219,20 +227,25 @@ static int mtk_restricted_memory_cma_allocate(struct restricted_heap *heap,
 	 * The variable "cma_hold_size" and "cma_used_size" will be
 	 * increased. Actually the memory allocating is within the TEE.
 	 */
-	cm_mem_end = heap->cma_paddr + heap->cma_size;
+	cm_mem_end = heap->resv_paddr + heap->resv_size;
 	mutex_lock(&data->lock);
-	if ((buf->size + data->cma_used_size) > heap->cma_size) {
+	if ((buf->size + data->cma_used_size) > heap->resv_size) {
 		pr_err("%s: failed used 0x%x total_size 0x%lx needed 0x%lx\n",
-			__func__, data->cma_used_size, heap->cma_size, buf->size);
+			__func__, data->cma_used_size, heap->resv_size, buf->size);
 		ret = -ENOMEM;
 		goto out_unlock;
 	}
+
+	/* only update used size when it's carveout memory */
+	if (data->is_carveout)
+		goto update_size;
+
 	if (((buf->size + data->cma_used_size) > data->cma_hold_size) || data->oom_retry) {
 		for (i = 0; i < data->cma_block_count; ++i) {
 			if (data->cma_hold_block_mask & BIT(i))
 				continue;
 
-			block_start = heap->cma_paddr + data->cma_block_size * i;
+			block_start = heap->resv_paddr + data->cma_block_size * i;
 			block_size = min(data->cma_block_size, cm_mem_end - block_start);
 			ret = alloc_contig_range(PFN_DOWN(block_start),
 						 PFN_DOWN(block_start + block_size),
@@ -252,6 +265,8 @@ static int mtk_restricted_memory_cma_allocate(struct restricted_heap *heap,
 		data->oom_retry = false;
 		goto out_unlock;
 	}
+
+update_size:
 	data->cma_used_size += buf->size;
 
 out_unlock:
@@ -302,15 +317,18 @@ static int mtk_tee_restrict_memory(struct restricted_heap *rheap, struct restric
 	params[2].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INOUT;
 
 	do {
-		if (rheap->cma && data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA) {
+		if (rheap->cma && !data->is_carveout && data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA) {
 			mutex_lock(&data->lock);
 			index = data->cma_page_index;
 			mutex_unlock(&data->lock);
-			cm_mem_end = rheap->cma_paddr + rheap->cma_size;
-			block_start = rheap->cma_paddr + index * data->cma_block_size;
+			cm_mem_end = rheap->resv_paddr + rheap->resv_size;
+			block_start = rheap->resv_paddr + index * data->cma_block_size;
 			block_size = min(data->cma_block_size, cm_mem_end - block_start);
 			params[2].u.value.a = block_start;
 			params[2].u.value.b = block_size;
+		} else if (data->is_carveout && data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA) {
+			params[2].u.value.a = rheap->resv_paddr;
+			params[2].u.value.b = rheap->resv_size;
 		}
 		params[3].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_OUTPUT;
 		ret = mtk_tee_service_call(data->tee_ctx, data->tee_session,
@@ -335,7 +353,8 @@ static int mtk_tee_restrict_memory(struct restricted_heap *rheap, struct restric
 		mutex_lock(&data->lock);
 		data->oom_retry = true;
 		mutex_unlock(&data->lock);
-		ret = mtk_restricted_memory_cma_allocate(rheap, buf);
+
+		ret = mtk_restricted_memory_resv_allocate(rheap, buf);
 		if (ret) /* In OOM case, try allocate new block again, If fails, return directly. */
 			return ret;
 	} while (!ret);
@@ -425,23 +444,22 @@ mtk_restricted_memory_free(struct restricted_heap *rheap, struct restricted_buff
 {
 }
 
-static void mtk_restricted_memory_cma_free(struct restricted_heap *rheap,
-					   struct restricted_buffer *buf)
+static void mtk_restricted_memory_resv_free(struct restricted_heap *rheap,
+					    struct restricted_buffer *buf)
 {
 	struct mtk_restricted_heap_data *data = rheap->priv_data;
 	unsigned long block_start, block_size, cm_mem_end;
 	int i;
 
-	cm_mem_end = rheap->cma_paddr + rheap->cma_size;
+	cm_mem_end = rheap->resv_paddr + rheap->resv_size;
 	mutex_lock(&data->lock);
 	data->cma_used_size -= buf->size;
-
-	if (!data->cma_used_size) {
+	if (!data->is_carveout && !data->cma_used_size) {
 		for (i = 0; i < data->cma_block_count; ++i) {
 			if (!(data->cma_hold_block_mask & BIT(i)))
 				continue;
 
-			block_start = rheap->cma_paddr + data->cma_block_size * i;
+			block_start = rheap->resv_paddr + data->cma_block_size * i;
 			block_size = min(data->cma_block_size, cm_mem_end - block_start);
 			free_contig_range(PFN_DOWN(block_start), block_size >> PAGE_SHIFT);
 		}
@@ -474,18 +492,20 @@ static const struct restricted_heap_ops mtk_restricted_heap_ops = {
 
 static struct mtk_restricted_heap_data mtk_restricted_heap_data = {
 	.mem_type		= MTK_SECURE_MEMORY_TYPE_CM_TZ,
+	.is_carveout		= false,
 };
 
-static const struct restricted_heap_ops mtk_restricted_heap_ops_cma = {
+static const struct restricted_heap_ops mtk_restricted_heap_ops_resv = {
 	.heap_init		= mtk_restricted_heap_init,
-	.alloc			= mtk_restricted_memory_cma_allocate,
-	.free			= mtk_restricted_memory_cma_free,
+	.alloc			= mtk_restricted_memory_resv_allocate,
+	.free			= mtk_restricted_memory_resv_free,
 	.restrict_buf		= mtk_tee_restrict_memory,
 	.unrestrict_buf		= mtk_tee_unrestrict_memory,
 };
 
-static struct mtk_restricted_heap_data mtk_restricted_heap_data_cma = {
+static struct mtk_restricted_heap_data mtk_restricted_heap_data_resv = {
 	.mem_type		= MTK_SECURE_MEMORY_TYPE_CM_CMA,
+	.is_carveout		= false,
 };
 
 static struct restricted_heap mtk_restricted_heaps[] = {
@@ -496,43 +516,52 @@ static struct restricted_heap mtk_restricted_heaps[] = {
 	},
 	{
 		.name		= "restricted_mtk_cma",
-		.ops		= &mtk_restricted_heap_ops_cma,
-		.priv_data	= &mtk_restricted_heap_data_cma,
+		.ops		= &mtk_restricted_heap_ops_resv,
+		.priv_data	= &mtk_restricted_heap_data_resv,
 	},
 };
 
-static int __init mtk_restricted_cma_init(struct reserved_mem *rmem)
+static int __init mtk_restricted_resv_init(struct reserved_mem *rmem)
 {
-	struct restricted_heap *rheap = mtk_restricted_heaps, *rheap_cma = NULL;
+	struct restricted_heap *rheap = mtk_restricted_heaps, *rheap_resv = NULL;
 	struct mtk_restricted_heap_data *data;
-	struct cma *cma;
+	unsigned long node = rmem->fdt_node;
+	struct cma *cma = NULL;
 	int ret, i;
+
+	/* If restricted_region in the device tree has the 'reusable' attribute,
+	 * it uses CMA to dynamically allocate memory. If restricted_region has
+	 * the 'no-map' attribute, it uses carveout memory. This depends on the
+	 * platform configuration.
+	 */
+	if (of_get_flat_dt_prop(node, "reusable", NULL)) {
+		ret = cma_init_reserved_mem(rmem->base, rmem->size, 0, rmem->name, &cma);
+		if (ret || !cma) {
+			pr_err("%s: %s set up CMA fail. ret %d.\n", __func__, rmem->name, ret);
+			return ret;
+		}
+	}
 
 	for (i = 0; i < ARRAY_SIZE(mtk_restricted_heaps); i++, rheap++) {
 		data = rheap->priv_data;
 		if (data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA) {
-			rheap_cma = rheap;
+			rheap_resv = rheap;
+			rheap_resv->cma = cma;
+			if (!cma)
+				data->is_carveout = true;
 			break;
 		}
 	}
-	if (!rheap_cma)
+	if (!rheap_resv)
 		return -EINVAL;
 
-	ret = cma_init_reserved_mem(rmem->base, rmem->size, 0, rmem->name,
-				    &cma);
-	if (ret) {
-		pr_err("%s: %s set up CMA fail. ret %d.\n", __func__, rmem->name, ret);
-		return ret;
-	}
-
-	rheap_cma->cma = cma;
-	rheap_cma->cma_paddr = rmem->base;
-	rheap_cma->cma_size = rmem->size;
+	rheap_resv->resv_paddr = rmem->base;
+	rheap_resv->resv_size = rmem->size;
 	return 0;
 }
 
 RESERVEDMEM_OF_DECLARE(restricted_cma, "mediatek,dynamic-restricted-region",
-		       mtk_restricted_cma_init);
+		       mtk_restricted_resv_init);
 
 static int mtk_restricted_heap_initialize(void)
 {
@@ -542,7 +571,8 @@ static int mtk_restricted_heap_initialize(void)
 
 	for (i = 0; i < ARRAY_SIZE(mtk_restricted_heaps); i++, rheap++) {
 		data = rheap->priv_data;
-		if (data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA && !rheap->cma)
+		if (data->mem_type == MTK_SECURE_MEMORY_TYPE_CM_CMA && !data->is_carveout &&
+		    !rheap->cma)
 			continue;
 		if (!restricted_heap_add(rheap))
 			mutex_init(&data->lock);
