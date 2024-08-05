@@ -43,12 +43,12 @@ struct cros_ucsi_data {
 	unsigned long flags;
 };
 
-static int cros_ucsi_read(struct ucsi *ucsi, unsigned int offset, void *val,
+static int cros_ucsi_read_message_in(struct ucsi *ucsi, void *val,
 			  size_t val_len)
 {
 	struct cros_ucsi_data *udata = ucsi_get_drvdata(ucsi);
 	struct ec_params_ucsi_ppm_get req = {
-		.offset = offset,
+		.offset = UCSI_VERSION,
 		.size = val_len,
 	};
 	int ret;
@@ -67,25 +67,24 @@ static int cros_ucsi_read(struct ucsi *ucsi, unsigned int offset, void *val,
 	return 0;
 }
 
-static int cros_ucsi_async_write(struct ucsi *ucsi, unsigned int offset,
-				 const void *val, size_t val_len)
+static int cros_ucsi_async_control(struct ucsi *ucsi, u64 command)
 {
 	struct cros_ucsi_data *udata = ucsi_get_drvdata(ucsi);
 	struct ec_params_ucsi_ppm_set *req;
 	size_t req_len;
 	int ret;
 
-	if (val_len > MAX_EC_DATA_SIZE) {
-		dev_err(udata->dev, "Can't write %zu bytes. Too big.", val_len);
+	if (sizeof(command) > MAX_EC_DATA_SIZE) {
+		dev_err(udata->dev, "Can't write %zu bytes. Too big.", sizeof(command));
 		return -EINVAL;
 	}
 
-	req_len = sizeof(struct ec_params_ucsi_ppm_set) + val_len;
+	req_len = sizeof(struct ec_params_ucsi_ppm_set) + sizeof(command);
 	req = kzalloc(req_len, GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
-	req->offset = offset;
-	memcpy(req->data, val, val_len);
+	req->offset = UCSI_CONTROL;
+	memcpy(req->data, &command, sizeof(command));
 	ret = cros_ec_cmd(udata->ec, 0, EC_CMD_UCSI_PPM_SET,
 			  req, req_len, NULL, 0);
 	kfree(req);
@@ -97,11 +96,10 @@ static int cros_ucsi_async_write(struct ucsi *ucsi, unsigned int offset,
 	return 0;
 }
 
-static int cros_ucsi_sync_write(struct ucsi *ucsi, unsigned int offset,
-				const void *val, size_t val_len)
+static int cros_ucsi_sync_control(struct ucsi *ucsi, u64 command)
 {
 	struct cros_ucsi_data *udata = ucsi_get_drvdata(ucsi);
-	bool ack = UCSI_COMMAND(*(u64 *)val) == UCSI_ACK_CC_CI;
+	bool ack = UCSI_COMMAND(command) == UCSI_ACK_CC_CI;
 	int ret;
 
 	if (ack)
@@ -109,7 +107,7 @@ static int cros_ucsi_sync_write(struct ucsi *ucsi, unsigned int offset,
 	else
 		set_bit(COMMAND_PENDING, &udata->flags);
 
-	ret = cros_ucsi_async_write(ucsi, offset, val, val_len);
+	ret = cros_ucsi_async_control(ucsi, command);
 	if (ret)
 		goto err;
 
@@ -128,9 +126,9 @@ err:
 }
 
 struct ucsi_operations cros_ucsi_ops = {
-	.read = cros_ucsi_read,
-	.async_write = cros_ucsi_async_write,
-	.sync_write = cros_ucsi_sync_write,
+	.read_message_in = cros_ucsi_read_message_in,
+	.async_control = cros_ucsi_async_control,
+	.sync_control = cros_ucsi_sync_control,
 };
 
 static void cros_ucsi_work(struct work_struct *work)
@@ -138,7 +136,7 @@ static void cros_ucsi_work(struct work_struct *work)
 	struct cros_ucsi_data *udata = container_of(work, struct cros_ucsi_data, work);
 	u32 cci;
 
-	if (cros_ucsi_read(udata->ucsi, UCSI_CCI, &cci, sizeof(cci)))
+	if (cros_ucsi_read_message_in(udata->ucsi, &cci, sizeof(cci)))
 		return;
 
 	if (UCSI_CCI_CONNECTOR(cci))
@@ -224,13 +222,12 @@ static int cros_ucsi_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int cros_ucsi_remove(struct platform_device *dev)
+static void cros_ucsi_remove(struct platform_device *dev)
 {
 	struct cros_ucsi_data *udata = platform_get_drvdata(dev);
 
 	ucsi_unregister(udata->ucsi);
 	cros_ucsi_destroy(udata);
-	return 0;
 }
 
 static int __maybe_unused cros_ucsi_suspend(struct device *dev)
