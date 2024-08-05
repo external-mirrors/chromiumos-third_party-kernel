@@ -180,6 +180,18 @@
 
 };
 
+&adsp {
+	memory-region = <&adsp_dma_mem_reserved>,
+			<&adsp_mem_reserved>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&afe {
+	memory-region = <&afe_dma_mem_reserved>;
+	status = "disabled";
+};
+
 &cpu0 {
 	proc-supply = <&mt6316_8_vbuck3>;
 };
