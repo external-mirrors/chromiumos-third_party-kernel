@@ -551,6 +551,24 @@
 		#size-cells = <2>;
 		ranges;
 
+		adsp_mem_reserved: adsp-mem-region@90000000 {
+			compatible = "mediatek,adsp-reserved-memory";
+			reg = <0 0x90000000 0 0x600000>;
+			no-map;
+		};
+
+		afe_dma_mem_reserved: snd-dma-mem-region@90600000 {
+			compatible = "shared-dma-pool";
+			reg = <0 0x90600000 0 0x200000>;
+			no-map;
+		};
+
+		adsp_dma_mem_reserved: adsp-dma-mem-region@90800000 {
+			compatible = "shared-dma-pool";
+			reg = <0 0x90800000 0 0x100000>;
+			no-map;
+		};
+
 		vcp_resv_mem: vcp-reserved-memory@a0200000 {
 			compatible = "mediatek,me-vcp-reserved";
 			reg = <0 0xa0200000 0 0x01e00000>; /* 30MB */
@@ -1835,6 +1853,27 @@
 			interrupts = <GIC_SPI 866 IRQ_TYPE_LEVEL_HIGH 0>;
 		};
 
+		adsp: adsp@1a000000 {
+			compatible = "mediatek,mt8196-dsp";
+			reg = <0 0x1a000000 0 0x5000>,
+			      <0 0x1a210000 0 0x80000>,
+			      <0 0x1a345000 0 0x300>,
+			      <0 0x1a00f000 0 0x1000>;
+			reg-names = "cfg", "sram", "sec", "bus";
+			interrupts = <GIC_SPI 705 IRQ_TYPE_LEVEL_HIGH 0>;
+			interrupt-names = "wdt";
+			power-domains = <&scpsys MT8196_POWER_DOMAIN_ADSP_TOP_DORMANT>;
+			clocks = <&cksys_clk CLK_CK_ADSP_SEL>,
+				 <&cksys_clk CLK_CK_TCK_26M_MX9>,
+				 <&cksys_clk CLK_CK_ADSPPLL>;
+			clock-names = "clk_top_adsp_sel",
+				      "clk_top_clk26m",
+				      "clk_top_adsppll";
+			mbox-names = "rx", "tx";
+			mboxes = <&adsp_mailbox0>, <&adsp_mailbox1>;
+			status = "disabled";
+		};
+
 		devapc_adsp: devapc@1a019000 {
 			compatible = "mediatek,mt8196-devapc";
 			reg = <0 0x1a019000 0 0x1000>;
@@ -2003,6 +2042,22 @@
 			etdm-in-sync = <1>; /* 0: disable; 1: enable */
 			etdm-ip-mode = <0>; /* 0: One IP multi-channel 1: Multi-IP 2-channel */
 			status = "disabled";
+		};
+
+		adsp_mailbox0: mailbox@1a350000 {
+			compatible = "mediatek,mt8196-adsp-mbox",
+				     "mediatek,mt8186-adsp-mbox";
+			reg = <0 0x1a350100 0 0x1000>;
+			interrupts = <GIC_SPI 709 IRQ_TYPE_LEVEL_HIGH 0>;
+			#mbox-cells = <0>;
+		};
+
+		adsp_mailbox1: mailbox@1a360000 {
+			compatible = "mediatek,mt8196-adsp-mbox",
+				     "mediatek,mt8186-adsp-mbox";
+			reg = <0 0x1a360100 0 0x1000>;
+			interrupts = <GIC_SPI 710 IRQ_TYPE_LEVEL_HIGH 0>;
+			#mbox-cells = <0>;
 		};
 
 		scpsys: power-controller@1c004000 {
