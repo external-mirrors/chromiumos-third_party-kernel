@@ -1351,6 +1351,14 @@
 			lvts_e_data4: data4@388 {
 				reg = <0x388 0x20>;
 			};
+
+			socinfo-data1@40 {
+				reg = <0x40 0x4>;
+			};
+
+			socinfo-data2@4c {
+				reg = <0x4c 0x4>;
+			};
 		};
 
 		i2c1: i2c@13930000 {
