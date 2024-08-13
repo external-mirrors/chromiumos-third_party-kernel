@@ -82,6 +82,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-veluza-sku131075.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-veluza-sku131076.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-veluza-sku131077.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-veluza-sku131080.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-veluza-sku131082.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-veluza-sku65536.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-voltorb-rev0-sku589824.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-voltorb-rev0-sku589825.dtb
