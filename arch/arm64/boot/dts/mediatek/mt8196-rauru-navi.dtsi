@@ -53,6 +53,12 @@
 	};
 };
 
+&cros_ec {
+	keyboard-backlight {
+		compatible = "google,cros-kbd-led-backlight";
+	};
+};
+
 &i2c4 {
 	anx_bridge: anx7625@58 {
 		compatible = "analogix,anx7625";
