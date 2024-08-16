@@ -231,6 +231,15 @@
 			bias-disable;
 		};
 	};
+
+	anx7625_pins: anx7625-pins {
+		pins2 {
+			pinmux = <PINMUX_GPIO9__FUNC_GPIO9>;
+			input-enable;
+			/delete-property/ bias-pull-up;
+			bias-disable;
+		};
+	};
 };
 
 &sound {
