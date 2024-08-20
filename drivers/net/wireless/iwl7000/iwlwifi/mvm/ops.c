@@ -769,6 +769,7 @@ static const struct iwl_hcmd_names iwl_mvm_regulatory_and_nvm_names[] = {
 	HCMD_NAME(NVM_ACCESS_COMPLETE),
 	HCMD_NAME(NVM_GET_INFO),
 	HCMD_NAME(TAS_CONFIG),
+	HCMD_NAME(TX_POWER_LIMIT_OVERRIDE_CMD),
 };
 
 static const struct iwl_hcmd_arr iwl_mvm_groups[] = {
