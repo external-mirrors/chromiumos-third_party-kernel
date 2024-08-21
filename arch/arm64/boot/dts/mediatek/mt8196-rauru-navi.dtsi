@@ -145,6 +145,16 @@
 		vcc-supply = <&mt6373_vcn33_2>;
 		wakeup-source;
 	};
+
+	/* focal trackpad */
+	trackpad@38  {
+		compatible = "hid-over-i2c";
+		reg = <0x38>;
+		interrupts-extended = <&pio 8 IRQ_TYPE_LEVEL_LOW>;
+		hid-descr-addr = <0x0020>;
+		vcc-supply = <&mt6373_vcn33_2>;
+		wakeup-source;
+	};
 };
 
 &backlight {
