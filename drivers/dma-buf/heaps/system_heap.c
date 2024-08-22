@@ -24,8 +24,14 @@
 #include <linux/swiotlb.h>
 #include <linux/vmalloc.h>
 
+#include <uapi/linux/dma-heap.h>
+
+#include "mtk_heap.h"
+
 static struct dma_heap *sys_heap;
 static struct dma_heap *sys_uncached_heap;
+
+static dmaheap_slc_callback slc_callback;
 
 struct system_heap_buffer {
 	struct dma_heap *heap;
@@ -37,6 +43,9 @@ struct system_heap_buffer {
 	void *vaddr;
 
 	bool uncached;
+
+	bool slc;
+	int  slc_gid;
 };
 
 struct dma_heap_attachment {
@@ -198,6 +207,11 @@ static int system_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 {
 	struct system_heap_buffer *buffer = dmabuf->priv;
 	struct dma_heap_attachment *a;
+
+	if (buffer->slc && slc_callback) {
+		slc_callback(dmabuf);
+		return 0;
+	}
 
 	mutex_lock(&buffer->lock);
 
@@ -389,6 +403,7 @@ static struct dma_buf *system_heap_do_allocate(struct dma_heap *heap,
 	buffer->heap = heap;
 	buffer->len = len;
 	buffer->uncached = uncached;
+	buffer->slc = !!(heap_flags & DMA_HEAP_FLAGS_MTK_SLC);
 
 	INIT_LIST_HEAD(&pages);
 	i = 0;
@@ -464,6 +479,44 @@ free_buffer:
 
 	return ERR_PTR(ret);
 }
+
+int mtk_dmaheap_register_slc_callback(dmaheap_slc_callback cb)
+{
+	if (slc_callback)
+		return -EPERM;
+
+	slc_callback = cb;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_dmaheap_register_slc_callback);
+
+int mtk_dmaheap_unregister_slc_callback(void)
+{
+	slc_callback = NULL;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_dmaheap_unregister_slc_callback);
+
+int dma_buf_set_gid(struct dma_buf *dmabuf, int gid)
+{
+	struct system_heap_buffer *buffer = dmabuf->priv;
+
+	if (IS_ERR_OR_NULL(buffer))
+		return -EINVAL;
+	buffer->slc_gid = gid;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_buf_set_gid);
+
+int dma_buf_get_gid(struct dma_buf *dmabuf)
+{
+	struct system_heap_buffer *buffer = dmabuf->priv;
+
+	if (IS_ERR_OR_NULL(buffer))
+		return -EINVAL;
+	return buffer->slc_gid;
+}
+EXPORT_SYMBOL_GPL(dma_buf_get_gid);
 
 static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 					    unsigned long len,
