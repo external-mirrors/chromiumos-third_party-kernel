@@ -2686,7 +2686,7 @@
 			compatible = "mediatek,mt8196-ovlsys1-config", "mediatek,mt8196-ovlsys1_config", "syscon";
 			reg = <0 0x32c00000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
-			mboxes = <&gce0 2 CMDQ_THR_PRIO_4>;
+			mboxes = <&gce0 2 CMDQ_THR_PRIO_4>, <&gce0 10 CMDQ_THR_PRIO_4>;
 			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL1_DORMANT>;
 			#clock-cells = <1>;
 
