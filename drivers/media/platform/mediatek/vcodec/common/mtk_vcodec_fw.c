@@ -5,22 +5,19 @@
 #include "mtk_vcodec_fw_priv.h"
 #include "mtk_vcodec_fw_vcp.h"
 
-int mtk_vcodec_fw_get_ipi_id(enum mtk_vcodec_fw_type type, int hw_id)
+int mtk_vcodec_fw_get_ipi_id(enum mtk_vcodec_fw_type type, int hw_id, bool is_secure)
 {
+	if (is_secure)
+		return (hw_id == MTK_VDEC_LAT0) ? SCP_IPI_VDEC_LAT : SCP_IPI_VDEC_CORE;
+
 	switch (type) {
 	case VPU:
 	case SCP:
-		if (hw_id == MTK_VDEC_LAT0)
-			return SCP_IPI_VDEC_LAT;
-		else
-			return SCP_IPI_VDEC_CORE;
+		return (hw_id == MTK_VDEC_LAT0) ? SCP_IPI_VDEC_LAT : SCP_IPI_VDEC_CORE;
 	case VCP:
-		if (hw_id == MTK_VDEC_LAT0)
-			return VCP_IPI_LAT_DECODER;
-		else
-			return VCP_IPI_CORE_DECODER;
+		return (hw_id == MTK_VDEC_LAT0) ? VCP_IPI_LAT_DECODER : VCP_IPI_CORE_DECODER;
 	default:
-		return ERR_PTR(-EINVAL);
+		return -EINVAL;
 	}
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_fw_get_ipi_id);

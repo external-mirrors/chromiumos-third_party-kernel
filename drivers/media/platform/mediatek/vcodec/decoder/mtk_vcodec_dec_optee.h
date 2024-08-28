@@ -94,7 +94,7 @@ struct mtk_vdec_optee_private {
 	struct mutex tee_mutex;
 };
 
-#if IS_REACHABLE(CONFIG_OPTEE)
+#if IS_ENABLED(CONFIG_VIDEO_MEDIATEK_VCODEC_TEE)
 /**
  * mtk_vcodec_dec_optee_open - setup the communication channels with TA.
  * @vcodec_dev: pointer to the mtk_vcodec_dec_dev of the device
@@ -193,6 +193,6 @@ static inline void *mtk_vcodec_dec_get_shm_buffer_va(struct mtk_vcodec_dec_dev *
 	return NULL;
 }
 
-#endif /* IS_REACHABLE(CONFIG_OPTEE) */
+#endif /* IS_ENABLED(CONFIG_VIDEO_MEDIATEK_VCODEC_TEE) */
 
 #endif /* _MTK_VCODEC_DEC_OPTEE_H_ */

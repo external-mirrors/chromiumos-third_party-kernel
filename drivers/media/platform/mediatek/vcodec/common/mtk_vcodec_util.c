@@ -122,7 +122,7 @@ static int mtk_vcodec_mem_alloc_sec(struct mtk_vcodec_dec_ctx *ctx, struct mtk_v
 		goto err_alloc_mem;
 	}
 
-	mem->dma_addr = sg_dma_address(sgt->sgl);
+	mem->dma_addr = sg_phys(sgt->sgl);
 	mem->dma_buf = dma_buffer;
 	mem->attach = attach;
 	mem->sgt = sgt;

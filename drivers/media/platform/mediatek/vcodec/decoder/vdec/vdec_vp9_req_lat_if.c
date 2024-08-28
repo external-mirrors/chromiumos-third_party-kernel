@@ -1883,8 +1883,10 @@ static int vdec_vp9_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 
 	fw_handler = ctx->dev->fw_handler;
 	instance->ctx = ctx;
-	instance->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_handler->type, MTK_VDEC_LAT0);
-	instance->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_handler->type, MTK_VDEC_CORE);
+	instance->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_handler->type, MTK_VDEC_LAT0,
+						    ctx->is_secure_playback);
+	instance->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_handler->type, MTK_VDEC_CORE,
+							 ctx->is_secure_playback);
 	instance->vpu.ctx = ctx;
 	instance->vpu.codec_type = ctx->current_codec;
 

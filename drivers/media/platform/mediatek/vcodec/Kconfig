@@ -41,7 +41,7 @@ config VIDEO_MEDIATEK_VCODEC
 	  modules will be called mtk-vcodec-dec and mtk-vcodec-enc.
 
 config VIDEO_MEDIATEK_VCODEC_TEE
-	bool "MediaTek Video Codec TEE driver"
+	tristate "MediaTek Video Codec TEE driver"
 	depends on DMABUF_HEAPS
 	depends on OPTEE
 	depends on TEE

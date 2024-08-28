@@ -241,11 +241,13 @@ int vpu_dec_init(struct vdec_vpu_inst *vpu)
 	vpu->handler = vpu_dec_ipi_handler;
 	vpu->ctx->vpu_inst = vpu;
 
-	err = mtk_vcodec_fw_ipi_register(vpu->ctx->dev->fw_handler, vpu->id,
-					 vpu->handler, "vdec", vpu->ctx->dev);
-	if (err) {
-		mtk_vdec_err(vpu->ctx, "vpu_ipi_register fail status=%d", err);
-		return err;
+	if (!vpu->ctx->is_secure_playback) {
+		err = mtk_vcodec_fw_ipi_register(vpu->ctx->dev->fw_handler, vpu->id,
+						 vpu->handler, "vdec", vpu->ctx->dev);
+		if (err) {
+			mtk_vdec_err(vpu->ctx, "vpu_ipi_register fail status=%d", err);
+			return err;
+		}
 	}
 
 	/*

@@ -871,8 +871,9 @@ static int vdec_hevc_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 	inst->ctx = ctx;
 
 	fw_type = inst->ctx->dev->fw_handler->type;
-	inst->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_LAT0);
-	inst->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_CORE);
+	inst->vpu.id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_LAT0, ctx->is_secure_playback);
+	inst->vpu.core_id = mtk_vcodec_fw_get_ipi_id(fw_type, MTK_VDEC_CORE,
+						     ctx->is_secure_playback);
 	inst->vpu.ctx = ctx;
 	inst->vpu.codec_type = ctx->current_codec;
 	inst->vpu.capture_type = ctx->capture_fourcc;

@@ -497,7 +497,7 @@ static int mtk_dma_contig_get_secure_handle(struct mtk_vcodec_dec_ctx *ctx, int 
 		mtk_v4l2_vdec_err(ctx, "dma_buf_map_attachment fail fd:%d", fd);
 		goto err_map;
 	}
-	secure_handle = sg_dma_address(sgt->sgl);
+	secure_handle = sg_phys(sgt->sgl);
 
 	dma_buf_unmap_attachment(dba, sgt, DMA_BIDIRECTIONAL);
 	dma_buf_detach(buf, dba);

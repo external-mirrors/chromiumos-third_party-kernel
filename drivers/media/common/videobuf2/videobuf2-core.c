@@ -748,16 +748,6 @@ static bool verify_coherency_flags(struct vb2_queue *q, bool non_coherent_mem)
 	return true;
 }
 
-static bool verify_restricted_mem_flags(struct vb2_queue *q, bool restricted_mem)
-{
-	if (restricted_mem != q->restricted_mem) {
-		dprintk(q, 1, "restricted memory model mismatch\n");
-		return false;
-	}
-
-	return true;
-}
-
 static inline int restricted_mem_mismatch(bool restricted_mem, struct vb2_queue *q,
 					  enum vb2_memory memory)
 {
@@ -832,7 +822,6 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	q->memory = memory;
 	mutex_unlock(&q->mmap_lock);
 	set_queue_coherency(q, non_coherent_mem);
-	q->restricted_mem = restricted_mem;
 
 	/*
 	 * Ask the driver how many buffers and planes per buffer it requires.
@@ -963,15 +952,12 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 		mutex_unlock(&q->mmap_lock);
 		q->waiting_for_buffers = !q->is_output;
 		set_queue_coherency(q, non_coherent_mem);
-		q->restricted_mem = restricted_mem;
 	} else {
 		if (q->memory != memory) {
 			dprintk(q, 1, "memory model mismatch\n");
 			return -EINVAL;
 		}
 		if (!verify_coherency_flags(q, non_coherent_mem))
-			return -EINVAL;
-		if (!verify_restricted_mem_flags(q, restricted_mem))
 			return -EINVAL;
 	}
 

@@ -31,7 +31,7 @@ static inline
 struct mtk_vdec_optee_ca_info *get_ca_info(struct mtk_vdec_optee_private *optee_private,
 					   enum mtk_vdec_hw_id hw_id)
 {
-	return hw_id == MTK_VDEC_LAT0 ? &optee_private->lat_ca : &optee_private->core_ca;
+	return (hw_id == MTK_VDEC_LAT0) ? &optee_private->lat_ca : &optee_private->core_ca;
 }
 
 int mtk_vcodec_dec_optee_private_init(struct mtk_vcodec_dec_dev *vcodec_dev)
@@ -389,3 +389,6 @@ void *mtk_vcodec_dec_get_shm_buffer_va(struct mtk_vcodec_dec_dev *vcodec_dev,
 	return ca_info->shm_memref[data_index].msg_shm_ca_buf;
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_dec_get_shm_buffer_va);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Mediatek video decoder optee driver");

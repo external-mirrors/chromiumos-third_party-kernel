@@ -741,7 +741,11 @@ static int vb2_dc_map_dmabuf(void *mem_priv)
 		return -EFAULT;
 	}
 
-	buf->dma_addr = sg_dma_address(sgt->sgl);
+
+	if (buf->vb->vb2_queue->restricted_mem)
+		buf->dma_addr = sg_phys(sgt->sgl);
+	else
+		buf->dma_addr = sg_dma_address(sgt->sgl);
 	buf->dma_sgt = sgt;
 	buf->vaddr = NULL;
 

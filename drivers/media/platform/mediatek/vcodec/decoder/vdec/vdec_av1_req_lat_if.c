@@ -1921,10 +1921,10 @@ static int vdec_av1_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 	if (mtk_vcodec_fw_get_type(ctx->dev->fw_handler) == VCP) {
 		instance->vpu.id =
 			mtk_vcodec_fw_get_ipi_id(instance->ctx->dev->fw_handler->type,
-				MTK_VDEC_LAT0);
+				MTK_VDEC_LAT0, ctx->is_secure_playback);
 		instance->vpu.core_id =
 			mtk_vcodec_fw_get_ipi_id(instance->ctx->dev->fw_handler->type,
-				MTK_VDEC_CORE);
+				MTK_VDEC_CORE, ctx->is_secure_playback);
 	} else {
 		instance->vpu.id = SCP_IPI_VDEC_LAT;
 		instance->vpu.core_id = SCP_IPI_VDEC_CORE;

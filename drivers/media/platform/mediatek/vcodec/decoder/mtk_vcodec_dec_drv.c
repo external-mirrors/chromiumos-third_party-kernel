@@ -274,7 +274,7 @@ static int fops_vcodec_open(struct file *file)
 	mtk_vcodec_dbgfs_create(ctx);
 
 	mutex_unlock(&dev->dev_mutex);
-	mtk_v4l2_vdec_dbg(0, ctx, "%s decoder [%d]", dev_name(&dev->plat_dev->dev), ctx->id);
+	mtk_v4l2_vdec_dbg(0, ctx, "[test] %s decoder [%d]", dev_name(&dev->plat_dev->dev), ctx->id);
 	return ret;
 
 	/* Deinit when failure occurred */
