@@ -346,16 +346,47 @@ static void snd_usb_audio_free(struct snd_card *card)
 		dev_set_drvdata(&chip->dev->dev, NULL);
 }
 
+/*
+ * Profile name preset table
+ */
+struct usb_audio_device_name {
+	u32 id;
+	const char *vendor_name;
+	const char *product_name;
+};
+
+#define DEVICE_NAME(vid, pid, vendor, product)	 \
+	{ .id = USB_ID(vid, pid), .vendor_name = (vendor),	 \
+	  .product_name = (product)}
+
+static const struct usb_audio_device_name usb_audio_names[] = {
+	/* Logitech Audio Devices */
+	DEVICE_NAME(0x046d, 0x0898, "Logitech, Inc.", "Logi-RB-Audio"),
+	DEVICE_NAME(0x046d, 0x08d2, "Logitech, Inc.", "Logi-RBM-Audio"),
+	DEVICE_NAME(0x046d, 0x0867, "Logitech, Inc.", "Logi-MeetUp"),
+	DEVICE_NAME(0x046d, 0x087c, "Logitech, Inc.", "Logi-Huddle"),
+	{ } /* terminator */
+};
+
 static void usb_audio_make_shortname(struct usb_device *dev,
 				     struct snd_usb_audio *chip,
 				     const struct snd_usb_audio_quirk *quirk)
 {
 	struct snd_card *card = chip->card;
+	static const struct usb_audio_device_name *p;
 
 	if (quirk && quirk->product_name && *quirk->product_name) {
 		strlcpy(card->shortname, quirk->product_name,
 			sizeof(card->shortname));
 		return;
+	}
+
+	for (p = usb_audio_names; p->id; p++) {
+		if (chip->usb_id == p->id) {
+			strscpy(card->shortname, p->product_name,
+			sizeof(card->shortname));
+			return;
+		}
 	}
 
 	/* retrieve the device string as shortname */
