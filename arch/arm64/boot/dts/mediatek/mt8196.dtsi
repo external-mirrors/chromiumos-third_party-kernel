@@ -941,6 +941,11 @@
 			mediatek,init-ttj-npu = <95000>;
 		};
 
+		slbc: slbc@117800 {
+			compatible = "mediatek,mt8196-slbc";
+			reg = <0 0x00117800 0 0x400>;
+		};
+
 		qos: qos@11bb00 {
 			compatible = "mediatek,mt8196-qos";
 			reg = <0 0x0011bb00 0 0x100>,
