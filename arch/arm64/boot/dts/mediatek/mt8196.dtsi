@@ -534,6 +534,20 @@
 			method = "smc";
 			interrupts-extended = <&gic GIC_SPI 955 IRQ_TYPE_LEVEL_HIGH 0>;
 		};
+
+		scmi: scmi {
+			compatible = "arm,scmi";
+			mboxes = <&tinysys_mbox 0>, <&tinysys_mbox 1>;
+			shmem = <&scmi_tx_shmem>, <&scmi_rx_shmem>;
+			mbox-names = "tx", "rx";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			scmi_tinysys: protocol@80 {
+				reg = <0x80>;
+				scmi-cm = <9>;
+			};
+		};
 	};
 
 	memory: memory@80000000 {
@@ -2135,6 +2149,47 @@
 			reg = <0 0x1c032000 0 0x1000>;
 			vio-idx-num = <101>;
 			interrupts = <GIC_SPI 694 IRQ_TYPE_LEVEL_HIGH 0>;
+		};
+
+		sram@1c350000 {
+			compatible = "mmio-sram";
+			reg = <0x0 0x1c350000 0x0 0x80>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0x0 0x1c350000 0x80>;
+
+			scmi_tx_shmem: mailbox-sram@0 {
+				compatible = "arm,scmi-shmem";
+				reg = <0x0 0x80>;
+			};
+		};
+
+		tinysys_mbox: mailbox@1c351000 {
+			compatible = "mediatek,tinysys_mbox";
+			reg = <0 0x1c351000 0 0x1000>,
+			      <0 0x1c361000 0 0x1000>;
+			/* for profiling */
+			shmem = <&scmi_tx_shmem>, <&scmi_rx_shmem>;
+			interrupts = <GIC_SPI 417 IRQ_TYPE_LEVEL_HIGH 0>,
+				     <GIC_SPI 418 IRQ_TYPE_LEVEL_HIGH 0>;
+			#mbox-cells = <1>;
+			/* notify spm clr */
+			secure-sspm-md2spm-clr = <1>;
+		};
+
+		sram@1c360000 {
+			compatible = "mmio-sram";
+			reg = <0x0 0x1c360000 0x0 0x80>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0x0 0x1c360000 0x80>;
+
+			scmi_rx_shmem: mailbox-sram@0 {
+				compatible = "arm,scmi-shmem";
+				reg = <0x0 0x80>;
+			};
 		};
 
 		systimer: systimer@1c400000 {
