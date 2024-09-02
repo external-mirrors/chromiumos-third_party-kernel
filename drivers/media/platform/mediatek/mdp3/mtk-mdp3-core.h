@@ -101,6 +101,8 @@ struct mtk_mdp_driver_data {
 	unsigned int pipe_info_len;
 	const struct v4l2_rect *pp_criteria;
 	const u8 pp_used;
+	const struct mdp_dip_cq_data *dip_cq_data;
+	unsigned int dip_cq_len;
 };
 
 struct mdp_mm_subsys {
@@ -141,6 +143,11 @@ struct mdp_pipe_info {
 	enum mdp_pipe_id pipe_id;
 	enum mdp_mm_subsys_id sub_id;
 	u32 mutex_id;
+};
+
+struct mdp_dip_cq_data {
+	u32 event_id;
+	u32 frm_ofst;
 };
 
 int mdp_vpu_get_locked(struct mdp_dev *mdp);
