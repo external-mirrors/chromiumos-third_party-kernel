@@ -276,6 +276,7 @@
 };
 
 &dp_tx {
+	#sound-dai-cells = <0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&dp_hpd_pin>;
 	direct-dp;
