@@ -280,10 +280,16 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 		      priv->regs, DISP_REG_OVL_SRC_SIZE);
 	mtk_ddp_write(cmdq_pkt, pending->height << 16 | align_width, &priv->cmdq_reg,
 		      priv->regs, DISP_REG_OVL_SRC_SIZE);
-	mtk_ddp_write(cmdq_pkt, pending->addr, &priv->cmdq_reg,
-		      priv->regs, DISP_REG_OVL_ADDR);
-	mtk_ddp_write_mask(cmdq_pkt, pending->pitch, &priv->cmdq_reg, priv->regs, OVL_L0_SRC_PITCH,
-			   OVL_L0_SRC_PITCH_MASK);
+
+	if (pending->is_secure)
+		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr, 0,
+				  &priv->cmdq_reg, DISP_REG_OVL_ADDR);
+	else
+		mtk_ddp_write(cmdq_pkt, pending->addr, &priv->cmdq_reg,
+			      priv->regs, DISP_REG_OVL_ADDR);
+
+	mtk_ddp_write_mask(cmdq_pkt, pending->pitch, &priv->cmdq_reg,
+			   priv->regs, DISP_REG_OVL_PITCH, OVL_L0_SRC_PITCH_MASK);
 	mtk_ddp_write_mask(cmdq_pkt, pending->pitch >> 16, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_PITCH_MSB, 0xf);
 
