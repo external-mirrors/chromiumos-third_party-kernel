@@ -38,8 +38,9 @@
 	 * update UCM config.
 	 **/
 	mediatek,dai-link = "AFE_SOF_DL_24CH", "AFE_SOF_DL1", "AFE_SOF_UL0",
-			"AFE_SOF_UL1", "AFE_SOF_UL2", "I2SIN6_BE", "I2SOUT4_BE",
-			"I2SOUT6_BE", "AP_DMIC_BE", "AP_DMIC_CH34_BE";
+			"AFE_SOF_UL1", "AFE_SOF_UL2", "HDMI_FE", "I2SIN6_BE",
+			"I2SOUT4_BE", "I2SOUT6_BE", "AP_DMIC_BE", "AP_DMIC_CH34_BE",
+			"TDM_DPTX_BE";
 	status = "okay";
 
 	dai-link-0 {
@@ -66,6 +67,13 @@
 
 		codec {
 			sound-dai = <&nau8318>;
+		};
+	};
+
+	dai-link-3 {
+		link-name = "TDM_DPTX_BE";
+		codec {
+			sound-dai = <&dp_tx>;
 		};
 	};
 };
