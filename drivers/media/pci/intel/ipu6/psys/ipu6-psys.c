@@ -15,6 +15,7 @@
 #include <linux/fs.h>
 
 #include "ipu6.h"
+#include "ipu6-dma.h"
 #include "ipu-psys.h"
 #include "ipu6-ppg.h"
 #include "ipu6-platform-regs.h"
@@ -317,17 +318,21 @@ static struct ipu_psys_kcmd *ipu_psys_copy_cmd(struct ipu_psys_command *cmd,
 		if (!kcmd->kbufs[i] || !kcmd->kbufs[i]->sgt ||
 		    kcmd->kbufs[i]->len < kcmd->buffers[i].bytes_used)
 			goto error;
-		if ((kcmd->kbufs[i]->flags &
-		     IPU_BUFFER_FLAG_NO_FLUSH) ||
-		    (kcmd->buffers[i].flags &
-		     IPU_BUFFER_FLAG_NO_FLUSH) ||
+
+		if ((kcmd->kbufs[i]->flags & IPU_BUFFER_FLAG_NO_FLUSH) ||
+		    (kcmd->buffers[i].flags & IPU_BUFFER_FLAG_NO_FLUSH) ||
 		    prevfd == kcmd->buffers[i].base.fd)
 			continue;
 
 		prevfd = kcmd->buffers[i].base.fd;
-		dma_sync_sg_for_device(dev, kcmd->kbufs[i]->sgt->sgl,
-				       kcmd->kbufs[i]->sgt->orig_nents,
-				       DMA_BIDIRECTIONAL);
+
+		/*
+		 * TODO: remove exported buffer sync here as the cache
+		 * coherency should be done by the exporter
+		 */
+		if (kcmd->kbufs[i]->kaddr)
+			clflush_cache_range(kcmd->kbufs[i]->kaddr,
+					    kcmd->kbufs[i]->len);
 	}
 
 	if (kcmd->state != KCMD_STATE_PPG_START)
@@ -853,7 +858,6 @@ void ipu_psys_handle_events(struct ipu_psys *psys)
 int ipu_psys_fh_init(struct ipu_psys_fh *fh)
 {
 	struct ipu_psys *psys = fh->psys;
-	struct device *dev = &psys->adev->auxdev.dev;
 	struct ipu_psys_buffer_set *kbuf_set, *kbuf_set_tmp;
 	struct ipu_psys_scheduler *sched = &fh->sched;
 	int i;
@@ -867,10 +871,10 @@ int ipu_psys_fh_init(struct ipu_psys_fh *fh)
 		kbuf_set = kzalloc(sizeof(*kbuf_set), GFP_KERNEL);
 		if (!kbuf_set)
 			goto out_free_buf_sets;
-		kbuf_set->kaddr = dma_alloc_attrs(dev,
-						  IPU_PSYS_BUF_SET_MAX_SIZE,
-						  &kbuf_set->dma_addr,
-						  GFP_KERNEL, 0);
+		kbuf_set->kaddr = ipu6_dma_alloc(psys->adev,
+						 IPU_PSYS_BUF_SET_MAX_SIZE,
+						 &kbuf_set->dma_addr,
+						 GFP_KERNEL, 0);
 		if (!kbuf_set->kaddr) {
 			kfree(kbuf_set);
 			goto out_free_buf_sets;
@@ -884,8 +888,8 @@ int ipu_psys_fh_init(struct ipu_psys_fh *fh)
 out_free_buf_sets:
 	list_for_each_entry_safe(kbuf_set, kbuf_set_tmp,
 				 &sched->buf_sets, list) {
-		dma_free_attrs(dev, kbuf_set->size, kbuf_set->kaddr,
-			       kbuf_set->dma_addr, 0);
+		ipu6_dma_free(psys->adev, kbuf_set->size, kbuf_set->kaddr,
+			      kbuf_set->dma_addr, 0);
 		list_del(&kbuf_set->list);
 		kfree(kbuf_set);
 	}
@@ -974,8 +978,8 @@ int ipu_psys_fh_deinit(struct ipu_psys_fh *fh)
 
 	mutex_lock(&sched->bs_mutex);
 	list_for_each_entry_safe(kbuf_set, kbuf_set0, &sched->buf_sets, list) {
-		dma_free_attrs(dev, kbuf_set->size, kbuf_set->kaddr,
-			       kbuf_set->dma_addr, 0);
+		ipu6_dma_free(psys->adev, kbuf_set->size, kbuf_set->kaddr,
+			      kbuf_set->dma_addr, 0);
 		list_del(&kbuf_set->list);
 		kfree(kbuf_set);
 	}

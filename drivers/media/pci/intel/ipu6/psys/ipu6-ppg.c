@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 
+#include "ipu6-dma.h"
 #include "ipu6-ppg.h"
 
 static bool enable_suspend_resume;
@@ -47,7 +48,7 @@ struct ipu_psys_kcmd *ipu_psys_ppg_get_stop_kcmd(struct ipu_psys_ppg *kppg)
 static struct ipu_psys_buffer_set *
 __get_buf_set(struct ipu_psys_fh *fh, size_t buf_set_size)
 {
-	struct device *dev = &fh->psys->adev->auxdev.dev;
+	struct ipu6_bus_device *adev = fh->psys->adev;
 	struct ipu_psys_buffer_set *kbuf_set;
 	struct ipu_psys_scheduler *sched = &fh->sched;
 
@@ -67,8 +68,8 @@ __get_buf_set(struct ipu_psys_fh *fh, size_t buf_set_size)
 	if (!kbuf_set)
 		return NULL;
 
-	kbuf_set->kaddr = dma_alloc_attrs(dev, buf_set_size,
-					  &kbuf_set->dma_addr, GFP_KERNEL, 0);
+	kbuf_set->kaddr = ipu6_dma_alloc(adev, buf_set_size,
+					 &kbuf_set->dma_addr, GFP_KERNEL, 0);
 	if (!kbuf_set->kaddr) {
 		kfree(kbuf_set);
 		return NULL;
@@ -110,6 +111,7 @@ ipu_psys_create_buffer_set(struct ipu_psys_kcmd *kcmd,
 					    kbuf_set->dma_addr);
 	keb = kcmd->kernel_enable_bitmap;
 	ipu_fw_psys_ppg_buffer_set_set_keb(kbuf_set->buf_set, keb);
+	ipu6_dma_sync_single(psys->adev, kbuf_set->dma_addr, buf_set_size);
 
 	return kbuf_set;
 }
@@ -158,12 +160,14 @@ error:
 
 void ipu_psys_ppg_complete(struct ipu_psys *psys, struct ipu_psys_ppg *kppg)
 {
-	struct device *dev = &psys->adev->auxdev.dev;
+	struct device *dev;
 	u8 queue_id;
 	int old_ppg_state;
 
 	if (!psys || !kppg)
 		return;
+
+	dev = &psys->adev->auxdev.dev;
 
 	mutex_lock(&kppg->mutex);
 	old_ppg_state = kppg->state;

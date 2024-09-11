@@ -166,7 +166,6 @@ static struct ipu_psys_desc *ipu_psys_desc_alloc(int fd)
 
 struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size)
 {
-	struct device *dev = &psys->adev->auxdev.dev;
 	struct ipu_psys_pg *kpg;
 	unsigned long flags;
 
@@ -184,8 +183,8 @@ struct ipu_psys_pg *__get_pg_buf(struct ipu_psys *psys, size_t pg_size)
 	if (!kpg)
 		return NULL;
 
-	kpg->pg = dma_alloc_attrs(dev, pg_size,  &kpg->pg_dma_addr,
-				  GFP_KERNEL, 0);
+	kpg->pg = ipu6_dma_alloc(psys->adev, pg_size,  &kpg->pg_dma_addr,
+				 GFP_KERNEL, 0);
 	if (!kpg->pg) {
 		kfree(kpg);
 		return NULL;
@@ -396,23 +395,28 @@ static struct sg_table *ipu_dma_buf_map(struct dma_buf_attachment *attach,
 					enum dma_data_direction dir)
 {
 	struct ipu_dma_buf_attach *ipu_attach = attach->priv;
+	struct pci_dev *pdev = to_pci_dev(attach->dev);
+	struct ipu6_device *isp = pci_get_drvdata(pdev);
+	struct ipu6_bus_device *adev = isp->psys;
 	unsigned long attrs;
 	int ret;
 
 	attrs = DMA_ATTR_SKIP_CPU_SYNC;
-	ret = dma_map_sgtable(attach->dev, ipu_attach->sgt, dir, attrs);
-	if (ret < 0) {
-		dev_dbg(attach->dev, "buf map failed\n");
-
+	ret = dma_map_sgtable(&pdev->dev, ipu_attach->sgt, dir, attrs);
+	if (ret) {
+		dev_err(attach->dev, "pci buf map failed\n");
 		return ERR_PTR(-EIO);
 	}
 
-	/*
-	 * Initial cache flush to avoid writing dirty pages for buffers which
-	 * are later marked as IPU_BUFFER_FLAG_NO_FLUSH.
-	 */
-	dma_sync_sg_for_device(attach->dev, ipu_attach->sgt->sgl,
-			       ipu_attach->sgt->orig_nents, DMA_BIDIRECTIONAL);
+	dma_sync_sgtable_for_device(&pdev->dev, ipu_attach->sgt, dir);
+
+	ret = ipu6_dma_map_sgtable(adev, ipu_attach->sgt, dir, 0);
+	if (ret) {
+		dev_err(attach->dev, "ipu6 buf map failed\n");
+		return ERR_PTR(-EIO);
+	}
+
+	ipu6_dma_sync_sgtable(adev, ipu_attach->sgt);
 
 	return ipu_attach->sgt;
 }
@@ -420,7 +424,12 @@ static struct sg_table *ipu_dma_buf_map(struct dma_buf_attachment *attach,
 static void ipu_dma_buf_unmap(struct dma_buf_attachment *attach,
 			      struct sg_table *sgt, enum dma_data_direction dir)
 {
-	dma_unmap_sgtable(attach->dev, sgt, dir, DMA_ATTR_SKIP_CPU_SYNC);
+	struct pci_dev *pdev = to_pci_dev(attach->dev);
+	struct ipu6_device *isp = pci_get_drvdata(pdev);
+	struct ipu6_bus_device *adev = isp->psys;
+
+	ipu6_dma_unmap_sgtable(adev, sgt, dir, DMA_ATTR_SKIP_CPU_SYNC);
+	dma_unmap_sgtable(&pdev->dev, sgt, dir, 0);
 }
 
 static int ipu_dma_buf_mmap(struct dma_buf *dbuf, struct vm_area_struct *vma)
@@ -536,7 +545,8 @@ open_failed:
 	return rval;
 }
 
-static inline void ipu_psys_kbuf_unmap(struct ipu_psys_kbuffer *kbuf)
+static inline void ipu_psys_kbuf_unmap(struct ipu_psys_fh *fh,
+				       struct ipu_psys_kbuffer *kbuf)
 {
 	if (!kbuf)
 		return;
@@ -553,6 +563,11 @@ static inline void ipu_psys_kbuf_unmap(struct ipu_psys_kbuffer *kbuf)
 		iosys_map_set_vaddr(&dmap, kbuf->kaddr);
 		dma_buf_vunmap_unlocked(kbuf->dbuf, &dmap);
 	}
+
+	if (!kbuf->userptr)
+		ipu6_dma_unmap_sgtable(fh->psys->adev, kbuf->sgt,
+				       DMA_BIDIRECTIONAL, 0);
+
 	if (!IS_ERR_OR_NULL(kbuf->sgt))
 		dma_buf_unmap_attachment_unlocked(kbuf->db_attach,
 						  kbuf->sgt,
@@ -572,7 +587,7 @@ static void __ipu_psys_unmapbuf(struct ipu_psys_fh *fh,
 				struct ipu_psys_kbuffer *kbuf)
 {
 	/* From now on it is not safe to use this kbuffer */
-	ipu_psys_kbuf_unmap(kbuf);
+	ipu_psys_kbuf_unmap(fh, kbuf);
 	ipu_buffer_del(fh, kbuf);
 	if (!kbuf->userptr)
 		kfree(kbuf);
@@ -651,7 +666,7 @@ static int ipu_psys_release(struct inode *inode, struct file *file)
 
 		/* Unmap and release buffers */
 		if (kbuf->dbuf && db_attach) {
-			ipu_psys_kbuf_unmap(kbuf);
+			ipu_psys_kbuf_unmap(fh, kbuf);
 		} else {
 			if (db_attach)
 				ipu_psys_put_userpages(db_attach->priv);
@@ -775,11 +790,12 @@ static void ipu_psys_kbuffer_lru(struct ipu_psys_fh *fh,
 struct ipu_psys_kbuffer *ipu_psys_mapbuf_locked(int fd, struct ipu_psys_fh *fh)
 {
 	struct ipu_psys *psys = fh->psys;
-	struct device *dev = &psys->adev->auxdev.dev;
+	struct device *dev = &psys->adev->isp->pdev->dev;
 	struct ipu_psys_kbuffer *kbuf;
 	struct ipu_psys_desc *desc;
 	struct dma_buf *dbuf;
 	struct iosys_map dmap;
+	int ret;
 
 	dbuf = dma_buf_get(fd);
 	if (IS_ERR(dbuf))
@@ -833,7 +849,7 @@ struct ipu_psys_kbuffer *ipu_psys_mapbuf_locked(int fd, struct ipu_psys_fh *fh)
 	kbuf->db_attach = dma_buf_attach(kbuf->dbuf, dev);
 	if (IS_ERR(kbuf->db_attach)) {
 		dev_dbg(dev, "dma buf attach failed\n");
-		goto kbuf_map_fail;
+		goto attach_fail;
 	}
 
 	kbuf->sgt = dma_buf_map_attachment_unlocked(kbuf->db_attach,
@@ -844,10 +860,16 @@ struct ipu_psys_kbuffer *ipu_psys_mapbuf_locked(int fd, struct ipu_psys_fh *fh)
 		goto kbuf_map_fail;
 	}
 
-	kbuf->dma_addr = sg_dma_address(kbuf->sgt->sgl);
+	if (!kbuf->userptr) {
+		ret = ipu6_dma_map_sgtable(psys->adev, kbuf->sgt,
+					   DMA_BIDIRECTIONAL, 0);
+		if (ret) {
+			dev_dbg(dev, "ipu6 buf map failed\n");
+			goto kbuf_map_fail;
+		}
+	}
 
-	if (!kbuf->userptr)
-		goto mapbuf_end;
+	kbuf->dma_addr = sg_dma_address(kbuf->sgt->sgl);
 
 	dmap.is_iomem = false;
 	if (dma_buf_vmap_unlocked(kbuf->dbuf, &dmap)) {
@@ -863,8 +885,16 @@ mapbuf_end:
 
 	return kbuf;
 kbuf_map_fail:
+	if (!IS_ERR_OR_NULL(kbuf->sgt)) {
+		if (!kbuf->userptr)
+			ipu6_dma_unmap_sgtable(psys->adev, kbuf->sgt,
+					       DMA_BIDIRECTIONAL, 0);
+		dma_buf_unmap_attachment_unlocked(kbuf->db_attach, kbuf->sgt,
+						  DMA_BIDIRECTIONAL);
+	}
+	dma_buf_detach(kbuf->dbuf, kbuf->db_attach);
+attach_fail:
 	ipu_buffer_del(fh, kbuf);
-	ipu_psys_kbuf_unmap(kbuf);
 	dbuf = ERR_PTR(-EINVAL);
 	if (!kbuf->userptr)
 		kfree(kbuf);
@@ -883,11 +913,11 @@ static long ipu_psys_mapbuf(int fd, struct ipu_psys_fh *fh)
 {
 	struct ipu_psys_kbuffer *kbuf;
 
+	dev_dbg(&fh->psys->adev->auxdev.dev, "IOC_MAPBUF\n");
+
 	mutex_lock(&fh->mutex);
 	kbuf = ipu_psys_mapbuf_locked(fd, fh);
 	mutex_unlock(&fh->mutex);
-
-	dev_dbg(&fh->psys->adev->auxdev.dev, "IOC_MAPBUF\n");
 
 	return kbuf ? 0 : -EINVAL;
 }
@@ -897,11 +927,11 @@ static long ipu_psys_unmapbuf(int fd, struct ipu_psys_fh *fh)
 	struct device *dev = &fh->psys->adev->auxdev.dev;
 	long ret;
 
+	dev_dbg(dev, "IOC_UNMAPBUF\n");
+
 	mutex_lock(&fh->mutex);
 	ret = ipu_psys_unmapbuf_locked(fd, fh);
 	mutex_unlock(&fh->mutex);
-
-	dev_dbg(dev, "IOC_UNMAPBUF\n");
 
 	return ret;
 }
@@ -1398,9 +1428,9 @@ static int ipu6_psys_probe(struct auxiliary_device *auxdev,
 		kpg = kzalloc(sizeof(*kpg), GFP_KERNEL);
 		if (!kpg)
 			goto out_free_pgs;
-		kpg->pg = dma_alloc_attrs(dev, IPU_PSYS_PG_MAX_SIZE,
-					  &kpg->pg_dma_addr,
-					  GFP_KERNEL, 0);
+		kpg->pg = ipu6_dma_alloc(adev, IPU_PSYS_PG_MAX_SIZE,
+					 &kpg->pg_dma_addr,
+					 GFP_KERNEL, 0);
 		if (!kpg->pg) {
 			kfree(kpg);
 			goto out_free_pgs;
@@ -1453,7 +1483,7 @@ out_release_fw_com:
 	ipu6_fw_com_release(psys->fwcom, 1);
 out_free_pgs:
 	list_for_each_entry_safe(kpg, kpg0, &psys->pgs, list) {
-		dma_free_attrs(dev, kpg->size, kpg->pg, kpg->pg_dma_addr, 0);
+		ipu6_dma_free(adev, kpg->size, kpg->pg, kpg->pg_dma_addr, 0);
 		kfree(kpg);
 	}
 
@@ -1478,6 +1508,7 @@ out_unregister_chr_region:
 
 static void ipu6_psys_remove(struct auxiliary_device *auxdev)
 {
+	struct ipu6_bus_device *adev = auxdev_to_adev(auxdev);
 	struct device *dev = &auxdev->dev;
 	struct ipu_psys *psys = dev_get_drvdata(&auxdev->dev);
 	struct ipu_psys_pg *kpg, *kpg0;
@@ -1492,7 +1523,7 @@ static void ipu6_psys_remove(struct auxiliary_device *auxdev)
 	mutex_lock(&ipu_psys_mutex);
 
 	list_for_each_entry_safe(kpg, kpg0, &psys->pgs, list) {
-		dma_free_attrs(dev, kpg->size, kpg->pg, kpg->pg_dma_addr, 0);
+		ipu6_dma_free(adev, kpg->size, kpg->pg, kpg->pg_dma_addr, 0);
 		kfree(kpg);
 	}
 
