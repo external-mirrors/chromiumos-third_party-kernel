@@ -25,7 +25,10 @@
 #define DISP_REG_OVL_OUTPROC_INTSTA				0x008
 #define DISP_REG_OVL_OUTPROC_DATAPATH_CON			0x010
 #define DATAPATH_CON_OUTPUT_CLAMP					BIT(26)
-
+#define DISP_REG_OVL_OUTPROC_TRIG				0x00c
+#define OVL_OUTPROC_SW_TRIG						BIT(0)
+#define OVL_OUTPROC_CRC_EN						BIT(8)
+#define OVL_OUTPROC_CRC_CLR						BIT(9)
 #define DISP_REG_OVL_OUTPROC_EN					0x020
 #define OVL_OUTPROC_OVL_EN						BIT(0)
 #define DISP_REG_OVL_OUTPROC_RST				0x024
@@ -33,6 +36,11 @@
 #define DISP_REG_OVL_OUTPROC_SHADOW_CTRL			0x028
 #define OVL_OUTPROC_BYPASS_SHADOW					BIT(2)
 #define DISP_REG_OVL_OUTPROC_ROI_SIZE				0x030
+#define DISP_REG_OVL_OUTPROC_CRC				0x100
+#define DISP_REG_OVL_OUTPROC_MODE				0x114
+#define OVL_OUTPROC_OP_8BIT_MODE					BIT(4)
+#define OVL_OUTPROC_HG_FOVL_CK_ON					BIT(8)
+#define OVL_OUTPROC_HF_FOVL_CK_ON					BIT(10)
 
 struct mtk_disp_outproc {
 	void __iomem		*regs;
@@ -41,7 +49,33 @@ struct mtk_disp_outproc {
 	void			*vblank_cb_data;
 	int			irq;
 	struct cmdq_client_reg	cmdq_reg;
+	struct mtk_crtc_crc crc;
 };
+
+static const u32 outproc_crc_ofs[] = {
+	DISP_REG_OVL_OUTPROC_CRC,
+};
+
+size_t mtk_disp_outproc_crc_cnt(struct device *dev)
+{
+	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+
+	return priv->crc.cnt;
+}
+
+u32 *mtk_disp_outproc_crc_entry(struct device *dev)
+{
+	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+
+	return priv->crc.va;
+}
+
+void mtk_disp_outproc_crc_read(struct device *dev)
+{
+	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+
+	mtk_crtc_read_crc(&priv->crc);
+}
 
 void mtk_disp_outproc_register_vblank_cb(struct device *dev,
 					 void (*vblank_cb)(void *),
@@ -114,6 +148,9 @@ void mtk_disp_outproc_config(struct device *dev, unsigned int w,
 void mtk_disp_outproc_start(struct device *dev)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+	unsigned int crc_mode_en  = OVL_OUTPROC_HG_FOVL_CK_ON |
+				    OVL_OUTPROC_HF_FOVL_CK_ON |
+				    OVL_OUTPROC_OP_8BIT_MODE;
 
 	mtk_ddp_write_mask(NULL, OVL_OUTPROC_RST, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_OUTPROC_RST, OVL_OUTPROC_RST);
@@ -123,16 +160,40 @@ void mtk_disp_outproc_start(struct device *dev)
 		      DISP_REG_OVL_OUTPROC_INTSTA);
 	mtk_ddp_write_mask(NULL, OVL_OUTPROC_OVL_EN, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_OUTPROC_EN, OVL_OUTPROC_OVL_EN);
+
+	if (priv->crc.cnt) {
+		mtk_ddp_write_mask(NULL, crc_mode_en, &priv->cmdq_reg, priv->regs,
+				 DISP_REG_OVL_OUTPROC_MODE, crc_mode_en);
+		mtk_ddp_write(NULL, OVL_OUTPROC_CRC_EN, &priv->cmdq_reg, priv->regs,
+			      DISP_REG_OVL_OUTPROC_TRIG);
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+		mtk_crtc_start_crc_cmdq(&priv->crc);
+#endif
+	}
 }
 
 void mtk_disp_outproc_stop(struct device *dev)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+	unsigned int crc_mode_en  = OVL_OUTPROC_HG_FOVL_CK_ON |
+				    OVL_OUTPROC_HF_FOVL_CK_ON |
+				    OVL_OUTPROC_OP_8BIT_MODE;
+
+	mtk_ddp_write(NULL, 0, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_OVL_OUTPROC_TRIG);
+	mtk_ddp_write_mask(NULL, 0, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_OUTPROC_MODE, crc_mode_en);
 
 	mtk_ddp_write(NULL, 0, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_OVL_OUTPROC_INTEN);
 	mtk_ddp_write_mask(NULL, 0, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_OUTPROC_EN, OVL_OUTPROC_OVL_EN);
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	if (priv->crc.cnt)
+		mtk_crtc_stop_crc_cmdq(&priv->crc);
+#endif
 }
 
 int mtk_disp_outproc_clk_enable(struct device *dev)
@@ -186,6 +247,26 @@ static int mtk_disp_outproc_probe(struct platform_device *pdev)
 	ret = cmdq_dev_get_client_reg(dev, &priv->cmdq_reg, 0);
 	if (ret)
 		dev_dbg(dev, "No mediatek,gce-client-reg\n");
+
+	/* set crc source */
+	priv->crc.cnt = ARRAY_SIZE(outproc_crc_ofs);
+	if (priv->crc.cnt) {
+		priv->crc.ofs = outproc_crc_ofs;
+		priv->crc.rst_ofs = DISP_REG_OVL_OUTPROC_TRIG;
+		priv->crc.rst_msk = OVL_OUTPROC_CRC_CLR;
+		priv->crc.va = kcalloc(priv->crc.cnt, sizeof(*priv->crc.va), GFP_KERNEL);
+		if (!priv->crc.va) {
+			dev_err(dev, "failed to allocate memory for crc\n");
+			priv->crc.cnt = 0;
+		}
+
+		if (of_property_read_u32_index(dev->of_node, "mediatek,gce-events", 0,
+					       &priv->crc.cmdq_event))
+			dev_warn(dev, "failed to get gce-events for crc\n");
+
+		priv->crc.cmdq_reg = &priv->cmdq_reg;
+		mtk_crtc_create_crc_cmdq(dev, &priv->crc);
+	}
 #endif
 
 	if (of_property_read_u32_index(dev->of_node, "interrupts", 0, &ret)) {
@@ -216,6 +297,13 @@ static int mtk_disp_outproc_probe(struct platform_device *pdev)
 
 static int mtk_disp_outproc_remove(struct platform_device *pdev)
 {
+	struct mtk_disp_outproc *priv = dev_get_drvdata(&pdev->dev);
+
+	if (priv->crc.cnt) {
+		kfree(priv->crc.va);
+		memset(&priv->crc, 0, sizeof(struct mtk_crtc_crc));
+	}
+
 	component_del(&pdev->dev, &mtk_disp_outproc_component_ops);
 
 	return 0;

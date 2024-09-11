@@ -202,6 +202,9 @@ struct device *mtk_ovlsys_adaptor_dma_dev_get(struct device *dev);
 u32 mtk_ovlsys_adaptor_get_blend_modes(struct device *dev);
 const u32 *mtk_ovlsys_adaptor_get_formats(struct device *dev);
 size_t mtk_ovlsys_adaptor_get_num_formats(struct device *dev);
+size_t mtk_ovlsys_adaptor_crc_cnt(struct device *dev);
+u32 *mtk_ovlsys_adaptor_crc_entry(struct device *dev);
+void mtk_ovlsys_adaptor_crc_read(struct device *dev);
 
 void mtk_rdma_bypass_shadow(struct device *dev);
 int mtk_rdma_clk_enable(struct device *dev);
