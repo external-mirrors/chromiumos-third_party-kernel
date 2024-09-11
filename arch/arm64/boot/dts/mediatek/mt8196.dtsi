@@ -2584,6 +2584,8 @@
 			clocks = <&ovlsys_config_clk CLK_OVL_OUTPROC0_DISP>;
 			interrupts = <GIC_SPI 450 IRQ_TYPE_LEVEL_HIGH 0>;
 			reg = <0 0x32970000 0 0x1000>;
+			mediatek,gce-events = <CMDQ_EVENT_OVL0_FRAME_DONE_SEL0>;
+			mboxes = <&gce0 3 CMDQ_THR_PRIO_4>;
 		};
 
 		disp_ovl0_outproc1: outproc@32980000 {
