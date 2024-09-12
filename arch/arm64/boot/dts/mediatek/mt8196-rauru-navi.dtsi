@@ -59,6 +59,33 @@
 	};
 };
 
+&i2c3 {
+	quad_tas2563: audio-codec@4d {
+		compatible = "ti,tas2563";
+		reg = <0x4d>, /* Woffer Left */
+			<0x4f>,	/* Tweeter Left */
+			<0x4c>, /* Woffer Right */
+			<0x4e>; /* Tweeter Right */
+
+		#sound-dai-cells = <0>;
+		reset-gpios = <&pio 174 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 9 IRQ_TYPE_LEVEL_LOW>;
+		status = "okay";
+	};
+
+	rt5682s: audio-codec@1a {
+		compatible = "realtek,rt5682s";
+		reg = <0x1a>;
+		interrupt-parent = <&pio>;
+		interrupts = <10 IRQ_TYPE_EDGE_BOTH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&nau8825_pins>;
+		realtek,jd-src = <1>;
+		#sound-dai-cells = <0>;
+		status = "okay";
+	};
+};
+
 &i2c4 {
 	anx_bridge: anx7625@58 {
 		compatible = "analogix,anx7625";
