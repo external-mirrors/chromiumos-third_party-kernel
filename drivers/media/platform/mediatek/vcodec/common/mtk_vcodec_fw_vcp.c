@@ -28,6 +28,12 @@ void *mtk_vcodec_vcp_get_vsi(struct mtk_vcodec_fw *fw, int is_lat)
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_vcp_get_vsi);
 
+dma_addr_t mtk_vcodec_vcp_get_vsi_iova(struct mtk_vcodec_fw *fw)
+{
+	return fw->vcp->iova_addr;
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_vcp_get_vsi_iova);
+
 static void vcp_ipi_lock(struct mtk_vcp *vcp, u32 ipi_id)
 {
 	if (WARN_ON(ipi_id >= VCP_IPI_MAX))
@@ -328,7 +334,7 @@ static unsigned int mtk_vcodec_vcp_get_vdec_capa(struct mtk_vcodec_fw *fw)
 
 static unsigned int mtk_vcodec_vcp_get_venc_capa(struct mtk_vcodec_fw *fw)
 {
-	return 0x1F20;
+	return 0x1;
 }
 
 static void *mtk_vcodec_vcp_dm_addr(struct mtk_vcodec_fw *fw, u32 dtcm_dmem_addr)
@@ -354,6 +360,19 @@ static void mtk_vcodec_vcp_release(struct mtk_vcodec_fw *fw)
 
 }
 
+static struct device *mtk_vcodec_vcp_get_io_dev(struct mtk_vcodec_fw *fw)
+{
+	struct mtk_vcp_device *vcp_device;
+
+	vcp_device = vcp_get(fw->pdev);
+	if (!vcp_device) {
+		dev_dbg(&fw->pdev->dev, "get vcp device failed\n");
+		return 0;
+	}
+
+	return vcp_device->dev;
+}
+
 static const struct mtk_vcodec_fw_ops mtk_vcodec_vcp_msg = {
 	.load_firmware = mtk_vcodec_vcp_load_firmware,
 	.get_vdec_capa = mtk_vcodec_vcp_get_vdec_capa,
@@ -362,6 +381,7 @@ static const struct mtk_vcodec_fw_ops mtk_vcodec_vcp_msg = {
 	.ipi_register = mtk_vcodec_vcp_set_ipi_register,
 	.ipi_send = mtk_vcodec_vcp_ipi_send,
 	.release = mtk_vcodec_vcp_release,
+	.get_io_dev = mtk_vcodec_vcp_get_io_dev,
 };
 
 struct mtk_vcodec_fw *mtk_vcodec_fw_vcp_init(void *priv, enum mtk_vcodec_fw_use fw_use)

@@ -20,14 +20,16 @@ int venc_if_init(struct mtk_vcodec_enc_ctx *ctx, unsigned int fourcc)
 {
 	int ret = 0;
 
-	switch (fourcc) {
-	case V4L2_PIX_FMT_VP8:
-		ctx->enc_if = &venc_vp8_if;
-		break;
-	case V4L2_PIX_FMT_H264:
+	if (MTK_ENC_DRV_IS_COMM(ctx)) {
+		if (fourcc == V4L2_PIX_FMT_H264)
+			ctx->enc_if = &venc_if;
+		else
+			return -EINVAL;
+	} else if (fourcc == V4L2_PIX_FMT_H264) {
 		ctx->enc_if = &venc_h264_if;
-		break;
-	default:
+	} else if (fourcc == V4L2_PIX_FMT_VP8) {
+		ctx->enc_if = &venc_vp8_if;
+	} else {
 		return -EINVAL;
 	}
 

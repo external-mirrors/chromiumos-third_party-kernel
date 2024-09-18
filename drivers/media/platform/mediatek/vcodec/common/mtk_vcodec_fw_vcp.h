@@ -78,6 +78,8 @@ struct mtk_vcp {
 void *mtk_vcodec_vcp_get_vsi(struct mtk_vcodec_fw *fw, int is_lat);
 
 struct mtk_vcodec_fw *mtk_vcodec_fw_vcp_init(void *priv, enum mtk_vcodec_fw_use fw_use);
+
+dma_addr_t mtk_vcodec_vcp_get_vsi_iova(struct mtk_vcodec_fw *fw);
 #else
 static inline void *mtk_vcodec_vcp_get_vsi(struct mtk_vcodec_fw *fw, int is_lat)
 {
@@ -88,6 +90,11 @@ static inline struct mtk_vcodec_fw *
 mtk_vcodec_fw_vcp_init(void *priv, enum mtk_vcodec_fw_use fw_use)
 {
 	return ERR_PTR(-ENODEV);
+}
+
+static inline dma_addr_t mtk_vcodec_vcp_get_vsi_iova(struct mtk_vcodec_fw *fw)
+{
+	return 0;
 }
 #endif /* CONFIG_VIDEO_MEDIATEK_VCODEC_VCP */
 
