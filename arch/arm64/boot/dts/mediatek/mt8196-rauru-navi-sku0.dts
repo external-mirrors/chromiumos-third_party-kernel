@@ -7,6 +7,7 @@
 #include "mt8196-rauru-navi.dtsi"
 
 / {
-	model = "Google Navi unprovisioned/sku0 board";
-	compatible = "google,navi-sku2147483647", "google,navi-sku0", "google,navi", "mediatek,mt8196";
+	model = "Google Navi unprovisioned 0x7FFFFFFF/sku0 board/sku3 board/sku4 board";
+	compatible = "google,navi-sku2147483647", "google,navi-sku2147480063",
+		"google,navi-sku0", "google,navi-sku3", "google,navi-sku4", "google,navi", "mediatek,mt8196";
 };
