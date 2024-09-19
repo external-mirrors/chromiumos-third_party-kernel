@@ -900,15 +900,13 @@ static int lvts_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int lvts_remove(struct platform_device *pdev)
+static void lvts_remove(struct platform_device *pdev)
 {
 	struct lvts_data *lvts_data;
 
 	lvts_data = (struct lvts_data *)platform_get_drvdata(pdev);
 
 	lvts_close(lvts_data);
-
-	return 0;
 }
 
 static int lvts_suspend(struct platform_device *pdev, pm_message_t state)
