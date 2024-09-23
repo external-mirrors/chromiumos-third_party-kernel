@@ -135,6 +135,21 @@
 	};
 };
 
+&i2c2 {
+	/delete-node/ touchscreen@41;
+
+	/* goodix touchscreen */
+	touchscreen@14 {
+		compatible = "goodix,gt7986u", "goodix,gt7375p";
+		reg = <0x14>;
+		interrupts-extended = <&pio 7 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 31 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&mt6373_vtp>;
+	};
+};
+
 &i2c0 {
 	/* synaptics trackpad */
 	trackpad@2c  {
