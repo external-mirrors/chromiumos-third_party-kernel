@@ -237,6 +237,14 @@
 			sound-dai = <&quad_tas2563>;
 		};
 	};
+
+	dai-link-3 {
+		link-name = "TDM_DPTX_BE";
+
+		codec {
+			sound-dai = <&dp_tx>;
+		};
+	};
 };
 
 &keyboard_controller {
