@@ -2367,6 +2367,7 @@
 			compatible = "mediatek,mt8196-audiosys", "syscon";
 			reg = <0 0x1a110000 0 0x1000>;
 			#clock-cells = <1>;
+			power-domains = <&scpsys MT8196_POWER_DOMAIN_AUDIO>;
 		};
 
 		afe: mt8196-afe-pcm@1a110000 {
@@ -3769,6 +3770,7 @@
 			compatible = "mediatek,mt8196-vdecsys-soc", "mediatek,mt8196-vdecsys_soc", "syscon";
 			reg = <0 0x3600f000 0 0x1000>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VDE0>;
 		};
 
 		smi_larb4: larb@3602e000 {
@@ -3787,6 +3789,7 @@
 			compatible = "mediatek,mt8196-vdecsys", "syscon";
 			reg = <0 0x3602f000 0 0x1000>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VDE1>;
 		};
 
 		venc_gcon_clk: syscon@38000000 {
@@ -3794,6 +3797,7 @@
 			reg = <0 0x38000000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VEN0>;
 		};
 
 		smi_larb7: larb@38010000 {
@@ -3848,6 +3852,7 @@
 			reg = <0 0x38800000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VEN1>;
 		};
 
 		smi_larb8: larb@38810000 {
@@ -3892,6 +3897,7 @@
 			reg = <0 0x38c00000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VEN2>;
 		};
 
 		smi_larb24: larb@38c10000 {
@@ -3941,6 +3947,7 @@
 			compatible = "mediatek,mt8196-mdpsys", "syscon";
 			reg = <0 0x3e000000 0 0x1000>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MML0_SHUTDOWN>;
 		};
 
 		smi_larb2: larb@3e030000 {
@@ -3958,6 +3965,7 @@
 			compatible = "mediatek,mt8196-mdpsys1", "syscon";
 			reg = <0 0x3e400000 0 0x1000>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MML1_SHUTDOWN>;
 		};
 
 		smi_larb3: larb@3e430000 {
@@ -3977,6 +3985,7 @@
 			reg = <0 0x3e800000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			#clock-cells = <1>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DISP_VCORE>;
 		};
 
 		smi_disp_dram_sub_comm0: smi-sub-comm@3e810000 {
