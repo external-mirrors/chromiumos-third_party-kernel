@@ -101,6 +101,7 @@
 		analogix,audio-enable;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		#sound-dai-cells = <0>;
 
 		ports {
 			#address-cells = <1>;
@@ -233,9 +234,9 @@
 	 * update UCM config.
 	 **/
 	mediatek,dai-link = "AFE_SOF_DL_24CH", "AFE_SOF_DL1", "AFE_SOF_UL0",
-			"AFE_SOF_UL1", "AFE_SOF_UL2", "HDMI_FE", "I2SIN6_BE",
+			"AFE_SOF_UL1", "AFE_SOF_UL2", "HDMI_FE", "DL2_FE", "I2SIN6_BE",
 			"I2SOUT4_BE", "I2SOUT6_BE", "AP_DMIC_BE", "AP_DMIC_CH34_BE",
-			"TDM_DPTX_BE";
+			"TDM_DPTX_BE", "I2SOUT3_BE";
 	status = "okay";
 
 	dai-link-0 {
@@ -270,6 +271,15 @@
 
 		codec {
 			sound-dai = <&dp_tx>;
+		};
+	};
+
+	dai-link-4 {
+		link-name = "I2SOUT3_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&anx_bridge>;
 		};
 	};
 };
