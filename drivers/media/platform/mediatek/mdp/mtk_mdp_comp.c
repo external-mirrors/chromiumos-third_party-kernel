@@ -229,12 +229,11 @@ static int mtk_mdp_comp_probe(struct platform_device *pdev)
 	return component_add(dev, &mtk_mdp_component_ops);
 }
 
-static int mtk_mdp_comp_remove(struct platform_device *pdev)
+static void mtk_mdp_comp_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
 	component_del(dev, &mtk_mdp_component_ops);
-	return 0;
 }
 
 struct platform_driver mtk_mdp_component_driver = {
