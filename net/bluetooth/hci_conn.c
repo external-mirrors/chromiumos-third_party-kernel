@@ -562,7 +562,8 @@ static void hci_conn_timeout(struct work_struct *work)
 
 	BT_DBG("hcon %p state %s", conn, state_to_string(conn->state));
 
-	WARN_ON(refcnt < 0);
+	if (refcnt < 0)
+		pr_warn("hcon refcount is %d\n", refcnt);
 
 	/* FIXME: It was observed that in pairing failed scenario, refcnt
 	 * drops below 0. Probably this is because l2cap_conn_del calls
@@ -951,6 +952,7 @@ static struct hci_conn *__hci_conn_add(struct hci_dev *hdev, int type, bdaddr_t 
 	conn->tx_power = HCI_TX_POWER_INVALID;
 	conn->max_tx_power = HCI_TX_POWER_INVALID;
 	conn->sync_handle = HCI_SYNC_HANDLE_INVALID;
+        conn->link_policy = hdev->link_policy;
 
 	set_bit(HCI_CONN_POWER_SAVE, &conn->flags);
 	conn->disc_timeout = HCI_DISCONN_TIMEOUT;
@@ -1314,8 +1316,10 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 
 	/* Since the controller supports only one LE connection attempt at a
 	 * time, we return -EBUSY if there is any connection attempt running.
+	 * CHROMIUM: extend the restriction to BR/EDR connection to prevent
+	 * from race. Context: b/302233940.
 	 */
-	if (hci_lookup_le_connect(hdev))
+	if (hci_lookup_le_conn_conflict(hdev))
 		return ERR_PTR(-EBUSY);
 
 	/* If there's already a connection object but it's not in
@@ -1545,6 +1549,7 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
 				     enum conn_reasons conn_reason)
 {
 	struct hci_conn *conn;
+	struct smp_irk *irk;
 
 	/* Let's make sure that le is enabled.*/
 	if (!hci_dev_test_flag(hdev, HCI_LE_ENABLED)) {
@@ -1568,6 +1573,20 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
 		if (conn->pending_sec_level < sec_level)
 			conn->pending_sec_level = sec_level;
 		goto done;
+	}
+
+	/* If we don't have an Irk or that we have a recent rpa, skip the extra
+	 * scan and try to connect immediately.
+	 */
+	irk = hci_find_irk_by_addr(hdev, dst, dst_type);
+	if (!irk ||
+	    time_before(jiffies, irk->rpa_timestamp + msecs_to_jiffies(2000))) {
+		bt_dev_info(hdev, "Skipping le scan before connect");
+
+		return hci_connect_le(hdev, dst, dst_type,
+				false, sec_level,
+				HCI_LE_CONN_TIMEOUT,
+				HCI_ROLE_MASTER, 0, 0);
 	}
 
 	BT_DBG("requesting refresh of dst_addr");
@@ -1608,6 +1627,12 @@ struct hci_conn *hci_connect_acl(struct hci_dev *hdev, bdaddr_t *dst,
 
 		return ERR_PTR(-EOPNOTSUPP);
 	}
+
+	/* CHROMIUM: Prevent race caused by concurrent BREDR and LE connection.
+	 * Context: b/302233940.
+	 */
+	if (hci_lookup_le_connect(hdev))
+		return ERR_PTR(-EBUSY);
 
 	/* Reject outgoing connection to device with same BD ADDR against
 	 * CVE-2020-26555
