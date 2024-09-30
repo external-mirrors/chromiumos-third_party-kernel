@@ -109,7 +109,7 @@ err:
 	return rc;
 }
 
-int cam_csid_ppi_remove(struct platform_device *pdev)
+void cam_csid_ppi_remove(struct platform_device *pdev)
 {
 	struct cam_csid_ppi_hw         *ppi_dev = NULL;
 	struct cam_hw_intf             *ppi_hw_intf;
@@ -127,7 +127,6 @@ int cam_csid_ppi_remove(struct platform_device *pdev)
 	kfree(ppi_dev);
 	kfree(ppi_hw_info);
 	kfree(ppi_hw_intf);
-	return 0;
 }
 
 int cam_csid_ppi_hw_init(struct cam_hw_intf **csid_ppi_hw,

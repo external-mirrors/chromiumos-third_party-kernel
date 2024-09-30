@@ -577,7 +577,7 @@ error_destroy_mem:
 	return rc;
 }
 
-static int cam_cpas_dev_remove(struct platform_device *dev)
+static void cam_cpas_dev_remove(struct platform_device *dev)
 {
 	mutex_lock(&g_cpas_intf->intf_lock);
 	cam_unregister_subdev(&g_cpas_intf->subdev);
@@ -586,8 +586,6 @@ static int cam_cpas_dev_remove(struct platform_device *dev)
 	mutex_destroy(&g_cpas_intf->intf_lock);
 	kfree(g_cpas_intf);
 	g_cpas_intf = NULL;
-
-	return 0;
 }
 
 static const struct of_device_id cam_cpas_dt_match[] = {

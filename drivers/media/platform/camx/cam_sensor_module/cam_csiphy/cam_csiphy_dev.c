@@ -208,7 +208,7 @@ csiphy_no_resource:
 }
 
 
-static int32_t cam_csiphy_device_remove(struct platform_device *pdev)
+static void cam_csiphy_device_remove(struct platform_device *pdev)
 {
 	struct v4l2_subdev *subdev =
 		platform_get_drvdata(pdev);
@@ -227,8 +227,6 @@ static int32_t cam_csiphy_device_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(&(csiphy_dev->v4l2_dev_str.sd), NULL);
 	devm_kfree(&pdev->dev, csiphy_dev);
-
-	return 0;
 }
 
 static const struct of_device_id cam_csiphy_dt_match[] = {

@@ -1017,7 +1017,7 @@ release_mem:
 	return rc;
 }
 
-static int cam_hw_cdm_remove(struct platform_device *pdev)
+static void cam_hw_cdm_remove(struct platform_device *pdev)
 {
 	int rc = -EBUSY;
 	struct cam_hw_info *cdm_hw = NULL;
@@ -1027,7 +1027,6 @@ static int cam_hw_cdm_remove(struct platform_device *pdev)
 	cdm_hw_intf = platform_get_drvdata(pdev);
 	if (!cdm_hw_intf) {
 		CAM_ERR(CAM_CDM, "Failed to get dev private data");
-		return rc;
 	}
 
 	cdm_hw = cdm_hw_intf->hw_priv;
@@ -1035,7 +1034,6 @@ static int cam_hw_cdm_remove(struct platform_device *pdev)
 		CAM_ERR(CAM_CDM,
 			"Failed to get hw private data for type=%d idx=%d",
 			cdm_hw_intf->hw_type, cdm_hw_intf->hw_idx);
-		return rc;
 	}
 
 	cdm_core = cdm_hw->core_info;
@@ -1043,26 +1041,22 @@ static int cam_hw_cdm_remove(struct platform_device *pdev)
 		CAM_ERR(CAM_CDM,
 			"Failed to get hw core data for type=%d idx=%d",
 			cdm_hw_intf->hw_type, cdm_hw_intf->hw_idx);
-		return rc;
 	}
 
 	if (cdm_hw->open_count != 0) {
 		CAM_ERR(CAM_CDM, "Hw open count invalid type=%d idx=%d cnt=%d",
 			cdm_hw_intf->hw_type, cdm_hw_intf->hw_idx,
 			cdm_hw->open_count);
-		return rc;
 	}
 
 	rc = cam_hw_cdm_deinit(cdm_hw, NULL, 0);
 	if (rc) {
 		CAM_ERR(CAM_CDM, "Deinit failed for hw");
-		return rc;
 	}
 
 	rc = cam_cpas_unregister_client(cdm_core->cpas_handle);
 	if (rc) {
 		CAM_ERR(CAM_CDM, "CPAS unregister failed");
-		return rc;
 	}
 
 	if (cam_soc_util_release_platform_resource(&cdm_hw->soc_info))
@@ -1081,8 +1075,6 @@ static int cam_hw_cdm_remove(struct platform_device *pdev)
 	kfree(cdm_hw_intf);
 	kfree(cdm_hw->core_info);
 	kfree(cdm_hw);
-
-	return 0;
 }
 
 static struct platform_driver cam_hw_cdm_driver = {

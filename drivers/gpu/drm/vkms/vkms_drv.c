@@ -254,17 +254,14 @@ out_release_group:
 	return ret;
 }
 
-static int vkms_platform_remove(struct platform_device *pdev)
+static void vkms_platform_remove(struct platform_device *pdev)
 {
 	struct vkms_device *vkms_device;
 
 	vkms_device = platform_get_drvdata(pdev);
-	if (!vkms_device)
-		return 0;
 
 	drm_dev_unregister(&vkms_device->drm);
 	drm_atomic_helper_shutdown(&vkms_device->drm);
-	return 0;
 }
 
 static struct platform_driver vkms_platform_driver = {

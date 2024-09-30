@@ -242,7 +242,7 @@ probe_fail:
 	return rc;
 }
 
-static int cam_icp_remove(struct platform_device *pdev)
+static void cam_icp_remove(struct platform_device *pdev)
 {
 	int i;
 	struct v4l2_subdev *sd;
@@ -250,19 +250,16 @@ static int cam_icp_remove(struct platform_device *pdev)
 
 	if (!pdev) {
 		CAM_ERR(CAM_ICP, "pdev is NULL");
-		return -ENODEV;
 	}
 
 	sd = platform_get_drvdata(pdev);
 	if (!sd) {
 		CAM_ERR(CAM_ICP, "V4l2 subdev is NULL");
-		return -ENODEV;
 	}
 
 	subdev = v4l2_get_subdevdata(sd);
 	if (!subdev) {
 		CAM_ERR(CAM_ICP, "cam subdev is NULL");
-		return -ENODEV;
 	}
 
 	for (i = 0; i < CAM_ICP_CTX_MAX; i++)
@@ -272,8 +269,6 @@ static int cam_icp_remove(struct platform_device *pdev)
 	cam_node_deinit(g_icp_dev->node);
 	cam_subdev_remove(&g_icp_dev->sd);
 	mutex_destroy(&g_icp_dev->icp_lock);
-
-	return 0;
 }
 
 static struct platform_driver cam_icp_driver = {

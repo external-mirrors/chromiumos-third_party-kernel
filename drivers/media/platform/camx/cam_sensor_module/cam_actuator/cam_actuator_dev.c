@@ -231,15 +231,13 @@ free_ctrl:
 	return rc;
 }
 
-static int32_t cam_actuator_platform_remove(struct platform_device *pdev)
+static void cam_actuator_platform_remove(struct platform_device *pdev)
 {
-	int32_t rc = 0;
 	struct cam_actuator_ctrl_t      *a_ctrl;
 
 	a_ctrl = platform_get_drvdata(pdev);
 	if (!a_ctrl) {
 		CAM_ERR(CAM_ACTUATOR, "Actuator device is NULL");
-		return 0;
 	}
 
 	CAM_INFO(CAM_ACTUATOR, "platform remove invoked");
@@ -257,8 +255,6 @@ static int32_t cam_actuator_platform_remove(struct platform_device *pdev)
 	v4l2_set_subdevdata(&a_ctrl->v4l2_dev_str.sd, NULL);
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, a_ctrl);
-
-	return rc;
 }
 
 static void cam_actuator_driver_i2c_remove(struct i2c_client *client)
