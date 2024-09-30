@@ -558,87 +558,109 @@
 	};
 
 	gpu_opp_table: opp-table-0 {
-		compatible = "operating-points-v2";
+		/*
+		 * Note: "operating-points-v2-mali" compatible and the
+		 * opp-core-mask properties are not part of upstream
+		 * binding.
+		 */
+
+		compatible = "operating-points-v2", "operating-points-v2-mali";
 		opp-shared;
 
 		opp-300000000 {
 			opp-hz = /bits/ 64 <300000000>;
 			opp-microvolt = <625000>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-320000000 {
 			opp-hz = /bits/ 64 <320000000>;
 			opp-microvolt = <631250>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-340000000 {
 			opp-hz = /bits/ 64 <340000000>;
 			opp-microvolt = <637500>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-360000000 {
 			opp-hz = /bits/ 64 <360000000>;
 			opp-microvolt = <643750>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-380000000 {
 			opp-hz = /bits/ 64 <380000000>;
 			opp-microvolt = <650000>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-400000000 {
 			opp-hz = /bits/ 64 <400000000>;
 			opp-microvolt = <656250>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-420000000 {
 			opp-hz = /bits/ 64 <420000000>;
 			opp-microvolt = <662500>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-460000000 {
 			opp-hz = /bits/ 64 <460000000>;
 			opp-microvolt = <675000>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-500000000 {
 			opp-hz = /bits/ 64 <500000000>;
 			opp-microvolt = <687500>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-540000000 {
 			opp-hz = /bits/ 64 <540000000>;
 			opp-microvolt = <700000>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-580000000 {
 			opp-hz = /bits/ 64 <580000000>;
 			opp-microvolt = <712500>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-620000000 {
 			opp-hz = /bits/ 64 <620000000>;
 			opp-microvolt = <725000>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-653000000 {
 			opp-hz = /bits/ 64 <653000000>;
 			opp-microvolt = <743750>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-698000000 {
 			opp-hz = /bits/ 64 <698000000>;
 			opp-microvolt = <768750>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-743000000 {
 			opp-hz = /bits/ 64 <743000000>;
 			opp-microvolt = <793750>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 
 		opp-800000000 {
 			opp-hz = /bits/ 64 <800000000>;
 			opp-microvolt = <825000>;
+			opp-core-mask = /bits/ 64 <0xf>;
 		};
 	};
 
@@ -872,8 +894,6 @@
 
 				mfg_async: power-domain@MT8183_POWER_DOMAIN_MFG_ASYNC {
 					reg = <MT8183_POWER_DOMAIN_MFG_ASYNC>;
-					clocks = <&topckgen CLK_TOP_MUX_MFG>;
-					clock-names = "mfg";
 					#address-cells = <1>;
 					#size-cells = <0>;
 					#power-domain-cells = <1>;
@@ -1658,6 +1678,18 @@
 			power-domain-names = "core0", "core1", "core2";
 
 			operating-points-v2 = <&gpu_opp_table>;
+
+			power_model@0 {
+				compatible = "arm,mali-simple-power-model";
+				static-coefficient = <2427750>;
+				dynamic-coefficient = <4687>;
+				ts = <20000 2000 (-20) 2>;
+				thermal-zone = "cpu-thermal";
+			};
+			power_model@1 {
+				compatible = "arm,mali-g72-power-model";
+				scale = <15000>;
+			};
 		};
 
 		mmsys: syscon@14000000 {
@@ -1670,7 +1702,7 @@
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0 0x1000>;
 		};
 
-		dma-controller0@14001000 {
+		mdp3_rdma0: mdp3-rdma0@14001000 {
 			compatible = "mediatek,mt8183-mdp3-rdma";
 			reg = <0 0x14001000 0 0x1000>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0x1000 0x1000>;
@@ -1685,7 +1717,7 @@
 			#dma-cells = <1>;
 		};
 
-		mdp3-rsz0@14003000 {
+		mdp3_rsz0: mdp3-rsz0@14003000 {
 			compatible = "mediatek,mt8183-mdp3-rsz";
 			reg = <0 0x14003000 0 0x1000>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0x3000 0x1000>;
@@ -1694,7 +1726,7 @@
 			clocks = <&mmsys CLK_MM_MDP_RSZ0>;
 		};
 
-		mdp3-rsz1@14004000 {
+		mdp3_rsz1: mdp3-rsz1@14004000 {
 			compatible = "mediatek,mt8183-mdp3-rsz";
 			reg = <0 0x14004000 0 0x1000>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0x4000 0x1000>;
@@ -1703,7 +1735,7 @@
 			clocks = <&mmsys CLK_MM_MDP_RSZ1>;
 		};
 
-		dma-controller@14005000 {
+		mdp3_wrot0: mdp3-wrot0@14005000 {
 			compatible = "mediatek,mt8183-mdp3-wrot";
 			reg = <0 0x14005000 0 0x1000>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0x5000 0x1000>;
@@ -1715,7 +1747,7 @@
 			#dma-cells = <1>;
 		};
 
-		mdp3-wdma@14006000 {
+		mdp3_wdma: mdp3-wdma@14006000 {
 			compatible = "mediatek,mt8183-mdp3-wdma";
 			reg = <0 0x14006000 0 0x1000>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1400XXXX 0x6000 0x1000>;
@@ -1838,6 +1870,17 @@
 			phy-names = "dphy";
 		};
 
+		dpi0: dpi@14015000 {
+			compatible = "mediatek,mt8183-dpi";
+			reg = <0 0x14015000 0 0x1000>;
+			interrupts = <GIC_SPI 237 IRQ_TYPE_LEVEL_LOW>;
+			power-domains = <&spm MT8183_POWER_DOMAIN_DISP>;
+			clocks = <&mmsys CLK_MM_DPI_IF>,
+				 <&mmsys CLK_MM_DPI_MM>,
+				 <&apmixedsys CLK_APMIXED_TVDPLL>;
+			clock-names = "pixel", "engine", "pll";
+		};
+
 		mutex: mutex@14016000 {
 			compatible = "mediatek,mt8183-disp-mutex";
 			reg = <0 0x14016000 0 0x1000>;
@@ -1869,7 +1912,7 @@
 			power-domains = <&spm MT8183_POWER_DOMAIN_DISP>;
 		};
 
-		mdp3-ccorr@1401c000 {
+		mdp3_ccorr: mdp3-ccorr@1401c000 {
 			compatible = "mediatek,mt8183-mdp3-ccorr";
 			reg = <0 0x1401c000 0 0x1000>;
 			mediatek,gce-client-reg = <&gce SUBSYS_1401XXXX 0xc000 0x1000>;
@@ -1882,6 +1925,21 @@
 			compatible = "mediatek,mt8183-imgsys", "syscon";
 			reg = <0 0x15020000 0 0x1000>;
 			#clock-cells = <1>;
+		};
+
+		dip: dip@15022000 {
+			compatible = "mediatek,mt8183-dip";
+			mediatek,larb = <&larb5>;
+			mediatek,mdp3 = <&mdp3_rdma0>;
+			mediatek,scp = <&scp>;
+			iommus = <&iommu M4U_PORT_CAM_IMGI>;
+			reg = <0 0x15022000 0 0x6000>;
+			interrupts = <GIC_SPI 268 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&imgsys CLK_IMG_LARB5>,
+				 <&imgsys CLK_IMG_DIP>;
+			clock-names = "larb5",
+				      "dip";
+			power-domains = <&spm MT8183_POWER_DOMAIN_ISP>;
 		};
 
 		larb5: larb@15021000 {
@@ -1901,6 +1959,19 @@
 			clocks = <&imgsys CLK_IMG_LARB2>, <&imgsys CLK_IMG_LARB2>,
 				 <&mmsys CLK_MM_GALS_IPU2MM>;
 			clock-names = "apb", "smi", "gals";
+			power-domains = <&spm MT8183_POWER_DOMAIN_ISP>;
+		};
+
+		fd: fd@1502b000 {
+			compatible = "mediatek,mt8183-fd";
+			mediatek,scp = <&scp>;
+			iommus = <&iommu M4U_PORT_CAM_FDVT_RP>,
+				 <&iommu M4U_PORT_CAM_FDVT_WR>,
+				 <&iommu M4U_PORT_CAM_FDVT_RB>;
+			reg = <0 0x1502b000 0 0x1000>;
+			interrupts = <GIC_SPI 269 IRQ_TYPE_LEVEL_LOW>;
+			clocks = <&imgsys CLK_IMG_FDVT>;
+			clock-names = "fd";
 			power-domains = <&spm MT8183_POWER_DOMAIN_ISP>;
 		};
 
@@ -1926,6 +1997,7 @@
 			reg-names = "misc", "ld", "top", "cm", "ad", "av", "pp",
 				    "hwd", "hwq", "hwb", "hwg";
 			interrupts = <GIC_SPI 250 IRQ_TYPE_LEVEL_LOW>;
+			mediatek,larb = <&larb1>;
 			iommus = <&iommu M4U_PORT_HW_VDEC_MC_EXT>,
 				 <&iommu M4U_PORT_HW_VDEC_PP_EXT>,
 				 <&iommu M4U_PORT_HW_VDEC_VLD_EXT>,
@@ -1976,6 +2048,25 @@
 			clock-names = "jpgenc";
 		};
 
+		vcodec_enc: vcodec@17020000 {
+			compatible = "mediatek,mt8183-vcodec-enc";
+			reg = <0 0x17020000 0 0x1000>,
+				 <0 0x17000000 0 0x1000>; /* Dummy */
+			interrupts = <GIC_SPI 247 IRQ_TYPE_LEVEL_LOW>;
+			mediatek,larb = <&larb4>;
+			iommus = <&iommu M4U_PORT_VENC_REC>,
+				 <&iommu M4U_PORT_VENC_BSDMA>,
+				 <&iommu M4U_PORT_VENC_RD_COMV>,
+				 <&iommu M4U_PORT_VENC_CUR_LUMA>,
+				 <&iommu M4U_PORT_VENC_CUR_CHROMA>,
+				 <&iommu M4U_PORT_VENC_REF_LUMA>,
+				 <&iommu M4U_PORT_VENC_REF_CHROMA>;
+			mediatek,scp = <&scp>;
+			power-domains = <&spm MT8183_POWER_DOMAIN_VENC>;
+			clocks = <&vencsys CLK_VENC_VENC>;
+			clock-names = "MT_CG_VENC";
+		};
+
 		ipu_conn: syscon@19000000 {
 			compatible = "mediatek,mt8183-ipu_conn", "syscon";
 			reg = <0 0x19000000 0 0x1000>;
@@ -2004,6 +2095,70 @@
 			compatible = "mediatek,mt8183-camsys", "syscon";
 			reg = <0 0x1a000000 0 0x1000>;
 			#clock-cells = <1>;
+		};
+
+		camisp: camisp@1a000000 {
+			compatible = "mediatek,mt8183-camisp";
+			reg = <0 0x1a000000 0 0x1000>,
+					<0 0x1a003000 0 0x1000>,
+					<0 0x1a004000 0 0x2000>,
+					<0 0x1a006000 0 0x2000>,
+					<0 0x1a008000 0 0x2000>;
+			reg-names = "cam_sys",
+					"cam_uni",
+					"cam_a",
+					"cam_b",
+					"cam_c";
+			interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_LOW>,
+					<GIC_SPI 254 IRQ_TYPE_LEVEL_LOW>,
+					<GIC_SPI 255 IRQ_TYPE_LEVEL_LOW>,
+					<GIC_SPI 256 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "cam_uni",
+					"cam_a",
+					"cam_b",
+					"cam_c";
+			iommus = <&iommu M4U_PORT_CAM_IMGO>;
+			clocks = <&camsys CLK_CAM_CAM>,
+					<&camsys CLK_CAM_CAMTG>;
+			clock-names = "camsys_cam_cgpdn",
+					"camsys_camtg_cgpdn";
+			mediatek,larb = <&larb3>,
+					<&larb6>;
+			power-domains = <&spm MT8183_POWER_DOMAIN_CAM>;
+			mediatek,scp = <&scp>;
+
+			port {
+				camisp_endpoint: endpoint {
+					remote-endpoint = <&seninf_camisp_endpoint>;
+				};
+			};
+		};
+
+		seninf: seninf@1a040000 {
+			compatible = "mediatek,mt8183-seninf";
+			reg = <0 0x1a040000 0 0x8000>,
+			      <0 0x11C80000 0 0x6000>;
+			reg-names = "base_reg", "rx_reg";
+			interrupts = <GIC_SPI 251 IRQ_TYPE_LEVEL_LOW>;
+			power-domains = <&spm MT8183_POWER_DOMAIN_CAM>;
+			clocks = <&camsys CLK_CAM_SENINF>,
+				 <&topckgen CLK_TOP_MUX_SENINF>;
+			clock-names = "CLK_CAM_SENINF", "CLK_TOP_MUX_SENINF";
+			status = "disabled";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@4 {
+					reg = <4>;
+
+					seninf_camisp_endpoint: endpoint {
+						remote-endpoint = <&camisp_endpoint>;
+					};
+				};
+			};
+
 		};
 
 		larb6: larb@1a001000 {

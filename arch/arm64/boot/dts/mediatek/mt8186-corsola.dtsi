@@ -169,7 +169,7 @@
 
 		adsp_mem: memory@60000000 {
 			compatible = "shared-dma-pool";
-			reg = <0 0x60000000 0 0xA00000>;
+			reg = <0 0x60000000 0 0x1000000>;
 			no-map;
 		};
 
@@ -369,8 +369,25 @@
 };
 
 &gpu {
+	supply-names = "mali","sram";
 	mali-supply = <&mt6366_vgpu_reg>;
+	sram-supply = <&mt6366_vsram_gpu_reg>;
+	operating-points-v2 = <&gpu_opp_table>;
+	volt-bin-mapping = <3 4 5>;
 	status = "okay";
+
+	power_model@0 {
+		compatible = "arm,mali-simple-power-model";
+		static-coefficient = <2427750>;
+		dynamic-coefficient = <4687>;
+		ts = <20000 2000 (-20) 2>;
+		thermal-zone = "soc_max";
+	};
+
+	power_model@1 {
+		compatible = "arm,mali-g52_r1-power-model";
+		scale = <1>;
+	};
 };
 
 &i2c0 {
@@ -439,6 +456,47 @@
 
 			port@1 {
 				reg = <1>;
+				it6505_out: endpoint {
+					data-lanes = <0 1>;
+				};
+			};
+		};
+
+		switches {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			switch@0 {
+				compatible = "typec-switch";
+				reg = <0>;
+				mode-switch;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						ite_typec0: endpoint {
+							remote-endpoint = <&typec_port0>;
+						};
+					};
+				};
+			};
+
+			switch@1 {
+				compatible = "typec-switch";
+				reg = <1>;
+				mode-switch;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						ite_typec1: endpoint {
+							remote-endpoint = <&typec_port1>;
+						};
+					};
+				};
 			};
 		};
 	};
@@ -1301,8 +1359,8 @@
 
 			vcore {
 				regulator-name = "pp0750_dvdd_core";
-				regulator-min-microvolt = <550000>;
-				regulator-max-microvolt = <800000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <200>;
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
@@ -1312,13 +1370,23 @@
 
 			mt6366_vdram1_reg: vdram1 {
 				regulator-name = "pp1125_emi_vdd2";
-				regulator-min-microvolt = <1125000>;
-				regulator-max-microvolt = <1125000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <2087500>;
 				regulator-ramp-delay = <12500>;
 				regulator-enable-ramp-delay = <0>;
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
 							   MT6397_BUCK_MODE_FORCE_PWM>;
 				regulator-always-on;
+			};
+
+			mt6366_vpa_reg: vpa {
+				regulator-name = "ppvar_dvdd_vpa";
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <3650000>;
+				regulator-ramp-delay = <50000>;
+				regulator-enable-ramp-delay = <250>;
+				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
+							   MT6397_BUCK_MODE_FORCE_PWM>;
 			};
 
 			mt6366_vgpu_reg: vgpu {
@@ -1329,19 +1397,17 @@
 				 */
 				regulator-name = "ppvar_dvdd_vgpu";
 				regulator-min-microvolt = <500000>;
-				regulator-max-microvolt = <950000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <200>;
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
 							   MT6397_BUCK_MODE_FORCE_PWM>;
-				regulator-coupled-with = <&mt6366_vsram_gpu_reg>;
-				regulator-coupled-max-spread = <10000>;
 			};
 
 			mt6366_vproc11_reg: vproc11 {
 				regulator-name = "ppvar_dvdd_proc_bc_mt6366";
-				regulator-min-microvolt = <600000>;
-				regulator-max-microvolt = <1200000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <200>;
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
@@ -1351,8 +1417,8 @@
 
 			mt6366_vproc12_reg: vproc12 {
 				regulator-name = "ppvar_dvdd_proc_lc";
-				regulator-min-microvolt = <600000>;
-				regulator-max-microvolt = <1200000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <200>;
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
@@ -1360,10 +1426,21 @@
 				regulator-always-on;
 			};
 
+			mt6366_vmodem_reg: vmodem {
+				regulator-name = "ppvar_vmodem";
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
+				regulator-ramp-delay = <6250>;
+				regulator-enable-ramp-delay = <900>;
+				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
+							   MT6397_BUCK_MODE_FORCE_PWM>;
+				regulator-always-on;
+			};
+
 			mt6366_vs1_reg: vs1 {
 				regulator-name = "pp2000_vs1";
-				regulator-min-microvolt = <2000000>;
-				regulator-max-microvolt = <2000000>;
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <2587500>;
 				regulator-ramp-delay = <12500>;
 				regulator-enable-ramp-delay = <0>;
 				regulator-always-on;
@@ -1371,8 +1448,8 @@
 
 			mt6366_vs2_reg: vs2 {
 				regulator-name = "pp1350_vs2";
-				regulator-min-microvolt = <1350000>;
-				regulator-max-microvolt = <1350000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <2087500>;
 				regulator-ramp-delay = <12500>;
 				regulator-enable-ramp-delay = <0>;
 				regulator-always-on;
@@ -1396,7 +1473,7 @@
 			mt6366_vaux18_reg: vaux18 {
 				regulator-name = "pp1840_vaux18";
 				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1840000>;
+				regulator-max-microvolt = <1800000>;
 				regulator-enable-ramp-delay = <270>;
 			};
 
@@ -1409,8 +1486,8 @@
 
 			mt6366_vcn18_reg: vcn18 {
 				regulator-name = "pp1800_vcn18_x";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1800000>;
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <2100000>;
 				regulator-enable-ramp-delay = <270>;
 			};
 
@@ -1423,8 +1500,8 @@
 
 			mt6366_vefuse_reg: vefuse {
 				regulator-name = "pp1800_vefuse";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1800000>;
+				regulator-min-microvolt = <1700000>;
+				regulator-max-microvolt = <1900000>;
 				regulator-enable-ramp-delay = <270>;
 			};
 
@@ -1437,15 +1514,15 @@
 
 			mt6366_vemc_reg: vemc {
 				regulator-name = "pp3000_vemc";
-				regulator-min-microvolt = <3000000>;
-				regulator-max-microvolt = <3000000>;
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
 				regulator-enable-ramp-delay = <60>;
 			};
 
 			mt6366_vibr_reg: vibr {
 				regulator-name = "pp2800_vibr_x";
-				regulator-min-microvolt = <2800000>;
-				regulator-max-microvolt = <2800000>;
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <3300000>;
 				regulator-enable-ramp-delay = <60>;
 			};
 
@@ -1481,30 +1558,30 @@
 
 			mt6366_vmddr_reg: vmddr {
 				regulator-name = "pm0750_emi_vmddr";
-				regulator-min-microvolt = <700000>;
-				regulator-max-microvolt = <750000>;
+				regulator-min-microvolt = <600000>;
+				regulator-max-microvolt = <2100000>;
 				regulator-enable-ramp-delay = <325>;
 				regulator-always-on;
 			};
 
 			mt6366_vmch_reg: vmch {
 				regulator-name = "pp3000_vmch";
-				regulator-min-microvolt = <3000000>;
-				regulator-max-microvolt = <3000000>;
+				regulator-min-microvolt = <2900000>;
+				regulator-max-microvolt = <3300000>;
 				regulator-enable-ramp-delay = <60>;
 			};
 
 			mt6366_vcn33_reg: vcn33 {
 				regulator-name = "pp3300_vcn33_x";
 				regulator-min-microvolt = <3300000>;
-				regulator-max-microvolt = <3300000>;
+				regulator-max-microvolt = <3500000>;
 				regulator-enable-ramp-delay = <270>;
 			};
 
 			vdram2 {
 				regulator-name = "pp0600_emi_vddq";
 				regulator-min-microvolt = <600000>;
-				regulator-max-microvolt = <600000>;
+				regulator-max-microvolt = <1800000>;
 				regulator-enable-ramp-delay = <3300>;
 				regulator-always-on;
 			};
@@ -1517,6 +1594,7 @@
 			};
 
 			mt6366_vrf18_reg: vrf18 {
+				compatible = "regulator-fixed";
 				regulator-name = "pp1800_vrf18_x";
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <1800000>;
@@ -1525,8 +1603,8 @@
 
 			vsim1 {
 				regulator-name = "pp1860_vsim1_x";
-				regulator-min-microvolt = <1800000>;
-				regulator-max-microvolt = <1860000>;
+				regulator-min-microvolt = <1700000>;
+				regulator-max-microvolt = <3100000>;
 				regulator-enable-ramp-delay = <540>;
 			};
 
@@ -1539,18 +1617,17 @@
 
 			mt6366_vsram_gpu_reg: vsram-gpu {
 				regulator-name = "pp0900_dvdd_sram_gpu";
-				regulator-min-microvolt = <850000>;
-				regulator-max-microvolt = <1050000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <240>;
-				regulator-coupled-with = <&mt6366_vgpu_reg>;
-				regulator-coupled-max-spread = <10000>;
+				regulator-always-on;
 			};
 
 			mt6366_vsram_others_reg: vsram-others {
 				regulator-name = "pp0900_dvdd_sram_core";
-				regulator-min-microvolt = <900000>;
-				regulator-max-microvolt = <900000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <240>;
 				regulator-always-on;
@@ -1558,8 +1635,8 @@
 
 			mt6366_vsram_proc11_reg: vsram-proc11 {
 				regulator-name = "pp0900_dvdd_sram_bc";
-				regulator-min-microvolt = <850000>;
-				regulator-max-microvolt = <1120000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <240>;
 				regulator-always-on;
@@ -1567,8 +1644,8 @@
 
 			mt6366_vsram_proc12_reg: vsram-proc12 {
 				regulator-name = "pp0900_dvdd_sram_lc";
-				regulator-min-microvolt = <850000>;
-				regulator-max-microvolt = <1120000>;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1293750>;
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <240>;
 				regulator-always-on;
@@ -1577,7 +1654,7 @@
 			vusb {
 				regulator-name = "pp3070_vusb";
 				regulator-min-microvolt = <3000000>;
-				regulator-max-microvolt = <3070000>;
+				regulator-max-microvolt = <3100000>;
 				regulator-enable-ramp-delay = <270>;
 				regulator-always-on;
 			};
@@ -1585,7 +1662,7 @@
 			vxo22 {
 				regulator-name = "pp2240_vxo22";
 				regulator-min-microvolt = <2200000>;
-				regulator-max-microvolt = <2240000>;
+				regulator-max-microvolt = <2200000>;
 				regulator-enable-ramp-delay = <120>;
 				/* Feeds DCXO internally */
 				regulator-always-on;
@@ -1644,6 +1721,19 @@
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						typec_port0: endpoint {
+							remote-endpoint = <&ite_typec0>;
+						};
+					};
+				};
 			};
 
 			usb_c1: connector@1 {
@@ -1653,6 +1743,19 @@
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						typec_port1: endpoint {
+							remote-endpoint = <&ite_typec1>;
+						};
+					};
+				};
 			};
 		};
 	};
@@ -1676,11 +1779,11 @@
 };
 
 &ssusb0 {
-	status = "okay";
+	status = "disabled";
 };
 
 &ssusb1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &u3phy0 {
@@ -1697,12 +1800,26 @@
 
 &usb_host0 {
 	vbus-supply = <&pp3300_s3>;
-	status = "okay";
+	status = "disabled";
 };
 
 &usb_host1 {
 	vbus-supply = <&usb_p1_vbus>;
+	status = "disabled";
+};
+
+&xhci0 {
 	status = "okay";
+
+	vbus-supply = <&pp3300_s3>;
+};
+
+&xhci1 {
+	status = "okay";
+
+	#address-cells = <2>;
+	#size-cells = <2>;
+	vbus-supply = <&usb_p1_vbus>;
 };
 
 &watchdog {

@@ -13,6 +13,7 @@
 #include <dt-bindings/power/mt8186-power.h>
 #include <dt-bindings/phy/phy.h>
 #include <dt-bindings/reset/mt8186-resets.h>
+#include <dt-bindings/thermal/thermal.h>
 
 / {
 	compatible = "mediatek,mt8186";
@@ -731,7 +732,7 @@
 		opp-900000000-3 {
 			opp-hz = /bits/ 64 <900000000>;
 			opp-microvolt = <850000>;
-			opp-supported-hw = <0x8>;
+			opp-supported-hw = <0xcf>;
 		};
 
 		opp-900000000-4 {
@@ -743,13 +744,13 @@
 		opp-900000000-5 {
 			opp-hz = /bits/ 64 <900000000>;
 			opp-microvolt = <825000>;
-			opp-supported-hw = <0x30>;
+			opp-supported-hw = <0x20>;
 		};
 
 		opp-950000000-3 {
 			opp-hz = /bits/ 64 <950000000>;
 			opp-microvolt = <900000>;
-			opp-supported-hw = <0x8>;
+			opp-supported-hw = <0xcf>;
 		};
 
 		opp-950000000-4 {
@@ -761,13 +762,13 @@
 		opp-950000000-5 {
 			opp-hz = /bits/ 64 <950000000>;
 			opp-microvolt = <850000>;
-			opp-supported-hw = <0x30>;
+			opp-supported-hw = <0x20>;
 		};
 
 		opp-1000000000-3 {
 			opp-hz = /bits/ 64 <1000000000>;
 			opp-microvolt = <950000>;
-			opp-supported-hw = <0x8>;
+			opp-supported-hw = <0xcf>;
 		};
 
 		opp-1000000000-4 {
@@ -779,7 +780,7 @@
 		opp-1000000000-5 {
 			opp-hz = /bits/ 64 <1000000000>;
 			opp-microvolt = <875000>;
-			opp-supported-hw = <0x30>;
+			opp-supported-hw = <0x20>;
 		};
 	};
 
@@ -931,17 +932,11 @@
 
 				power-domain@MT8186_POWER_DOMAIN_SSUSB {
 					reg = <MT8186_POWER_DOMAIN_SSUSB>;
-					clocks = <&topckgen CLK_TOP_USB_TOP>,
-						 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_REF>;
-					clock-names = "sys_ck", "ref_ck";
 					#power-domain-cells = <0>;
 				};
 
 				power-domain@MT8186_POWER_DOMAIN_SSUSB_P1 {
 					reg = <MT8186_POWER_DOMAIN_SSUSB_P1>;
-					clocks = <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_P1_SYS>,
-						 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_P1_REF>;
-					clock-names = "sys_ck", "ref_ck";
 					#power-domain-cells = <0>;
 				};
 
@@ -1361,6 +1356,17 @@
 			status = "disabled";
 		};
 
+		lvts: thermal-sensor@1100b000 {
+			compatible = "mediatek,mt8186-lvts";
+			reg = <0 0x1100b000 0 0x1000>;
+			interrupts = <GIC_SPI 99 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&infracfg_ao CLK_INFRA_AO_THERM>;
+			resets = <&infracfg_ao MT8186_INFRA_THERMAL_CTRL_RST>;
+			nvmem-cells = <&lvts_efuse_data1 &lvts_efuse_data2>;
+			nvmem-cell-names = "lvts-calib-data-1", "lvts-calib-data-2";
+			#thermal-sensor-cells = <1>;
+		};
+
 		pwm0: pwm@1100e000 {
 			compatible = "mediatek,mt8186-disp-pwm", "mediatek,mt8183-disp-pwm";
 			reg = <0 0x1100e000 0 0x1000>;
@@ -1630,6 +1636,47 @@
 			};
 		};
 
+		xhci0: usb@11200000 {
+			compatible = "mediatek,mt8186-xhci",
+				     "mediatek,mtk-xhci";
+			reg = <0 0x11200000 0 0x1000>,
+			      <0 0x11203e00 0 0x0100>;
+			reg-names = "mac", "ippc";
+			interrupts = <GIC_SPI 294 IRQ_TYPE_LEVEL_HIGH 0>;
+			phys = <&u2port0 PHY_TYPE_USB2>;
+			clocks = <&topckgen CLK_TOP_USB_TOP>,
+				 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_REF>,
+				 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_HCLK>,
+				 <&infracfg_ao CLK_INFRA_AO_ICUSB>,
+				 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_XHCI>;
+			clock-names = "sys_ck", "ref_ck", "mcu_ck", "dma_ck", "xhci_ck";
+			power-domains = <&spm MT8186_POWER_DOMAIN_SSUSB>;
+			mediatek,syscon-wakeup = <&pericfg 0x420 2>;
+			wakeup-source;
+			status = "disabled";
+		};
+
+		xhci1: usb@11280000 {
+			compatible = "mediatek,mt8186-xhci",
+				     "mediatek,mtk-xhci";
+			reg = <0 0x11280000 0 0x1000>,
+			      <0 0x11283e00 0 0x0100>;
+			reg-names = "mac", "ippc";
+			interrupts = <GIC_SPI 324 IRQ_TYPE_LEVEL_HIGH 0>;
+			phys = <&u2port1 PHY_TYPE_USB2>,
+			       <&u3port1 PHY_TYPE_USB3>;
+			clocks = <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_P1_SYS>,
+				 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_P1_REF>,
+				 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_P1_HCLK>,
+				 <&clk26m>,
+				 <&infracfg_ao CLK_INFRA_AO_SSUSB_TOP_P1_XHCI>;
+			clock-names = "sys_ck", "ref_ck", "mcu_ck", "dma_ck","xhci_ck";
+			power-domains = <&spm MT8186_POWER_DOMAIN_SSUSB_P1>;
+			mediatek,syscon-wakeup = <&pericfg 0x424 2>;
+			wakeup-source;
+			status = "disabled";
+		};
+
 		u3phy0: t-phy@11c80000 {
 			compatible = "mediatek,mt8186-tphy",
 				     "mediatek,generic-tphy-v2";
@@ -1676,6 +1723,14 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
+			lvts_efuse_data1: lvts1-calib@1cc {
+				reg = <0x1cc 0x14>;
+			};
+
+			lvts_efuse_data2: lvts2-calib@2f8 {
+				reg = <0x2f8 0x14>;
+			};
+
 			gpu_speedbin: gpu-speedbin@59c {
 				reg = <0x59c 0x4>;
 				bits = <0 3>;
@@ -1707,7 +1762,18 @@
 				     "arm,mali-bifrost";
 			reg = <0 0x13040000 0 0x4000>;
 
-			clocks = <&mfgsys CLK_MFG_BG3D>;
+			clocks = <&mfgsys CLK_MFG_BG3D>,
+				 <&topckgen CLK_TOP_MFG>,
+				 <&apmixedsys CLK_APMIXED_MFGPLL>,
+				 <&apmixedsys CLK_APMIXED_MFGPLL>,
+				 <&topckgen CLK_TOP_MAINPLL_D5>;
+
+			clock-names = "subsys_mfg_cg",
+				      "clk_mux",
+				      "clk_pll_src",
+				      "clk_main_parent",
+				      "clk_sub_parent";
+
 			interrupts = <GIC_SPI 276 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 275 IRQ_TYPE_LEVEL_HIGH 0>,
 				     <GIC_SPI 274 IRQ_TYPE_LEVEL_HIGH 0>;
@@ -2176,6 +2242,125 @@
 			mediatek,larb-id = <19>;
 			mediatek,smi = <&smi_common>;
 			power-domains = <&spm MT8186_POWER_DOMAIN_IPE>;
+		};
+
+		thermal_zones: thermal-zones {
+			soc_max {
+				polling-delay = <1000>; /* milliseconds */
+				polling-delay-passive = <50>; /* milliseconds */
+				thermal-sensors = <&lvts 0>;
+				sustainable-power = <1500>;
+
+				trips {
+					threshold: trip-point@0 {
+						temperature = <58000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					target: target@1 {
+						temperature = <82000>;
+						hysteresis = <2000>;
+						type = "passive";
+					};
+
+					soc_max_crit: soc_max_crit@0 {
+						temperature = <103000>;
+						hysteresis = <2000>;
+						type = "critical";
+					};
+				};
+
+				cooling_map: cooling-maps {
+					map0 {
+						trip = <&target>;
+						cooling-device = <&cpu0
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+								<&cpu1
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+								<&cpu2
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+								<&cpu3
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+								<&cpu4
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+								<&cpu5
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>;
+						contribution = <4096>;
+					};
+
+					map1 {
+						trip = <&target>;
+						cooling-device = <&cpu6
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>,
+								<&cpu7
+							THERMAL_NO_LIMIT
+							THERMAL_NO_LIMIT>;
+						contribution = <1024>;
+					};
+				};
+			};
+
+			cpu_zone0{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 1>;
+			};
+
+			cpu_zone1{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 2>;
+			};
+
+			cpu_zone2{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 3>;
+			};
+
+			cam{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 4>;
+			};
+
+			nna{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 5>;
+			};
+
+			adsp{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 6>;
+			};
+
+			mfg{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 7>;
+			};
+
+			cpu_big0{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 8>;
+			};
+
+			cpu_big1{
+				polling-delay = <0>; /* milliseconds */
+				polling-delay-passive = <0>; /* milliseconds */
+				thermal-sensors = <&lvts 9>;
+			};
 		};
 	};
 };
