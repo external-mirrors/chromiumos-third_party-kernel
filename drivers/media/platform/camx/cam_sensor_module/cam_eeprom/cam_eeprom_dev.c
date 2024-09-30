@@ -290,20 +290,17 @@ static void cam_eeprom_i2c_driver_remove(struct i2c_client *client)
 
 	if (!sd) {
 		CAM_ERR(CAM_EEPROM, "Subdevice is NULL");
-		return;
 	}
 
 	e_ctrl = (struct cam_eeprom_ctrl_t *)v4l2_get_subdevdata(sd);
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "eeprom device is NULL");
-		return;
 	}
 
 	soc_private =
 		(struct cam_eeprom_soc_private *)e_ctrl->soc_info.soc_private;
 	if (!soc_private) {
 		CAM_ERR(CAM_EEPROM, "soc_info.soc_private is NULL");
-		return;
 	}
 
 	CAM_INFO(CAM_EEPROM, "i2c driver remove invoked");
@@ -585,7 +582,7 @@ free_e_ctrl:
 	return rc;
 }
 
-static int cam_eeprom_platform_driver_remove(struct platform_device *pdev)
+static void cam_eeprom_platform_driver_remove(struct platform_device *pdev)
 {
 	int                        i;
 	struct cam_eeprom_ctrl_t  *e_ctrl;
@@ -594,7 +591,6 @@ static int cam_eeprom_platform_driver_remove(struct platform_device *pdev)
 	e_ctrl = platform_get_drvdata(pdev);
 	if (!e_ctrl) {
 		CAM_ERR(CAM_EEPROM, "eeprom device is NULL");
-		return -EINVAL;
 	}
 
 	CAM_INFO(CAM_EEPROM, "Platform driver remove invoked");
@@ -616,8 +612,6 @@ static int cam_eeprom_platform_driver_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(&e_ctrl->v4l2_dev_str.sd, NULL);
 	kfree(e_ctrl);
-
-	return 0;
 }
 
 static const struct of_device_id cam_eeprom_dt_match[] = {
