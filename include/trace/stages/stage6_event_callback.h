@@ -38,7 +38,7 @@
 		memcpy(__str__, __data_offsets.dst##_ptr_ ? :		\
 		       EVENT_NULL_STR, __len__);			\
 		__str__[__len__] = '\0';				\
-	} while (0)
+	} while (0);
 
 #undef __assign_vstr
 #define __assign_vstr(dst, fmt, va)					\
@@ -47,7 +47,7 @@
 		va_copy(__cp_va, *(va));				\
 		vsnprintf(__get_str(dst), TRACE_EVENT_STR_MAX, fmt, __cp_va); \
 		va_end(__cp_va);					\
-	} while (0)
+	} while (0);
 
 #undef __bitmask
 #define __bitmask(item, nr_bits) __dynamic_array(unsigned long, item, -1)
