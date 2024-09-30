@@ -104,6 +104,19 @@ int xhci_handshake_check_state(struct xhci_hcd *xhci, void __iomem *ptr,
 	return ret;
 }
 
+/* return 1 if there is a pending interrupt, -ENODEV on error, 0 otherwise */
+int xhci_pending_interrupt(struct xhci_hcd *xhci)
+{
+	u32 status;
+
+	status = readl(&xhci->op_regs->status);
+
+	if (status == ~(u32)0)
+		return -ENODEV;
+
+	return !!(status & STS_EINT);
+}
+
 /*
  * Disable interrupts and begin the xHCI halting process.
  */
@@ -225,7 +238,7 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 		udelay(1000);
 
 	ret = xhci_handshake_check_state(xhci, &xhci->op_regs->command,
-				CMD_RESET, 0, timeout_us, XHCI_STATE_REMOVING);
+				CMD_RESET, 0, 20 * 1000 * 1000, XHCI_STATE_REMOVING);
 	if (ret)
 		return ret;
 
@@ -850,12 +863,11 @@ static bool xhci_pending_portevent(struct xhci_hcd *xhci)
 {
 	struct xhci_port	**ports;
 	int			port_index;
-	u32			status;
 	u32			portsc;
 
-	status = readl(&xhci->op_regs->status);
-	if (status & STS_EINT)
+	if (xhci_pending_interrupt(xhci) > 0)
 		return true;
+
 	/*
 	 * Checking STS_EINT is not enough as there is a lag between a change
 	 * bit being set and the Port Status Change Event that it generated
@@ -4524,6 +4536,20 @@ static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct xhci_port *port;
 	u32 capability;
+
+	/* Check if USB3 device at root port is tunneled over USB4 */
+	if (hcd->speed >= HCD_USB3 && !udev->parent->parent) {
+		port = xhci->usb3_rhub.ports[udev->portnum - 1];
+
+		udev->tunnel_mode = xhci_port_is_tunneled(xhci, port);
+		if (udev->tunnel_mode == USB_LINK_UNKNOWN)
+			dev_dbg(&udev->dev, "link tunnel state unknown\n");
+		else if (udev->tunnel_mode == USB_LINK_TUNNELED)
+			dev_dbg(&udev->dev, "tunneled over USB4 link\n");
+		else if (udev->tunnel_mode == USB_LINK_NATIVE)
+			dev_dbg(&udev->dev, "native USB 3.x link\n");
+		return 0;
+	}
 
 	if (hcd->speed >= HCD_USB3 || !udev->lpm_capable || !xhci->hw_lpm_support)
 		return 0;
