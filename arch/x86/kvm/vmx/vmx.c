@@ -4291,7 +4291,7 @@ void vmx_deliver_interrupt(struct kvm_lapic *apic, int delivery_mode,
 	if (vmx_deliver_posted_interrupt(vcpu, vector)) {
 		kvm_lapic_set_irr(vector, apic);
 		kvm_make_request(KVM_REQ_EVENT, vcpu);
-		kvm_vcpu_kick(vcpu);
+		kvm_vcpu_kick_boost(vcpu);
 	} else {
 		trace_kvm_apicv_accept_irq(vcpu->vcpu_id, delivery_mode,
 					   trig_mode, vector);
@@ -7648,7 +7648,8 @@ int vmx_vm_init(struct kvm *kvm)
 	return 0;
 }
 
-u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
+u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio,
+			  const struct kvm_memory_slot *slot)
 {
 	/*
 	 * Force UC for host MMIO regions, as allowing the guest to access MMIO
@@ -7656,6 +7657,9 @@ u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
 	 */
 	if (is_mmio)
 		return MTRR_TYPE_UNCACHABLE << VMX_EPT_MT_EPTE_SHIFT;
+
+	if (slot->flags & KVM_MEM_NON_COHERENT_DMA)
+		return MTRR_TYPE_WRBACK << VMX_EPT_MT_EPTE_SHIFT;
 
 	/*
 	 * Force WB and ignore guest PAT if the VM does NOT have a non-coherent

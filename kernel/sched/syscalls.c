@@ -543,6 +543,22 @@ static void __setscheduler_uclamp(struct task_struct *p,
 				  const struct sched_attr *attr) { }
 #endif
 
+#ifdef CONFIG_SMP
+static void __setscheduler_task_util(struct task_struct *p,
+                                 const struct sched_attr *attr)
+{
+
+       if (likely(!(attr->sched_flags & SCHED_FLAG_UTIL_GUEST)))
+               return;
+
+       p->se.avg.util_guest = attr->sched_util_min;
+}
+#else
+static void __setscheduler_task_util(struct task_struct *p,
+                                 const struct sched_attr *attr)
+{ }
+#endif
+
 /*
  * Allow unprivileged RT tasks to decrease priority.
  * Only issue a capable test if needed and only once to avoid an audit
@@ -634,7 +650,7 @@ recheck:
 			return -EINVAL;
 	}
 
-	if (attr->sched_flags & ~(SCHED_FLAG_ALL | SCHED_FLAG_SUGOV))
+	if (attr->sched_flags & ~(SCHED_FLAG_ALL | SCHED_FLAG_SUGOV | SCHED_FLAG_UTIL_GUEST))
 		return -EINVAL;
 
 	/*
@@ -655,6 +671,8 @@ recheck:
 
 		if (attr->sched_flags & SCHED_FLAG_SUGOV)
 			return -EINVAL;
+               if (attr->sched_flags & SCHED_FLAG_UTIL_GUEST)
+                        return -EINVAL;
 
 		retval = security_task_setscheduler(p);
 		if (retval)
@@ -708,6 +726,8 @@ recheck:
 			goto change;
 		if (attr->sched_flags & SCHED_FLAG_UTIL_CLAMP)
 			goto change;
+                if (attr->sched_flags & SCHED_FLAG_UTIL_GUEST)
+                        goto change;
 
 		p->sched_reset_on_fork = reset_on_fork;
 		retval = 0;
@@ -797,6 +817,7 @@ change:
 		__setscheduler_prio(p, newprio);
 	}
 	__setscheduler_uclamp(p, attr);
+	__setscheduler_task_util(p, attr);
 
 	if (queued) {
 		/*

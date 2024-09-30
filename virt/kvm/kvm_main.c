@@ -54,6 +54,9 @@
 #include <asm/ioctl.h>
 #include <linux/uaccess.h>
 
+#include <linux/sched.h>
+#include <uapi/linux/sched/types.h>
+
 #include "coalesced_mmio.h"
 #include "async_pf.h"
 #include "kvm_mm.h"
@@ -93,6 +96,68 @@ EXPORT_SYMBOL_GPL(halt_poll_ns_grow_start);
 unsigned int halt_poll_ns_shrink = 2;
 module_param(halt_poll_ns_shrink, uint, 0644);
 EXPORT_SYMBOL_GPL(halt_poll_ns_shrink);
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+__read_mostly DEFINE_STATIC_KEY_FALSE(kvm_pv_sched);
+EXPORT_SYMBOL_GPL(kvm_pv_sched);
+
+static int set_kvm_pv_sched(const char *val, const struct kernel_param *cp)
+{
+	struct kvm *kvm;
+	char *s = strstrip((char *)val);
+	bool new_val, old_val = static_key_enabled(&kvm_pv_sched);
+
+	if (!strcmp(s, "0"))
+		new_val = 0;
+	else if (!strcmp(s, "1"))
+		new_val = 1;
+	else
+		return -EINVAL;
+
+	/*
+	 * We have three factors that determine the feature status for a vcpu:
+	 * - Global static key: kvm_pv_sched
+	 * - Per vm: kvm->pv_sched_enabled
+	 * - Per vcpu: vcpu->arch.pv_sched.msr_val
+	 * We check this in order to determine the feature status. On both enable
+	 * and disable path, we modify this in the same order. This is to avoid
+	 * races which otherwise would need boosting path locking.
+	 */
+	if (old_val != new_val) {
+		mutex_lock(&kvm_lock);
+		if (new_val)
+			static_branch_enable(&kvm_pv_sched);
+		else
+			static_branch_disable(&kvm_pv_sched);
+
+		list_for_each_entry(kvm, &vm_list, vm_list)
+			kvm_set_pv_sched_enabled(kvm, !old_val);
+		mutex_unlock(&kvm_lock);
+	}
+
+	return 0;
+}
+
+static int get_kvm_pv_sched(char *buf, const struct kernel_param *cp)
+{
+	return sprintf(buf, "%s\n",
+			static_key_enabled(&kvm_pv_sched) ? "1" : "0");
+}
+
+static const struct kernel_param_ops kvm_pv_sched_ops = {
+	.set = set_kvm_pv_sched,
+	.get = get_kvm_pv_sched
+};
+
+module_param_cb(kvm_pv_sched, &kvm_pv_sched_ops, NULL, 0644);
+#endif
+
+/*
+ * Allow non-refcounted struct pages and non-struct page memory to
+ * be mapped without MMU notifier protection.
+ */
+static bool allow_unsafe_mappings;
+module_param(allow_unsafe_mappings, bool, 0444);
 
 /*
  * Ordering of locks:
@@ -501,6 +566,11 @@ static void kvm_vcpu_init(struct kvm_vcpu *vcpu, struct kvm *kvm, unsigned id)
 	/* Fill the stats id string for the vcpu */
 	snprintf(vcpu->stats_id, sizeof(vcpu->stats_id), "kvm-%d/vcpu-%d",
 		 task_pid_nr(current), id);
+
+#ifdef CONFIG_KVM_VIRT_SUSPEND_TIMING
+	vcpu->suspend_time_ns = kvm->suspend_time_ns;
+	spin_lock_init(&vcpu->suspend_time_ns_lock);
+#endif
 }
 
 static void kvm_vcpu_destroy(struct kvm_vcpu *vcpu)
@@ -900,6 +970,63 @@ static int kvm_mmu_notifier_test_young(struct mmu_notifier *mn,
 					     kvm_test_age_gfn);
 }
 
+static bool kvm_test_clear_young(struct kvm *kvm, unsigned long start,
+				 unsigned long end, unsigned long *bitmap)
+{
+	int i;
+	int key;
+	bool success = true;
+
+	trace_kvm_age_hva(start, end);
+
+	key = srcu_read_lock(&kvm->srcu);
+
+	for (i = 0; i < KVM_MAX_NR_ADDRESS_SPACES; i++) {
+		struct interval_tree_node *node;
+		struct kvm_memslots *slots = __kvm_memslots(kvm, i);
+
+		kvm_for_each_memslot_in_hva_range(node, slots, start, end - 1) {
+			gfn_t lsb_gfn;
+			unsigned long hva_start, hva_end;
+			struct kvm_gfn_range range = {
+				.slot = container_of(node, struct kvm_memory_slot,
+						     hva_node[slots->node_idx]),
+			};
+
+			hva_start = max(start, range.slot->userspace_addr);
+			hva_end = min(end, range.slot->userspace_addr +
+					   range.slot->npages * PAGE_SIZE);
+
+			range.start = hva_to_gfn_memslot(hva_start, range.slot);
+			range.end = hva_to_gfn_memslot(hva_end + PAGE_SIZE - 1, range.slot);
+
+			if (WARN_ON_ONCE(range.end <= range.start))
+				continue;
+
+			/* see the comments on the generic kvm_arch_has_test_clear_young() */
+			lsb_gfn = hva_to_gfn_memslot(end - 1, range.slot);
+
+			success = kvm_arch_test_clear_young(kvm, &range, lsb_gfn, bitmap);
+			if (!success)
+				break;
+		}
+	}
+
+	srcu_read_unlock(&kvm->srcu, key);
+
+	return success;
+}
+
+static bool kvm_mmu_notifier_test_clear_young(struct mmu_notifier *mn, struct mm_struct *mm,
+					      unsigned long start, unsigned long end,
+					      unsigned long *bitmap)
+{
+	if (kvm_arch_has_test_clear_young())
+		return kvm_test_clear_young(mmu_notifier_to_kvm(mn), start, end, bitmap);
+
+	return false;
+}
+
 static void kvm_mmu_notifier_release(struct mmu_notifier *mn,
 				     struct mm_struct *mm)
 {
@@ -917,6 +1044,7 @@ static const struct mmu_notifier_ops kvm_mmu_notifier_ops = {
 	.clear_flush_young	= kvm_mmu_notifier_clear_flush_young,
 	.clear_young		= kvm_mmu_notifier_clear_young,
 	.test_young		= kvm_mmu_notifier_test_young,
+	.test_clear_young	= kvm_mmu_notifier_test_clear_young,
 	.release		= kvm_mmu_notifier_release,
 };
 
@@ -936,11 +1064,69 @@ static int kvm_init_mmu_notifier(struct kvm *kvm)
 #endif /* CONFIG_KVM_GENERIC_MMU_NOTIFIER */
 
 #ifdef CONFIG_HAVE_KVM_PM_NOTIFIER
+static int kvm_suspend_notifier(struct kvm *kvm)
+{
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
+
+	if (!virt_suspend_time_enabled(kvm))
+		return NOTIFY_DONE;
+
+	mutex_lock(&kvm->lock);
+	kvm_for_each_vcpu(i, vcpu, kvm)
+		kvm_make_request(KVM_REQ_SUSPEND_TIME_ADJ, vcpu);
+	mutex_unlock(&kvm->lock);
+
+	return NOTIFY_DONE;
+}
+
+static int kvm_resume_notifier(struct kvm *kvm)
+{
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
+
+	if (!virt_suspend_time_enabled(kvm))
+		return NOTIFY_DONE;
+
+	mutex_lock(&kvm->lock);
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		/*
+		 * Clear KVM_REQ_SUSPEND_TIME_ADJ if the suspend injection is
+		 * not needed (e.g. suspend failure)
+		 * The following condition is also true when the adjustment is
+		 * already done and it is safe to clear the request again here.
+		 */
+		if (kvm_total_suspend_time(kvm) ==
+		    vcpu_suspend_time_injected(vcpu))
+			kvm_clear_request(KVM_REQ_SUSPEND_TIME_ADJ, vcpu);
+	}
+	mutex_unlock(&kvm->lock);
+
+	return NOTIFY_DONE;
+}
+
+static int kvm_pm_notifier(struct kvm *kvm, unsigned long state)
+{
+	switch (state) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		return kvm_suspend_notifier(kvm);
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		return kvm_resume_notifier(kvm);
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int kvm_pm_notifier_call(struct notifier_block *bl,
 				unsigned long state,
 				void *unused)
 {
 	struct kvm *kvm = container_of(bl, struct kvm, pm_notifier);
+
+	if (kvm_pm_notifier(kvm, state) != NOTIFY_DONE)
+		return NOTIFY_BAD;
 
 	return kvm_arch_pm_notifier(kvm, state);
 }
@@ -966,6 +1152,24 @@ static void kvm_destroy_pm_notifier(struct kvm *kvm)
 {
 }
 #endif /* CONFIG_HAVE_KVM_PM_NOTIFIER */
+
+#ifdef CONFIG_KVM_VIRT_SUSPEND_TIMING
+void kvm_write_suspend_time(struct kvm *kvm)
+{
+	struct kvm_suspend_time st;
+
+	st.suspend_time_ns = kvm->suspend_time_ns;
+	kvm_write_guest(kvm, kvm->arch.msr_suspend_time & ~1ULL,
+			&st, sizeof(st));
+}
+
+int kvm_init_suspend_time_ghc(struct kvm *kvm, gpa_t gpa)
+{
+	kvm->arch.msr_suspend_time = gpa;
+	kvm_write_suspend_time(kvm);
+	return 0;
+}
+#endif
 
 static void kvm_destroy_dirty_bitmap(struct kvm_memory_slot *memslot)
 {
@@ -1170,6 +1374,9 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 
 	BUILD_BUG_ON(KVM_MEM_SLOTS_NUM > SHRT_MAX);
 
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	kvm->pv_sched_enabled = true;
+#endif
 	/*
 	 * Force subsequent debugfs file creations to fail if the VM directory
 	 * is not created (by kvm_create_vm_debugfs()).
@@ -1226,6 +1433,11 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 
 #ifdef CONFIG_HAVE_KVM_IRQCHIP
 	INIT_HLIST_HEAD(&kvm->irq_ack_notifier_list);
+#endif
+
+#ifdef CONFIG_KVM_VIRT_SUSPEND_TIMING
+	spin_lock_init(&kvm->suspend_time_ns_lock);
+	kvm->base_offs_boot_ns = ktime_get_offs_boot_ns();
 #endif
 
 	r = kvm_init_mmu_notifier(kvm);
@@ -1586,6 +1798,8 @@ static int check_memory_region_flags(struct kvm *kvm,
 	if (kvm_arch_has_readonly_mem(kvm) &&
 	    !(mem->flags & KVM_MEM_GUEST_MEMFD))
 		valid_flags |= KVM_MEM_READONLY;
+
+	valid_flags |= KVM_MEM_NON_COHERENT_DMA;
 
 	if (mem->flags & ~valid_flags)
 		return -EINVAL;
@@ -2057,7 +2271,8 @@ int __kvm_set_memory_region(struct kvm *kvm,
 			return -EINVAL;
 		if ((mem->userspace_addr != old->userspace_addr) ||
 		    (npages != old->npages) ||
-		    ((mem->flags ^ old->flags) & KVM_MEM_READONLY))
+		    ((mem->flags ^ old->flags) &
+		     (KVM_MEM_READONLY | KVM_MEM_NON_COHERENT_DMA)))
 			return -EINVAL;
 
 		if (base_gfn != old->base_gfn)
@@ -2754,13 +2969,30 @@ static inline int check_user_page_hwpoison(unsigned long addr)
 	return rc == -EHWPOISON;
 }
 
+static kvm_pfn_t kvm_follow_refcounted_pfn(struct kvm_follow_pfn *kfp,
+					   struct page *page)
+{
+	kvm_pfn_t pfn = page_to_pfn(page);
+
+	/*
+	 * FIXME: Ideally, KVM wouldn't pass FOLL_GET to gup() when the caller
+	 * doesn't want to grab a reference, but gup() doesn't support getting
+	 * just the pfn, i.e. FOLL_GET is effectively mandatory.  If that ever
+	 * changes, drop this and simply don't pass FOLL_GET to gup().
+	 */
+	if (!(kfp->flags & FOLL_GET))
+		put_page(page);
+
+	kfp->refcounted_page = page;
+	return pfn;
+}
+
 /*
  * The fast path to get the writable pfn which will be stored in @pfn,
  * true indicates success, otherwise false is returned.  It's also the
  * only part that runs if we can in atomic context.
  */
-static bool hva_to_pfn_fast(unsigned long addr, bool write_fault,
-			    bool *writable, kvm_pfn_t *pfn)
+static bool hva_to_pfn_fast(struct kvm_follow_pfn *kfp, kvm_pfn_t *pfn)
 {
 	struct page *page[1];
 
@@ -2769,14 +3001,12 @@ static bool hva_to_pfn_fast(unsigned long addr, bool write_fault,
 	 * or the caller allows to map a writable pfn for a read fault
 	 * request.
 	 */
-	if (!(write_fault || writable))
+	if (!((kfp->flags & FOLL_WRITE) || kfp->try_map_writable))
 		return false;
 
-	if (get_user_page_fast_only(addr, FOLL_WRITE, page)) {
-		*pfn = page_to_pfn(page[0]);
-
-		if (writable)
-			*writable = true;
+	if (get_user_page_fast_only(kfp->hva, FOLL_WRITE, page)) {
+		*pfn = kvm_follow_refcounted_pfn(kfp, page[0]);
+		kfp->writable = true;
 		return true;
 	}
 
@@ -2787,8 +3017,7 @@ static bool hva_to_pfn_fast(unsigned long addr, bool write_fault,
  * The slow path to get the pfn of the specified host virtual address,
  * 1 indicates success, -errno is returned if error is detected.
  */
-static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
-			   bool interruptible, bool *writable, kvm_pfn_t *pfn)
+static int hva_to_pfn_slow(struct kvm_follow_pfn *kfp, kvm_pfn_t *pfn)
 {
 	/*
 	 * When a VCPU accesses a page that is not mapped into the secondary
@@ -2801,37 +3030,29 @@ static int hva_to_pfn_slow(unsigned long addr, bool *async, bool write_fault,
 	 * Note that get_user_page_fast_only() and FOLL_WRITE for now
 	 * implicitly honor NUMA hinting faults and don't need this flag.
 	 */
-	unsigned int flags = FOLL_HWPOISON | FOLL_HONOR_NUMA_FAULT;
+	unsigned int flags = FOLL_HWPOISON | FOLL_HONOR_NUMA_FAULT | kfp->flags;
 	struct page *page;
 	int npages;
 
 	might_sleep();
 
-	if (writable)
-		*writable = write_fault;
-
-	if (write_fault)
-		flags |= FOLL_WRITE;
-	if (async)
-		flags |= FOLL_NOWAIT;
-	if (interruptible)
-		flags |= FOLL_INTERRUPTIBLE;
-
-	npages = get_user_pages_unlocked(addr, 1, &page, flags);
+	npages = get_user_pages_unlocked(kfp->hva, 1, &page, flags);
 	if (npages != 1)
 		return npages;
 
-	/* map read fault as writable if possible */
-	if (unlikely(!write_fault) && writable) {
+	if (kfp->flags & FOLL_WRITE) {
+		kfp->writable = true;
+	} else if (kfp->try_map_writable) {
 		struct page *wpage;
 
-		if (get_user_page_fast_only(addr, FOLL_WRITE, &wpage)) {
-			*writable = true;
+		/* map read fault as writable if possible */
+		if (get_user_page_fast_only(kfp->hva, FOLL_WRITE, &wpage)) {
+			kfp->writable = true;
 			put_page(page);
 			page = wpage;
 		}
 	}
-	*pfn = page_to_pfn(page);
+	*pfn = kvm_follow_refcounted_pfn(kfp, page);
 	return npages;
 }
 
@@ -2846,34 +3067,25 @@ static bool vma_is_valid(struct vm_area_struct *vma, bool write_fault)
 	return true;
 }
 
-static int kvm_try_get_pfn(kvm_pfn_t pfn)
-{
-	struct page *page = kvm_pfn_to_refcounted_page(pfn);
-
-	if (!page)
-		return 1;
-
-	return get_page_unless_zero(page);
-}
-
 static int hva_to_pfn_remapped(struct vm_area_struct *vma,
-			       unsigned long addr, bool write_fault,
-			       bool *writable, kvm_pfn_t *p_pfn)
+			       struct kvm_follow_pfn *kfp, kvm_pfn_t *p_pfn)
 {
 	kvm_pfn_t pfn;
 	pte_t *ptep;
 	pte_t pte;
 	spinlock_t *ptl;
+	bool write_fault = kfp->flags & FOLL_WRITE;
+	struct page *page;
 	int r;
 
-	r = follow_pte(vma, addr, &ptep, &ptl);
+	r = follow_pte(vma, kfp->hva, &ptep, &ptl);
 	if (r) {
 		/*
 		 * get_user_pages fails for VM_IO and VM_PFNMAP vmas and does
 		 * not call the fault handler, so do it here.
 		 */
 		bool unlocked = false;
-		r = fixup_user_fault(current->mm, addr,
+		r = fixup_user_fault(current->mm, kfp->hva,
 				     (write_fault ? FAULT_FLAG_WRITE : 0),
 				     &unlocked);
 		if (unlocked)
@@ -2881,82 +3093,74 @@ static int hva_to_pfn_remapped(struct vm_area_struct *vma,
 		if (r)
 			return r;
 
-		r = follow_pte(vma, addr, &ptep, &ptl);
+		r = follow_pte(vma, kfp->hva, &ptep, &ptl);
 		if (r)
 			return r;
 	}
 
 	pte = ptep_get(ptep);
 
+	kfp->writable = pte_write(pte);
+	pfn = pte_pfn(pte);
+
+	page = kvm_pfn_to_refcounted_page(pfn);
+
 	if (write_fault && !pte_write(pte)) {
 		pfn = KVM_PFN_ERR_RO_FAULT;
 		goto out;
 	}
 
-	if (writable)
-		*writable = pte_write(pte);
-	pfn = pte_pfn(pte);
+	if (!page)
+		goto out;
 
 	/*
-	 * Get a reference here because callers of *hva_to_pfn* and
-	 * *gfn_to_pfn* ultimately call kvm_release_pfn_clean on the
-	 * returned pfn.  This is only needed if the VMA has VM_MIXEDMAP
-	 * set, but the kvm_try_get_pfn/kvm_release_pfn_clean pair will
-	 * simply do nothing for reserved pfns.
-	 *
-	 * Whoever called remap_pfn_range is also going to call e.g.
-	 * unmap_mapping_range before the underlying pages are freed,
-	 * causing a call to our MMU notifier.
-	 *
-	 * Certain IO or PFNMAP mappings can be backed with valid
-	 * struct pages, but be allocated without refcounting e.g.,
-	 * tail pages of non-compound higher order allocations, which
-	 * would then underflow the refcount when the caller does the
-	 * required put_page. Don't allow those pages here.
+	 * IO or PFNMAP mappings can be backed with valid struct pages but be
+	 * allocated without refcounting. We need to detect that to make sure we
+	 * only pass refcounted pages to kvm_follow_refcounted_pfn.
 	 */
-	if (!kvm_try_get_pfn(pfn))
-		r = -EFAULT;
+	if (get_page_unless_zero(page))
+		WARN_ON_ONCE(kvm_follow_refcounted_pfn(kfp, page) != pfn);
 
 out:
 	pte_unmap_unlock(ptep, ptl);
-	*p_pfn = pfn;
+
+	if (page && !kfp->refcounted_page &&
+	    !kfp->allow_non_refcounted_struct_page) {
+		r = -EFAULT;
+	} else if (!kfp->refcounted_page &&
+		   !kfp->guarded_by_mmu_notifier &&
+		   !allow_unsafe_mappings) {
+		r = -EFAULT;
+	} else {
+		*p_pfn = pfn;
+	}
 
 	return r;
 }
 
 /*
- * Pin guest page in memory and return its pfn.
- * @addr: host virtual address which maps memory to the guest
- * @atomic: whether this function is forbidden from sleeping
- * @interruptible: whether the process can be interrupted by non-fatal signals
- * @async: whether this function need to wait IO complete if the
- *         host page is not in the memory
- * @write_fault: whether we should get a writable host page
- * @writable: whether it allows to map a writable host page for !@write_fault
- *
- * The function will map a writable host page for these two cases:
- * 1): @write_fault = true
- * 2): @write_fault = false && @writable, @writable will tell the caller
- *     whether the mapping is writable.
+ * Convert a hva to a pfn.
+ * @kfp: args struct for the conversion
  */
-kvm_pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool interruptible,
-		     bool *async, bool write_fault, bool *writable)
+kvm_pfn_t hva_to_pfn(struct kvm_follow_pfn *kfp)
 {
 	struct vm_area_struct *vma;
 	kvm_pfn_t pfn;
 	int npages, r;
 
-	/* we can do it either atomically or asynchronously, not both */
-	BUG_ON(atomic && async);
+	/*
+	 * FOLL_NOWAIT is used for async page faults, which don't make sense
+	 * in an atomic context where the caller can't do async resolution.
+	 */
+	WARN_ON_ONCE(kfp->atomic && (kfp->flags & FOLL_NOWAIT));
 
-	if (hva_to_pfn_fast(addr, write_fault, writable, &pfn))
+	if (hva_to_pfn_fast(kfp, &pfn))
 		return pfn;
 
-	if (atomic)
+	if (kfp->atomic)
 		return KVM_PFN_ERR_FAULT;
 
-	npages = hva_to_pfn_slow(addr, async, write_fault, interruptible,
-				 writable, &pfn);
+	npages = hva_to_pfn_slow(kfp, &pfn);
 	if (npages == 1)
 		return pfn;
 	if (npages == -EINTR)
@@ -2964,79 +3168,136 @@ kvm_pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool interruptible,
 
 	mmap_read_lock(current->mm);
 	if (npages == -EHWPOISON ||
-	      (!async && check_user_page_hwpoison(addr))) {
+	    (!(kfp->flags & FOLL_NOWAIT) && check_user_page_hwpoison(kfp->hva))) {
 		pfn = KVM_PFN_ERR_HWPOISON;
 		goto exit;
 	}
 
 retry:
-	vma = vma_lookup(current->mm, addr);
+	vma = vma_lookup(current->mm, kfp->hva);
 
 	if (vma == NULL)
 		pfn = KVM_PFN_ERR_FAULT;
 	else if (vma->vm_flags & (VM_IO | VM_PFNMAP)) {
-		r = hva_to_pfn_remapped(vma, addr, write_fault, writable, &pfn);
+		r = hva_to_pfn_remapped(vma, kfp, &pfn);
 		if (r == -EAGAIN)
 			goto retry;
 		if (r < 0)
 			pfn = KVM_PFN_ERR_FAULT;
 	} else {
-		if (async && vma_is_valid(vma, write_fault))
-			*async = true;
-		pfn = KVM_PFN_ERR_FAULT;
+		if ((kfp->flags & FOLL_NOWAIT) &&
+		    vma_is_valid(vma, kfp->flags & FOLL_WRITE))
+			pfn = KVM_PFN_ERR_NEEDS_IO;
+		else
+			pfn = KVM_PFN_ERR_FAULT;
 	}
 exit:
 	mmap_read_unlock(current->mm);
 	return pfn;
 }
 
+kvm_pfn_t kvm_follow_pfn(struct kvm_follow_pfn *kfp)
+{
+	kfp->writable = false;
+	kfp->refcounted_page = NULL;
+
+	if (WARN_ON_ONCE(!(kfp->flags & FOLL_GET) && !kfp->guarded_by_mmu_notifier))
+		return KVM_PFN_ERR_FAULT;
+
+	kfp->hva = __gfn_to_hva_many(kfp->slot, kfp->gfn, NULL,
+				     kfp->flags & FOLL_WRITE);
+
+	if (kfp->hva == KVM_HVA_ERR_RO_BAD)
+		return KVM_PFN_ERR_RO_FAULT;
+
+	if (kvm_is_error_hva(kfp->hva))
+		return KVM_PFN_NOSLOT;
+
+	if (memslot_is_readonly(kfp->slot))
+		kfp->try_map_writable = false;
+
+	return hva_to_pfn(kfp);
+}
+EXPORT_SYMBOL_GPL(kvm_follow_pfn);
+
 kvm_pfn_t __gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn,
 			       bool atomic, bool interruptible, bool *async,
 			       bool write_fault, bool *writable, hva_t *hva)
 {
-	unsigned long addr = __gfn_to_hva_many(slot, gfn, NULL, write_fault);
+	kvm_pfn_t pfn;
+	struct kvm_follow_pfn kfp = {
+		.slot = slot,
+		.gfn = gfn,
+		.flags = FOLL_GET,
+		.atomic = atomic,
+		.try_map_writable = !!writable,
+		.allow_non_refcounted_struct_page = false,
+	};
 
+	if (write_fault)
+		kfp.flags |= FOLL_WRITE;
+	if (async)
+		kfp.flags |= FOLL_NOWAIT;
+	if (interruptible)
+		kfp.flags |= FOLL_INTERRUPTIBLE;
+
+	pfn = kvm_follow_pfn(&kfp);
+	if (pfn == KVM_PFN_ERR_NEEDS_IO) {
+		*async = true;
+		pfn = KVM_PFN_ERR_FAULT;
+	}
 	if (hva)
-		*hva = addr;
-
-	if (kvm_is_error_hva(addr)) {
-		if (writable)
-			*writable = false;
-
-		return addr == KVM_HVA_ERR_RO_BAD ? KVM_PFN_ERR_RO_FAULT :
-						    KVM_PFN_NOSLOT;
-	}
-
-	/* Do not map writable pfn in the readonly memslot. */
-	if (writable && memslot_is_readonly(slot)) {
-		*writable = false;
-		writable = NULL;
-	}
-
-	return hva_to_pfn(addr, atomic, interruptible, async, write_fault,
-			  writable);
+		*hva = kfp.hva;
+	if (writable)
+		*writable = kfp.writable;
+	return pfn;
 }
 EXPORT_SYMBOL_GPL(__gfn_to_pfn_memslot);
 
 kvm_pfn_t gfn_to_pfn_prot(struct kvm *kvm, gfn_t gfn, bool write_fault,
 		      bool *writable)
 {
-	return __gfn_to_pfn_memslot(gfn_to_memslot(kvm, gfn), gfn, false, false,
-				    NULL, write_fault, writable, NULL);
+	kvm_pfn_t pfn;
+	struct kvm_follow_pfn kfp = {
+		.slot = gfn_to_memslot(kvm, gfn),
+		.gfn = gfn,
+		.flags = FOLL_GET | (write_fault ? FOLL_WRITE : 0),
+		.try_map_writable = !!writable,
+		.allow_non_refcounted_struct_page = false,
+	};
+	pfn = kvm_follow_pfn(&kfp);
+	if (writable)
+		*writable = kfp.writable;
+	return pfn;
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_prot);
 
 kvm_pfn_t gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn)
 {
-	return __gfn_to_pfn_memslot(slot, gfn, false, false, NULL, true,
-				    NULL, NULL);
+	struct kvm_follow_pfn kfp = {
+		.slot = slot,
+		.gfn = gfn,
+		.flags = FOLL_GET | FOLL_WRITE,
+		.allow_non_refcounted_struct_page = false,
+	};
+	return kvm_follow_pfn(&kfp);
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_memslot);
 
 kvm_pfn_t gfn_to_pfn_memslot_atomic(const struct kvm_memory_slot *slot, gfn_t gfn)
 {
-	return __gfn_to_pfn_memslot(slot, gfn, true, false, NULL, true,
-				    NULL, NULL);
+	struct kvm_follow_pfn kfp = {
+		.slot = slot,
+		.gfn = gfn,
+		.flags = FOLL_GET | FOLL_WRITE,
+		.atomic = true,
+		/*
+		 * Setting atomic means __kvm_follow_pfn will never make it
+		 * to hva_to_pfn_remapped, so this is vacuously true.
+		 */
+		.allow_non_refcounted_struct_page = true,
+	};
+	return kvm_follow_pfn(&kfp);
 }
 EXPORT_SYMBOL_GPL(gfn_to_pfn_memslot_atomic);
 
@@ -3099,24 +3360,22 @@ struct page *gfn_to_page(struct kvm *kvm, gfn_t gfn)
 }
 EXPORT_SYMBOL_GPL(gfn_to_page);
 
-void kvm_release_pfn(kvm_pfn_t pfn, bool dirty)
-{
-	if (dirty)
-		kvm_release_pfn_dirty(pfn);
-	else
-		kvm_release_pfn_clean(pfn);
-}
-
 int kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn, struct kvm_host_map *map)
 {
 	kvm_pfn_t pfn;
 	void *hva = NULL;
 	struct page *page = KVM_UNMAPPED_PAGE;
+	struct kvm_follow_pfn kfp = {
+		.slot = gfn_to_memslot(vcpu->kvm, gfn),
+		.gfn = gfn,
+		.flags = FOLL_GET | FOLL_WRITE,
+		.allow_non_refcounted_struct_page = true,
+	};
 
 	if (!map)
 		return -EINVAL;
 
-	pfn = gfn_to_pfn(vcpu->kvm, gfn);
+	pfn = kvm_follow_pfn(&kfp);
 	if (is_error_noslot_pfn(pfn))
 		return -EINVAL;
 
@@ -3136,6 +3395,7 @@ int kvm_vcpu_map(struct kvm_vcpu *vcpu, gfn_t gfn, struct kvm_host_map *map)
 	map->hva = hva;
 	map->pfn = pfn;
 	map->gfn = gfn;
+	map->is_refcounted_page = !!kfp.refcounted_page;
 
 	return 0;
 }
@@ -3159,7 +3419,12 @@ void kvm_vcpu_unmap(struct kvm_vcpu *vcpu, struct kvm_host_map *map, bool dirty)
 	if (dirty)
 		kvm_vcpu_mark_page_dirty(vcpu, map->gfn);
 
-	kvm_release_pfn(map->pfn, dirty);
+	if (map->is_refcounted_page) {
+		if (dirty)
+			kvm_release_page_dirty(map->page);
+		else
+			kvm_release_page_clean(map->page);
+	}
 
 	map->hva = NULL;
 	map->page = NULL;
@@ -3169,45 +3434,63 @@ EXPORT_SYMBOL_GPL(kvm_vcpu_unmap);
 static bool kvm_is_ad_tracked_page(struct page *page)
 {
 	/*
+	 * Assert that KVM isn't attempting to mark a freed page as Accessed or
+	 * Dirty, i.e. that KVM's MMU doesn't have a use-after-free bug.  KVM
+	 * (typically) doesn't pin pages that are mapped in KVM's MMU, and
+	 * instead relies on mmu_notifiers to know when a mapping needs to be
+	 * zapped/invalidated.  Unmapping from KVM's MMU must happen _before_
+	 * KVM returns from its mmu_notifier, i.e. the page should have an
+	 * elevated refcount at this point even though KVM doesn't hold a
+	 * reference of its own.
+	 */
+	if (WARN_ON_ONCE(!page_count(page)))
+		return false;
+
+	/*
 	 * Per page-flags.h, pages tagged PG_reserved "should in general not be
 	 * touched (e.g. set dirty) except by its owner".
 	 */
 	return !PageReserved(page);
 }
 
-static void kvm_set_page_dirty(struct page *page)
+void kvm_set_page_dirty(struct page *page)
 {
 	if (kvm_is_ad_tracked_page(page))
 		SetPageDirty(page);
 }
+EXPORT_SYMBOL_GPL(kvm_set_page_dirty);
 
-static void kvm_set_page_accessed(struct page *page)
+static void __kvm_set_page_accessed(struct page *page)
 {
 	if (kvm_is_ad_tracked_page(page))
 		mark_page_accessed(page);
 }
 
+void kvm_set_page_accessed(struct page *page)
+{
+	if (page)
+		__kvm_set_page_accessed(page);
+}
+EXPORT_SYMBOL_GPL(kvm_set_page_accessed);
+
 void kvm_release_page_clean(struct page *page)
 {
 	WARN_ON(is_error_page(page));
 
-	kvm_set_page_accessed(page);
+	if (!page)
+		return;
+
+	__kvm_set_page_accessed(page);
 	put_page(page);
 }
 EXPORT_SYMBOL_GPL(kvm_release_page_clean);
 
 void kvm_release_pfn_clean(kvm_pfn_t pfn)
 {
-	struct page *page;
-
 	if (is_error_noslot_pfn(pfn))
 		return;
 
-	page = kvm_pfn_to_refcounted_page(pfn);
-	if (!page)
-		return;
-
-	kvm_release_page_clean(page);
+	kvm_release_page_clean(kvm_pfn_to_refcounted_page(pfn));
 }
 EXPORT_SYMBOL_GPL(kvm_release_pfn_clean);
 
@@ -3739,6 +4022,14 @@ bool kvm_vcpu_block(struct kvm_vcpu *vcpu)
 		if (kvm_vcpu_check_block(vcpu) < 0)
 			break;
 
+		/*
+		 * Boost before scheduling out. Wakeup happens only on
+		 * an event or a signal and hence it is beneficial to
+		 * be scheduled ASAP. Ultimately, guest gets to idle loop
+		 * and then will request deboost.
+		 */
+		kvm_vcpu_boost(vcpu, PVSCHED_KERNCS_BOOST_IDLE);
+
 		waited = true;
 		schedule();
 	}
@@ -3883,6 +4174,154 @@ bool kvm_vcpu_wake_up(struct kvm_vcpu *vcpu)
 	return false;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_wake_up);
+
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+union vcpu_sched_attr kvm_vcpu_get_sched(struct kvm_vcpu *vcpu)
+{
+	union vcpu_sched_attr attr = { 0 };
+	struct pid *pid;
+	struct task_struct *vcpu_task = NULL;
+
+	rcu_read_lock();
+	pid = rcu_dereference(vcpu->pid);
+	if (pid)
+		vcpu_task = get_pid_task(pid, PIDTYPE_PID);
+	rcu_read_unlock();
+	if (vcpu_task == NULL)
+		return attr;
+
+	attr.sched_policy = vcpu_task->policy;
+	if (vcpu_task->policy == SCHED_RR || vcpu_task->policy == SCHED_FIFO)
+		attr.rt_priority = vcpu_task->rt_priority;
+	else
+		attr.sched_nice = task_nice(vcpu_task);
+
+	put_task_struct(vcpu_task);
+
+	return attr;
+}
+
+ /*
+  * Check if we need to act on the boost/unboost request.
+  * Returns true if:
+  * - caller is requesting boost and vcpu is boosted, or
+  * - caller is requesting unboost and vcpu is not boosted.
+  */
+static inline bool __needs_set_sched(struct kvm_vcpu *vcpu, int policy, int prio, int nice)
+{
+	union vcpu_sched_attr attr = {
+		.sched_policy = policy,
+		.rt_priority = prio,
+		.sched_nice = nice
+	};
+
+	return kvm_arch_vcpu_normalprio_cmp(&vcpu->arch, attr);
+}
+
+int kvm_vcpu_set_sched(struct kvm_vcpu *vcpu, union vcpu_sched_attr attr)
+{
+	int rt_prio;
+	int nice;
+	int policy;
+	int ret = 0;
+	struct pid *pid;
+	struct task_struct *vcpu_task = NULL;
+	int max_rt_prio = kvm_arch_vcpu_kerncs_prio(&vcpu->arch);
+	union vcpu_sched_attr default_attr = kvm_arch_vcpu_default_sched_attr(&vcpu->arch);
+
+retry_disable:
+	/*
+	 * If the feature is disabled, or a boost request comes when throttled, revert to CFS.
+	 */
+	if (!kvm_vcpu_sched_enabled(vcpu) || (kvm_arch_vcpu_is_throttled(&vcpu->arch) &&
+		(attr.kern_cs || kvm_arch_vcpu_normalprio_cmp(&vcpu->arch, attr) < 0)))
+		attr = default_attr;
+
+	policy = attr.sched_policy;
+	rt_prio = attr.rt_priority;
+	nice = attr.sched_nice;
+	if (attr.kern_cs || policy == SCHED_DEADLINE) {
+		nice = 0;
+		policy = kvm_arch_vcpu_kerncs_policy(&vcpu->arch);
+		rt_prio = max_rt_prio;
+	} else if (policy == SCHED_FIFO || policy == SCHED_RR) {
+		nice = 0;
+		if (rt_prio > max_rt_prio)
+			rt_prio = max_rt_prio;
+	} else {
+		rt_prio = 0;
+	}
+
+	rcu_read_lock();
+	pid = rcu_dereference(vcpu->pid);
+	if (pid)
+		vcpu_task = get_pid_task(pid, PIDTYPE_PID);
+	rcu_read_unlock();
+	if (vcpu_task == NULL)
+		return -KVM_EINVAL;
+
+	/*
+	 * This might be called from interrupt context.
+	 * Since we do not use rt-mutexes, we can safely call
+	 * sched_setscheduler_pi_nocheck with pi = false.
+	 * NOTE: If in future, we use rt-mutexes, this should
+	 * be modified to use a tasklet to do boost/unboost.
+	 */
+	WARN_ON_ONCE(vcpu_task->pi_top_task);
+	if (__needs_set_sched(vcpu, policy, rt_prio, nice)) {
+		struct sched_attr sattr = {
+			.sched_policy = policy,
+			.sched_nice = nice,
+			.sched_priority = rt_prio,
+		};
+		ret = sched_setattr_pi_nocheck(vcpu_task, &sattr, false);
+	}
+
+	/*
+	 * values to return to guest.
+	 */
+	attr.sched_policy = vcpu_task->policy;
+	if (task_is_realtime(vcpu_task))
+		attr.rt_priority = vcpu_task->rt_priority;
+	else
+		attr.sched_nice = task_nice(vcpu_task);
+
+	put_task_struct(vcpu_task);
+
+	attr.enabled = kvm_vcpu_sched_enabled(vcpu);
+	trace_kvm_pvsched_schedattr(ret, &attr);
+	/*
+	 * If the feature is disabled, we set it in the priority field to let the guest know.
+	 */
+	if (!attr.enabled) {
+		/*
+		 * There could be a race where the disable path disabled the feature
+		 * but we did the boost without knowing that disable was in progress.
+		 * Unboost again.
+		 */
+		if (attr.sched_policy != SCHED_NORMAL || attr.sched_nice != 0)
+			goto retry_disable;
+	}
+
+	kvm_arch_vcpu_set_sched_attr(&vcpu->arch, attr);
+	kvm_make_request(KVM_REQ_VCPU_PV_SCHED, vcpu);
+	trace_kvm_pvsched_vcpu_state(kvm_arch_vcpu_is_boosted(&vcpu->arch),
+			kvm_arch_vcpu_is_throttled(&vcpu->arch));
+
+	return ret;
+}
+
+void kvm_vcpu_boost(struct kvm_vcpu *vcpu, enum kerncs_boost_type boost_type)
+{
+	union vcpu_sched_attr attr = {
+		.kern_cs = boost_type
+	};
+
+	if (kvm_vcpu_sched_enabled(vcpu))
+		kvm_vcpu_set_sched(vcpu, attr);
+}
+EXPORT_SYMBOL_GPL(kvm_vcpu_boost);
+#endif
 
 #ifndef CONFIG_S390
 /*
@@ -4875,6 +5314,7 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_USER_MEMORY2:
 	case KVM_CAP_DESTROY_MEMORY_REGION_WORKS:
 	case KVM_CAP_JOIN_MEMORY_REGIONS_WORKS:
+	case KVM_CAP_USER_CONFIGURE_NONCOHERENT_DMA:
 	case KVM_CAP_INTERNAL_ERROR_DATA:
 #ifdef CONFIG_HAVE_KVM_MSI
 	case KVM_CAP_SIGNAL_MSI:
@@ -4886,6 +5326,9 @@ static int kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_CHECK_EXTENSION_VM:
 	case KVM_CAP_ENABLE_CAP_VM:
 	case KVM_CAP_HALT_POLL:
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case KVM_CAP_PV_SCHED:
+#endif
 		return 1;
 #ifdef CONFIG_KVM_MMIO
 	case KVM_CAP_COALESCED_MMIO:
@@ -5379,6 +5822,18 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = kvm_gmem_create(kvm, &guest_memfd);
 		break;
 	}
+#endif
+#ifdef CONFIG_PARAVIRT_SCHED_KVM
+	case KVM_SET_PV_SCHED_ENABLED:
+		r = -EINVAL;
+		if (arg == 0 || arg == 1) {
+			kvm_set_pv_sched_enabled(kvm, arg);
+			r = 0;
+		}
+		break;
+	case KVM_GET_PV_SCHED_ENABLED:
+		r = kvm->pv_sched_enabled;
+		break;
 #endif
 	default:
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);

@@ -426,6 +426,16 @@ struct load_weight {
 };
 
 /*
+ * For sched_setattr_nocheck() (kernel) only
+ *
+ * Allow vCPU threads to use UTIL_GUEST as a way to hint the scheduler with more
+ * accurate utilization info. This is useful when guest kernels have some way of
+ * tracking its own runqueue's utilization.
+ *
+ */
+#define SCHED_FLAG_UTIL_GUEST   0x20000000
+
+/*
  * The load/runnable/util_avg accumulates an infinite geometric series
  * (see __update_load_avg_cfs_rq() in kernel/sched/pelt.c).
  *
@@ -479,6 +489,7 @@ struct sched_avg {
 	unsigned long			load_avg;
 	unsigned long			runnable_avg;
 	unsigned long			util_avg;
+	unsigned long			util_guest;
 	unsigned int			util_est;
 } ____cacheline_aligned;
 
@@ -1844,6 +1855,7 @@ extern void sched_set_fifo_low(struct task_struct *p);
 extern void sched_set_normal(struct task_struct *p, int nice);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);
 extern int sched_setattr_nocheck(struct task_struct *, const struct sched_attr *);
+extern int sched_setattr_pi_nocheck(struct task_struct *p, const struct sched_attr *a, bool pi);
 extern struct task_struct *idle_task(int cpu);
 
 /**
@@ -2186,6 +2198,40 @@ static __always_inline void alloc_tag_restore(struct alloc_tag *tag, struct allo
 #else
 #define alloc_tag_save(_tag)			NULL
 #define alloc_tag_restore(_tag, _old)		do {} while (0)
+#endif
+
+#ifdef CONFIG_PARAVIRT_SCHED
+DECLARE_STATIC_KEY_FALSE(__pv_sched_enabled);
+
+extern unsigned long pv_sched_pa(void);
+
+static inline bool pv_sched_enabled(void)
+{
+	return static_branch_unlikely(&__pv_sched_enabled);
+}
+
+static inline void pv_sched_enable(void)
+{
+	static_branch_enable(&__pv_sched_enabled);
+}
+
+extern void pv_sched_vcpu_update(int policy, int prio, int nice, bool lazy);
+extern void pv_sched_vcpu_kerncs_unboost(int boost_type, bool lazy);
+extern void pv_sched_vcpu_kerncs_boost_lazy(int boost_type);
+#else
+static inline bool pv_sched_enabled(void)
+{
+	return false;
+}
+
+static inline void pv_sched_enable(void) { }
+
+static inline void pv_sched_vcpu_update(int policy, int prio,
+		int nice, bool lazy)
+{
+}
+static inline void pv_sched_vcpu_kerncs_unboost(int boost_type, bool lazy) { }
+static inline void pv_sched_vcpu_kerncs_boost_lazy(int boost_type) { }
 #endif
 
 #endif

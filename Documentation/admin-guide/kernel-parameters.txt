@@ -863,6 +863,20 @@
 			/proc/<pid>/coredump_filter.
 			See also Documentation/filesystems/proc.rst.
 
+	coresched=	[SCHED_CORE] This feature allows the Linux scheduler
+			to force hyperthread siblings of a CPU to only execute tasks
+			concurrently on all hyperthreads that are running within the
+			same core scheduling group.
+			Possible values are:
+			'on' - Enable scheduler capability to core schedule.
+			By default, no tasks will be core scheduled, but the coresched
+			interface can be used to form groups of tasks that are forced
+			to share a core.
+			'off' - Disable scheduler capability to core schedule.
+			'secure' - Like 'on' but only enable on systems affected by
+			MDS or L1TF vulnerabilities. 'off' otherwise.
+			Default: 'secure'.
+
 	coresight_cpu_debug.enable
 			[ARM,ARM64]
 			Format: <bool>
@@ -5458,6 +5472,21 @@
 
 	rcutorture.verbose= [KNL]
 			Enable additional printk() statements.
+
+	rcupdate.rcu_boot_end_delay= [KNL]
+			Minimum time in milliseconds from the start of boot
+			that must elapse before the boot sequence can be marked
+			complete from RCU's perspective, after which RCU's
+			behavior becomes more relaxed. The default value is also
+			configurable via CONFIG_RCU_BOOT_END_DELAY.
+			Userspace can also mark the boot as completed
+			sooner by writing the time in milliseconds, say once
+			userspace considers the system as booted, to:
+			/sys/module/rcupdate/parameters/rcu_boot_end_delay
+			Or even just writing a value of 0 to this sysfs node.
+			The sysfs node can also be used to extend the delay
+			to be larger than the default, assuming the marking
+			of boot complete has not yet occurred.
 
 	rcupdate.rcu_cpu_stall_ftrace_dump= [KNL]
 			Dump ftrace buffer after reporting RCU CPU
