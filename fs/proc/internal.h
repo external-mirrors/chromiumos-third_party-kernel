@@ -179,6 +179,7 @@ static inline int folio_precise_page_mapcount(struct folio *folio,
  * array.c
  */
 extern const struct file_operations proc_tid_children_operations;
+extern const struct file_operations proc_tid_latsense_operations;
 
 extern void proc_task_name(struct seq_file *m, struct task_struct *p,
 			   bool escape);
@@ -329,7 +330,7 @@ struct proc_maps_private {
 #endif
 } __randomize_layout;
 
-struct mm_struct *proc_mem_open(struct inode *inode, unsigned int mode);
+struct mm_struct *proc_mem_open(struct file *file, unsigned int mode);
 
 extern const struct file_operations proc_pid_maps_operations;
 extern const struct file_operations proc_pid_numa_maps_operations;
