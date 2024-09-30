@@ -559,6 +559,73 @@ static void __setscheduler_task_util(struct task_struct *p,
 { }
 #endif
 
+#ifdef CONFIG_PARAVIRT_SCHED
+#include <linux/kvm_para.h>
+
+DEFINE_STATIC_KEY_FALSE(__pv_sched_enabled);
+
+DEFINE_PER_CPU_DECRYPTED(struct pv_sched_data, pv_sched) __aligned(64);
+
+unsigned long pv_sched_pa(void)
+{
+        return slow_virt_to_phys(this_cpu_ptr(&pv_sched));
+}
+
+static inline int __normal_prio(int policy, int rt_prio, int nice);
+static inline int __pv_sched_equal_prio(union vcpu_sched_attr a1,
+                union vcpu_sched_attr a2)
+{
+        return (__normal_prio(a1.sched_policy, a1.rt_priority, a1.sched_nice) ==
+                __normal_prio(a2.sched_policy, a2.rt_priority, a2.sched_nice));
+}
+
+static inline void __pv_sched_vcpu_attr_update(union vcpu_sched_attr attr,
+                bool lazy)
+{
+        union vcpu_sched_attr status_attr;
+
+        status_attr.pad = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_HOST].pad);
+        if (!status_attr.enabled || (status_attr.kern_cs == attr.kern_cs &&
+                        __pv_sched_equal_prio(attr, status_attr)))
+                return;
+
+        this_cpu_write(pv_sched.attr[PV_SCHEDATTR_GUEST].pad, attr.pad);
+        trace_sched_pvsched_vcpu_update(&attr);
+
+        if (!lazy)
+                kvm_pv_sched_notify_host();
+}
+
+void pv_sched_vcpu_update(int policy, int prio, int nice, bool lazy)
+{
+        union vcpu_sched_attr attr = {
+                .sched_policy = policy,
+                .rt_priority = prio,
+                .sched_nice = nice
+        };
+        attr.kern_cs = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_GUEST].kern_cs);
+        __pv_sched_vcpu_attr_update(attr, lazy);
+}
+
+void pv_sched_vcpu_kerncs_boost_lazy(int boost_type)
+{
+        union vcpu_sched_attr attr;
+
+        attr.pad = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_GUEST].pad);
+        attr.kern_cs |= boost_type;
+        __pv_sched_vcpu_attr_update(attr, true);
+}
+
+void pv_sched_vcpu_kerncs_unboost(int boost_type, bool lazy)
+{
+        union vcpu_sched_attr attr;
+
+        attr.pad = this_cpu_read(pv_sched.attr[PV_SCHEDATTR_GUEST].pad);
+        attr.kern_cs &= ~boost_type;
+        __pv_sched_vcpu_attr_update(attr, lazy);
+}
+#endif
+
 /*
  * Allow unprivileged RT tasks to decrease priority.
  * Only issue a capable test if needed and only once to avoid an audit
