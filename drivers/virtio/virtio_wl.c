@@ -825,15 +825,15 @@ static int virtwl_vfd_send(struct file *filp, const char __user *buffer,
 				break;
 
 			vfd_file = fdget(vfd_fds[i]);
-			if (!vfd_file.file) {
+			if (!fd_file(vfd_file)) {
 				ret = -EBADFD;
 				goto put_files;
 			}
 
-			if (vfd_file.file->f_op == &virtwl_vfd_fops) {
+			if (fd_file(vfd_file)->f_op == &virtwl_vfd_fops) {
 				vfd_files[i] = vfd_file;
 
-				vfds[i] = vfd_file.file->private_data;
+				vfds[i] = fd_file(vfd_file)->private_data;
 				if (vfds[i] && vfds[i]->id) {
 					vfd_count++;
 					continue;
@@ -969,7 +969,7 @@ free_ctrl_send:
 	kvfree(ctrl_send);
 put_files:
 	for (i = 0; i < VIRTWL_SEND_MAX_ALLOCS; i++) {
-		if (vfd_files[i].file)
+		if (fd_file(vfd_files[i]))
 			fdput(vfd_files[i]);
 #ifdef SEND_VIRTGPU_RESOURCES
 		if (virtgpu_dma_bufs[i])
@@ -1457,8 +1457,10 @@ static int probe_common(struct virtio_device *vdev)
 	int i;
 	int ret;
 	struct virtwl_info *vi = NULL;
-	vq_callback_t *vq_callbacks[] = { vq_in_cb, vq_out_cb };
-	static const char * const vq_names[] = { "in", "out" };
+	struct virtqueue_info vqs_info[] = {
+		{ "in", vq_in_cb },
+		{ "out", vq_out_cb },
+	};
 
 	vi = kzalloc(sizeof(struct virtwl_info), GFP_KERNEL);
 	if (!vi)
@@ -1500,8 +1502,7 @@ static int probe_common(struct virtio_device *vdev)
 	for (i = 0; i < VIRTWL_QUEUE_COUNT; i++)
 		mutex_init(&vi->vq_locks[i]);
 
-	ret = virtio_find_vqs(vdev, VIRTWL_QUEUE_COUNT, vi->vqs, vq_callbacks,
-			      vq_names, NULL);
+	ret = virtio_find_vqs(vdev, VIRTWL_QUEUE_COUNT, vi->vqs, vqs_info, NULL);
 	if (ret) {
 		pr_warn("virtwl: failed to find virtio wayland queues: %d\n",
 			ret);
