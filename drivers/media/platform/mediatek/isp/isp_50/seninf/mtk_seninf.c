@@ -986,7 +986,7 @@ static const struct dev_pm_ops runtime_pm_ops = {
 	SET_RUNTIME_PM_OPS(seninf_pm_suspend, seninf_pm_resume, NULL)
 };
 
-static int seninf_remove(struct platform_device *pdev)
+static void seninf_remove(struct platform_device *pdev)
 {
 	struct mtk_seninf *priv = dev_get_drvdata(&pdev->dev);
 	struct v4l2_subdev *subdev = &priv->subdev;
@@ -997,7 +997,6 @@ static int seninf_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(priv->dev);
 
-	return 0;
 }
 
 #ifdef CONFIG_OF

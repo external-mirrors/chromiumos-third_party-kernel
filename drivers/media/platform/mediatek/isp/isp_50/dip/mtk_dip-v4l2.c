@@ -2153,7 +2153,7 @@ err_destroy_mutex:
 	return ret;
 }
 
-static int mtk_dip_remove(struct platform_device *pdev)
+static void mtk_dip_remove(struct platform_device *pdev)
 {
 	struct mtk_dip_dev *dip_dev = dev_get_drvdata(&pdev->dev);
 
@@ -2165,7 +2165,6 @@ static int mtk_dip_remove(struct platform_device *pdev)
 	mutex_destroy(&dip_dev->hw_op_lock);
 	scp_put(dip_dev->scp);
 
-	return 0;
 }
 
 static int __maybe_unused mtk_dip_runtime_suspend(struct device *dev)
