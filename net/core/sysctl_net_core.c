@@ -641,6 +641,15 @@ static struct ctl_table netns_core_table[] = {
 	},
 #endif
 	{
+		.procname	= "android_paranoid",
+		.data		= &init_net.core.sysctl_android_paranoid,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+		.proc_handler	= proc_dointvec_minmax
+	},
+	{
 		.procname	= "somaxconn",
 		.data		= &init_net.core.sysctl_somaxconn,
 		.maxlen		= sizeof(int),
@@ -719,6 +728,8 @@ static __net_init int sysctl_core_net_init(struct net *net)
 {
 	size_t table_size = ARRAY_SIZE(netns_core_table);
 	struct ctl_table *tbl;
+
+	net->core.sysctl_android_paranoid = 0;
 
 	tbl = netns_core_table;
 	if (!net_eq(net, &init_net)) {
