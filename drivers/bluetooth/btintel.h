@@ -218,6 +218,7 @@ enum {
 	INTEL_ROM_LEGACY,
 	INTEL_ROM_LEGACY_NO_WBS_SUPPORT,
 	INTEL_ACPI_RESET_ACTIVE,
+	INTEL_WAIT_FOR_D0,
 
 	__INTEL_NUM_FLAGS,
 };
@@ -289,6 +290,7 @@ int btintel_bootloader_setup_tlv(struct hci_dev *hdev,
 int btintel_shutdown_combined(struct hci_dev *hdev);
 void btintel_hw_error(struct hci_dev *hdev, u8 code);
 void btintel_print_fseq_info(struct hci_dev *hdev);
+int btintel_diagnostics(struct hci_dev *hdev, struct sk_buff *skb);
 bool btintel_is_quality_report_evt(struct sk_buff *skb);
 bool btintel_pull_quality_report_data(struct sk_buff *skb);
 #else
@@ -432,5 +434,10 @@ static inline bool btintel_is_quality_report_evt(struct sk_buff *skb)
 static inline bool btintel_pull_quality_report_data(struct sk_buff *skb)
 {
 	return false;
+}
+
+static inline int btintel_diagnostics(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	return -EOPNOTSUPP;
 }
 #endif
