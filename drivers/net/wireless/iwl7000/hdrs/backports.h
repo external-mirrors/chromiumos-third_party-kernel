@@ -69,3 +69,5 @@ static inline void
 cfg80211_epcs_changed(struct net_device *netdev, bool enabled)
 {
 }
+
+#define NL80211_RRF_ALLOW_20MHZ_ACTIVITY    BIT(25)
