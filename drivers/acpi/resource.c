@@ -447,24 +447,17 @@ static const struct dmi_system_id asus_laptop[] = {
 		},
 	},
 	{
-		.ident = "Asus ExpertBook B1402CBA",
+		/* Asus ExpertBook B1402C* */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-			DMI_MATCH(DMI_BOARD_NAME, "B1402CBA"),
+			DMI_MATCH(DMI_BOARD_NAME, "B1402C"),
 		},
 	},
 	{
-		/* Asus ExpertBook B1402CVA */
+		/* Asus ExpertBook B1502C* */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-			DMI_MATCH(DMI_BOARD_NAME, "B1402CVA"),
-		},
-	},
-	{
-		.ident = "Asus ExpertBook B1502CBA",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-			DMI_MATCH(DMI_BOARD_NAME, "B1502CBA"),
+			DMI_MATCH(DMI_BOARD_NAME, "B1502C"),
 		},
 	},
 	{
