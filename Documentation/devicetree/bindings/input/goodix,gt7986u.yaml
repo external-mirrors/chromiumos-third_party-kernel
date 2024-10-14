@@ -29,11 +29,10 @@ properties:
 
   reset-gpios:
     maxItems: 1
-    description: reset gpio the chip is connected to.
 
   goodix,hid-report-addr:
     $ref: /schemas/types.yaml#/definitions/uint32
-    description: |
+    description:
       The register address for retrieving HID report data.
       This address is related to the device firmware and may
       change after a firmware update.

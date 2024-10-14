@@ -2821,7 +2821,7 @@ static int xhci_configure_endpoint(struct xhci_hcd *xhci,
 				xhci->num_active_eps);
 		return -ENOMEM;
 	}
-	if ((xhci->quirks & XHCI_SW_BW_CHECKING) &&
+	if ((xhci->quirks & XHCI_SW_BW_CHECKING) && !ctx_change &&
 	    xhci_reserve_bandwidth(xhci, virt_dev, command->in_ctx)) {
 		if ((xhci->quirks & XHCI_EP_LIMIT_QUIRK))
 			xhci_free_host_resources(xhci, ctrl_ctx);
@@ -4163,8 +4163,10 @@ static int xhci_setup_device(struct usb_hcd *hcd, struct usb_device *udev,
 		mutex_unlock(&xhci->mutex);
 		ret = xhci_disable_slot(xhci, udev->slot_id);
 		xhci_free_virt_device(xhci, udev->slot_id);
-		if (!ret)
-			xhci_alloc_dev(hcd, udev);
+		if (!ret) {
+			if (xhci_alloc_dev(hcd, udev) == 1)
+				xhci_setup_addressable_virt_dev(xhci, udev);
+		}
 		kfree(command->completion);
 		kfree(command);
 		return -EPROTO;
@@ -4480,35 +4482,27 @@ static int xhci_set_usb2_hardware_lpm(struct usb_hcd *hcd,
 	return 0;
 }
 
-/* check if a usb2 port supports a given extened capability protocol
- * only USB2 ports extended protocol capability values are cached.
- * Return 1 if capability is supported
- */
-static int xhci_check_usb2_port_capability(struct xhci_hcd *xhci, int port,
-					   unsigned capability)
-{
-	u32 port_offset, port_count;
-	int i;
-
-	for (i = 0; i < xhci->num_ext_caps; i++) {
-		if (xhci->ext_caps[i] & capability) {
-			/* port offsets starts at 1 */
-			port_offset = XHCI_EXT_PORT_OFF(xhci->ext_caps[i]) - 1;
-			port_count = XHCI_EXT_PORT_COUNT(xhci->ext_caps[i]);
-			if (port >= port_offset &&
-			    port < port_offset + port_count)
-				return 1;
-		}
-	}
-	return 0;
-}
-
 static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 {
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
-	int		portnum = udev->portnum - 1;
+	struct xhci_port *port;
+	u32 capability;
 
-	if (hcd->speed >= HCD_USB3 || !udev->lpm_capable)
+	/* Check if USB3 device at root port is tunneled over USB4 */
+	if (hcd->speed >= HCD_USB3 && !udev->parent->parent) {
+		port = xhci->usb3_rhub.ports[udev->portnum - 1];
+
+		udev->tunnel_mode = xhci_port_is_tunneled(xhci, port);
+		if (udev->tunnel_mode == USB_LINK_UNKNOWN)
+			dev_dbg(&udev->dev, "link tunnel state unknown\n");
+		else if (udev->tunnel_mode == USB_LINK_TUNNELED)
+			dev_dbg(&udev->dev, "tunneled over USB4 link\n");
+		else if (udev->tunnel_mode == USB_LINK_NATIVE)
+			dev_dbg(&udev->dev, "native USB 3.x link\n");
+		return 0;
+	}
+
+	if (hcd->speed >= HCD_USB3 || !udev->lpm_capable || !xhci->hw_lpm_support)
 		return 0;
 
 	/* we only support lpm for non-hub device connected to root hub yet */
@@ -4516,14 +4510,14 @@ static int xhci_update_device(struct usb_hcd *hcd, struct usb_device *udev)
 			udev->descriptor.bDeviceClass == USB_CLASS_HUB)
 		return 0;
 
-	if (xhci->hw_lpm_support == 1 &&
-			xhci_check_usb2_port_capability(
-				xhci, portnum, XHCI_HLC)) {
+	port = xhci->usb2_rhub.ports[udev->portnum - 1];
+	capability = port->port_cap->protocol_caps;
+
+	if (capability & XHCI_HLC) {
 		udev->usb2_hw_lpm_capable = 1;
 		udev->l1_params.timeout = XHCI_L1_TIMEOUT;
 		udev->l1_params.besl = XHCI_DEFAULT_BESL;
-		if (xhci_check_usb2_port_capability(xhci, portnum,
-					XHCI_BLC))
+		if (capability & XHCI_BLC)
 			udev->usb2_hw_lpm_besl_capable = 1;
 	}
 

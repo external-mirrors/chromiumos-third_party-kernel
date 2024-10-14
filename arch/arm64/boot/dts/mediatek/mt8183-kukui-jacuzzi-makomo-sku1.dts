@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /*
- * Copyright 2021 Google LLC
+ * Copyright 2023 Google LLC
  */
 
 /dts-v1/;
@@ -9,8 +9,8 @@
 
 / {
 	model = "Google makomo sku1 board";
-	compatible = "google,makomo-rev4-sku1", "google,makomo-rev5-sku1",
-		"google,makomo", "mediatek,mt8183";
+	chassis-type = "laptop";
+	compatible = "google,makomo-sku1", "google,makomo", "mediatek,mt8183";
 };
 
 &qca_wifi {
@@ -18,7 +18,7 @@
 };
 
 &mmc1_pins_uhs {
-	pins_clk {
+	pins-clk {
 		drive-strength = <MTK_DRIVE_6mA>;
 	};
 };

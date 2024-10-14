@@ -2491,7 +2491,6 @@ struct cfg80211_scan_6ghz_params {
  * @n_ssids: number of SSIDs
  * @channels: channels to scan on.
  * @n_channels: total number of channels to scan
- * @scan_width: channel width for scanning
  * @ie: optional information element(s) to add into Probe Request or %NULL
  * @ie_len: length of ie in octets
  * @duration: how long to listen on each channel, in TUs. If
@@ -2521,7 +2520,6 @@ struct cfg80211_scan_request {
 	struct cfg80211_ssid *ssids;
 	int n_ssids;
 	u32 n_channels;
-	enum nl80211_bss_scan_width scan_width;
 	const u8 *ie;
 	size_t ie_len;
 	u16 duration;
@@ -2616,7 +2614,6 @@ struct cfg80211_bss_select_adjust {
  * @ssids: SSIDs to scan for (passed in the probe_reqs in active scans)
  * @n_ssids: number of SSIDs
  * @n_channels: total number of channels to scan
- * @scan_width: channel width for scanning
  * @ie: optional information element(s) to add into Probe Request or %NULL
  * @ie_len: length of ie in octets
  * @flags: control flags from &enum nl80211_scan_flags
@@ -2664,7 +2661,6 @@ struct cfg80211_sched_scan_request {
 	struct cfg80211_ssid *ssids;
 	int n_ssids;
 	u32 n_channels;
-	enum nl80211_bss_scan_width scan_width;
 	const u8 *ie;
 	size_t ie_len;
 	u32 flags;
@@ -2712,7 +2708,6 @@ enum cfg80211_signal_type {
 /**
  * struct cfg80211_inform_bss - BSS inform data
  * @chan: channel the frame was received on
- * @scan_width: scan width that was used
  * @signal: signal strength value, according to the wiphy's
  *	signal type
  * @boottime_ns: timestamp (CLOCK_BOOTTIME) when the information was
@@ -2732,7 +2727,6 @@ enum cfg80211_signal_type {
  */
 struct cfg80211_inform_bss {
 	struct ieee80211_channel *chan;
-	enum nl80211_bss_scan_width scan_width;
 	s32 signal;
 	u64 boottime_ns;
 	u64 parent_tsf;
@@ -2766,7 +2760,6 @@ struct cfg80211_bss_ies {
  * for use in scan results and similar.
  *
  * @channel: channel this BSS is on
- * @scan_width: width of the control channel
  * @bssid: BSSID of the BSS
  * @beacon_interval: the beacon interval as from the frame
  * @capability: the capability field in host byte order
@@ -2798,7 +2791,6 @@ struct cfg80211_bss_ies {
  */
 struct cfg80211_bss {
 	struct ieee80211_channel *channel;
-	enum nl80211_bss_scan_width scan_width;
 
 	const struct cfg80211_bss_ies __rcu *ies;
 	const struct cfg80211_bss_ies __rcu *beacon_ies;
@@ -6291,13 +6283,11 @@ ieee80211_get_response_rate(struct ieee80211_supported_band *sband,
 /**
  * ieee80211_mandatory_rates - get mandatory rates for a given band
  * @sband: the band to look for rates in
- * @scan_width: width of the control channel
  *
  * This function returns a bitmap of the mandatory rates for the given
  * band, bits are set according to the rate position in the bitrates array.
  */
-u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband,
-			      enum nl80211_bss_scan_width scan_width);
+u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband);
 
 /*
  * Radiotap parsing functions -- for controlled injection support
@@ -6959,22 +6949,6 @@ cfg80211_inform_bss_frame_data(struct wiphy *wiphy,
 			       gfp_t gfp);
 
 static inline struct cfg80211_bss * __must_check
-cfg80211_inform_bss_width_frame(struct wiphy *wiphy,
-				struct ieee80211_channel *rx_channel,
-				enum nl80211_bss_scan_width scan_width,
-				struct ieee80211_mgmt *mgmt, size_t len,
-				s32 signal, gfp_t gfp)
-{
-	struct cfg80211_inform_bss data = {
-		.chan = rx_channel,
-		.scan_width = scan_width,
-		.signal = signal,
-	};
-
-	return cfg80211_inform_bss_frame_data(wiphy, &data, mgmt, len, gfp);
-}
-
-static inline struct cfg80211_bss * __must_check
 cfg80211_inform_bss_frame(struct wiphy *wiphy,
 			  struct ieee80211_channel *rx_channel,
 			  struct ieee80211_mgmt *mgmt, size_t len,
@@ -6982,7 +6956,6 @@ cfg80211_inform_bss_frame(struct wiphy *wiphy,
 {
 	struct cfg80211_inform_bss data = {
 		.chan = rx_channel,
-		.scan_width = NL80211_BSS_CHAN_WIDTH_20,
 		.signal = signal,
 	};
 
@@ -7085,26 +7058,6 @@ cfg80211_inform_bss_data(struct wiphy *wiphy,
 			 gfp_t gfp);
 
 static inline struct cfg80211_bss * __must_check
-cfg80211_inform_bss_width(struct wiphy *wiphy,
-			  struct ieee80211_channel *rx_channel,
-			  enum nl80211_bss_scan_width scan_width,
-			  enum cfg80211_bss_frame_type ftype,
-			  const u8 *bssid, u64 tsf, u16 capability,
-			  u16 beacon_interval, const u8 *ie, size_t ielen,
-			  s32 signal, gfp_t gfp)
-{
-	struct cfg80211_inform_bss data = {
-		.chan = rx_channel,
-		.scan_width = scan_width,
-		.signal = signal,
-	};
-
-	return cfg80211_inform_bss_data(wiphy, &data, ftype, bssid, tsf,
-					capability, beacon_interval, ie, ielen,
-					gfp);
-}
-
-static inline struct cfg80211_bss * __must_check
 cfg80211_inform_bss(struct wiphy *wiphy,
 		    struct ieee80211_channel *rx_channel,
 		    enum cfg80211_bss_frame_type ftype,
@@ -7114,7 +7067,6 @@ cfg80211_inform_bss(struct wiphy *wiphy,
 {
 	struct cfg80211_inform_bss data = {
 		.chan = rx_channel,
-		.scan_width = NL80211_BSS_CHAN_WIDTH_20,
 		.signal = signal,
 	};
 
@@ -7198,19 +7150,6 @@ void cfg80211_bss_iter(struct wiphy *wiphy,
 				    struct cfg80211_bss *bss,
 				    void *data),
 		       void *iter_data);
-
-static inline enum nl80211_bss_scan_width
-cfg80211_chandef_to_scan_width(const struct cfg80211_chan_def *chandef)
-{
-	switch (chandef->width) {
-	case NL80211_CHAN_WIDTH_5:
-		return NL80211_BSS_CHAN_WIDTH_5;
-	case NL80211_CHAN_WIDTH_10:
-		return NL80211_BSS_CHAN_WIDTH_10;
-	default:
-		return NL80211_BSS_CHAN_WIDTH_20;
-	}
-}
 
 /**
  * cfg80211_rx_mlme_mgmt - notification of processed MLME management frame
@@ -8842,6 +8781,18 @@ static inline size_t ieee80211_ie_split(const u8 *ies, size_t ielen,
 {
 	return ieee80211_ie_split_ric(ies, ielen, ids, n_ids, NULL, 0, offset);
 }
+
+/**
+ * ieee80211_fragment_element - fragment the last element in skb
+ * @skb: The skbuf that the element was added to
+ * @len_pos: Pointer to length of the element to fragment
+ * @frag_id: The element ID to use for fragments
+ *
+ * This function fragments all data after @len_pos, adding fragmentation
+ * elements with the given ID as appropriate. The SKB will grow in size
+ * accordingly.
+ */
+void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id);
 
 /**
  * cfg80211_report_wowlan_wakeup - report wakeup from WoWLAN

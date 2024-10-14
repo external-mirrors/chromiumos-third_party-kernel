@@ -161,9 +161,9 @@ static void iwl_mvm_rx_monitor_notif(struct iwl_mvm *mvm,
 	if (!vif || vif->type != NL80211_IFTYPE_STATION)
 		return;
 
-	if (!vif->bss_conf.chandef.chan ||
-	    vif->bss_conf.chandef.chan->band != NL80211_BAND_2GHZ ||
-	    vif->bss_conf.chandef.width < NL80211_CHAN_WIDTH_40)
+	if (!vif->bss_conf.chanreq.oper.chan ||
+	    vif->bss_conf.chanreq.oper.chan->band != NL80211_BAND_2GHZ ||
+	    vif->bss_conf.chanreq.oper.width < NL80211_CHAN_WIDTH_40)
 		return;
 
 	if (!vif->cfg.assoc)
@@ -219,7 +219,7 @@ void iwl_mvm_update_link_smps(struct ieee80211_vif *vif,
 		return;
 
 	if (mvm->fw_static_smps_request &&
-	    link_conf->chandef.width == NL80211_CHAN_WIDTH_160 &&
+	    link_conf->chanreq.oper.width == NL80211_CHAN_WIDTH_160 &&
 	    link_conf->he_support)
 		mode = IEEE80211_SMPS_STATIC;
 
@@ -702,11 +702,6 @@ static void iwl_mvm_fwrt_dump_end(void *ctx)
 	mutex_unlock(&mvm->mutex);
 }
 
-static bool iwl_mvm_fwrt_fw_running(void *ctx)
-{
-	return iwl_mvm_firmware_running(ctx);
-}
-
 static int iwl_mvm_fwrt_send_hcmd(void *ctx, struct iwl_host_cmd *host_cmd)
 {
 	struct iwl_mvm *mvm = (struct iwl_mvm *)ctx;
@@ -727,7 +722,6 @@ static bool iwl_mvm_d3_debug_enable(void *ctx)
 static const struct iwl_fw_runtime_ops iwl_mvm_fwrt_ops = {
 	.dump_start = iwl_mvm_fwrt_dump_start,
 	.dump_end = iwl_mvm_fwrt_dump_end,
-	.fw_running = iwl_mvm_fwrt_fw_running,
 	.send_hcmd = iwl_mvm_fwrt_send_hcmd,
 	.d3_debug_enable = iwl_mvm_d3_debug_enable,
 };
@@ -1423,6 +1417,8 @@ void iwl_mvm_stop_device(struct iwl_mvm *mvm)
 	iwl_fw_cancel_timestamp(&mvm->fwrt);
 
 	clear_bit(IWL_MVM_STATUS_FIRMWARE_RUNNING, &mvm->status);
+
+	iwl_mvm_pause_tcm(mvm, false);
 
 	iwl_fw_dbg_stop_sync(&mvm->fwrt);
 	iwl_trans_stop_device(mvm->trans);

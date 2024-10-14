@@ -1914,7 +1914,6 @@ no_bw:
 	kfree(xhci->usb3_rhub.ports);
 	kfree(xhci->hw_ports);
 	kfree(xhci->rh_bw);
-	kfree(xhci->ext_caps);
 	for (i = 0; i < xhci->num_port_caps; i++)
 		kfree(xhci->port_caps[i].psi);
 	kfree(xhci->port_caps);
@@ -1924,7 +1923,6 @@ no_bw:
 	xhci->usb3_rhub.ports = NULL;
 	xhci->hw_ports = NULL;
 	xhci->rh_bw = NULL;
-	xhci->ext_caps = NULL;
 	xhci->port_caps = NULL;
 
 	xhci->page_size = 0;
@@ -2056,10 +2054,7 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 
 	port_cap->maj_rev = major_revision;
 	port_cap->min_rev = minor_revision;
-
-	/* cache usb2 port capabilities */
-	if (major_revision < 0x03 && xhci->num_ext_caps < max_caps)
-		xhci->ext_caps[xhci->num_ext_caps++] = temp;
+	port_cap->protocol_caps = temp;
 
 	if ((xhci->hci_version >= 0x100) && (major_revision != 0x03) &&
 		 (temp & XHCI_HLC)) {
@@ -2179,11 +2174,6 @@ static int xhci_setup_port_arrays(struct xhci_hcd *xhci, gfp_t flags)
 						      XHCI_EXT_CAPS_PROTOCOL);
 	}
 
-	xhci->ext_caps = kcalloc_node(cap_count, sizeof(*xhci->ext_caps),
-				flags, dev_to_node(dev));
-	if (!xhci->ext_caps)
-		return -ENOMEM;
-
 	xhci->port_caps = kcalloc_node(cap_count, sizeof(*xhci->port_caps),
 				flags, dev_to_node(dev));
 	if (!xhci->port_caps)
@@ -2289,7 +2279,10 @@ xhci_add_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir,
 	erst_base = xhci_read_64(xhci, &ir->ir_set->erst_base);
 	erst_base &= ERST_BASE_RSVDP;
 	erst_base |= ir->erst.erst_dma_addr & ~ERST_BASE_RSVDP;
-	xhci_write_64(xhci, erst_base, &ir->ir_set->erst_base);
+	if (xhci->quirks & XHCI_WRITE_64_HI_LO)
+		hi_lo_writeq(erst_base, &ir->ir_set->erst_base);
+	else
+		xhci_write_64(xhci, erst_base, &ir->ir_set->erst_base);
 
 	/* Set the event ring dequeue address of this interrupter */
 	xhci_set_hc_event_deq(xhci, ir);

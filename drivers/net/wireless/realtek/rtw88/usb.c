@@ -574,6 +574,8 @@ static void rtw_usb_rx_handler(struct work_struct *work)
 
 		skb_put(skb, pkt_stat.pkt_len);
 		skb_reserve(skb, pkt_offset);
+
+		rtw_update_rx_freq_for_invalid(rtwdev, skb, &rx_status, &pkt_stat);
 		memcpy(skb->cb, &rx_status, sizeof(rx_status));
 		ieee80211_rx_irqsafe(rtwdev->hw, skb);
 	}
@@ -742,7 +744,6 @@ static struct rtw_hci_ops rtw_usb_ops = {
 static int rtw_usb_init_rx(struct rtw_dev *rtwdev)
 {
 	struct rtw_usb *rtwusb = rtw_get_usb_priv(rtwdev);
-	int i;
 
 	rtwusb->rxwq = create_singlethread_workqueue("rtw88_usb: rx wq");
 	if (!rtwusb->rxwq) {
@@ -754,13 +755,19 @@ static int rtw_usb_init_rx(struct rtw_dev *rtwdev)
 
 	INIT_WORK(&rtwusb->rx_work, rtw_usb_rx_handler);
 
+	return 0;
+}
+
+static void rtw_usb_setup_rx(struct rtw_dev *rtwdev)
+{
+	struct rtw_usb *rtwusb = rtw_get_usb_priv(rtwdev);
+	int i;
+
 	for (i = 0; i < RTW_USB_RXCB_NUM; i++) {
 		struct rx_usb_ctrl_block *rxcb = &rtwusb->rx_cb[i];
 
 		rtw_usb_rx_resubmit(rtwusb, rxcb);
 	}
-
-	return 0;
 }
 
 static void rtw_usb_deinit_rx(struct rtw_dev *rtwdev)
@@ -896,6 +903,8 @@ int rtw_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		rtw_err(rtwdev, "failed to register hw\n");
 		goto err_destroy_rxwq;
 	}
+
+	rtw_usb_setup_rx(rtwdev);
 
 	return 0;
 

@@ -1285,6 +1285,7 @@ void btrtl_set_quirks(struct hci_dev *hdev, struct btrtl_device_info *btrtl_dev)
 			btrealtek_set_flag(hdev, REALTEK_ALT6_CONTINUOUS_TX_CHIP);
 
 		if (btrtl_dev->project_id == CHIP_ID_8852A ||
+		    btrtl_dev->project_id == CHIP_ID_8852B ||
 		    btrtl_dev->project_id == CHIP_ID_8852C)
 			set_bit(HCI_QUIRK_USE_MSFT_EXT_ADDRESS_FILTER, &hdev->quirks);
 
@@ -1305,7 +1306,8 @@ void btrtl_set_quirks(struct hci_dev *hdev, struct btrtl_device_info *btrtl_dev)
 	/* Force RTL8852A to enable remote wakeup in order to prevent it from
 	 * resetting itself and taking longer to resume from suspend
 	 */
-	if (btrtl_dev->project_id == CHIP_ID_8852A)
+	if (btrtl_dev->project_id == CHIP_ID_8852A ||
+	    btrtl_dev->project_id == CHIP_ID_8852B)
 		set_bit(HCI_QUIRK_FORCE_REMOTE_WAKE, &hdev->quirks);
 
 	if (!btrtl_dev->ic_info)

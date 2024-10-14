@@ -2903,8 +2903,10 @@ int rt5682_register_dai_clks(struct rt5682_priv *rt5682)
 		}
 
 		if (dev->of_node) {
-			devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get,
+			ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_simple_get,
 						    dai_clk_hw);
+			if (ret)
+				return ret;
 		} else {
 			ret = devm_clk_hw_register_clkdev(dev, dai_clk_hw,
 							  init.name,
@@ -3102,8 +3104,6 @@ int rt5682_parse_dt(struct rt5682_priv *rt5682, struct device *dev)
 
 	rt5682->pdata.dmic_clk_driving_high = device_property_read_bool(dev,
 		"realtek,dmic-clk-driving-high");
-
-	device_property_read_string(dev, "realtek,mclk-name", &rt5682->pdata.mclk_name);
 
 	return 0;
 }

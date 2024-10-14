@@ -2802,8 +2802,15 @@ static void mnt_warn_timestamp_expiry(struct path *mountpoint, struct vfsmount *
 	if (!__mnt_is_readonly(mnt) &&
 	   (!(sb->s_iflags & SB_I_TS_EXPIRY_WARNED)) &&
 	   (ktime_get_real_seconds() + TIME_UPTIME_SEC_MAX > sb->s_time_max)) {
-		char *buf = (char *)__get_free_page(GFP_KERNEL);
-		char *mntpath = buf ? d_path(mountpoint, buf, PAGE_SIZE) : ERR_PTR(-ENOMEM);
+		char *buf, *mntpath;
+
+		buf = (char *)__get_free_page(GFP_KERNEL);
+		if (buf)
+			mntpath = d_path(mountpoint, buf, PAGE_SIZE);
+		else
+			mntpath = ERR_PTR(-ENOMEM);
+		if (IS_ERR(mntpath))
+			mntpath = "(unknown)";
 
 		pr_warn("%s filesystem being %s at %s supports timestamps until %ptTd (0x%llx)\n",
 			sb->s_type->name,
@@ -2811,8 +2818,9 @@ static void mnt_warn_timestamp_expiry(struct path *mountpoint, struct vfsmount *
 			mntpath, &sb->s_time_max,
 			(unsigned long long)sb->s_time_max);
 
-		free_page((unsigned long)buf);
 		sb->s_iflags |= SB_I_TS_EXPIRY_WARNED;
+		if (buf)
+			free_page((unsigned long)buf);
 	}
 }
 
@@ -3629,24 +3637,6 @@ int path_mount(const char *dev_name, struct path *path,
 	/* Default to relatime unless overriden */
 	if (!(flags & MS_NOATIME))
 		mnt_flags |= MNT_RELATIME;
-
-	/*
-	 * The nosymfollow option used to be extracted from data_page by an LSM.
-	 * It is now passed in as MS_NOSYMFOLLOW.  We need to also check in
-	 * the old place until all callers have been updated to use the flag.
-	 * Some callers will pass both for cross-kernel compatibility, so
-	 * only check if the new flag isn't already present.
-	 * TODO(b/152074038): Remove this check when all devices are on a kernel
-	 * that supports MS_NOSYMFOLLOW.
-	 */
-	if (data_page && !(flags & MS_NOSYMFOLLOW)) {
-		if (!strncmp((char *)data_page, "nosymfollow", 11) ||
-		    strstr((char *)data_page, ",nosymfollow")) {
-			WARN(1,
-			     "nosymfollow passed in mount data should be changed to the MS_NOSYMFOLLOW flag.");
-			flags |= MS_NOSYMFOLLOW;
-		}
-	}
 
 	/* Separate the per-mountpoint flags */
 	if (flags & MS_NOSUID)

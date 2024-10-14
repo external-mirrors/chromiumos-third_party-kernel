@@ -166,6 +166,8 @@ static const struct platform_device_id board_ids[] = {
 	},
 	{ }
 };
+MODULE_DEVICE_TABLE(platform, board_ids);
+
 static struct platform_driver acp_asoc_audio = {
 	.driver = {
 		.name = "sof_mach",
@@ -178,7 +180,7 @@ static struct platform_driver acp_asoc_audio = {
 module_platform_driver(acp_asoc_audio);
 
 MODULE_IMPORT_NS(SND_SOC_AMD_MACH);
-MODULE_DESCRIPTION("ACP chrome SOF audio support");
+MODULE_DESCRIPTION("ACP SOF Machine Driver");
 MODULE_ALIAS("platform:rt5682-rt1019");
 MODULE_ALIAS("platform:rt5682-max");
 MODULE_ALIAS("platform:rt5682s-max");

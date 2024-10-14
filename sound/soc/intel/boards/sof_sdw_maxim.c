@@ -31,7 +31,7 @@ static const struct snd_soc_dapm_route max_98373_dapm_routes[] = {
 	{ "Right Spk", NULL, "Right BE_OUT" },
 };
 
-static int spk_init(struct snd_soc_pcm_runtime *rtd)
+int maxim_spk_rtd_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_card *card = rtd->card;
 	int ret;
@@ -149,8 +149,6 @@ int sof_sdw_maxim_init(struct snd_soc_card *card,
 		       bool playback)
 {
 	info->amp_num++;
-	if (info->amp_num == 2)
-		dai_links->init = spk_init;
 
 	maxim_part_id = info->part_id;
 	switch (maxim_part_id) {

@@ -63,6 +63,11 @@ static const struct snd_soc_dapm_route rt713_sdca_map[] = {
 	{ "rt713 MIC2", NULL, "Headset Mic" },
 };
 
+static const struct snd_soc_dapm_route rt722_sdca_map[] = {
+	{ "Headphone", NULL, "rt722 HP" },
+	{ "rt722 MIC2", NULL, "Headset Mic" },
+};
+
 static const struct snd_kcontrol_new rt_sdca_jack_controls[] = {
 	SOC_DAPM_PIN_SWITCH("Headphone"),
 	SOC_DAPM_PIN_SWITCH("Headset Mic"),
@@ -83,7 +88,7 @@ static const char * const jack_codecs[] = {
 	"rt711", "rt712", "rt713"
 };
 
-static int rt_sdca_jack_rtd_init(struct snd_soc_pcm_runtime *rtd)
+int rt_sdca_jack_rtd_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_card *card = rtd->card;
 	struct mc_private *ctx = snd_soc_card_get_drvdata(card);
@@ -126,6 +131,9 @@ static int rt_sdca_jack_rtd_init(struct snd_soc_pcm_runtime *rtd)
 	} else if (strstr(component->name_prefix, "rt713")) {
 		ret = snd_soc_dapm_add_routes(&card->dapm, rt713_sdca_map,
 					      ARRAY_SIZE(rt713_sdca_map));
+	} else if (strstr(component->name_prefix, "rt722")) {
+		ret = snd_soc_dapm_add_routes(&card->dapm, rt722_sdca_map,
+					      ARRAY_SIZE(rt722_sdca_map));
 	} else {
 		dev_err(card->dev, "%s is not supported\n", component->name_prefix);
 		return -EINVAL;
@@ -193,10 +201,10 @@ int sof_sdw_rt_sdca_jack_init(struct snd_soc_card *card,
 	int ret;
 
 	/*
-	 * headset should be initialized once.
-	 * Do it with dai link for playback.
+	 * Jack detection should be only initialized once for headsets since
+	 * the playback/capture is sharing the same jack
 	 */
-	if (!playback)
+	if (ctx->headset_codec_dev)
 		return 0;
 
 	sdw_dev = bus_find_device_by_name(&sdw_bus_type, NULL, dai_links->codecs[0].name);
@@ -209,8 +217,6 @@ int sof_sdw_rt_sdca_jack_init(struct snd_soc_card *card,
 		return ret;
 	}
 	ctx->headset_codec_dev = sdw_dev;
-
-	dai_links->init = rt_sdca_jack_rtd_init;
 
 	return 0;
 }

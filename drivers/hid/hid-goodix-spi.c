@@ -294,17 +294,23 @@ static int goodix_hid_start(struct hid_device *hid)
 {
 	struct goodix_ts_data *ts = hid->driver_data;
 	unsigned int bufsize = GOODIX_HID_COOR_PKG_LEN;
+	u32 report_size;
 
 	goodix_hid_find_max_report(hid, HID_INPUT_REPORT, &bufsize);
 	goodix_hid_find_max_report(hid, HID_OUTPUT_REPORT, &bufsize);
 	goodix_hid_find_max_report(hid, HID_FEATURE_REPORT, &bufsize);
 
-	ts->hid_max_event_sz = GOODIX_SPI_READ_PREFIX_LEN +
-			       GOODIX_HID_ACK_HEADER_SIZE + bufsize;
-	ts->event_buf = kzalloc(ts->hid_max_event_sz, GFP_KERNEL);
+	report_size = GOODIX_SPI_READ_PREFIX_LEN +
+			GOODIX_HID_ACK_HEADER_SIZE + bufsize;
+	if (report_size <= ts->hid_max_event_sz)
+		return 0;
+
+	ts->event_buf = devm_krealloc(ts->dev, ts->event_buf,
+				      report_size, GFP_KERNEL);
 	if (!ts->event_buf)
 		return -ENOMEM;
 
+	ts->hid_max_event_sz = report_size;
 	return 0;
 }
 
@@ -329,11 +335,12 @@ static void goodix_hid_close(struct hid_device *hid)
 }
 
 /* Return date length of response data */
-static int goodix_hid_check_ack_status(struct goodix_ts_data *ts)
+static int goodix_hid_check_ack_status(struct goodix_ts_data *ts, u32 *resp_len)
 {
 	struct goodix_hid_report_header hdr;
 	int retry = 20;
 	int error;
+	int len;
 
 	while (retry--) {
 		/*
@@ -343,8 +350,15 @@ static int goodix_hid_check_ack_status(struct goodix_ts_data *ts)
 		 */
 		error = goodix_spi_read(ts, ts->hid_report_addr,
 					&hdr, sizeof(hdr));
-		if (!error && (hdr.flag & GOODIX_HID_ACK_READY_FLAG))
-			return le16_to_cpu(hdr.size);
+		if (!error && (hdr.flag & GOODIX_HID_ACK_READY_FLAG)) {
+			len = le16_to_cpu(hdr.size);
+			if (len < GOODIX_HID_PKG_LEN_SIZE) {
+				dev_err(ts->dev, "hrd.size too short: %d", len);
+				return -EINVAL;
+			}
+			*resp_len = len;
+			return 0;
+		}
 
 		/* Wait 10ms for another try */
 		usleep_range(10000, 11000);
@@ -377,7 +391,7 @@ static int goodix_hid_get_raw_report(struct hid_device *hid,
 	u16 cmd_register = le16_to_cpu(ts->hid_desc.cmd_register);
 	u8 tmp_buf[GOODIX_HID_MAX_INBUF_SIZE];
 	int tx_len = 0, args_len = 0;
-	int response_data_len;
+	u32 response_data_len;
 	u8 args[3];
 	int error;
 
@@ -428,9 +442,9 @@ static int goodix_hid_get_raw_report(struct hid_device *hid,
 		return 0;
 
 	/* Step2: check response data status */
-	response_data_len = goodix_hid_check_ack_status(ts);
-	if (response_data_len <= GOODIX_HID_PKG_LEN_SIZE)
-		return -EINVAL;
+	error = goodix_hid_check_ack_status(ts, &response_data_len);
+	if (error)
+		return error;
 
 	len = min(len, response_data_len - GOODIX_HID_PKG_LEN_SIZE);
 	/* Step3: read response data(skip 2bytes of hid pkg length) */
@@ -672,6 +686,12 @@ static int goodix_spi_probe(struct spi_device *spi)
 	spi_set_drvdata(spi, ts);
 	ts->spi = spi;
 	ts->dev = dev;
+	ts->hid_max_event_sz = GOODIX_SPI_READ_PREFIX_LEN +
+			       GOODIX_HID_ACK_HEADER_SIZE + GOODIX_HID_COOR_PKG_LEN;
+	ts->event_buf = devm_kmalloc(dev, ts->hid_max_event_sz, GFP_KERNEL);
+	if (!ts->event_buf)
+		return -ENOMEM;
+
 	ts->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(ts->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ts->reset_gpio),
@@ -718,15 +738,6 @@ static void goodix_spi_remove(struct spi_device *spi)
 
 	disable_irq(spi->irq);
 	hid_destroy_device(ts->hid);
-	kfree(ts->event_buf);
-}
-
-static void goodix_spi_shutdown(struct spi_device *spi)
-{
-	struct goodix_ts_data *ts = spi_get_drvdata(spi);
-
-	disable_irq(spi->irq);
-	hid_destroy_device(ts->hid);
 }
 
 static int goodix_spi_set_power(struct goodix_ts_data *ts, int power_state)
@@ -751,11 +762,9 @@ static int goodix_spi_set_power(struct goodix_ts_data *ts, int power_state)
 static int goodix_spi_suspend(struct device *dev)
 {
 	struct goodix_ts_data *ts = dev_get_drvdata(dev);
-	int error;
 
-	error = goodix_spi_set_power(ts, GOODIX_SPI_POWER_SLEEP);
 	disable_irq(ts->spi->irq);
-	return error;
+	return goodix_spi_set_power(ts, GOODIX_SPI_POWER_SLEEP);
 }
 
 static int goodix_spi_resume(struct device *dev)
@@ -763,7 +772,6 @@ static int goodix_spi_resume(struct device *dev)
 	struct goodix_ts_data *ts = dev_get_drvdata(dev);
 
 	enable_irq(ts->spi->irq);
-
 	return goodix_spi_set_power(ts, GOODIX_SPI_POWER_ON);
 }
 
@@ -801,7 +809,6 @@ static struct spi_driver goodix_spi_driver = {
 	},
 	.probe =	goodix_spi_probe,
 	.remove =	goodix_spi_remove,
-	.shutdown =	goodix_spi_shutdown,
 	.id_table =	goodix_spi_ids,
 };
 module_spi_driver(goodix_spi_driver);

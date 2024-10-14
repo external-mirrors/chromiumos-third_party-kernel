@@ -135,6 +135,7 @@ static __le16 ieee80211_duration(struct ieee80211_tx_data *tx,
 	mrate = sband->bitrates[0].bitrate;
 	for (i = 0; i < sband->n_bitrates; i++) {
 		struct ieee80211_rate *r = &sband->bitrates[i];
+		u32 flag;
 
 		if (r->bitrate > txrate->bitrate)
 			break;
@@ -147,28 +148,24 @@ static __le16 ieee80211_duration(struct ieee80211_tx_data *tx,
 
 		switch (sband->band) {
 		case NL80211_BAND_2GHZ:
-		case NL80211_BAND_LC: {
-			u32 flag;
+		case NL80211_BAND_LC:
 			if (tx->sdata->deflink.operating_11g_mode)
 				flag = IEEE80211_RATE_MANDATORY_G;
 			else
 				flag = IEEE80211_RATE_MANDATORY_B;
-			if (r->flags & flag)
-				mrate = r->bitrate;
 			break;
-		}
 		case NL80211_BAND_5GHZ:
 		case NL80211_BAND_6GHZ:
-			if (r->flags & IEEE80211_RATE_MANDATORY_A)
-				mrate = r->bitrate;
+			flag = IEEE80211_RATE_MANDATORY_A;
 			break;
-		case NL80211_BAND_S1GHZ:
-		case NL80211_BAND_60GHZ:
-			/* TODO, for now fall through */
-		case NUM_NL80211_BANDS:
+		default:
+			flag = 0;
 			WARN_ON(1);
 			break;
 		}
+
+		if (r->flags & flag)
+			mrate = r->bitrate;
 	}
 	if (rate == -1) {
 		/* No matching basic rate found; use highest suitable mandatory
@@ -706,7 +703,7 @@ ieee80211_tx_h_rate_ctrl(struct ieee80211_tx_data *tx)
 	txrc.skb = tx->skb;
 	txrc.reported_rate.idx = -1;
 
-	if (unlikely(info->control.flags & IEEE80211_TX_CTRL_SCAN_TX)) {
+	if (unlikely(info->control.flags & IEEE80211_TX_CTRL_DONT_USE_RATE_MASK)) {
 		txrc.rate_idx_mask = ~0;
 	} else {
 		txrc.rate_idx_mask = tx->sdata->rc_rateidx_mask[info->band];
@@ -2388,8 +2385,6 @@ netdev_tx_t ieee80211_monitor_start_xmit(struct sk_buff *skb,
 
 	if (chanctx_conf)
 		chandef = &chanctx_conf->def;
-	else if (!local->use_chanctx)
-		chandef = &local->_oper_chandef;
 	else
 		goto fail_rcu;
 
@@ -5311,8 +5306,10 @@ ieee80211_beacon_get_ap(struct ieee80211_hw *hw,
 	if (beacon->tail)
 		skb_put_data(skb, beacon->tail, beacon->tail_len);
 
-	if (ieee80211_beacon_protect(skb, local, sdata, link) < 0)
+	if (ieee80211_beacon_protect(skb, local, sdata, link) < 0) {
+		dev_kfree_skb(skb);
 		return NULL;
+	}
 
 	ieee80211_beacon_get_finish(hw, vif, link, offs, beacon, skb,
 				    chanctx_conf, csa_off_base);
