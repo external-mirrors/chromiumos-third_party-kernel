@@ -72,6 +72,7 @@
 
 #define RTL_GENERIC_PHYID			0x001cc800
 #define RTL_8211FVD_PHYID			0x001cc878
+#define RTL_8221B				0x001cc840
 #define RTL_8251B				0x001cc862
 
 MODULE_DESCRIPTION("Realtek PHY driver");
@@ -742,6 +743,23 @@ static bool rtlgen_supports_2_5gbps(struct phy_device *phydev)
 	return val >= 0 && val & RTL_SUPPORTS_2500FULL;
 }
 
+/* On internal PHY's MMD reads over C22 always return 0.
+ * Check a MMD register which is known to be non-zero.
+ */
+static bool rtlgen_supports_mmd(struct phy_device *phydev)
+{
+	int val;
+
+	phy_lock_mdio_bus(phydev);
+	__phy_write(phydev, MII_MMD_CTRL, MDIO_MMD_PCS);
+	__phy_write(phydev, MII_MMD_DATA, MDIO_PCS_EEE_ABLE);
+	__phy_write(phydev, MII_MMD_CTRL, MDIO_MMD_PCS | MII_MMD_CTRL_NOINCR);
+	val = __phy_read(phydev, MII_MMD_DATA);
+	phy_unlock_mdio_bus(phydev);
+
+	return val > 0;
+}
+
 static int rtlgen_match_phy_device(struct phy_device *phydev)
 {
 	return phydev->phy_id == RTL_GENERIC_PHYID &&
@@ -754,18 +772,21 @@ static int rtl8226_match_phy_device(struct phy_device *phydev)
 	       rtlgen_supports_2_5gbps(phydev);
 }
 
-static int rtlgen_is_c45_match(struct phy_device *phydev, unsigned int id,
-			       bool is_c45)
+static int rtl_internal_nbaset_match_phy_device(struct phy_device *phydev)
 {
 	if (phydev->is_c45)
-		return is_c45 && (id == phydev->c45_ids.device_ids[1]);
-	else
-		return !is_c45 && (id == phydev->phy_id);
-}
+		return false;
 
-static int rtl8251b_c22_match_phy_device(struct phy_device *phydev)
-{
-	return rtlgen_is_c45_match(phydev, RTL_8251B, false);
+	switch (phydev->phy_id) {
+	case RTL_GENERIC_PHYID:
+	case RTL_8221B:
+	case RTL_8251B:
+		break;
+	default:
+		return false;
+	}
+
+	return rtlgen_supports_2_5gbps(phydev) && !rtlgen_supports_mmd(phydev);
 }
 
 static int rtlgen_resume(struct phy_device *phydev)
@@ -1065,8 +1086,9 @@ static struct phy_driver realtek_drvs[] = {
 		.read_page      = rtl821x_read_page,
 		.write_page     = rtl821x_write_page,
 	}, {
-		.match_phy_device = rtl8251b_c22_match_phy_device,
-		.name           = "RTL8126A-internal 5Gbps PHY",
+		.match_phy_device = rtl_internal_nbaset_match_phy_device,
+		.name           = "Realtek Internal NBASE-T PHY",
+		.flags		= PHY_IS_INTERNAL,
 		.get_features   = rtl822x_get_features,
 		.config_aneg    = rtl822x_config_aneg,
 		.read_status    = rtl822x_read_status,
