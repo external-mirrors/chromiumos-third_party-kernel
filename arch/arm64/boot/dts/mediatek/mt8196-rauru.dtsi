@@ -1354,12 +1354,14 @@ spi_ap_fp: &spi5 {
 
 &xhci0 {
 	vbus-supply = <&pp5000_usb>;
+	usb2-lpm-disable;
 
 	status = "okay";
 };
 
 &xhci1 {
 	vbus-supply = <&mt6373_vcn33_1>;
+	usb2-lpm-disable;
 
 	status = "okay";
 };
