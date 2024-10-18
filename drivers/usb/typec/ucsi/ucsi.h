@@ -444,6 +444,7 @@ struct ucsi_connector {
 	u32 rdo;
 	u32 src_pdos[PDO_MAX_OBJECTS];
 	int num_pdos;
+	bool drp_partner;
 
 	/* USB PD objects */
 	struct usb_power_delivery *pd;
