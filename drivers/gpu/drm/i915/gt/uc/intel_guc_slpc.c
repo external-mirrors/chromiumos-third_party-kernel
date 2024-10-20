@@ -6,6 +6,7 @@
 #include "i915_drv.h"
 #include "intel_guc_slpc.h"
 #include "gt/intel_gt.h"
+#include <linux/dmi.h>
 
 static inline struct intel_guc *slpc_to_guc(struct intel_guc_slpc *slpc)
 {
@@ -24,6 +25,10 @@ static inline struct drm_i915_private *slpc_to_i915(struct intel_guc_slpc *slpc)
 
 static bool __detect_slpc_supported(struct intel_guc *guc)
 {
+	if (dmi_match(DMI_SYS_VENDOR, "Google") &&
+		dmi_match(DMI_PRODUCT_NAME, "Bujia"))
+		return 0;
+
 	/* GuC SLPC is unavailable for pre-Gen12 */
 	return guc->submission_supported &&
 		GRAPHICS_VER(guc_to_gt(guc)->i915) >= 12;
