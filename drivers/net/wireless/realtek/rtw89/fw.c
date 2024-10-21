@@ -4999,6 +4999,8 @@ void rtw89_hw_scan_complete(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif,
 	if (!vif)
 		return;
 
+	rtw89_set_channel(rtwdev);
+
 	rtw89_chanctx_proceed(rtwdev);
 
 	rtw89_write32_mask(rtwdev,
@@ -5017,8 +5019,6 @@ void rtw89_hw_scan_complete(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif,
 	rtwvif->scan_ies = NULL;
 	scan_info->last_chan_idx = 0;
 	scan_info->scanning_vif = NULL;
-
-	rtw89_set_channel(rtwdev);
 }
 
 void rtw89_hw_scan_abort(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif)
