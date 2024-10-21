@@ -687,7 +687,7 @@ static int of_update_lvts_data(struct lvts_data *lvts_data,
 	unsigned int i;
 	int ret;
 
-	lvts_data->clk = devm_clk_get(dev, "lvts_clk");
+	lvts_data->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(lvts_data->clk))
 		return PTR_ERR(lvts_data->clk);
 
