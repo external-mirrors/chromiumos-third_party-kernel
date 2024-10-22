@@ -2150,7 +2150,6 @@ static int mt_reset(struct hid_device *hdev)
 
 	return 0;
 }
-#endif
 
 static void mt_remove(struct hid_device *hdev)
 {
