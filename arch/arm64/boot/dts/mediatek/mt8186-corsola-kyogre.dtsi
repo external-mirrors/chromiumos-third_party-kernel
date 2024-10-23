@@ -7,31 +7,6 @@
 #include "mt8186-corsola.dtsi"
 
 / {
-	gpio_keys: gpio-keys {
-		compatible = "gpio-keys";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pen_eject>;
-		status = "okay";
-
-		pen_insert: pen-insert {
-			label = "Pen Insert";
-			/* Insert = low, eject = high */
-			gpios = <&pio 18 GPIO_ACTIVE_LOW>;
-			linux,code = <SW_PEN_INSERTED>;
-			linux,input-type = <EV_SW>;
-			wakeup-event-action = <EV_ACT_DEASSERTED>;
-			wakeup-source;
-		};
-	};
-
-	rt1019p: rt1019p {
-		compatible = "realtek,rt1019p";
-		pinctrl-names = "default";
-		pinctrl-0 = <&rt1019p_pins_default>;
-		sdb-gpios = <&pio 150 GPIO_ACTIVE_HIGH>;
-		#sound-dai-cells = <0>;
-		status = "okay";
-	};
 };
 
 &keyboard_controller {
@@ -160,19 +135,6 @@
 	};
 };
 
-&i2c5 {
-	rt5682s: rt5682s@1a {
-		compatible = "realtek,rt5682s";
-		reg = <0x1a>;
-		interrupt-parent = <&pio>;
-		interrupts = <17 IRQ_TYPE_EDGE_BOTH>;
-		realtek,jd-src = <1>;
-		AVDD-supply = <&mt6366_vio18_reg>;
-		MICVDD-supply = <&pp3300_z2>;
-		#sound-dai-cells = <0>;
-	};
-};
-
 &pio {
 	dpi_pin_default: dpi-pin-default {
 		pins-cmd-dat {
@@ -216,15 +178,6 @@
 				 <PINMUX_GPIO102__FUNC_DPI_DE>,
 				 <PINMUX_GPIO99__FUNC_DPI_PCLK>;
 			drive-strength = <MTK_DRIVE_10mA>;
-		};
-	};
-
-	pen_eject: peneject {
-		pen-eject {
-			pinmux = <PINMUX_GPIO18__FUNC_GPIO18>;
-			input-enable;
-			/* External pull-up. */
-			bias-disable;
 		};
 	};
 
