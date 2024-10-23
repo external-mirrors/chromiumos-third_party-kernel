@@ -145,9 +145,6 @@
 };
 
 &i2c2 {
-	pinctrl-0 = <&i2c2_pins &trackpad_pins>;
-	pinctrl-names = "default";
-
 	touchpad@15 {
 		compatible = "elan,ekth3000";
 		reg = <0x15>;
