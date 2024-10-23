@@ -240,17 +240,3 @@
 		};
 	};
 };
-
-&sound {
-	compatible = "mediatek,mt8186-mt6366-rt1019-rt5682s-sound";
-	mediatek,adsp = <&adsp>;
-	status = "okay";
-
-	playback-codecs {
-		sound-dai = <&it6505dptx>,<&rt1019p>;
-	};
-
-	headset-codec {
-		sound-dai = <&rt5682s>;
-	};
-};
