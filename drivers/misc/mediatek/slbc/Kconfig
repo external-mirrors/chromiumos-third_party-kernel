@@ -1,0 +1,27 @@
+# # SPDX-License-Identifier: (GPL-2.0 OR MIT)
+
+config MTK_SLBC
+	tristate "MTK SLBC"
+	help
+	  This kernel config can be used to enable SLBC (System Level Buffer and
+	  Cache). When enable this option, we will use system buffer to improve
+	  performance and power.
+	  If unsure, say N.
+
+config MTK_SLBC_MT8196
+	tristate "MTK SLBC MT8196"
+	depends on MTK_SLBC
+	help
+	  This kernel config can be used to enable SLBC at mt8196. When enable
+	  this option, we will use system buffer to improve performance
+	  and power.
+	  If unsure, say N.
+
+config MTK_SLBC_IPI
+	tristate "MTK SLBC use IPI"
+	help
+	  This kernel config can be used to enable SLBC IPI. When enable
+	  this option, we will use scmi on system buffer to improve
+	  performance and power.
+	  If unsure, say N.
+

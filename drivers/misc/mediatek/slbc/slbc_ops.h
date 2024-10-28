@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2019 MediaTek Inc.
+ * Copyright (c) 2025 MediaTek Inc.
  */
 #ifndef _SLBC_OPS_H_
 #define _SLBC_OPS_H_
-#include <linux/list.h>
 #include <linux/bitops.h>
 #include <linux/dma-buf.h>
+#include <linux/list.h>
 /* error code */
 #define EWAIT_RELEASE		1 /* wait for release */
 #define ENOT_AVAILABLE		2 /* not available for now */
@@ -38,7 +38,7 @@
 #define GS_FD	BIT(3)
 /* need to modify slbc_uid_str  */
 enum slbc_uid {
-	UID_ZERO = 0,
+	UID_ZERO,
 	UID_MM_VENC,
 	UID_MM_DISP,
 	UID_MM_MDP,
@@ -82,12 +82,12 @@ enum slbc_uid {
 #define UID_MM_BITS_4 (BIT(UID_AISR_APU) | BIT(UID_AISR_MML))
 #define BIT_IN_MM_BITS_4(x) ((x) & UID_MM_BITS_4)
 enum slbc_type {
-	TP_BUFFER = 0,
+	TP_BUFFER,
 	TP_CACHE,
 	TP_ACP,
 };
 enum slbc_force {
-	FR_DIS = 0,
+	FR_DIS,
 	FR_CPU,
 	FR_GPU,
 	FR_APU,
@@ -180,21 +180,20 @@ extern unsigned int slbc_enable;
 extern unsigned int slbc_all_cache_mode;
 extern char *slbc_uid_str[UID_MAX + 1];
 extern char *slc_ach_uid_str[ID_MAX + 1];
-extern int popcount(unsigned int x);
 #if IS_ENABLED(CONFIG_MTK_SLBC)
-extern int slbc_status(struct slbc_data *d);
-extern int slbc_request(struct slbc_data *d);
-extern int slbc_release(struct slbc_data *d);
-extern int slbc_power_on(struct slbc_data *d);
-extern int slbc_power_off(struct slbc_data *d);
-extern int slbc_secure_on(struct slbc_data *d);
-extern int slbc_secure_off(struct slbc_data *d);
-extern int slbc_register_activate_ops(struct slbc_ops *ops);
-extern int slbc_activate_status(struct slbc_data *d);
-extern void slbc_update_mm_bw(unsigned int bw);
-extern void slbc_update_mic_num(unsigned int num);
-extern void slbc_update_inner(unsigned int inner);
-extern void slbc_update_outer(unsigned int outer);
+int slbc_status(struct slbc_data *d);
+int slbc_request(struct slbc_data *d);
+int slbc_release(struct slbc_data *d);
+int slbc_power_on(struct slbc_data *d);
+int slbc_power_off(struct slbc_data *d);
+int slbc_secure_on(struct slbc_data *d);
+int slbc_secure_off(struct slbc_data *d);
+int slbc_register_activate_ops(struct slbc_ops *ops);
+int slbc_activate_status(struct slbc_data *d);
+void slbc_update_mm_bw(unsigned int bw);
+void slbc_update_mic_num(unsigned int num);
+void slbc_update_inner(unsigned int inner);
+void slbc_update_outer(unsigned int outer);
 void slbc_get_gid_for_dma(struct dma_buf *dmabuf);
 int slbc_gid_val(enum slc_ach_uid uid);
 int slbc_gid_request(enum slc_ach_uid uid, int *gid, struct slbc_gid_data *data);
