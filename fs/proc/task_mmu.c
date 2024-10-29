@@ -25,6 +25,9 @@
 #include <linux/buildid.h>
 #include <linux/random.h>
 #include <linux/mm_inline.h>
+#include <linux/migrate.h>
+#include <linux/mm.h>
+#include <linux/mmdebug.h>
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -2857,39 +2860,40 @@ static int deactivate_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	pte_t *orig_pte, *pte, ptent;
 	spinlock_t *ptl;
-	struct page *page;
 	struct vm_area_struct *vma = walk->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long next = pmd_addr_end(addr, end);
 
 	ptl = pmd_trans_huge_lock(pmd, vma);
 	if (ptl) {
+		struct folio *folio;
+
 		if (!pmd_present(*pmd))
 			goto huge_unlock;
 
 		if (is_huge_zero_pmd(*pmd))
 			goto huge_unlock;
 
-		page = pmd_page(*pmd);
-		if (page_mapcount(page) > 1)
+		folio = pmd_folio(*pmd);
+		if (folio_likely_mapped_shared(folio))
 			goto huge_unlock;
 
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
-			get_page(page);
+			folio_get(folio);
 			spin_unlock(ptl);
-			lock_page(page);
-			err = split_huge_page(page);
-			unlock_page(page);
-			put_page(page);
+			folio_lock(folio);
+			err = split_folio(folio);
+			folio_unlock(folio);
+			folio_put(folio);
 			if (!err)
 				goto regular_page;
 			return 0;
 		}
 
 		pmdp_test_and_clear_young(vma, addr, pmd);
-		folio_deactivate(page_folio(page));
+		folio_deactivate(folio);
 huge_unlock:
 		spin_unlock(ptl);
 		return 0;
@@ -2898,46 +2902,51 @@ huge_unlock:
 regular_page:
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
+	if (!orig_pte)
+		return 0;
+
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
+		struct folio *folio;
+
 		ptent = *pte;
 
 		if (!pte_present(ptent))
 			continue;
 
-		page = vm_normal_page(vma, addr, ptent);
-		if (!page)
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio)
 			continue;
 
-		if (PageTransCompound(page))  {
-			if (page_mapcount(page) != 1)
+		if (folio_test_large(folio)) {
+			if (folio_likely_mapped_shared(folio))
 				break;
-			get_page(page);
-			if (!trylock_page(page)) {
-				put_page(page);
+			folio_get(folio);
+			if (!folio_trylock(folio)) {
+				folio_put(folio);
 				break;
 			}
 			pte_unmap_unlock(orig_pte, ptl);
-			if (split_huge_page(page)) {
-				unlock_page(page);
-				put_page(page);
+			if (split_folio(folio)) {
+				folio_unlock(folio);
+				folio_put(folio);
 				pte_offset_map_lock(mm, pmd, addr, &ptl);
 				break;
 			}
-			unlock_page(page);
-			put_page(page);
+			folio_unlock(folio);
+			folio_put(folio);
 			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 			pte--;
 			addr -= PAGE_SIZE;
 			continue;
 		}
 
-		VM_BUG_ON_PAGE(PageTransCompound(page), page);
+		VM_BUG_ON_FOLIO(folio_test_large(folio), folio);
 
-		if (page_mapcount(page) > 1)
+		if (folio_likely_mapped_shared(folio))
 			continue;
 
 		ptep_test_and_clear_young(vma, addr, pte);
-		folio_deactivate(page_folio(page));
+		folio_deactivate(folio);
 	}
 	pte_unmap_unlock(orig_pte, ptl);
 	cond_resched();
@@ -2950,8 +2959,7 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 {
 	pte_t *orig_pte, *pte, ptent;
 	spinlock_t *ptl;
-	LIST_HEAD(page_list);
-	struct page *page;
+	LIST_HEAD(folio_list);
 	int isolated = 0;
 	struct vm_area_struct *vma = walk->vma;
 	struct walk_data *data = (struct walk_data*)walk->private;
@@ -2965,14 +2973,16 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 
 	ptl = pmd_trans_huge_lock(pmd, vma);
 	if (ptl) {
+		struct folio *folio;
+
 		if (!pmd_present(*pmd))
 			goto huge_unlock;
 
 		if (is_huge_zero_pmd(*pmd))
 			goto huge_unlock;
 
-		page = pmd_page(*pmd);
-		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
+		folio = pmd_folio(*pmd);
+		if (type != RECLAIM_SHMEM && folio_likely_mapped_shared(folio))
 			goto huge_unlock;
 
 		if (!data->nr_to_try)
@@ -2980,18 +2990,18 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		if (next - addr != HPAGE_PMD_SIZE) {
 			int err;
 
-			get_page(page);
+			folio_get(folio);
 			spin_unlock(ptl);
-			lock_page(page);
-			err = split_huge_page(page);
-			unlock_page(page);
-			put_page(page);
+			folio_lock(folio);
+			err = split_folio(folio);
+			folio_unlock(folio);
+			folio_put(folio);
 			if (!err)
-				goto regular_page;
+				goto regular_folio;
 			return 0;
 		}
 
-		if (!isolate_lru_page(page))
+		if (!folio_isolate_lru(folio))
 			goto huge_unlock;
 
 		/*
@@ -2999,33 +3009,35 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		 * over our limit.
 		 */
 		data->nr_to_try -= min_t(unsigned long, data->nr_to_try,
-		    thp_nr_pages(page));
+					 folio_nr_pages(folio));
 
 		/* Clear all the references to make sure it gets reclaimed */
 		pmdp_test_and_clear_young(vma, addr, pmd);
-		ClearPageReferenced(page);
-		test_and_clear_page_young(page);
-		list_add(&page->lru, &page_list);
+		folio_clear_referenced(folio);
+		folio_test_clear_young(folio);
+		list_add(&folio->lru, &folio_list);
 huge_unlock:
 		spin_unlock(ptl);
-		reclaim_pages(&page_list);
+		reclaim_pages(&folio_list);
 		return 0;
 	}
 
-regular_page:
+regular_folio:
 
 	orig_pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 	if (!orig_pte)
 		return 0;
 	for (pte = orig_pte; addr < end; pte++, addr += PAGE_SIZE) {
+		struct folio *folio;
+
 		if (!data->nr_to_try)
 			break;
 		ptent = *pte;
 		if (!pte_present(ptent))
 			continue;
 
-		page = vm_normal_page(vma, addr, ptent);
-		if (!page)
+		folio = vm_normal_folio(vma, addr, ptent);
+		if (!folio)
 			continue;
 
 		if (++batch_count == SWAP_CLUSTER_MAX) {
@@ -3034,55 +3046,55 @@ regular_page:
 				arch_leave_lazy_mmu_mode();
 				pte_unmap_unlock(orig_pte, ptl);
 				cond_resched();
-				goto regular_page;
+				goto regular_folio;
 			}
 		}
 
-		if (PageTransCompound(page)) {
-			if (type != RECLAIM_SHMEM && page_mapcount(page) != 1)
+		if (folio_test_large(folio)) {
+			if (type != RECLAIM_SHMEM && folio_likely_mapped_shared(folio))
 				break;
-			get_page(page);
-			if (!trylock_page(page)) {
-				put_page(page);
+			folio_get(folio);
+			if (!folio_trylock(folio)) {
+				folio_put(folio);
 				break;
 			}
 			pte_unmap_unlock(orig_pte, ptl);
 
-			if (split_huge_page(page)) {
-				unlock_page(page);
-				put_page(page);
+			if (split_folio(folio)) {
+				folio_unlock(folio);
+				folio_put(folio);
 				pte_offset_map_lock(mm, pmd, addr, &ptl);
 				break;
 			}
-			unlock_page(page);
-			put_page(page);
+			folio_unlock(folio);
+			folio_put(folio);
 			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 			pte--;
 			addr -= PAGE_SIZE;
 			continue;
 		}
 
-		VM_BUG_ON_PAGE(PageTransCompound(page), page);
+		VM_BUG_ON_FOLIO(folio_test_large(folio), folio);
 
-		if (!PageLRU(page))
+		if (!folio_test_lru(folio))
 			continue;
 
-		if (type != RECLAIM_SHMEM && page_mapcount(page) > 1)
+		if (type != RECLAIM_SHMEM && folio_likely_mapped_shared(folio))
 			continue;
 
-		if (!isolate_lru_page(page))
+		if (!folio_isolate_lru(folio))
 			continue;
 
 		isolated++;
 		data->nr_to_try--;
-		list_add(&page->lru, &page_list);
+		list_add(&folio->lru, &folio_list);
 		/* Clear all the references to make sure it gets reclaimed */
 		ptep_test_and_clear_young(vma, addr, pte);
-		ClearPageReferenced(page);
-		test_and_clear_page_young(page);
+		folio_clear_referenced(folio);
+		folio_test_clear_young(folio);
 		if (isolated >= SWAP_CLUSTER_MAX) {
 			pte_unmap_unlock(orig_pte, ptl);
-			reclaim_pages(&page_list);
+			reclaim_pages(&folio_list);
 			isolated = 0;
 			pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);
 			orig_pte = pte;
@@ -3090,7 +3102,7 @@ regular_page:
 	}
 
 	pte_unmap_unlock(orig_pte, ptl);
-	reclaim_pages(&page_list);
+	reclaim_pages(&folio_list);
 
 	cond_resched();
 	return 0;
