@@ -3630,7 +3630,7 @@ static int it6505_i2c_probe(struct i2c_client *client)
 	struct it6505 *it6505;
 	struct device *dev = &client->dev;
 	struct extcon_dev *extcon;
-	int err, intp_irq, ret;
+	int err, ret;
 
 	it6505 = devm_kzalloc(&client->dev, sizeof(*it6505), GFP_KERNEL);
 	if (!it6505)
