@@ -1526,7 +1526,7 @@ static const struct mdp_comp_ops pad_ops = {
 
 static int init_isp(struct mdp_comp_ctx *ctx, struct mdp_cmdq_cmd *cmd)
 {
-	struct device *dev = ctx->comp->mdp_dev->mdp_mmsys;
+	struct device *dev;
 	u32 c_id, c1, c2;
 
 	if (CFG_CHECK(MT8183, p_id))
@@ -1534,6 +1534,7 @@ static int init_isp(struct mdp_comp_ctx *ctx, struct mdp_cmdq_cmd *cmd)
 	else
 		return 0;
 
+	dev = ctx->comp->mdp_dev->mm_subsys[MDP_MM_SUBSYS_0].mmsys;
 	c1 = mdp_cfg_get_id_inner(ctx->comp->mdp_dev, MDP_COMP_CAMIN);
 	c2 = mdp_cfg_get_id_inner(ctx->comp->mdp_dev, MDP_COMP_CAMIN2);
 
@@ -1554,8 +1555,8 @@ static int config_isp_frame(struct mdp_comp_ctx *ctx,
 			    struct mdp_cmdq_cmd *cmd,
 			    const struct v4l2_rect *compose)
 {
-	struct device *dev = &ctx->comp->mdp_dev->pdev->dev;
 	struct mdp_dev *m_dev = ctx->comp->mdp_dev;
+	struct device *dev = m_dev->mm_subsys[MDP_MM_SUBSYS_0].mmsys;
 	const struct mdp_dip_cq_data *dip_cq = m_dev->mdp_data->dip_cq_data;
 	phys_addr_t base = ctx->comp->reg_base;
 	u8 subsys_id = ctx->comp->subsys_id;
@@ -1617,8 +1618,8 @@ static int config_isp_subfrm(struct mdp_comp_ctx *ctx,
 
 static int wait_isp_event(struct mdp_comp_ctx *ctx, struct mdp_cmdq_cmd *cmd)
 {
-	struct device *dev = &ctx->comp->mdp_dev->pdev->dev;
 	struct mdp_dev *m_dev = ctx->comp->mdp_dev;
+	struct device *dev = m_dev->mm_subsys[MDP_MM_SUBSYS_0].mmsys;
 	const struct mdp_dip_cq_data *dip_cq = m_dev->mdp_data->dip_cq_data;
 	phys_addr_t base = ctx->comp->reg_base;
 	u8 subsys_id = ctx->comp->subsys_id;
@@ -1665,11 +1666,16 @@ static const struct mdp_comp_ops imgi_ops = {
 static int config_camin_subfrm(struct mdp_comp_ctx *ctx,
 			       struct mdp_cmdq_cmd *cmd, u32 index)
 {
-	struct device *dev = ctx->comp->mdp_dev->mdp_mmsys;
+	struct device *dev;
 	u32 csf_l = 0, csf_r = 0;
 	u32 csf_t = 0, csf_b = 0;
 	u32 camin_w, camin_h;
 	u32 idx;
+
+	if (!CFG_CHECK(MT8183, p_id))
+		return 0;
+
+	dev = ctx->comp->mdp_dev->mm_subsys[MDP_MM_SUBSYS_0].mmsys;
 
 	csf_l = CFG_COMP(MT8183, ctx->param, subfrms[index].in.left);
 	csf_r = CFG_COMP(MT8183, ctx->param, subfrms[index].in.right);
