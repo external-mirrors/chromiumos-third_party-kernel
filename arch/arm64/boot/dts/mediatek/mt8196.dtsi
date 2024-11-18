@@ -3026,7 +3026,6 @@
 		smi_disp_common: smi-comm@30020000 {
 			compatible = "mediatek,mt8196-smi-common";
 			reg = <0 0x30020000 0 0x1000>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MM_INFRA1>;
 			mediatek,smi = <&disp_ssc0_smi_2x1_sub_comm>;
 			mediatek,common-id = <0>;
 			mediatek,skip-rpm-cb;
@@ -3035,7 +3034,6 @@
 		smi_mdp_common: smi-comm@30021000 {
 			compatible = "mediatek,mt8196-smi-common";
 			reg = <0 0x30021000 0 0x1000>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MM_INFRA1>;
 			mediatek,smi = <&mdp_ssc4_smi_2x1_sub_comm>;
 			mediatek,common-id = <1>;
 			mediatek,skip-rpm-cb;
@@ -3078,14 +3076,12 @@
 			compatible = "mediatek,mt8196-smi-common";
 			reg = <0 0x30a30000 0 0x1000>;
 			mediatek,common-id = <3>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MM_INFRA1>;
 			mediatek,skip-rpm-cb;
 		};
 
 		disp_ssc1_smi_2x1_sub_comm: smi-comm@30a31000 {
 			compatible = "mediatek,mt8196-smi-common";
 			reg = <0 0x30a31000 0 0x1000>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MM_INFRA1>;
 			mediatek,common-id = <4>;
 			mediatek,skip-rpm-cb;
 		};
@@ -3093,7 +3089,6 @@
 		mdp_ssc4_smi_2x1_sub_comm: smi-comm@30a32000 {
 			compatible = "mediatek,mt8196-smi-common";
 			reg = <0 0x30a32000 0 0x1000>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MM_INFRA1>;
 			mediatek,common-id = <5>;
 			mediatek,skip-rpm-cb;
 		};
@@ -3101,7 +3096,6 @@
 		mdp_ssc5_smi_2x1_sub_comm: smi-comm@30a33000 {
 			compatible = "mediatek,mt8196-smi-common";
 			reg = <0 0x30a33000 0 0x1000>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_MM_INFRA1>;
 			mediatek,common-id = <6>;
 			mediatek,skip-rpm-cb;
 		};
