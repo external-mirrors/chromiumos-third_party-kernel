@@ -35,6 +35,7 @@
 
 #include "hci_debugfs.h"
 #include "hci_codec.h"
+#include "aosp.h"
 #include "smp.h"
 #include "msft.h"
 #include "eir.h"
@@ -2462,6 +2463,16 @@ static void hci_check_pending_name(struct hci_dev *hdev, struct hci_conn *conn,
 	if (conn && (conn->state == BT_CONFIG || conn->state == BT_CONNECTED))
 		mgmt_device_connected(hdev, conn, name, name_len);
 
+	e = hci_inquiry_cache_lookup_resolve(hdev, bdaddr, NAME_PENDING);
+
+	if (e) {
+		list_del(&e->list);
+
+		e->name_state = name ? NAME_KNOWN : NAME_NOT_KNOWN;
+		mgmt_remote_name(hdev, bdaddr, ACL_LINK, 0x00, e->data.rssi,
+				 name, name_len);
+	}
+
 	if (discov->state == DISCOVERY_STOPPED)
 		return;
 
@@ -2471,19 +2482,12 @@ static void hci_check_pending_name(struct hci_dev *hdev, struct hci_conn *conn,
 	if (discov->state != DISCOVERY_RESOLVING)
 		return;
 
-	e = hci_inquiry_cache_lookup_resolve(hdev, bdaddr, NAME_PENDING);
 	/* If the device was not found in a list of found devices names of which
 	 * are pending. there is no need to continue resolving a next name as it
 	 * will be done upon receiving another Remote Name Request Complete
 	 * Event */
 	if (!e)
 		return;
-
-	list_del(&e->list);
-
-	e->name_state = name ? NAME_KNOWN : NAME_NOT_KNOWN;
-	mgmt_remote_name(hdev, bdaddr, ACL_LINK, 0x00, e->data.rssi,
-			 name, name_len);
 
 	if (hci_resolve_next_name(hdev))
 		return;
@@ -5550,6 +5554,41 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+#define QUALITY_SPEC_NA			0x0
+#define QUALITY_SPEC_INTEL_TELEMETRY	0x1
+#define QUALITY_SPEC_AOSP_BQR		0x2
+
+static bool quality_report_evt(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	if (aosp_is_quality_report_evt(skb)) {
+		if (aosp_has_quality_report(hdev) &&
+		    aosp_pull_quality_report_data(skb))
+			mgmt_quality_report(hdev, skb, QUALITY_SPEC_AOSP_BQR);
+	} else if (hdev->is_quality_report_evt &&
+		   hdev->is_quality_report_evt(skb)) {
+		if (hdev->set_quality_report &&
+		    hdev->pull_quality_report_data(skb))
+			mgmt_quality_report(hdev, skb,
+					    QUALITY_SPEC_INTEL_TELEMETRY);
+	} else {
+		return false;
+	}
+
+	return true;
+}
+
+static void hci_vendor_evt(struct hci_dev *hdev, void *data,
+			   struct sk_buff *skb)
+{
+	/* Every specification must have a well-defined condition
+	 * to determine if an event meets the specification.
+	 * The skb is consumed by a specification only if the event
+	 * meets the specification.
+	 */
+	if (!quality_report_evt(hdev, skb))
+		msft_vendor_evt(hdev, data, skb);
+}
+
 static void le_conn_update_addr(struct hci_conn *conn, bdaddr_t *bdaddr,
 				u8 bdaddr_type, bdaddr_t *local_rpa)
 {
@@ -7403,7 +7442,7 @@ static const struct hci_ev {
 	HCI_EV_REQ_VL(HCI_EV_LE_META, hci_le_meta_evt,
 		      sizeof(struct hci_ev_le_meta), HCI_MAX_EVENT_SIZE),
 	/* [0xff = HCI_EV_VENDOR] */
-	HCI_EV_VL(HCI_EV_VENDOR, msft_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
+	HCI_EV_VL(HCI_EV_VENDOR, hci_vendor_evt, 0, HCI_MAX_EVENT_SIZE),
 };
 
 static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
