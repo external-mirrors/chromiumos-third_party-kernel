@@ -429,6 +429,16 @@ struct load_weight {
 };
 
 /*
+ * For sched_setattr_nocheck() (kernel) only
+ *
+ * Allow vCPU threads to use UTIL_GUEST as a way to hint the scheduler with more
+ * accurate utilization info. This is useful when guest kernels have some way of
+ * tracking its own runqueue's utilization.
+ *
+ */
+#define SCHED_FLAG_UTIL_GUEST   0x20000000
+
+/*
  * The load/runnable/util_avg accumulates an infinite geometric series
  * (see __update_load_avg_cfs_rq() in kernel/sched/pelt.c).
  *
@@ -482,6 +492,7 @@ struct sched_avg {
 	unsigned long			load_avg;
 	unsigned long			runnable_avg;
 	unsigned long			util_avg;
+	unsigned long			util_guest;
 	unsigned int			util_est;
 } ____cacheline_aligned;
 
@@ -1868,6 +1879,7 @@ extern void sched_set_fifo_low(struct task_struct *p);
 extern void sched_set_normal(struct task_struct *p, int nice);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);
 extern int sched_setattr_nocheck(struct task_struct *, const struct sched_attr *);
+extern int sched_setattr_pi_nocheck(struct task_struct *p, const struct sched_attr *a, bool pi);
 extern struct task_struct *idle_task(int cpu);
 
 /**
