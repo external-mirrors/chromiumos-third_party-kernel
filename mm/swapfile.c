@@ -49,6 +49,7 @@
 #include <linux/swap_cgroup.h>
 #include "internal.h"
 #include "swap.h"
+#include "../block/blk.h"
 
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
