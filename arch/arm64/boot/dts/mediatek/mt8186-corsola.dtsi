@@ -370,8 +370,27 @@
 };
 
 &gpu {
+	/* supply-names is required by the proprietary Mali driver. */
+	supply-names = "mali";
 	mali-supply = <&mt6366_vgpu_reg>;
 	status = "okay";
+
+	/*
+	 * The power models below are not part of the upstream binding
+	 * but are required by the proprietary Mali driver.
+	 */
+	power_model@0 {
+		compatible = "arm,mali-simple-power-model";
+		static-coefficient = <2427750>;
+		dynamic-coefficient = <4687>;
+		ts = <20000 2000 (-20) 2>;
+		thermal-zone = "soc_max";
+	};
+
+	power_model@1 {
+		compatible = "arm,mali-g52_r1-power-model";
+		scale = <1>;
+	};
 };
 
 &i2c0 {
@@ -440,6 +459,47 @@
 
 			port@1 {
 				reg = <1>;
+				it6505_out: endpoint {
+					data-lanes = <0 1>;
+				};
+			};
+		};
+
+		switches {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			switch@0 {
+				compatible = "typec-switch";
+				reg = <0>;
+				mode-switch;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						ite_typec0: endpoint {
+							remote-endpoint = <&typec_port0>;
+						};
+					};
+				};
+			};
+
+			switch@1 {
+				compatible = "typec-switch";
+				reg = <1>;
+				mode-switch;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						ite_typec1: endpoint {
+							remote-endpoint = <&typec_port1>;
+						};
+					};
+				};
 			};
 		};
 	};
@@ -1336,7 +1396,7 @@
 				regulator-allowed-modes = <MT6397_BUCK_MODE_AUTO
 							   MT6397_BUCK_MODE_FORCE_PWM>;
 				regulator-coupled-with = <&mt6366_vsram_gpu_reg>;
-				regulator-coupled-max-spread = <10000>;
+				regulator-coupled-max-spread = <100000>;
 			};
 
 			mt6366_vproc11_reg: vproc11 {
@@ -1545,7 +1605,7 @@
 				regulator-ramp-delay = <6250>;
 				regulator-enable-ramp-delay = <240>;
 				regulator-coupled-with = <&mt6366_vgpu_reg>;
-				regulator-coupled-max-spread = <10000>;
+				regulator-coupled-max-spread = <100000>;
 			};
 
 			mt6366_vsram_others_reg: vsram-others {
@@ -1645,6 +1705,19 @@
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						typec_port0: endpoint {
+							remote-endpoint = <&ite_typec0>;
+						};
+					};
+				};
 			};
 
 			usb_c1: connector@1 {
@@ -1654,6 +1727,19 @@
 				power-role = "dual";
 				data-role = "host";
 				try-power-role = "source";
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					port@1 {
+						reg = <1>;
+
+						typec_port1: endpoint {
+							remote-endpoint = <&ite_typec1>;
+						};
+					};
+				};
 			};
 		};
 	};
@@ -1677,11 +1763,11 @@
 };
 
 &ssusb0 {
-	status = "okay";
+	status = "disabled";
 };
 
 &ssusb1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &u3phy0 {
@@ -1698,12 +1784,26 @@
 
 &usb_host0 {
 	vbus-supply = <&pp3300_s3>;
-	status = "okay";
+	status = "disabled";
 };
 
 &usb_host1 {
 	vbus-supply = <&usb_p1_vbus>;
+	status = "disabled";
+};
+
+&xhci0 {
 	status = "okay";
+
+	vbus-supply = <&pp3300_s3>;
+};
+
+&xhci1 {
+	status = "okay";
+
+	#address-cells = <2>;
+	#size-cells = <2>;
+	vbus-supply = <&usb_p1_vbus>;
 };
 
 &watchdog {

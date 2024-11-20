@@ -398,6 +398,13 @@
 &gpu {
 	status = "okay";
 	mali-supply = <&mt6315_7_vbuck1>;
+
+	/*
+	 * Note: the property below are not part of the
+	 * upstream binding but is required by proprietary
+	 * Mali driver.
+	 */
+	supply-names = "mali";
 };
 
 &i2c0 {
@@ -610,6 +617,13 @@
 		spi-rx-bus-width = <2>;
 		spi-tx-bus-width = <2>;
 	};
+};
+
+&pcie0 {
+	status = "disabled";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_pins_default>;
 };
 
 &pcie1 {
