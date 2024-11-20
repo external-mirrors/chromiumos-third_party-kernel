@@ -10,6 +10,7 @@
 #include <linux/sched/cpufreq.h>
 #include <linux/sched/deadline.h>
 #include <linux/sched.h>
+#include <linux/sched/latsense.h>
 #include <linux/sched/loadavg.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/rseq_api.h>
@@ -3318,6 +3319,11 @@ static inline bool uclamp_rq_is_idle(struct rq *rq)
 	return rq->uclamp_flags & UCLAMP_FLAG_IDLE;
 }
 
+static inline bool uclamp_boosted(struct task_struct *p)
+{
+	return uclamp_eff_value(p, UCLAMP_MIN) > 0;
+}
+
 /* Is the rq being capped/throttled by uclamp_max? */
 static inline bool uclamp_rq_is_capped(struct rq *rq)
 {
@@ -3386,6 +3392,11 @@ uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
 	return SCHED_CAPACITY_SCALE;
 }
 
+static inline bool uclamp_boosted(struct task_struct *p)
+{
+	return false;
+}
+
 static inline bool uclamp_rq_is_capped(struct rq *rq) { return false; }
 
 static inline bool uclamp_is_used(void)
@@ -3413,6 +3424,34 @@ static inline bool uclamp_rq_is_idle(struct rq *rq)
 }
 
 #endif /* !CONFIG_UCLAMP_TASK */
+
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+static inline bool uclamp_latency_sensitive(struct task_struct *p)
+{
+	struct cgroup_subsys_state *css = task_css(p, cpu_cgrp_id);
+	struct task_group *tg;
+
+#ifdef CONFIG_PROC_LATSENSE
+	/* Over CGroup interface with task-interface. */
+	if (p->proc_latency_sensitive)
+		return true;
+#endif
+
+	if (!css)
+		return false;
+	tg = container_of(css, struct task_group, css);
+
+	return tg->latency_sensitive;
+}
+#else
+static inline bool uclamp_latency_sensitive(struct task_struct *p)
+{
+#ifdef CONFIG_PROC_LATSENSE
+	return !!p->proc_latency_sensitive;
+#endif
+	return false;
+}
+#endif /* CONFIG_UCLAMP_TASK_GROUP */
 
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
 
