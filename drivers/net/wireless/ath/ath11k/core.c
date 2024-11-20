@@ -473,7 +473,11 @@ static const struct ath11k_hw_params ath11k_hw_params[] = {
 		.name = "wcn6855 hw2.1",
 		.hw_rev = ATH11K_HW_WCN6855_HW21,
 		.fw = {
-			.dir = "WCN6855/hw2.1",
+			/* WCN6855 hw2.1 and hw2.0 share the same FW.
+			 * To maintain backward compatibility, use hw2.0
+			 * directory.for 2.1 as well.
+			 */
+			.dir = "WCN6855/hw2.0",
 			.board_size = 256 * 1024,
 			.cal_offset = 128 * 1024,
 		},
@@ -1924,6 +1928,7 @@ void ath11k_core_halt(struct ath11k *ar)
 	ath11k_mac_scan_finish(ar);
 	ath11k_mac_peer_cleanup_all(ar);
 	cancel_delayed_work_sync(&ar->scan.timeout);
+	cancel_work_sync(&ar->channel_update_work);
 	cancel_work_sync(&ar->regd_update_work);
 	cancel_work_sync(&ab->update_11d_work);
 
