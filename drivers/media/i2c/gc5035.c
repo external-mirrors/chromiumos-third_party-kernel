@@ -1257,7 +1257,7 @@ static int gc5035_set_fmt(struct v4l2_subdev *sd,
 
 	mutex_lock(&gc5035->mutex);
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		*v4l2_subdev_get_try_format(sd, state, fmt->pad) = fmt->format;
+		*v4l2_subdev_state_get_format(state, fmt->pad) = fmt->format;
 	} else {
 		gc5035->cur_mode = mode;
 		h_blank = mode->hts_def - mode->width;
@@ -1282,7 +1282,7 @@ static int gc5035_get_fmt(struct v4l2_subdev *sd,
 
 	mutex_lock(&gc5035->mutex);
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		fmt->format = *v4l2_subdev_get_try_format(sd, state, fmt->pad);
+		fmt->format = *v4l2_subdev_state_get_format(state, fmt->pad);
 	} else {
 		fmt->format.width = mode->width;
 		fmt->format.height = mode->height;
@@ -1476,7 +1476,7 @@ static int gc5035_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int gc5035_entity_init_cfg(struct v4l2_subdev *subdev,
+static int gc5035_entity_init_state(struct v4l2_subdev *subdev,
 				struct v4l2_subdev_state *state)
 {
 	struct v4l2_subdev_format fmt = {
@@ -1504,11 +1504,14 @@ static const struct v4l2_subdev_video_ops gc5035_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops gc5035_pad_ops = {
-	.init_cfg = gc5035_entity_init_cfg,
 	.enum_mbus_code = gc5035_enum_mbus_code,
 	.enum_frame_size = gc5035_enum_frame_sizes,
 	.get_fmt = gc5035_get_fmt,
 	.set_fmt = gc5035_set_fmt,
+};
+
+static const struct v4l2_subdev_internal_ops gc5035_internal_ops = {
+	.init_state = gc5035_entity_init_state,
 };
 
 static const struct v4l2_subdev_ops gc5035_subdev_ops = {
@@ -1879,6 +1882,7 @@ static int gc5035_probe(struct i2c_client *client)
 
 	sd = &gc5035->subdev;
 	v4l2_i2c_subdev_init(sd, client, &gc5035_subdev_ops);
+	sd->internal_ops = &gc5035_internal_ops;
 
 	ret = gc5035_initialize_controls(gc5035);
 	if (ret) {
