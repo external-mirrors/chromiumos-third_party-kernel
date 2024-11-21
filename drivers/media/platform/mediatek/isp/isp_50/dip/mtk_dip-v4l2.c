@@ -28,9 +28,9 @@ static int mtk_dip_subdev_open(struct v4l2_subdev *sd,
 	struct mtk_dip_pipe *pipe = mtk_dip_subdev_to_pipe(sd);
 
 	for (i = 0; i < pipe->desc->total_queues; i++) {
-		*v4l2_subdev_get_pad_format(&pipe->subdev, fh->state, i) =
+		*v4l2_subdev_state_get_format(fh->state, i) =
 			pipe->nodes[i].pad_fmt;
-		*v4l2_subdev_get_pad_crop(&pipe->subdev, fh->state, i) =
+		*v4l2_subdev_state_get_crop(fh->state, i) =
 			pipe->nodes[i].crop;
 	}
 
@@ -74,7 +74,7 @@ static int mtk_dip_subdev_get_fmt(struct v4l2_subdev *sd,
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
 		fmt->format = dip_pipe->nodes[pad].pad_fmt;
 	} else {
-		mf = v4l2_subdev_get_pad_format(sd, state, pad);
+		mf = v4l2_subdev_state_get_format(state, pad);
 		if (!mf)
 			return -EINVAL;
 		fmt->format = *mf;
@@ -96,7 +96,7 @@ static int mtk_dip_subdev_set_fmt(struct v4l2_subdev *sd,
 		return -EINVAL;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		mf = v4l2_subdev_get_pad_format(sd, state, pad);
+		mf = v4l2_subdev_state_get_format(state, pad);
 
 		if (!mf)
 			return -EINVAL;
@@ -136,7 +136,7 @@ static int mtk_dip_subdev_get_selection(struct v4l2_subdev *sd,
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
-		try_sel = v4l2_subdev_get_pad_crop(sd, state, sel->pad);
+		try_sel = v4l2_subdev_state_get_crop(state, sel->pad);
 		r = &dip_pipe->nodes[sel->pad].crop;  /* effective resolution */
 		break;
 	default:
@@ -172,7 +172,7 @@ static int mtk_dip_subdev_set_selection(struct v4l2_subdev *sd,
 
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
-		try_sel = v4l2_subdev_get_pad_crop(sd, state, sel->pad);
+		try_sel = v4l2_subdev_state_get_crop(state, sel->pad);
 		rect = &dip_pipe->nodes[sel->pad].crop;
 		break;
 	default:
@@ -865,7 +865,7 @@ int mtk_dip_dev_media_register(struct device *dev,
 	int ret;
 
 	media_dev->dev = dev;
-	strlcpy(media_dev->model, dev_driver_string(dev),
+	strscpy(media_dev->model, dev_driver_string(dev),
 		sizeof(media_dev->model));
 	snprintf(media_dev->bus_info, sizeof(media_dev->bus_info),
 		 "platform:%s", dev_name(dev));
@@ -931,7 +931,7 @@ static int mtk_dip_video_device_v4l2_register(struct mtk_dip_pipe *pipe,
 	vbq->supports_requests = true;
 	vbq->buf_struct_size = sizeof(struct mtk_dip_dev_buffer);
 	vbq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
-	vbq->min_buffers_needed = 0;
+	vbq->min_queued_buffers = 0;
 	vbq->drv_priv = pipe;
 	vbq->lock = &node->dev_q.lock;
 	if (node->desc->cached_mmap)
