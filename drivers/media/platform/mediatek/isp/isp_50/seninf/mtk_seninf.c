@@ -494,14 +494,14 @@ static void init_fmt(struct mtk_seninf *priv)
 		priv->fmt[i].format = mtk_seninf_default_fmt;
 }
 
-static int seninf_init_cfg(struct v4l2_subdev *sd,
+static int seninf_init_state(struct v4l2_subdev *sd,
 			   struct v4l2_subdev_state *sd_state)
 {
 	struct v4l2_mbus_framefmt *mf;
 	unsigned int i;
 
 	for (i = 0; i < sd->entity.num_pads; i++) {
-		mf = v4l2_subdev_get_try_format(sd, sd_state, i);
+		mf = v4l2_subdev_state_get_format(sd_state, i);
 		*mf = mtk_seninf_default_fmt;
 	}
 
@@ -518,7 +518,7 @@ static int seninf_set_fmt(struct v4l2_subdev *sd,
 		fmt->format.code = MEDIA_BUS_FMT_SBGGR10_1X10;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		*v4l2_subdev_get_try_format(sd, sd_state, fmt->pad) = fmt->format;
+		*v4l2_subdev_state_get_format(sd_state, fmt->pad) = fmt->format;
 	} else {
 		priv->fmt[fmt->pad].pad = fmt->pad;
 		priv->fmt[fmt->pad].format.code = fmt->format.code;
@@ -536,7 +536,7 @@ static int seninf_get_fmt(struct v4l2_subdev *sd,
 	struct mtk_seninf *priv = container_of(sd, struct mtk_seninf, subdev);
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		fmt->format = *v4l2_subdev_get_try_format(sd, sd_state, fmt->pad);
+		fmt->format = *v4l2_subdev_state_get_format(sd_state, fmt->pad);
 	} else {
 		fmt->format.code = priv->fmt[fmt->pad].format.code;
 		fmt->format.width = priv->fmt[fmt->pad].format.width;
@@ -579,10 +579,13 @@ static int seninf_s_stream(struct v4l2_subdev *sd, int on)
 };
 
 static const struct v4l2_subdev_pad_ops seninf_subdev_pad_ops = {
-	.init_cfg = seninf_init_cfg,
 	.set_fmt = seninf_set_fmt,
 	.get_fmt = seninf_get_fmt,
 	.enum_mbus_code = seninf_enum_mbus_code,
+};
+
+static const struct v4l2_subdev_internal_ops seninf_internal_ops = {
+	.init_state = seninf_init_state,
 };
 
 static const struct v4l2_subdev_video_ops seninf_subdev_video_ops = {
@@ -835,6 +838,7 @@ static int mtk_seninf_media_register(struct mtk_seninf *priv)
 	int ret;
 
 	v4l2_subdev_init(sd, &seninf_subdev_ops);
+	sd->internal_ops = &seninf_internal_ops;
 
 	init_fmt(priv);
 	ret = seninf_initialize_controls(priv);
@@ -846,7 +850,7 @@ static int mtk_seninf_media_register(struct mtk_seninf *priv)
 	sd->flags |= (V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS);
 
 	priv->subdev.dev = dev;
-	snprintf(sd->name, V4L2_SUBDEV_NAME_SIZE, "%s",
+	snprintf(sd->name, sizeof(sd->name), "%s",
 		 dev_name(dev));
 	v4l2_set_subdevdata(sd, priv);
 
