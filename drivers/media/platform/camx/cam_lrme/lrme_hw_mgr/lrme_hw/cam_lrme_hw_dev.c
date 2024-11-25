@@ -244,23 +244,21 @@ free_memory:
 	return rc;
 }
 
-static int cam_lrme_hw_dev_remove(struct platform_device *pdev)
+static void cam_lrme_hw_dev_remove(struct platform_device *pdev)
 {
-	int rc = 0;
+	int rc;
 	struct cam_hw_info *lrme_hw;
 	struct cam_lrme_core *lrme_core;
 
 	lrme_hw = platform_get_drvdata(pdev);
 	if (!lrme_hw) {
 		CAM_ERR(CAM_LRME, "Invalid lrme_hw from fd_hw_intf");
-		rc = -ENODEV;
 		goto deinit_platform_res;
 	}
 
 	lrme_core = (struct cam_lrme_core *)lrme_hw->core_info;
 	if (!lrme_core) {
 		CAM_ERR(CAM_LRME, "Invalid lrme_core from fd_hw");
-		rc = -EINVAL;
 		goto deinit_platform_res;
 	}
 
@@ -280,8 +278,6 @@ deinit_platform_res:
 
 	mutex_destroy(&lrme_hw->hw_mutex);
 	kfree(lrme_hw);
-
-	return rc;
 }
 
 static const struct of_device_id cam_lrme_hw_dt_match[] = {

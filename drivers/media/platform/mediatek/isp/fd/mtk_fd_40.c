@@ -1156,7 +1156,7 @@ err_put_scp:
 	return ret;
 }
 
-static int mtk_fd_remove(struct platform_device *pdev)
+static void mtk_fd_remove(struct platform_device *pdev)
 {
 	struct mtk_fd_dev *fd = dev_get_drvdata(&pdev->dev);
 
@@ -1174,8 +1174,6 @@ static int mtk_fd_remove(struct platform_device *pdev)
 	mutex_destroy(&fd->vfd_lock);
 	mtk_fd_free_dma_handle(fd);
 	scp_put(fd->scp);
-
-	return 0;
 }
 
 static int mtk_fd_suspend(struct device *dev)

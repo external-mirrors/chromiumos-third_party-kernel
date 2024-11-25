@@ -2375,13 +2375,12 @@ static int cam_smmu_probe(struct platform_device *pdev)
 	return rc;
 }
 
-static int cam_smmu_remove(struct platform_device *pdev)
+static void cam_smmu_remove(struct platform_device *pdev)
 {
 	/* release all the context banks and memory allocated */
 	cam_smmu_reset_iommu_table(CAM_SMMU_TABLE_DEINIT);
 	if (of_device_is_compatible(pdev->dev.of_node, "qcom,msm-cam-smmu"))
 		cam_smmu_release_cb(pdev);
-	return 0;
 }
 
 static struct platform_driver cam_smmu_driver = {

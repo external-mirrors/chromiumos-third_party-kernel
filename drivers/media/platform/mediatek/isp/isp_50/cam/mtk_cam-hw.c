@@ -682,7 +682,7 @@ static int mtk_isp_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mtk_isp_remove(struct platform_device *pdev)
+static void mtk_isp_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_isp_p1_device *p1_dev = dev_get_drvdata(dev);
@@ -694,8 +694,6 @@ static int mtk_isp_remove(struct platform_device *pdev)
 			     MTK_ISP_COMPOSER_MEM_SIZE, DMA_BIDIRECTIONAL,
 			     DMA_ATTR_SKIP_CPU_SYNC);
 	isp_teardown_scp_rproc(p1_dev);
-
-	return 0;
 }
 
 static const struct dev_pm_ops mtk_isp_pm_ops = {

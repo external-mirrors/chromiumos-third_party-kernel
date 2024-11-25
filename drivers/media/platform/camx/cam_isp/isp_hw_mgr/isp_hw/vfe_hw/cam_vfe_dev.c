@@ -135,7 +135,7 @@ end:
 	return rc;
 }
 
-int cam_vfe_remove(struct platform_device *pdev)
+void cam_vfe_remove(struct platform_device *pdev)
 {
 	struct cam_hw_info                *vfe_hw = NULL;
 	struct cam_hw_intf                *vfe_hw_intf = NULL;
@@ -145,7 +145,7 @@ int cam_vfe_remove(struct platform_device *pdev)
 	vfe_hw_intf = platform_get_drvdata(pdev);
 	if (!vfe_hw_intf) {
 		CAM_ERR(CAM_ISP, "Error! No data in pdev");
-		return -EINVAL;
+		return;
 	}
 
 	CAM_DBG(CAM_ISP, "type %d index %d",
@@ -157,14 +157,12 @@ int cam_vfe_remove(struct platform_device *pdev)
 	vfe_hw = vfe_hw_intf->hw_priv;
 	if (!vfe_hw) {
 		CAM_ERR(CAM_ISP, "Error! HW data is NULL");
-		rc = -ENODEV;
 		goto free_vfe_hw_intf;
 	}
 
 	core_info = (struct cam_vfe_hw_core_info *)vfe_hw->core_info;
 	if (!core_info) {
 		CAM_ERR(CAM_ISP, "Error! core data NULL");
-		rc = -EINVAL;
 		goto deinit_soc;
 	}
 
@@ -186,8 +184,6 @@ deinit_soc:
 
 free_vfe_hw_intf:
 	kfree(vfe_hw_intf);
-
-	return rc;
 }
 
 int cam_vfe_hw_init(struct cam_hw_intf **vfe_hw, uint32_t hw_idx)
