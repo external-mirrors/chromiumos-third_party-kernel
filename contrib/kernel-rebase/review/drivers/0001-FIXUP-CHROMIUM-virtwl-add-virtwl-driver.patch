@@ -1,0 +1,76 @@
+From 6ffcb9b795864d6f28564a4b205726b854a6fc5c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bart=C5=82omiej=20Bujak?= <bbujak@google.com>
+Date: Mon, 30 Sep 2024 13:24:33 +0000
+Subject: [PATCH] FIXUP: CHROMIUM: virtwl: add virtwl driver
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Create fixup.
+
+Change-Id: Id659d2c737c54bf3f4a7080b5f0333a49be5c884
+Signed-off-by: Bartłomiej Bujak <bbujak@google.com>
+Kcr-depends-on-sha: 6c85d6b653caeba2ef982925703cbb4f2b3b3163
+Kcr-depends-on-sha: 1da91ea87aefe2c25b68c9f96947a9271ba6325d
+---
+ drivers/virtio/virtio_wl.c | 17 +++++++++--------
+ 1 file changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/virtio/virtio_wl.c b/drivers/virtio/virtio_wl.c
+index f3bd3f6e37dc..ff57bddd316d 100644
+--- a/drivers/virtio/virtio_wl.c
++++ b/drivers/virtio/virtio_wl.c
+@@ -825,15 +825,15 @@ static int virtwl_vfd_send(struct file *filp, const char __user *buffer,
+ 				break;
+ 
+ 			vfd_file = fdget(vfd_fds[i]);
+-			if (!vfd_file.file) {
++			if (!fd_file(vfd_file)) {
+ 				ret = -EBADFD;
+ 				goto put_files;
+ 			}
+ 
+-			if (vfd_file.file->f_op == &virtwl_vfd_fops) {
++			if (fd_file(vfd_file)->f_op == &virtwl_vfd_fops) {
+ 				vfd_files[i] = vfd_file;
+ 
+-				vfds[i] = vfd_file.file->private_data;
++				vfds[i] = fd_file(vfd_file)->private_data;
+ 				if (vfds[i] && vfds[i]->id) {
+ 					vfd_count++;
+ 					continue;
+@@ -969,7 +969,7 @@ static int virtwl_vfd_send(struct file *filp, const char __user *buffer,
+ 	kvfree(ctrl_send);
+ put_files:
+ 	for (i = 0; i < VIRTWL_SEND_MAX_ALLOCS; i++) {
+-		if (vfd_files[i].file)
++		if (fd_file(vfd_files[i]))
+ 			fdput(vfd_files[i]);
+ #ifdef SEND_VIRTGPU_RESOURCES
+ 		if (virtgpu_dma_bufs[i])
+@@ -1457,8 +1457,10 @@ static int probe_common(struct virtio_device *vdev)
+ 	int i;
+ 	int ret;
+ 	struct virtwl_info *vi = NULL;
+-	vq_callback_t *vq_callbacks[] = { vq_in_cb, vq_out_cb };
+-	static const char * const vq_names[] = { "in", "out" };
++	struct virtqueue_info vqs_info[] = {
++		{ "in", vq_in_cb },
++		{ "out", vq_out_cb },
++	};
+ 
+ 	vi = kzalloc(sizeof(struct virtwl_info), GFP_KERNEL);
+ 	if (!vi)
+@@ -1500,8 +1502,7 @@ static int probe_common(struct virtio_device *vdev)
+ 	for (i = 0; i < VIRTWL_QUEUE_COUNT; i++)
+ 		mutex_init(&vi->vq_locks[i]);
+ 
+-	ret = virtio_find_vqs(vdev, VIRTWL_QUEUE_COUNT, vi->vqs, vq_callbacks,
+-			      vq_names, NULL);
++	ret = virtio_find_vqs(vdev, VIRTWL_QUEUE_COUNT, vi->vqs, vqs_info, NULL);
+ 	if (ret) {
+ 		pr_warn("virtwl: failed to find virtio wayland queues: %d\n",
+ 			ret);
+-- 
+2.47.0.338.g60cca15819-goog
+
