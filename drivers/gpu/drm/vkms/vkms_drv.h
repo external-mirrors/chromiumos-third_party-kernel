@@ -208,6 +208,9 @@ struct vkms_device {
 
 #define drm_crtc_to_vkms_crtc(crtc) container_of(crtc, struct vkms_crtc, base)
 
+#define timer_to_vkms_crtc(timer) \
+	container_of(timer, struct vkms_crtc, vblank_hrtimer)
+
 #define drm_device_to_vkms_device(target) \
 	container_of(target, struct vkms_device, drm)
 
