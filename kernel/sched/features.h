@@ -24,6 +24,8 @@ SCHED_FEAT(RUN_TO_PARITY, true)
  */
 SCHED_FEAT(PREEMPT_SHORT, true)
 
+SCHED_FEAT(ENFORCE_ELIGIBILITY, true)
+
 /*
  * Prefer to schedule the task we woke last (assuming it failed
  * wakeup-preemption), since its likely going to consume data we

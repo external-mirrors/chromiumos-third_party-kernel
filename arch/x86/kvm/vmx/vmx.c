@@ -7654,7 +7654,8 @@ int vmx_vm_init(struct kvm *kvm)
 	return 0;
 }
 
-u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
+u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio,
+			  const struct kvm_memory_slot *slot)
 {
 	/*
 	 * Force UC for host MMIO regions, as allowing the guest to access MMIO
@@ -7662,6 +7663,9 @@ u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
 	 */
 	if (is_mmio)
 		return MTRR_TYPE_UNCACHABLE << VMX_EPT_MT_EPTE_SHIFT;
+
+	if (slot->flags & KVM_MEM_NON_COHERENT_DMA)
+		return MTRR_TYPE_WRBACK << VMX_EPT_MT_EPTE_SHIFT;
 
 	/*
 	 * Force WB and ignore guest PAT if the VM does NOT have a non-coherent
