@@ -217,6 +217,9 @@ struct vkms_device {
 #define to_vkms_plane_state(target)\
 	container_of(target, struct vkms_plane_state, base.base)
 
+#define timer_to_vkms_crtc(timer) \
+	container_of(timer, struct vkms_crtc, vblank_hrtimer)
+
 #define item_to_configfs(item) \
 	container_of(to_config_group(item), struct vkms_configfs, device_group)
 
