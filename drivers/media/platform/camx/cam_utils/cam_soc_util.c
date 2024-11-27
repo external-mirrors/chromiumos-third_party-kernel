@@ -1093,7 +1093,8 @@ static int cam_soc_util_request_gpio_table(
 			}
 		}
 	} else {
-		gpio_free_array(gpio_tbl, size);
+		while (size--)
+			gpio_free((gpio_tbl++)->gpio);
 	}
 
 	return rc;
