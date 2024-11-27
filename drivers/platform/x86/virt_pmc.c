@@ -55,11 +55,9 @@ static int virt_pmc_probe(struct platform_device *pdev)
 	return err;
 }
 
-static int virt_pmc_remove(struct platform_device *pdev)
+static void virt_pmc_remove(struct platform_device *pdev)
 {
 	acpi_unregister_lps0_dev(&pmc_s2idle_dev_ops);
-
-	return 0;
 }
 
 static const struct acpi_device_id virt_pmc_acpi_ids[] = {
