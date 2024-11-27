@@ -13,6 +13,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/soc/mediatek/infracfg.h>
+#include <linux/clk-provider.h>
 
 #include <dt-bindings/power/mt2701-power.h>
 #include <dt-bindings/power/mt2712-power.h>
@@ -21,8 +22,10 @@
 #include <dt-bindings/power/mt7623a-power.h>
 #include <dt-bindings/power/mt8173-power.h>
 #include <dt-bindings/power/mt8196-power.h>
+#include <dt-bindings/power/mt8189-power.h>
 
 #include "mt8196-scpsys.h"
+#include "mt8189-scpsys.h"
 
 #define MTK_POLL_DELAY_US		10
 #define MTK_POLL_TIMEOUT		USEC_PER_SEC
@@ -49,6 +52,7 @@
 #define MTK_SCPD_RTFF_DELAY		BIT(10)
 #define MTK_SCPD_IRQ_SAVE		BIT(11)
 #define MTK_SCPD_ALWAYS_ON		BIT(12)
+#define MTK_SCPD_KEEP_DEFAULT_OFF	BIT(13)
 #define MTK_SCPD_CAPS(_scpd, _x)	((_scpd)->data->caps & (_x))
 
 #define SPM_VDE_PWR_CON			0x0210
@@ -113,7 +117,7 @@
 
 #define _BUS_PROT(_type, _set_ofs, _clr_ofs,			\
 		_en_ofs, _sta_ofs, _mask, _ack_mask,		\
-		_ignore_clr_ack) {				\
+		_ignore_clr_ack, _ignore_subsys_clk) {		\
 		.type = _type,					\
 		.set_ofs = _set_ofs,				\
 		.clr_ofs = _clr_ofs,				\
@@ -122,17 +126,24 @@
 		.mask = _mask,					\
 		.ack_mask = _ack_mask,				\
 		.ignore_clr_ack = _ignore_clr_ack,		\
+		.ignore_subsys_clk = _ignore_subsys_clk,		\
 	}
 
 #define BUS_PROT_IGN(_type, _set_ofs, _clr_ofs,	\
 		_en_ofs, _sta_ofs, _mask)		\
 		_BUS_PROT(_type, _set_ofs, _clr_ofs,	\
-		_en_ofs, _sta_ofs, _mask, _mask, true)
+		_en_ofs, _sta_ofs, _mask, _mask, true, false)
+
+#define BUS_PROT_SUBSYS_CLK_IGN(_type, _set_ofs, _clr_ofs,	\
+		_en_ofs, _sta_ofs, _mask)		\
+		_BUS_PROT(_type, _set_ofs, _clr_ofs,	\
+		_en_ofs, _sta_ofs, _mask, _mask, true, true)
 
 enum clk_id {
 	CLK_NONE,
 	CLK_MM,
 	CLK_MFG,
+	CLK_MFG_TOP,
 	CLK_VENC,
 	CLK_VENC_LT,
 	CLK_ETHIF,
@@ -142,6 +153,7 @@ enum clk_id {
 	CLK_AUDIO,
 	CLK_DISP_AO_CONFIG,
 	CLK_DISP_DPC,
+	CLK_MDP,
 	CLK_MAX,
 };
 
@@ -149,6 +161,7 @@ static const char * const clk_names[] = {
 	NULL,
 	"mm",
 	"mfg",
+	"mfg_top",
 	"venc",
 	"venc_lt",
 	"ethif",
@@ -158,11 +171,13 @@ static const char * const clk_names[] = {
 	"audio",
 	"disp_ao_config",
 	"disp_dpc",
+	"mdp",
 	NULL,
 };
 
 #define MAX_CLKS	3
-#define MAX_STEPS	3
+#define MAX_STEPS	4
+#define MAX_SUBSYS_CLKS 20
 
 struct bus_prot {
 	u32 type;
@@ -173,6 +188,7 @@ struct bus_prot {
 	u32 mask;
 	u32 ack_mask;
 	bool ignore_clr_ack;
+	bool ignore_subsys_clk;
 };
 
 /**
@@ -206,6 +222,7 @@ struct scp_domain_data {
 	u32 sram_slp_ack_bits;
 	u32 bus_prot_mask;
 	enum clk_id clk_id[MAX_CLKS];
+	const char *subsys_clk_prefix;
 	struct bus_prot bp_table[MAX_STEPS];
 	u32 caps;
 };
@@ -216,10 +233,12 @@ struct scp_domain {
 	struct generic_pm_domain genpd;
 	struct scp *scp;
 	struct clk *clk[MAX_CLKS];
+	struct clk *subsys_clk[MAX_SUBSYS_CLKS];
 	const struct scp_domain_data *data;
 	struct regulator *supply;
 	struct regmap *hwv_regmap;
 	bool rtff_flag;
+	bool boot_status;
 };
 
 struct scp_ctrl_reg {
@@ -281,14 +300,14 @@ static int scpsys_domain_is_on(struct scp_domain *scpd)
 	return -EINVAL;
 }
 
-static int scpsys_pwr_ack_is_on(struct scp_domain *scpd)
+static bool scpsys_pwr_ack_is_on(struct scp_domain *scpd)
 {
 	u32 status = readl(scpd->scp->base + scpd->data->ctl_offs) & PWR_ACK;
 
 	return status ? true : false;
 }
 
-static int scpsys_pwr_ack_2nd_is_on(struct scp_domain *scpd)
+static bool scpsys_pwr_ack_2nd_is_on(struct scp_domain *scpd)
 {
 	u32 status = readl(scpd->scp->base + scpd->data->ctl_offs) & PWR_ACK_2ND;
 
@@ -476,7 +495,7 @@ static int scpsys_bus_protect_table_disable(struct scp_domain *scpd,
 		struct regmap *map;
 		struct bus_prot bp = bp_table[i];
 
-		if (bp.type == 0 || bp.type >= scp->num_bp)
+		if (bp.type == 0 || bp.type >= scp->num_bp || bp.ignore_subsys_clk)
 			continue;
 
 		map = scp->bp_regmap[bp.type];
@@ -502,7 +521,62 @@ static int scpsys_bus_protect_table_enable(struct scp_domain *scpd)
 		struct regmap *map;
 		struct bus_prot bp = bp_table[i];
 
-		if (bp.type == 0 || bp.type >= scp->num_bp)
+		if (bp.type == 0 || bp.type >= scp->num_bp || bp.ignore_subsys_clk)
+			continue;
+
+		map = scp->bp_regmap[bp.type];
+		if (!map)
+			continue;
+
+		ret = set_bus_protection(map, &bp);
+		if (ret) {
+			scpsys_bus_protect_table_disable(scpd, i);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
+static int scpsys_bus_protect_table_disable_ignore_subsys_clks(struct scp_domain *scpd,
+			unsigned int index)
+{
+	struct scp *scp = scpd->scp;
+	const struct bus_prot *bp_table = scpd->data->bp_table;
+	int ret = 0;
+	int i;
+
+	for (i = index; i >= 0; i--) {
+		struct regmap *map;
+		struct bus_prot bp = bp_table[i];
+
+		if (bp.type == 0 || bp.type >= scp->num_bp || !bp.ignore_subsys_clk)
+			continue;
+
+		map = scp->bp_regmap[bp.type];
+		if (!map)
+			continue;
+
+		ret = clear_bus_protection(map, &bp);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
+static int scpsys_bus_protect_table_enable_ignore_subsys_clks(struct scp_domain *scpd)
+{
+	struct scp *scp = scpd->scp;
+	const struct bus_prot *bp_table = scpd->data->bp_table;
+	int ret = 0;
+	int i;
+
+	for (i = 0; i < MAX_STEPS; i++) {
+		struct regmap *map;
+		struct bus_prot bp = bp_table[i];
+
+		if (bp.type == 0 || bp.type >= scp->num_bp || !bp.ignore_subsys_clk)
 			continue;
 
 		map = scp->bp_regmap[bp.type];
@@ -549,6 +623,26 @@ static int scpsys_bus_protect_disable(struct scp_domain *scpd)
 			scp->bus_prot_reg_update);
 }
 
+static int scpsys_bus_protect_enable_ignore_subsys_clks(struct scp_domain *scpd)
+{
+	struct scp *scp = scpd->scp;
+
+	if (scp->bp_regmap && scp->num_bp > 0)
+		return scpsys_bus_protect_table_enable_ignore_subsys_clks(scpd);
+
+	return 0;
+}
+
+static int scpsys_bus_protect_disable_ignore_subsys_clks(struct scp_domain *scpd)
+{
+	struct scp *scp = scpd->scp;
+
+	if (scp->bp_regmap && scp->num_bp > 0)
+		return scpsys_bus_protect_table_disable_ignore_subsys_clks(scpd, MAX_STEPS - 1);
+
+	return 0;
+}
+
 static int scpsys_power_on(struct generic_pm_domain *genpd)
 {
 	struct scp_domain *scpd = container_of(genpd, struct scp_domain, genpd);
@@ -556,6 +650,10 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	void __iomem *ctl_addr = scp->base + scpd->data->ctl_offs;
 	u32 val;
 	int ret, tmp;
+	bool pwr_ack;
+
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_KEEP_DEFAULT_OFF) && !scpd->boot_status)
+		return 0;
 
 	ret = scpsys_regulator_enable(scpd);
 	if (ret < 0)
@@ -570,7 +668,7 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	val |= PWR_ON_BIT;
 	writel(val, ctl_addr);
 	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_IS_PWR_CON_ON)) {
-		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_is_on, scpd, tmp, tmp > 0,
+		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_is_on, scpd, pwr_ack, pwr_ack,
 				MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 		if (ret < 0)
 			goto err_pwr_ack;
@@ -583,7 +681,7 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 
 	/* wait until PWR_ACK = 1 */
 	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_IS_PWR_CON_ON))
-		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_2nd_is_on, scpd, tmp, tmp > 0,
+		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_2nd_is_on, scpd, pwr_ack, pwr_ack,
 				MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 	else
 		ret = readx_poll_timeout(scpsys_domain_is_on, scpd, tmp, tmp > 0,
@@ -657,16 +755,26 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 		scpd->rtff_flag = false;
 	}
 
-	ret = scpsys_sram_enable(scpd, ctl_addr);
+	ret = scpsys_bus_protect_disable_ignore_subsys_clks(scpd);
 	if (ret < 0)
 		goto err_pwr_ack;
+
+	ret = scpsys_clk_enable(scpd->subsys_clk, MAX_SUBSYS_CLKS);
+	if (ret < 0)
+		goto err_pwr_ack;
+
+	ret = scpsys_sram_enable(scpd, ctl_addr);
+	if (ret < 0)
+		goto err_sram_enable;
 
 	ret = scpsys_bus_protect_disable(scpd);
 	if (ret < 0)
-		goto err_pwr_ack;
+		goto err_sram_enable;
 
 	return 0;
 
+err_sram_enable:
+	scpsys_clk_disable(scpd->subsys_clk, MAX_SUBSYS_CLKS);
 err_pwr_ack:
 	scpsys_clk_disable(scpd->clk, MAX_CLKS);
 err_clk:
@@ -684,12 +792,19 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	void __iomem *ctl_addr = scp->base + scpd->data->ctl_offs;
 	u32 val;
 	int ret, tmp;
+	bool pwr_ack;
 
 	ret = scpsys_bus_protect_enable(scpd);
 	if (ret < 0)
 		goto out;
 
 	ret = scpsys_sram_disable(scpd, ctl_addr);
+	if (ret < 0)
+		goto out;
+
+	scpsys_clk_disable(scpd->subsys_clk, MAX_SUBSYS_CLKS);
+
+	ret = scpsys_bus_protect_enable_ignore_subsys_clks(scpd);
 	if (ret < 0)
 		goto out;
 
@@ -744,7 +859,7 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	writel(val, ctl_addr);
 
 	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_IS_PWR_CON_ON)) {
-		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_is_on, scpd, tmp, tmp == 0,
+		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_is_on, scpd, pwr_ack, !pwr_ack,
 				MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 		if (ret < 0)
 			goto out;
@@ -755,7 +870,7 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 
 	/* wait until PWR_ACK = 0 */
 	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_IS_PWR_CON_ON))
-		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_2nd_is_on, scpd, tmp, tmp == 0,
+		ret = readx_poll_timeout_atomic(scpsys_pwr_ack_2nd_is_on, scpd, pwr_ack, !pwr_ack,
 				MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 	else
 		ret = readx_poll_timeout(scpsys_domain_is_on, scpd, tmp, tmp == 0,
@@ -933,6 +1048,48 @@ static void init_clks(struct platform_device *pdev, struct clk **clk)
 		clk[i] = devm_clk_get(&pdev->dev, clk_names[i]);
 }
 
+static int init_subsys_clks(struct platform_device *pdev,
+			    const char *prefix, struct clk **clk)
+{
+	struct device_node *node = pdev->dev.of_node;
+	u32 prefix_len, sub_clk_cnt = 0;
+	struct property *prop;
+	const char *clk_name;
+
+	if (!node) {
+		dev_err(&pdev->dev, "Cannot find scpsys node: %ld\n",
+			   PTR_ERR(node));
+		return PTR_ERR(node);
+	}
+
+	prefix_len = strlen(prefix);
+
+	of_property_for_each_string(node, "clock-names", prop, clk_name) {
+		if (!strncmp(clk_name, prefix, prefix_len) &&
+		    (strlen(clk_name) > prefix_len + 1) &&
+		    (clk_name[prefix_len] == '-')) {
+			if (sub_clk_cnt >= MAX_SUBSYS_CLKS) {
+				dev_err(&pdev->dev,
+					   "subsys clk out of range %d\n",
+					   sub_clk_cnt);
+				return -EINVAL;
+			}
+
+			clk[sub_clk_cnt] = devm_clk_get(&pdev->dev, clk_name);
+
+			if (IS_ERR(clk[sub_clk_cnt])) {
+				dev_err(&pdev->dev,
+					   "Subsys clk get fail %ld\n",
+					   PTR_ERR(clk[sub_clk_cnt]));
+				return PTR_ERR(clk[sub_clk_cnt]);
+			}
+			sub_clk_cnt++;
+		}
+	}
+
+	return sub_clk_cnt;
+}
+
 static int mtk_pd_get_regmap(struct platform_device *pdev, struct regmap **regmap,
 			const char *name)
 {
@@ -1051,6 +1208,14 @@ struct scp *init_scp(struct platform_device *pdev, const struct scp_soc_data *so
 			scpd->clk[j] = c;
 		}
 
+		if (data->subsys_clk_prefix) {
+			ret = init_subsys_clks(pdev, data->subsys_clk_prefix, scpd->subsys_clk);
+			if (ret < 0) {
+				dev_notice(&pdev->dev, "%s: subsys clk unavailable\n", data->name);
+				return ERR_PTR(ret);
+			}
+		}
+
 		if (data->hwv_comp) {
 			ret = mtk_pd_get_regmap(pdev, &scpd->hwv_regmap, data->hwv_comp);
 			if (ret)
@@ -1093,11 +1258,22 @@ static void mtk_register_power_domains(struct platform_device *pdev,
 		 * software.  The unused domains will be switched off during
 		 * late_init time.
 		 */
-		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_BYPASS_INIT_ON))
-			on = false;
-		else
-			on = !WARN_ON(genpd->power_on(genpd) < 0);
+		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_KEEP_DEFAULT_OFF)) {
+			if (MTK_SCPD_CAPS(scpd, MTK_SCPD_IS_PWR_CON_ON))
+				scpd->boot_status = scpsys_pwr_ack_is_on(scpd) &&
+						    scpsys_pwr_ack_2nd_is_on(scpd);
+			else
+				scpd->boot_status = (scpsys_domain_is_on(scpd) > 0) ? true : false;
 
+			if (scpd->boot_status)
+				on = !WARN_ON(genpd->power_on(genpd) < 0);
+			else
+				on = false;
+		} else if (MTK_SCPD_CAPS(scpd, MTK_SCPD_BYPASS_INIT_ON)) {
+			on = false;
+		} else {
+			on = !WARN_ON(genpd->power_on(genpd) < 0);
+		}
 		pm_genpd_init(genpd, NULL, !on);
 	}
 
@@ -2257,6 +2433,313 @@ static const struct scp_soc_data mt8196_mmpc_hwv_data = {
 };
 
 /*
+ * MT8189 power domain support
+ */
+static const char *mt8189_bus_list[MT8189_BUS_TYPE_NUM] = {
+	[MT8189_BP_IFR_TYPE] = "infra-infracfg-ao-reg-bus",
+	[MT8189_BP_VLP_TYPE] = "vlpcfg-reg-bus",
+	[MT8189_VLPCFG_REG_TYPE] = "vlpcfg-reg-bus",
+	[MT8189_EMICFG_AO_MEM_TYPE] = "emicfg-ao-mem",
+};
+
+static const struct scp_domain_data scp_domain_mt8189_spm_data[] = {
+	[MT8189_POWER_DOMAIN_CONN] = {
+		.name = "conn",
+		.ctl_offs = MT8189_SPM_CONN_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c94, 0x0c98, 0x0c90, 0x0c9c,
+				     MT8189_TOP_AXI_PROT_EN_MCU_STA_0_CONN),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c54, 0x0c58, 0x0c50, 0x0c5c,
+				     MT8189_TOP_AXI_PROT_EN_INFRASYS_STA_1_CONN),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c94, 0x0c98, 0x0c90, 0x0c9c,
+				     MT8189_TOP_AXI_PROT_EN_MCU_STA_0_CONN_2ND),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c44, 0x0c48, 0x0c40, 0x0c4c,
+				     MT8189_TOP_AXI_PROT_EN_INFRASYS_STA_0_CONN),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_AUDIO] = {
+		.name = "audio",
+		.ctl_offs = MT8189_SPM_AUDIO_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c84, 0x0c88, 0x0c80, 0x0c8c,
+				     MT8189_TOP_AXI_PROT_EN_PERISYS_STA_0_AUDIO),
+		},
+		.clk_id = {CLK_AUDIO},
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_ADSP_TOP_DORMANT] = {
+		.name = "adsp-top-dormant",
+		.ctl_offs = MT8189_SPM_ADSP_TOP_PWR_CON,
+		.sram_slp_bits = GENMASK(9, 9),
+		.sram_slp_ack_bits = GENMASK(13, 13),
+		.caps = MTK_SCPD_SRAM_ISO | MTK_SCPD_SRAM_SLP | MTK_SCPD_IS_PWR_CON_ON |
+			MTK_SCPD_ACTIVE_WAKEUP | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_ADSP_INFRA] = {
+		.name = "adsp-infra",
+		.ctl_offs = MT8189_SPM_ADSP_INFRA_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_ADSP_AO] = {
+		.name = "adsp-ao",
+		.ctl_offs = MT8189_SPM_ADSP_AO_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_ISP_IMG1] = {
+		.name = "isp-img1",
+		.ctl_offs = MT8189_SPM_ISP_IMG1_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_ISP_IMG1),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_ISP_IMG1),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_ISP_IMG2] = {
+		.name = "isp-img2",
+		.ctl_offs = MT8189_SPM_ISP_IMG2_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_ISP_IPE] = {
+		.name = "isp-ipe",
+		.ctl_offs = MT8189_SPM_ISP_IPE_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_ISP_IPE),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_ISP_IPE),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_VDE0] = {
+		.name = "vde0",
+		.ctl_offs = MT8189_SPM_VDE0_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_VDE0),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_VDE0),
+		},
+		.clk_id = {CLK_VDEC},
+		.subsys_clk_prefix = "vdec",
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_VEN0] = {
+		.name = "ven0",
+		.ctl_offs = MT8189_SPM_VEN0_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_VEN0),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_VEN0),
+		},
+		.clk_id = {CLK_VENC},
+		.subsys_clk_prefix = "venc",
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_CAM_MAIN] = {
+		.name = "cam-main",
+		.ctl_offs = MT8189_SPM_CAM_MAIN_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1C,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_CAM_MAIN),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2C,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_CAM_MAIN),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_CAM_SUBA] = {
+		.name = "cam-suba",
+		.ctl_offs = MT8189_SPM_CAM_SUBA_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_CAM_SUBB] = {
+		.name = "cam-subb",
+		.ctl_offs = MT8189_SPM_CAM_SUBB_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_MDP0] = {
+		.name = "mdp0",
+		.ctl_offs = MT8189_SPM_MDP0_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_MDP0),
+		},
+		.clk_id = {CLK_MDP},
+		.subsys_clk_prefix = "mdp0",
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_DISP] = {
+		.name = "disp",
+		.ctl_offs = MT8189_SPM_DISP_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c14, 0x0c18, 0x0c10, 0x0c1c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_0_DISP),
+		},
+		.clk_id = {CLK_DISP_AO_CONFIG},
+		.subsys_clk_prefix = "disp",
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_MM_INFRA] = {
+		.name = "mm-infra",
+		.ctl_offs = MT8189_SPM_MM_INFRA_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_MM_INFRA),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+				     MT8189_TOP_AXI_PROT_EN_MMSYS_STA_1_MM_INFRA_2ND),
+			BUS_PROT_SUBSYS_CLK_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+						MT8189_TOP_AXI_PROT_EN_MMSYS_MM_INFRA_CLK_IGN),
+			BUS_PROT_SUBSYS_CLK_IGN(MT8189_BP_IFR_TYPE, 0x0c24, 0x0c28, 0x0c20, 0x0c2c,
+						MT8189_TOP_AXI_PROT_EN_MMSYS_MM_INFRA_2ND_CLK_IGN),
+		},
+		.clk_id = {CLK_MM},
+		.subsys_clk_prefix = "mm_infra",
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_DP_TX] = {
+		.name = "dp-tx",
+		.ctl_offs = MT8189_SPM_DP_TX_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_CSI_RX] = {
+		.name = "csi-rx",
+		.ctl_offs = MT8189_SPM_CSI_RX_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_KEEP_DEFAULT_OFF,
+	},
+	[MT8189_POWER_DOMAIN_SSUSB] = {
+		.name = "ssusb",
+		.ctl_offs = MT8189_SPM_SSUSB_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c84, 0x0c88, 0x0c80, 0x0c8c,
+				     MT8189_TOP_AXI_PROT_EN_PERISYS_STA_0_SSUSB),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_ACTIVE_WAKEUP,
+	},
+	[MT8189_POWER_DOMAIN_MFG0] = {
+		.name = "mfg0",
+		.ctl_offs = MT8189_SPM_MFG0_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+		.clk_id = {CLK_MFG_TOP},
+	},
+	[MT8189_POWER_DOMAIN_MFG1] = {
+		.name = "mfg1",
+		.ctl_offs = MT8189_SPM_MFG1_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0c54, 0x0c58, 0x0c50, 0x0C5c,
+				     MT8189_TOP_AXI_PROT_EN_INFRASYS_STA_1_MFG1),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0ca4, 0x0ca8, 0x0ca0, 0x0cac,
+				     MT8189_TOP_AXI_PROT_EN_MD_STA_0_MFG1),
+			BUS_PROT_IGN(MT8189_BP_IFR_TYPE, 0x0ca4, 0x0ca8, 0x0ca0, 0x0cac,
+				     MT8189_TOP_AXI_PROT_EN_MD_STA_0_MFG1_2ND),
+			BUS_PROT_IGN(MT8189_EMICFG_AO_MEM_TYPE, 0x0084, 0x0088, 0x0080, 0x008c,
+				     MT8189_AXI_PROT_EN_MFG1),
+		},
+		.clk_id = {CLK_MFG},
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_MFG2] = {
+		.name = "mfg2",
+		.ctl_offs = MT8189_SPM_MFG2_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_MFG3] = {
+		.name = "mfg3",
+		.ctl_offs = MT8189_SPM_MFG3_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_EDP_TX_DORMANT] = {
+		.name = "edp-tx-dormant",
+		.ctl_offs = MT8189_SPM_EDP_TX_PWR_CON,
+		.sram_slp_bits = GENMASK(9, 9),
+		.sram_slp_ack_bits = 0,
+		.caps = MTK_SCPD_SRAM_ISO | MTK_SCPD_SRAM_SLP | MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8189_POWER_DOMAIN_PCIE] = {
+		.name = "pcie",
+		.ctl_offs = MT8189_SPM_PCIE_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_ACTIVE_WAKEUP,
+	},
+	[MT8189_POWER_DOMAIN_PCIE_PHY] = {
+		.name = "pcie-phy",
+		.ctl_offs = MT8189_SPM_PCIE_PHY_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+};
+
+static const struct scp_subdomain scp_subdomain_mt8189_spm[] = {
+	{MT8189_POWER_DOMAIN_ADSP_AO, MT8189_POWER_DOMAIN_ADSP_INFRA},
+	{MT8189_POWER_DOMAIN_ADSP_INFRA, MT8189_POWER_DOMAIN_ADSP_TOP_DORMANT},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_ISP_IMG1},
+	{MT8189_POWER_DOMAIN_ISP_IMG1, MT8189_POWER_DOMAIN_ISP_IMG2},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_ISP_IPE},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_VDE0},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_VEN0},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_CAM_MAIN},
+	{MT8189_POWER_DOMAIN_CAM_MAIN, MT8189_POWER_DOMAIN_CAM_SUBA},
+	{MT8189_POWER_DOMAIN_CAM_MAIN, MT8189_POWER_DOMAIN_CAM_SUBB},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_MDP0},
+	{MT8189_POWER_DOMAIN_MM_INFRA, MT8189_POWER_DOMAIN_DISP},
+	{MT8189_POWER_DOMAIN_DISP, MT8189_POWER_DOMAIN_DP_TX},
+	{MT8189_POWER_DOMAIN_MFG0, MT8189_POWER_DOMAIN_MFG1},
+	{MT8189_POWER_DOMAIN_MFG1, MT8189_POWER_DOMAIN_MFG2},
+	{MT8189_POWER_DOMAIN_MFG1, MT8189_POWER_DOMAIN_MFG3},
+	{MT8189_POWER_DOMAIN_DP_TX, MT8189_POWER_DOMAIN_EDP_TX_DORMANT},
+	{MT8189_POWER_DOMAIN_PCIE, MT8189_POWER_DOMAIN_PCIE_PHY},
+};
+
+static const struct scp_soc_data mt8189_spm_data = {
+	.domains = scp_domain_mt8189_spm_data,
+	.num_domains = ARRAY_SIZE(scp_domain_mt8189_spm_data),
+	.subdomains = scp_subdomain_mt8189_spm,
+	.num_subdomains = ARRAY_SIZE(scp_subdomain_mt8189_spm),
+	.regs = {
+		.pwr_sta_offs = 0xF40,
+		.pwr_sta2nd_offs = 0xF44,
+	},
+	.bp_list = mt8189_bus_list,
+	.num_bp = MT8189_BUS_TYPE_NUM,
+};
+
+/*
  * scpsys driver init
  */
 
@@ -2279,6 +2762,9 @@ static const struct of_device_id of_scpsys_match_tbl[] = {
 	}, {
 		.compatible = "mediatek,mt8173-scpsys",
 		.data = &mt8173_data,
+	}, {
+		.compatible = "mediatek,mt8189-scpsys",
+		.data = &mt8189_spm_data,
 	}, {
 		.compatible = "mediatek,mt8196-scpsys-hwv",
 		.data = &mt8196_spm_hwv_data,
