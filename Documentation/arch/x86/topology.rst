@@ -49,7 +49,8 @@ Package-related topology information in the kernel:
 
   - topology_num_threads_per_package()
 
-    The number of threads in a package.
+    The maximum possible number of cores in a package. This information is
+    retrieved via CPUID.
 
   - topology_num_cores_per_package()
 
@@ -99,6 +100,16 @@ are SMT- or CMT-type threads.
 
 AMDs nomenclature for a CMT core is "Compute Unit". The kernel always uses
 "core".
+
+Core-related topology information in the kernel:
+
+  - smp_num_siblings:
+
+    The maximum possible number of threads in a core. The maximum possible
+    number of threads in a package can be calculated by::
+
+	maximum_threads_per_package = cpuinfo_x86.x86_max_cores * smp_num_siblings
+
 
 Threads
 =======
