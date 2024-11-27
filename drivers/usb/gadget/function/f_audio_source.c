@@ -18,6 +18,7 @@
 #include <linux/usb/audio.h>
 #include <linux/wait.h>
 #include <linux/pm_qos.h>
+#include <linux/vmalloc.h>
 #include <sound/core.h>
 #include <sound/initval.h>
 #include <sound/pcm.h>
@@ -771,19 +772,36 @@ static int audio_pcm_hw_params(struct snd_pcm_substream *substream,
 {
 	unsigned int channels = params_channels(params);
 	unsigned int rate = params_rate(params);
+	struct snd_pcm_runtime *runtime;
+	int size;
 
 	if (rate != SAMPLE_RATE)
 		return -EINVAL;
 	if (channels != 2)
 		return -EINVAL;
 
-	return snd_pcm_lib_alloc_vmalloc_buffer(substream,
-		params_buffer_bytes(params));
+	runtime = substream->runtime;
+	size = params_buffer_bytes(params);
+
+	if (runtime->dma_area) {
+		if (runtime->dma_bytes >= size)
+			return 0;
+		vfree(runtime->dma_area);
+	}
+	runtime->dma_area = __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO);
+	runtime->dma_bytes = size;
+
+	return 0;
 }
 
 static int audio_pcm_hw_free(struct snd_pcm_substream *substream)
 {
-	return snd_pcm_lib_free_vmalloc_buffer(substream);
+	struct snd_pcm_runtime *runtime = substream->runtime;
+
+	vfree(runtime->dma_area);
+	runtime->dma_bytes = 0;
+
+	return 0;
 }
 
 static int audio_pcm_prepare(struct snd_pcm_substream *substream)
