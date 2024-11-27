@@ -4,6 +4,7 @@
  * Author: Ping-Hsun Wu <ping-hsun.wu@mediatek.com>
  */
 
+#include <dt-bindings/gce/mt8183-gce.h>
 #include "mtk-img-ipi.h"
 #include "mtk-mdp3-cfg.h"
 #include "mtk-mdp3-core.h"
@@ -164,6 +165,21 @@ enum mt8195_mdp_comp_id {
 	MT8195_MDP_COMP_VDO1DL1,        /* 62 */
 };
 
+enum {
+	DIP_CQ_THRE0 = 0,
+	DIP_CQ_THRE1,
+	DIP_CQ_THRE2,
+	DIP_CQ_THRE3,
+	DIP_CQ_THRE4,
+	DIP_CQ_THRE5,
+	DIP_CQ_THRE6,
+	DIP_CQ_THRE7,
+	DIP_CQ_THRE8,
+	DIP_CQ_THRE9,
+	DIP_CQ_THRE10,
+	DIP_CQ_THRE11,
+};
+
 static const struct of_device_id mt8183_mdp_probe_infra[MDP_INFRA_MAX] = {
 	[MDP_INFRA_MMSYS] = { .compatible = "mediatek,mt8183-mmsys" },
 	[MDP_INFRA_MUTEX] = { .compatible = "mediatek,mt8183-disp-mutex" },
@@ -320,11 +336,11 @@ static const struct mdp_comp_data mt8183_mdp_comp_data[MDP_MAX_COMP_COUNT] = {
 	},
 	[MDP_COMP_ISP_IMGI] = {
 		{MDP_COMP_TYPE_IMGI, 0, MT8183_MDP_COMP_ISP_IMGI, MDP_MM_SUBSYS_0},
-		{0, 0, 4}
+		{0, 0, 0}
 	},
 	[MDP_COMP_ISP_IMGO] = {
 		{MDP_COMP_TYPE_EXTO, 0, MT8183_MDP_COMP_ISP_IMGO, MDP_MM_SUBSYS_0},
-		{0, 0, 4}
+		{0, 0, 0}
 	},
 	[MDP_COMP_ISP_IMG2O] = {
 		{MDP_COMP_TYPE_EXTO, 1, MT8183_MDP_COMP_ISP_IMG2O, MDP_MM_SUBSYS_0},
@@ -332,11 +348,11 @@ static const struct mdp_comp_data mt8183_mdp_comp_data[MDP_MAX_COMP_COUNT] = {
 	},
 	[MDP_COMP_CAMIN] = {
 		{MDP_COMP_TYPE_DL_PATH, 0, MT8183_MDP_COMP_CAMIN, MDP_MM_SUBSYS_0},
-		{2, 2, 1}
+		{2, 0, 0}
 	},
 	[MDP_COMP_CAMIN2] = {
 		{MDP_COMP_TYPE_DL_PATH, 1, MT8183_MDP_COMP_CAMIN2, MDP_MM_SUBSYS_0},
-		{2, 4, 1}
+		{2, 2, 0}
 	},
 	[MDP_COMP_RDMA0] = {
 		{MDP_COMP_TYPE_RDMA, 0, MT8183_MDP_COMP_RDMA0, MDP_MM_SUBSYS_0},
@@ -805,6 +821,18 @@ static const struct of_device_id mt8183_sub_comp_dt_ids[] = {
 	}, {
 		.compatible = "mediatek,mt8183-mdp3-wrot",
 		.data = (void *)MDP_COMP_TYPE_PATH,
+	}, {
+		.compatible = "mediatek,mt8183-mdp3-imgi",
+		.data = (void *)MDP_COMP_TYPE_IMGI,
+	}, {
+		.compatible = "mediatek,mt8183-mdp3-exto",
+		.data = (void *)MDP_COMP_TYPE_EXTO,
+	}, {
+		.compatible = "mediatek,mt8183-mdp3-dl1",
+		.data = (void *)MDP_COMP_TYPE_DL_PATH,
+	}, {
+		.compatible = "mediatek,mt8183-mdp3-dl2",
+		.data = (void *)MDP_COMP_TYPE_DL_PATH,
 	},
 	{}
 };
@@ -1327,6 +1355,45 @@ static const struct v4l2_rect mt8195_mdp_pp_criteria = {
 	.height = 1080,
 };
 
+static const struct mdp_dip_cq_data mt8183_dip_cb[] = {
+	[DIP_CQ_THRE0] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_0, 0x2208
+	},
+	[DIP_CQ_THRE1] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_1, 0x2214
+	},
+	[DIP_CQ_THRE2] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_2, 0x2220
+	},
+	[DIP_CQ_THRE3] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_3, 0x222C
+	},
+	[DIP_CQ_THRE4] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_4, 0x2238
+	},
+	[DIP_CQ_THRE5] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_5, 0x2244
+	},
+	[DIP_CQ_THRE6] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_6, 0x2250
+	},
+	[DIP_CQ_THRE7] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_7, 0x225C
+	},
+	[DIP_CQ_THRE8] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_8, 0x2268
+	},
+	[DIP_CQ_THRE9] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_9, 0x2274
+	},
+	[DIP_CQ_THRE10] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_10, 0x2280
+	},
+	[DIP_CQ_THRE11] = {
+		CMDQ_EVENT_ISP_FRAME_DONE_P2_11, 0x228C
+	},
+};
+
 const struct mtk_mdp_driver_data mt8183_mdp_driver_data = {
 	.mdp_plat_id = MT8183,
 	.mdp_con_res = 0x14001000,
@@ -1342,6 +1409,8 @@ const struct mtk_mdp_driver_data mt8183_mdp_driver_data = {
 	.pipe_info = mt8183_pipe_info,
 	.pipe_info_len = ARRAY_SIZE(mt8183_pipe_info),
 	.pp_used = MDP_PP_USED_1,
+	.dip_cq_data = mt8183_dip_cb,
+	.dip_cq_len = ARRAY_SIZE(mt8183_dip_cb),
 };
 
 const struct mtk_mdp_driver_data mt8188_mdp_driver_data = {
