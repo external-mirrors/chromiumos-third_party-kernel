@@ -1231,11 +1231,7 @@ int hci_setup_ext_adv_instance_sync(struct hci_dev *hdev, u8 instance)
 
 	flags = hci_adv_instance_flags(hdev, instance);
 
-	/* If the "connectable" instance flag was not set, then choose between
-	 * ADV_IND and ADV_NONCONN_IND based on the global connectable setting.
-	 */
-	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE) ||
-		      mgmt_get_connectable(hdev);
+	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE);
 
 	if (!is_advertising_allowed(hdev, connectable))
 		return -EPERM;
@@ -1677,11 +1673,7 @@ int hci_enable_advertising_sync(struct hci_dev *hdev)
 	flags = hci_adv_instance_flags(hdev, hdev->cur_adv_instance);
 	adv_instance = hci_find_adv_instance(hdev, hdev->cur_adv_instance);
 
-	/* If the "connectable" instance flag was not set, then choose between
-	 * ADV_IND and ADV_NONCONN_IND based on the global connectable setting.
-	 */
-	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE) ||
-		      mgmt_get_connectable(hdev);
+	connectable = (flags & MGMT_ADV_FLAG_CONNECTABLE);
 
 	if (!is_advertising_allowed(hdev, connectable))
 		return -EINVAL;
@@ -2204,6 +2196,9 @@ static void hci_start_interleave_scan(struct hci_dev *hdev)
 
 static void cancel_interleave_scan(struct hci_dev *hdev)
 {
+	if (!is_interleave_scanning(hdev))
+		return;
+
 	bt_dev_dbg(hdev, "cancelling interleave scan");
 
 	cancel_delayed_work_sync(&hdev->interleave_scan);
@@ -2423,8 +2418,17 @@ static int hci_le_add_accept_list_sync(struct hci_dev *hdev,
 	if (*num_entries >= hdev->le_accept_list_size)
 		return -ENOSPC;
 
-	/* Accept list can not be used with RPAs */
-	if (!use_ll_privacy(hdev) &&
+	/* Accept list can not be used with RPAs if ll privacy is not enabled.
+	 *
+	 * There are devices which do not use RPAs and still have IRKs. As a
+	 * result, during suspend all devices can be added to accept list to
+	 * be permissive and allow filter policy to use accept list.
+	 *
+	 * For all other cases, accept list will not be used if a device has
+	 * IRK and ll privacy is not enabled, because devices with RPAs are
+	 * filtered by the accept list.
+	 */
+	if (!hdev->suspended && !use_ll_privacy(hdev) &&
 	    hci_find_irk_by_addr(hdev, &params->addr, params->addr_type))
 		return -EINVAL;
 
@@ -4813,6 +4817,26 @@ static int hci_init_sync(struct hci_dev *hdev)
 	return 0;
 }
 
+static void set_quality_report(struct hci_dev *hdev, bool enable)
+{
+	int err;
+
+	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL) ||
+	    !hci_dev_test_flag(hdev, HCI_QUALITY_REPORT))
+		return;
+
+	if (hdev->set_quality_report)
+		err = hdev->set_quality_report(hdev, enable);
+	else
+		err = aosp_set_quality_report(hdev, enable);
+
+	if (err)
+		bt_dev_err(hdev, "set quality report error %d (enable %d)",
+			   err, enable);
+	else
+		bt_dev_info(hdev, "set quality report (enable %d)", enable);
+}
+
 #define HCI_QUIRK_BROKEN(_quirk, _desc) { HCI_QUIRK_BROKEN_##_quirk, _desc }
 
 static const struct {
@@ -4967,6 +4991,8 @@ static int hci_dev_init_sync(struct hci_dev *hdev)
 	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
 		msft_do_open(hdev);
 		aosp_do_open(hdev);
+
+		set_quality_report(hdev, true);
 	}
 
 	clear_bit(HCI_INIT, &hdev->flags);
@@ -5145,6 +5171,17 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 
 	cancel_interleave_scan(hdev);
 
+	/* Disable quality report and close aosp before shutdown()
+	 * is called. Otherwise, some chips may panic.
+	 */
+	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
+		if (!hci_dev_test_flag(hdev, HCI_UNREGISTER))
+			set_quality_report(hdev, false);
+
+		aosp_do_close(hdev);
+	}
+
+
 	if (hdev->adv_instance_timeout) {
 		cancel_delayed_work_sync(&hdev->adv_instance_expire);
 		hdev->adv_instance_timeout = 0;
@@ -5205,10 +5242,11 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 
 	hci_sock_dev_event(hdev, HCI_DEV_DOWN);
 
-	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
-		aosp_do_close(hdev);
+	/* TODO: May be better to close msft early in the beginning of
+	 * hci_dev_do_close before shutdown() is called.
+	 */
+	if (!hci_dev_test_flag(hdev, HCI_USER_CHANNEL))
 		msft_do_close(hdev);
-	}
 
 	if (hdev->flush)
 		hdev->flush(hdev);
@@ -5375,6 +5413,9 @@ int hci_stop_discovery_sync(struct hci_dev *hdev)
 	/* Resume advertising if it was paused */
 	if (use_ll_privacy(hdev))
 		hci_resume_advertising_sync(hdev);
+
+	/* Sampling Period is disabled while active scanning, re-enable it */
+	msft_set_active_scan(hdev, false);
 
 	/* No further actions needed for LE-only discovery */
 	if (d->type == DISCOV_TYPE_LE)
@@ -5950,6 +5991,9 @@ int hci_start_discovery_sync(struct hci_dev *hdev)
 	if (err)
 		return err;
 
+	/* Disable Sampling Period while active scanning */
+	msft_set_active_scan(hdev, true);
+
 	bt_dev_dbg(hdev, "timeout %u ms", jiffies_to_msecs(timeout));
 
 	queue_delayed_work(hdev->req_workqueue, &hdev->le_scan_disable,
@@ -6081,11 +6125,17 @@ int hci_suspend_sync(struct hci_dev *hdev)
 	/* Pause other advertisements */
 	hci_pause_advertising_sync(hdev);
 
+	/* Cancel interleaved scan */
+	cancel_interleave_scan(hdev);
+
 	/* Suspend monitor filters */
 	hci_suspend_monitor_sync(hdev);
 
 	/* Prevent disconnects from causing scanning to be re-enabled */
 	hci_pause_scan_sync(hdev);
+
+	/* Stop quality reporting activities */
+	set_quality_report(hdev, false);
 
 	if (hci_conn_count(hdev)) {
 		/* Soft disconnect everything (power off) */
@@ -6194,6 +6244,9 @@ int hci_resume_sync(struct hci_dev *hdev)
 
 	/* Restore event mask */
 	hci_set_event_mask_sync(hdev);
+
+	/* Resume quality reporting activities */
+	set_quality_report(hdev, true);
 
 	/* Clear any event filters and restore scan state */
 	hci_clear_event_filter_sync(hdev);
