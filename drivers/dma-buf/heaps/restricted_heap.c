@@ -111,18 +111,18 @@ restricted_heap_unmap_dma_buf(struct dma_buf_attachment *attachment, struct sg_t
 static int
 restricted_heap_dma_buf_begin_cpu_access(struct dma_buf *dmabuf, enum dma_data_direction direction)
 {
-	return -EPERM;
+	return -EACCES;
 }
 
 static int
 restricted_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf, enum dma_data_direction direction)
 {
-	return -EPERM;
+	return -EACCES;
 }
 
 static int restricted_heap_dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 {
-	return -EPERM;
+	return -EACCES;
 }
 
 static void restricted_heap_free(struct dma_buf *dmabuf)
