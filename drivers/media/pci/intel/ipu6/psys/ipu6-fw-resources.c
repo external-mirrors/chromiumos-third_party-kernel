@@ -481,7 +481,7 @@ int ipu6_fw_psys_set_process_ext_mem(struct ipu_fw_psys_process *ptr,
 }
 
 static struct ipu_fw_psys_program_manifest *
-get_program_manifest(const struct ipu_fw_psys_program_group_manifest *manifest,
+get_program_manifest(const struct ipu_fw_psys_pgm *manifest,
 		     const unsigned int program_index)
 {
 	struct ipu_fw_psys_program_manifest *prg_manifest_base;
@@ -504,10 +504,10 @@ get_program_manifest(const struct ipu_fw_psys_program_group_manifest *manifest,
 	return (struct ipu_fw_psys_program_manifest *)program_manifest;
 }
 
-int ipu6_fw_psys_get_program_manifest_by_process(
-	struct ipu_fw_generic_program_manifest *gen_pm,
-	const struct ipu_fw_psys_program_group_manifest *pg_manifest,
-	struct ipu_fw_psys_process *process)
+int
+ipu6_fw_psys_get_pgm_by_process(struct ipu_fw_generic_program_manifest *gen_pm,
+				const struct ipu_fw_psys_pgm *pg_manifest,
+				struct ipu_fw_psys_process *process)
 {
 	u32 program_id = process->program_idx;
 	struct ipu_fw_psys_program_manifest *pm;
@@ -545,18 +545,19 @@ void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 			  struct ipu_psys_kcmd *kcmd, const char *note)
 {
 	struct ipu_fw_psys_process_group *pg = kcmd->kpg->pg;
+	struct device *dev = &psys->adev->auxdev.dev;
 	u32 pgid = pg->ID;
 	u8 processes = pg->process_count;
 	u16 *process_offset_table = (u16 *)((char *)pg + pg->processes_offset);
 	unsigned int p, chn, mem, mem_id;
 	unsigned int mem_type, max_mem_id, dev_chn;
 
-	if (ipu_ver == IPU_VER_6SE) {
+	if (ipu_ver == IPU6_VER_6SE) {
 		mem_type = IPU6SE_FW_PSYS_N_DATA_MEM_TYPE_ID;
 		max_mem_id = IPU6SE_FW_PSYS_N_MEM_ID;
 		dev_chn = IPU6SE_FW_PSYS_N_DEV_CHN_ID;
-	} else if (ipu_ver == IPU_VER_6 || ipu_ver == IPU_VER_6EP ||
-		   ipu_ver == IPU_VER_6EP_MTL) {
+	} else if (ipu_ver == IPU6_VER_6 || ipu_ver == IPU6_VER_6EP ||
+		   ipu_ver == IPU6_VER_6EP_MTL) {
 		mem_type = IPU6_FW_PSYS_N_DATA_MEM_TYPE_ID;
 		max_mem_id = IPU6_FW_PSYS_N_MEM_ID;
 		dev_chn = IPU6_FW_PSYS_N_DEV_CHN_ID;
@@ -565,7 +566,7 @@ void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 		return;
 	}
 
-	dev_dbg(&psys->adev->dev, "%s %s pgid %i has %i processes:\n",
+	dev_dbg(dev, "%s %s pgid %i has %i processes:\n",
 		__func__, note, pgid, processes);
 
 	for (p = 0; p < processes; p++) {
@@ -575,23 +576,20 @@ void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 		struct ipu6_fw_psys_process_ext *pm_ext =
 		    (struct ipu6_fw_psys_process_ext *)((u8 *)process
 		    + process->process_extension_offset);
-		dev_dbg(&psys->adev->dev, "\t process %i size=%u",
-			p, process->size);
+		dev_dbg(dev, "\t process %i size=%u", p, process->size);
 		if (!process->process_extension_offset)
 			continue;
 
 		for (mem = 0; mem < mem_type; mem++) {
 			mem_id = pm_ext->ext_mem_id[mem];
 			if (mem_id != max_mem_id)
-				dev_dbg(&psys->adev->dev,
-					"\t mem type %u id %d offset=0x%x",
+				dev_dbg(dev, "\t mem type %u id %d offset=0x%x",
 					mem, mem_id,
 					pm_ext->ext_mem_offset[mem]);
 		}
 		for (chn = 0; chn < dev_chn; chn++) {
 			if (pm_ext->dev_chn_offset[chn] != (u16)(-1))
-				dev_dbg(&psys->adev->dev,
-					"\t dev_chn[%u]=0x%x\n",
+				dev_dbg(dev, "\t dev_chn[%u]=0x%x\n",
 					chn, pm_ext->dev_chn_offset[chn]);
 		}
 	}
@@ -600,8 +598,8 @@ void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 void ipu6_fw_psys_pg_dump(struct ipu_psys *psys,
 			  struct ipu_psys_kcmd *kcmd, const char *note)
 {
-	if (ipu_ver == IPU_VER_6SE || ipu_ver == IPU_VER_6 ||
-	    ipu_ver == IPU_VER_6EP || ipu_ver == IPU_VER_6EP_MTL)
+	if (ipu_ver == IPU6_VER_6SE || ipu_ver == IPU6_VER_6 ||
+	    ipu_ver == IPU6_VER_6EP || ipu_ver == IPU6_VER_6EP_MTL)
 		return;
 
 	WARN(1, "%s ipu_ver:[%u] is unsupported!\n", __func__, ipu_ver);
