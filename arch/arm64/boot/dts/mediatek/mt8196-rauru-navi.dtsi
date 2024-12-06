@@ -5,6 +5,7 @@
 
 /dts-v1/;
 #include "mt8196-rauru.dtsi"
+#include <dt-bindings/thermal/thermal.h>
 
 / {
 	pp3300_edp_x: regulator-pp3300-edp-x {
@@ -54,6 +55,9 @@
 };
 
 &cros_ec {
+	#thermal-sensor-cells = <1>;
+	#cooling-cells = <2>;
+
 	keyboard-backlight {
 		compatible = "google,cros-kbd-led-backlight";
 	};
@@ -280,6 +284,54 @@
 
 		codec {
 			sound-dai = <&anx_bridge>;
+		};
+	};
+};
+
+&thermal_zones {
+	bulk-board-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <1000>;
+		thermal-sensors = <&cros_ec 0>;
+		sustainable-power = <3350>; /* estimated sustainable power when saturated */
+
+		trips {
+			bulk_threshold: trip-point@0 {
+				temperature = <45000>; /* switch on temperature */
+				hysteresis = <2000>;
+				type = "passive";
+			};
+			bulk_target: trip-point@1 {
+				temperature = <50000>; /* desired temperature */
+				hysteresis = <2000>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&cpu0 THERMAL_NO_LIMIT 10>,
+					<&cpu1 THERMAL_NO_LIMIT 10>,
+					<&cpu2 THERMAL_NO_LIMIT 10>,
+					<&cpu3 THERMAL_NO_LIMIT 10>;
+				contribution = <2048>;
+			};
+			map1 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&cpu4 THERMAL_NO_LIMIT 16>,
+					<&cpu5 THERMAL_NO_LIMIT 16>,
+					<&cpu6 THERMAL_NO_LIMIT 16>;
+				contribution = <1024>;
+			};
+			map2 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&cpu7 THERMAL_NO_LIMIT 19>;
+				contribution = <768>;
+			};
 		};
 	};
 };
