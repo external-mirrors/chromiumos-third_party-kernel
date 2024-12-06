@@ -274,6 +274,10 @@ struct venc_controls {
 	s32 h264_loop_filter_beta;
 	u32 h264_8x8_transform;
 
+	u32 h264_hier_enabled;
+	u32 h264_hier_p_layers;
+	u32 h264_hier_p_bitrate[6];
+
 	u32 hevc_i_qp;
 	u32 hevc_p_qp;
 	u32 hevc_b_qp;
@@ -564,4 +568,6 @@ is_fw_rev_or_older(struct venus_core *core, u32 vmajor, u32 vminor, u32 vrev)
 		(core)->venus_ver.minor == vminor &&
 		(core)->venus_ver.rev <= vrev);
 }
+
+void venus_close_common(struct venus_inst *inst);
 #endif

@@ -688,98 +688,6 @@ static int venc_set_properties(struct venus_inst *inst)
 	if (ret)
 		return ret;
 
-	if (inst->fmt_cap->pixfmt == V4L2_PIX_FMT_H264) {
-		struct hfi_h264_vui_timing_info info;
-		struct hfi_h264_entropy_control entropy;
-		struct hfi_h264_db_control deblock;
-		struct hfi_h264_8x8_transform h264_transform;
-
-		ptype = HFI_PROPERTY_PARAM_VENC_H264_VUI_TIMING_INFO;
-		info.enable = 1;
-		info.fixed_framerate = 1;
-		info.time_scale = NSEC_PER_SEC;
-
-		ret = hfi_session_set_property(inst, ptype, &info);
-		if (ret)
-			return ret;
-
-		ptype = HFI_PROPERTY_PARAM_VENC_H264_ENTROPY_CONTROL;
-		entropy.entropy_mode = venc_v4l2_to_hfi(
-					  V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,
-					  ctr->h264_entropy_mode);
-		entropy.cabac_model = HFI_H264_CABAC_MODEL_0;
-
-		ret = hfi_session_set_property(inst, ptype, &entropy);
-		if (ret)
-			return ret;
-
-		ptype = HFI_PROPERTY_PARAM_VENC_H264_DEBLOCK_CONTROL;
-		deblock.mode = venc_v4l2_to_hfi(
-				      V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE,
-				      ctr->h264_loop_filter_mode);
-		deblock.slice_alpha_offset = ctr->h264_loop_filter_alpha;
-		deblock.slice_beta_offset = ctr->h264_loop_filter_beta;
-
-		ret = hfi_session_set_property(inst, ptype, &deblock);
-		if (ret)
-			return ret;
-
-		ptype = HFI_PROPERTY_PARAM_VENC_H264_TRANSFORM_8X8;
-		h264_transform.enable_type = 0;
-		if (ctr->profile.h264 == V4L2_MPEG_VIDEO_H264_PROFILE_HIGH ||
-		    ctr->profile.h264 == V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH)
-			h264_transform.enable_type = ctr->h264_8x8_transform;
-
-		ret = hfi_session_set_property(inst, ptype, &h264_transform);
-		if (ret)
-			return ret;
-
-	}
-
-	if (inst->fmt_cap->pixfmt == V4L2_PIX_FMT_H264 ||
-	    inst->fmt_cap->pixfmt == V4L2_PIX_FMT_HEVC) {
-		/* IDR periodicity, n:
-		 * n = 0 - only the first I-frame is IDR frame
-		 * n = 1 - all I-frames will be IDR frames
-		 * n > 1 - every n-th I-frame will be IDR frame
-		 */
-		ptype = HFI_PROPERTY_CONFIG_VENC_IDR_PERIOD;
-		idrp.idr_period = 0;
-		ret = hfi_session_set_property(inst, ptype, &idrp);
-		if (ret)
-			return ret;
-	}
-
-	if (inst->fmt_cap->pixfmt == V4L2_PIX_FMT_HEVC &&
-	    ctr->profile.hevc == V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10) {
-		struct hfi_hdr10_pq_sei hdr10;
-		unsigned int c;
-
-		ptype = HFI_PROPERTY_PARAM_VENC_HDR10_PQ_SEI;
-
-		for (c = 0; c < 3; c++) {
-			hdr10.mastering.display_primaries_x[c] =
-				ctr->mastering.display_primaries_x[c];
-			hdr10.mastering.display_primaries_y[c] =
-				ctr->mastering.display_primaries_y[c];
-		}
-
-		hdr10.mastering.white_point_x = ctr->mastering.white_point_x;
-		hdr10.mastering.white_point_y = ctr->mastering.white_point_y;
-		hdr10.mastering.max_display_mastering_luminance =
-			ctr->mastering.max_display_mastering_luminance;
-		hdr10.mastering.min_display_mastering_luminance =
-			ctr->mastering.min_display_mastering_luminance;
-
-		hdr10.cll.max_content_light = ctr->cll.max_content_light_level;
-		hdr10.cll.max_pic_average_light =
-			ctr->cll.max_pic_average_light_level;
-
-		ret = hfi_session_set_property(inst, ptype, &hdr10);
-		if (ret)
-			return ret;
-	}
-
 	if (ctr->num_b_frames) {
 		u32 max_num_b_frames = NUM_B_FRAMES_MAX;
 
@@ -921,6 +829,121 @@ static int venc_set_properties(struct venus_inst *inst)
 	ret = hfi_session_set_property(inst, ptype, &ltr_mode);
 	if (ret)
 		return ret;
+
+	if (inst->fmt_cap->pixfmt == V4L2_PIX_FMT_H264) {
+		struct hfi_h264_vui_timing_info info;
+		struct hfi_h264_entropy_control entropy;
+		struct hfi_h264_db_control deblock;
+		struct hfi_h264_8x8_transform h264_transform;
+
+		ptype = HFI_PROPERTY_PARAM_VENC_H264_VUI_TIMING_INFO;
+		info.enable = 1;
+		info.fixed_framerate = 1;
+		info.time_scale = NSEC_PER_SEC;
+
+		ret = hfi_session_set_property(inst, ptype, &info);
+		if (ret)
+			return ret;
+
+		ptype = HFI_PROPERTY_PARAM_VENC_H264_ENTROPY_CONTROL;
+		entropy.entropy_mode = venc_v4l2_to_hfi(
+					  V4L2_CID_MPEG_VIDEO_H264_ENTROPY_MODE,
+					  ctr->h264_entropy_mode);
+		entropy.cabac_model = HFI_H264_CABAC_MODEL_0;
+
+		ret = hfi_session_set_property(inst, ptype, &entropy);
+		if (ret)
+			return ret;
+
+		ptype = HFI_PROPERTY_PARAM_VENC_H264_DEBLOCK_CONTROL;
+		deblock.mode = venc_v4l2_to_hfi(
+				      V4L2_CID_MPEG_VIDEO_H264_LOOP_FILTER_MODE,
+				      ctr->h264_loop_filter_mode);
+		deblock.slice_alpha_offset = ctr->h264_loop_filter_alpha;
+		deblock.slice_beta_offset = ctr->h264_loop_filter_beta;
+
+		ret = hfi_session_set_property(inst, ptype, &deblock);
+		if (ret)
+			return ret;
+
+		ptype = HFI_PROPERTY_PARAM_VENC_H264_TRANSFORM_8X8;
+		h264_transform.enable_type = 0;
+		if (ctr->profile.h264 == V4L2_MPEG_VIDEO_H264_PROFILE_HIGH ||
+		    ctr->profile.h264 == V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH)
+			h264_transform.enable_type = ctr->h264_8x8_transform;
+
+		ret = hfi_session_set_property(inst, ptype, &h264_transform);
+		if (ret)
+			return ret;
+
+		if (ctr->h264_hier_enabled) {
+			unsigned int i;
+
+			ptype = HFI_PROPERTY_PARAM_VENC_HIER_P_MAX_NUM_ENH_LAYER;
+			ret = hfi_session_set_property(inst, ptype, &ctr->h264_hier_p_layers);
+			if (ret)
+				return ret;
+
+			ptype = HFI_PROPERTY_CONFIG_VENC_HIER_P_ENH_LAYER;
+			ret = hfi_session_set_property(inst, ptype, &ctr->h264_hier_p_layers);
+			if (ret)
+				return ret;
+
+			for (i = 0; i < ctr->h264_hier_p_layers; ++i) {
+				ptype = HFI_PROPERTY_CONFIG_VENC_TARGET_BITRATE;
+				brate.bitrate = ctr->h264_hier_p_bitrate[i];
+				brate.layer_id = i;
+
+				ret = hfi_session_set_property(inst, ptype, &brate);
+				if (ret)
+					return ret;
+			}
+		}
+	}
+
+	if (inst->fmt_cap->pixfmt == V4L2_PIX_FMT_H264 ||
+	    inst->fmt_cap->pixfmt == V4L2_PIX_FMT_HEVC) {
+		/* IDR periodicity, n:
+		 * n = 0 - only the first I-frame is IDR frame
+		 * n = 1 - all I-frames will be IDR frames
+		 * n > 1 - every n-th I-frame will be IDR frame
+		 */
+		ptype = HFI_PROPERTY_CONFIG_VENC_IDR_PERIOD;
+		idrp.idr_period = 0;
+		ret = hfi_session_set_property(inst, ptype, &idrp);
+		if (ret)
+			return ret;
+	}
+
+	if (inst->fmt_cap->pixfmt == V4L2_PIX_FMT_HEVC &&
+	    ctr->profile.hevc == V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_10) {
+		struct hfi_hdr10_pq_sei hdr10;
+		unsigned int c;
+
+		ptype = HFI_PROPERTY_PARAM_VENC_HDR10_PQ_SEI;
+
+		for (c = 0; c < 3; c++) {
+			hdr10.mastering.display_primaries_x[c] =
+				ctr->mastering.display_primaries_x[c];
+			hdr10.mastering.display_primaries_y[c] =
+				ctr->mastering.display_primaries_y[c];
+		}
+
+		hdr10.mastering.white_point_x = ctr->mastering.white_point_x;
+		hdr10.mastering.white_point_y = ctr->mastering.white_point_y;
+		hdr10.mastering.max_display_mastering_luminance =
+			ctr->mastering.max_display_mastering_luminance;
+		hdr10.mastering.min_display_mastering_luminance =
+			ctr->mastering.min_display_mastering_luminance;
+
+		hdr10.cll.max_content_light = ctr->cll.max_content_light_level;
+		hdr10.cll.max_pic_average_light =
+			ctr->cll.max_pic_average_light_level;
+
+		ret = hfi_session_set_property(inst, ptype, &hdr10);
+		if (ret)
+			return ret;
+	}
 
 	switch (inst->hfi_codec) {
 	case HFI_VIDEO_CODEC_H264:
@@ -1503,7 +1526,7 @@ err_m2m_release:
 err_session_destroy:
 	hfi_session_destroy(inst);
 err_ctrl_deinit:
-	venc_ctrl_deinit(inst);
+	v4l2_ctrl_handler_free(&inst->ctrl_handler);
 err_free:
 	kfree(inst);
 	return ret;
@@ -1514,18 +1537,8 @@ static int venc_close(struct file *file)
 	struct venus_inst *inst = to_inst(file);
 
 	venc_pm_get(inst);
-
-	v4l2_m2m_ctx_release(inst->m2m_ctx);
-	v4l2_m2m_release(inst->m2m_dev);
-	venc_ctrl_deinit(inst);
-	hfi_session_destroy(inst);
-	mutex_destroy(&inst->lock);
-	mutex_destroy(&inst->ctx_q_lock);
-	v4l2_fh_del(&inst->fh);
-	v4l2_fh_exit(&inst->fh);
-
+	venus_close_common(inst);
 	inst->enc_state = VENUS_ENC_STATE_DEINIT;
-
 	venc_pm_put(inst, false);
 
 	kfree(inst);
