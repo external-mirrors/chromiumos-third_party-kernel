@@ -181,7 +181,7 @@ static void cros_ucsi_write_timeout(struct work_struct *work)
 	u32 cci;
 	u64 cmd;
 
-	if (cros_ucsi_read(udata->ucsi, UCSI_CCI, &cci, sizeof(cci))) {
+	if (cros_ucsi_read_message_in(udata->ucsi, &cci, sizeof(cci))) {
 		dev_err(udata->dev,
 			"Reading CCI failed; no write timeout recovery possible.");
 		return;
@@ -206,8 +206,7 @@ static void cros_ucsi_write_timeout(struct work_struct *work)
 	/* Need to ack previous command which may have timed out. */
 	if (cci & UCSI_CCI_COMMAND_COMPLETE) {
 		cmd = UCSI_ACK_CC_CI | UCSI_ACK_COMMAND_COMPLETE;
-		cros_ucsi_async_write(udata->ucsi, UCSI_CONTROL, &cmd,
-				      sizeof(cmd));
+		cros_ucsi_async_control(udata->ucsi, cmd);
 
 		/* Check again after a few seconds that the system has
 		 * recovered to make sure our async write above was successful.
