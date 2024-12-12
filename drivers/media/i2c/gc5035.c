@@ -1257,7 +1257,7 @@ static int gc5035_set_fmt(struct v4l2_subdev *sd,
 
 	mutex_lock(&gc5035->mutex);
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		*v4l2_subdev_get_try_format(sd, state, fmt->pad) = fmt->format;
+		*v4l2_subdev_state_get_format(state, fmt->pad) = fmt->format;
 	} else {
 		gc5035->cur_mode = mode;
 		h_blank = mode->hts_def - mode->width;
@@ -1282,7 +1282,7 @@ static int gc5035_get_fmt(struct v4l2_subdev *sd,
 
 	mutex_lock(&gc5035->mutex);
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		fmt->format = *v4l2_subdev_get_try_format(sd, state, fmt->pad);
+		fmt->format = *v4l2_subdev_state_get_format(state, fmt->pad);
 	} else {
 		fmt->format.width = mode->width;
 		fmt->format.height = mode->height;
