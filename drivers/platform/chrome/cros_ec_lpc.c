@@ -319,7 +319,7 @@ static void cros_ec_lpc_acpi_notify(acpi_handle device, u32 value, void *data)
 
 	ec_dev->last_event_time = cros_ec_get_time_ns();
 
-	if (ec_dev->mkbp_event_supported)
+	if (value == ACPI_NOTIFY_CROS_EC_MKBP && ec_dev->mkbp_event_supported)
 		do {
 			ret = cros_ec_get_next_event(ec_dev, NULL,
 						     &ec_has_more_events);
