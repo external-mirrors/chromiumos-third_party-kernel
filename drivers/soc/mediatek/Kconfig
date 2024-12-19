@@ -146,4 +146,13 @@ config MTK_SOCINFO
 	  information about the SoC to the userspace including the
 	  manufacturer name, marketing name and soc name.
 
+config MTK_VDISP
+        bool "MediaTek VDISP driver"
+	select REGMAP
+        help
+	  The VDISP driver to manage the display power voter, ensuring
+	  efficient power control for display components in MediaTek SoCs.
+	  The driver mainly help to nofify MM MCU to turn on/off DISP
+          buck.
+
 endmenu
