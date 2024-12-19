@@ -4782,6 +4782,16 @@
 			status = "disabled";
 		};
 
+		vdisp-ctrl {
+			compatible = "mediatek,mt8196-vdisp-ctrl";
+			mediatek,hw-ccf = <&mm_hwv>;
+			mediatek,vcp = <&vcp>;
+
+			vdisp: vdisp {
+				regulator-name = "vdisp";
+			};
+		};
+
 		thermal_zones: thermal-zones {
 			soc_max: soc_max {
 				polling-delay = <0>; /* milliseconds */
