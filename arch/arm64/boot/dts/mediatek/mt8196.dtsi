@@ -3329,6 +3329,7 @@
 			mmpc = <&hfrpsys>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			mminfra-hwv-regmap = <&mminfra_hwv>;
+			vde-vcore0-supply = <&vdec_vcore>;
 		};
 
 		dispsys_config_clk: syscon@32000000 {
@@ -4789,6 +4790,16 @@
 
 			vdisp: vdisp {
 				regulator-name = "vdisp";
+			};
+		};
+
+		vmm: vmm {
+			compatible = "mediatek,mt8196-vmm";
+			mediatek,hw-ccf = <&mm_hwv>;
+			mediatek,vcp = <&vcp>;
+
+			vdec_vcore: vdec-vcore {
+				regulator-name = "vdec-vcore";
 			};
 		};
 
