@@ -14,6 +14,6 @@ obj-$(CONFIG_MTK_SOCINFO) += mtk-socinfo.o
 obj-$(CONFIG_MTK_IPI) += mtk_tinysys_ipi.o
 obj-$(CONFIG_MTK_MBOX) += mtk-mbox.o
 obj-$(CONFIG_MTK_VDISP) += mtk-vdisp.o
-
+obj-$(CONFIG_MTK_VMM) += mtk-vmm-drv.o
 ccflags-y += -I$(srctree)/drivers/remoteproc/vcp
 ccflags-y += -I$(srctree)/drivers/remoteproc/vcp/include

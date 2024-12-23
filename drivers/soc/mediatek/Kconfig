@@ -155,4 +155,12 @@ config MTK_VDISP
 	  The driver mainly help to nofify MM MCU to turn on/off DISP
           buck.
 
+config MTK_VMM
+	tristate "MediaTek VMM driver"
+	help
+	  This VMM driver is used to manage Multimedia power voter in
+	  MediaTek SoCs. The Regulator help to notify the mtcmos status
+	  of each subsys to vcp when any of them is on, VMM DVFS can
+	  adjust voltage level dynamically according to the status.
+
 endmenu
