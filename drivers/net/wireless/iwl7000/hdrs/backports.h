@@ -27,6 +27,22 @@ static inline bool iwl7000_wiphy_ext_feature_isset(struct wiphy *wiphy,
 #define wiphy_ext_feature_set iwl7000_wiphy_ext_feature_set
 #define wiphy_ext_feature_isset iwl7000_wiphy_ext_feature_isset
 
+static inline int pcim_request_all_regions(struct pci_dev *pdev, const char *name)
+{
+	/* NOTE: this only works with pcim_enable_device() on older kernels */
+	int mask = 0;
+
+	for (int i = 0; i < PCI_STD_NUM_BARS; i++) {
+		if (!pci_resource_start(pdev, i))
+			continue;
+		if (!pci_resource_len(pdev, i))
+			continue;
+		mask |= BIT(i);
+	}
+
+	return pci_request_selected_regions(pdev, mask, name);
+}
+
 
 struct cfg80211_mlo_reconf_done_data {
 	const u8 *buf;
