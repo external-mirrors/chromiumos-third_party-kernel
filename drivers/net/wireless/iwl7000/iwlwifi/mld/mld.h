@@ -34,6 +34,7 @@
 #include "constants.h"
 #include "rfi.h"
 #include "ptp.h"
+#include "time_sync.h"
 
 #define IWL_MLD_MAX_ADDRESSES		5
 
@@ -118,6 +119,7 @@
  *	requests
  * @rfi: RFI data.
  * @ptp_data: data of the PTP clock
+ * @time_sync: time sync data.
  */
 struct iwl_mld {
 	/* Add here fields that need clean up on restart */
@@ -216,6 +218,8 @@ struct iwl_mld {
 	struct iwl_mld_rfi rfi;
 
 	struct ptp_data ptp_data;
+
+	struct iwl_mld_time_sync_data __rcu *time_sync;
 };
 
 /* memset the part of the struct that requires cleanup on restart */
