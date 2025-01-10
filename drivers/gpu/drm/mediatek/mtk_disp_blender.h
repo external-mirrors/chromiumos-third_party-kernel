@@ -14,4 +14,6 @@ enum mtk_disp_blender_layer {
 	BLENDER_LAYER_MAX,
 };
 
+u32 mtk_disp_blender_get_blend_modes(struct device *dev);
+
 #endif // __MTK_DISP_BLENDER_H__
