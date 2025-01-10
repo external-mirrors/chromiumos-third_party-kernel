@@ -272,6 +272,13 @@ void mtk_disp_blender_clk_disable(struct device *dev)
 	clk_disable_unprepare(priv->clk);
 }
 
+u32 mtk_disp_blender_get_blend_modes(struct device *dev)
+{
+	return BIT(DRM_MODE_BLEND_PREMULTI) |
+	       BIT(DRM_MODE_BLEND_COVERAGE) |
+	       BIT(DRM_MODE_BLEND_PIXEL_NONE);
+}
+
 static int mtk_disp_blender_bind(struct device *dev, struct device *master,
 				 void *data)
 {
