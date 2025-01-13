@@ -53,6 +53,11 @@ struct cfg80211_mlo_reconf_done_data {
 	} links[IEEE80211_MLD_MAX_NUM_LINKS];
 };
 
+struct cfg80211_ml_reconf_req {
+	struct cfg80211_assoc_link add_links[IEEE80211_MLD_MAX_NUM_LINKS];
+	u16 rem_links;
+};
+
 static inline void
 cfg80211_mlo_reconf_add_done(struct net_device *dev,
 			     struct cfg80211_mlo_reconf_done_data *data)
