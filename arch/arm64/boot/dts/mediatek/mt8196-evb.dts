@@ -29,6 +29,19 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	panel: panel {
+		compatible = "lg,lp120up1";
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_fixed_pins>;
+		backlight = <&backlight_lcd0>;
+
+		port {
+			panel_edp_in: endpoint {
+				remote-endpoint = <&edptx_out>;
+			};
+		};
+	};
+
 	usb_p0_vbus: regulator@0 {
 		compatible = "regulator-fixed";
 		regulator-name = "vbus";
@@ -288,3 +301,76 @@
 &uart0 {
 	status = "okay";
 };
+
+&disp_dvo0 {
+	status = "okay";
+
+	port {
+		disp_dvo0_out: endpoint {
+			remote-endpoint = <&edptx_in>;
+		};
+	};
+};
+
+&edp_tx {
+	pinctrl-names = "default";
+	pinctrl-0 = <&edp_hpd_pins>;
+	max-lane-count = <4>;
+	max-linkrate-mhz = <8100>;
+	use-edid;
+
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			edptx_in: endpoint {
+				remote-endpoint = <&disp_dvo0_out>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+
+			edptx_out: endpoint {
+				remote-endpoint = <&panel_edp_in>;
+			};
+		};
+	};
+};
+
+&disp_pwm1 {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&disp_pwm1_pin_default>;
+};
+
+&pio {
+	edp_hpd_pins: edp-hpd-pins {
+		pins1 {
+			pinmux = <PINMUX_GPIO13__FUNC_EDP_TX_HPD>;
+			bias-pull-up;
+		};
+	};
+
+	disp_pwm1_pin_default: disp-pwm1-default-pins {
+		pins-disp-pwm {
+			pinmux = <PINMUX_GPIO4__FUNC_DISP_PWM1>;
+		};
+	};
+
+	panel_fixed_pins: panel-fixed-pins {
+		pins1 {
+			pinmux = <PINMUX_GPIO26__FUNC_GPIO26>,
+			<PINMUX_GPIO33__FUNC_GPIO33>;
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
+
