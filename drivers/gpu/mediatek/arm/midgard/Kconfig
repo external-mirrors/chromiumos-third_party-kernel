@@ -394,5 +394,5 @@ config MALI_TRACE_POWER_GPU_WORK_PERIOD
 
 
 source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/midgard/tests/Kconfig"
-
+source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/midgard/base/arm/Kconfig"
 endif

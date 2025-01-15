@@ -44,6 +44,10 @@
 #include <mali_kbase_gpu_metrics.h>
 #endif
 
+#ifdef MALI_MTK_COMMON
+#include "mtk_platform_common.h"
+#endif /* MALI_MTK_COMMON */
+
 /**
  * kbase_device_firmware_hwcnt_term - Terminate CSF firmware and HWC
  *
@@ -281,6 +285,9 @@ static void kbase_device_hwcnt_backend_csf_term(struct kbase_device *kbdev)
 }
 
 static const struct kbase_device_init dev_init[] = {
+#ifdef MALI_MTK_COMMON
+	{mtk_common_device_init, mtk_common_device_term, "MTK common initialization failed"},
+#endif /* MALI_MTK_COMMON */
 #if !IS_ENABLED(CONFIG_MALI_REAL_HW)
 	{ kbase_gpu_device_create, kbase_gpu_device_destroy, "Dummy model initialization failed" },
 #else /* !IS_ENABLED(CONFIG_MALI_REAL_HW) */

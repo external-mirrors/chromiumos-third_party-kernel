@@ -135,6 +135,10 @@ ccflags-y += \
     -I$(src)/../../../base \
     -I$(src)/../../../../include
 
+# *** MTK ***
+MTK_PLATFORM := mt8196
+include $(src)/Kbuild-mtk-custom-env
+ccflags-y += -I$(src)/include
 subdir-ccflags-y += $(ccflags-y)
 
 #
@@ -242,3 +246,9 @@ else
 # out-of-tree
     include $(INCLUDE_SUBDIR)
 endif
+
+# *** MTK Proprietary ***
+export MALI_PLATFORM_DIR
+include $(src)/platform/$(MALI_PLATFORM_DIR)/mtk_platform_common/Kbuild
+include $(src)/base/arm/Kbuild
+obj-y += platform/$(MALI_PLATFORM_DIR)/mtk_proprietary/

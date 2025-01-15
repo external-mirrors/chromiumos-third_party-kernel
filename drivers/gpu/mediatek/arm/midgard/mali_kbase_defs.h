@@ -1083,6 +1083,11 @@ struct kbase_device {
 	u64 reg_start;
 	size_t reg_size;
 	void __iomem *reg;
+#ifdef MALI_MTK_GPUEB_IRQ
+	int gpueb_irq;
+	u64 low_volt_count;
+	u64 brcast_timeout_count;
+#endif /* MALI_MTK_GPUEB_IRQ */
 	struct {
 		void __iomem **regs;
 		u32 *flags;
@@ -1321,6 +1326,9 @@ struct kbase_device {
 	u32 sysc_alloc[GPU_SYSC_ALLOC_COUNT];
 
 	struct mutex fw_load_lock;
+#ifdef MALI_MTK_GHPM_STAGE1_ENABLE
+	struct mutex ghpm_lock;
+#endif /* MALI_MTK_GHPM_STAGE1_ENABLE */
 #if MALI_USE_CSF
 	/* CSF object for the GPU device. */
 	struct kbase_csf_device csf;

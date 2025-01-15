@@ -18,6 +18,4 @@
 #
 #
 
-ifeq ($(CONFIG_MALI_MEMORY_GROUP_MANAGER), y)
-obj-m := memory_group_manager.o
-endif
+obj-$(CONFIG_MALI_MEMORY_GROUP_MANAGER) += memory_group_manager.o

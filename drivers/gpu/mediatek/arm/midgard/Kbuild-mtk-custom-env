@@ -1,0 +1,17 @@
+ccflags-y += -DCONFIG_GPU_$(shell echo $(MTK_PLATFORM) | tr a-z A-Z)
+ccflags-y += -DMALI_MTK_COMMON
+ccflags-y += -DMALI_MTK_DEBUG_FS
+ccflags-y += -DMALI_MTK_DEVFREQ_ENABLE
+ccflags-y += -DMALI_MTK_DEVFREQ_GOVERNOR
+ccflags-y += -DMALI_MTK_DEVFREQ_THERMAL
+ccflags-y += -DMALI_MTK_GHPM_STAGE1_ENABLE
+ccflags-y += -DMALI_MTK_GPUEB_IRQ
+
+ccflags-y += \
+	-I$(srctree)/drivers/gpu/mediatek/arm/midgard/platform/$(MALI_PLATFORM_DIR)/mtk_platform_common \
+	-I$(srctree)/drivers/gpu/mediatek/arm/midgard/platform/$(MALI_PLATFORM_DIR)/mtk_proprietary/ged/include \
+	-I$(srctree)/drivers/gpu/mediatek/arm/midgard/platform/$(MALI_PLATFORM_DIR)/mtk_proprietary/gpufreq \
+	-I$(srctree)/drivers/gpu/mediatek/arm/midgard/platform/$(MALI_PLATFORM_DIR)/mtk_proprietary/mt-plat \
+	-I$(srctree)/drivers/gpu/mediatek/arm/midgard/platform/$(MALI_PLATFORM_DIR)/mtk_proprietary/gpueb/include \
+	-I$(srctree)/drivers/misc/mediatek/trusted_mem/public \
+	-I$(srctree)/drivers/dma-buf/heaps

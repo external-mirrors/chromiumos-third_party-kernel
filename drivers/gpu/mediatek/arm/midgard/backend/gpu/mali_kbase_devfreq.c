@@ -26,6 +26,9 @@
 #include <linux/of.h>
 #include <linux/clk.h>
 #include <linux/devfreq.h>
+#if defined(MALI_MTK_DEVFREQ_GOVERNOR) && IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+#include <mtk_gpufreq.h>
+#endif
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
 #include <linux/devfreq_cooling.h>
 #endif
@@ -33,6 +36,14 @@
 #include <linux/version.h>
 #include <linux/pm_opp.h>
 #include "mali_kbase_devfreq.h"
+
+#ifdef MALI_MTK_DEVFREQ_GOVERNOR
+#include "mtk_platform_devfreq_governor.h"
+#endif /* MALI_MTK_DEVFREQ_GOVERNOR */
+
+#ifdef MALI_MTK_DEVFREQ_THERMAL
+#include "mtk_platform_devfreq_thermal.h"
+#endif /* MALI_MTK_DEVFREQ_THERMAL*/
 
 /**
  * get_voltage() - Get the voltage value corresponding to the nominal frequency
@@ -603,8 +614,9 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 {
 	struct devfreq_dev_profile *dp;
 	int err;
-	unsigned int i;
 	bool free_devfreq_freq_table = true;
+#ifndef MALI_MTK_DEVFREQ_GOVERNOR
+	unsigned int i;
 
 	if (kbdev->nr_clocks == 0) {
 		dev_err(kbdev->dev, "Clock not available for devfreq\n");
@@ -616,6 +628,7 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 			kbdev->current_freqs[i] = clk_get_rate(kbdev->clocks[i]);
 	}
 	kbdev->current_nominal_freq = kbdev->current_freqs[0];
+#endif /* MALI_MTK_DEVFREQ_GOVERNOR */
 
 	dp = &kbdev->devfreq_profile;
 
@@ -626,27 +639,46 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 	dp->get_cur_freq = kbase_devfreq_cur_freq;
 	dp->exit = kbase_devfreq_exit;
 
+#ifndef MALI_MTK_DEVFREQ_ENABLE
 	if (kbase_devfreq_init_freq_table(kbdev, dp))
 		return -EFAULT;
+#else
+	if (mtk_devfreq_init_freq_table(kbdev, dp))
+		return -EFAULT;
+#endif /* MALI_MTK_DEVFREQ_ENABLE */
 
 	if (dp->max_state > 0) {
 		/* Record the maximum frequency possible */
-		kbdev->gpu_props.gpu_freq_khz_max = dp->freq_table[0] / 1000;
+		kbdev->gpu_props.gpu_freq_khz_max =
+#if defined(MALI_MTK_DEVFREQ_GOVERNOR) && IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+			gpufreq_get_freq_by_idx(TARGET_DEFAULT, 0);
+#else
+			dp->freq_table[0] / 1000;
+#endif
 	}
 
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
+#ifndef MALI_MTK_DEVFREQ_THERMAL
 	err = kbase_ipa_init(kbdev);
 	if (err) {
 		dev_err(kbdev->dev, "IPA initialization failed");
 		goto ipa_init_failed;
 	}
+#endif /* MALI_MTK_DEVFREQ_THERMAL */
 #endif
 
 	err = kbase_devfreq_init_core_mask_table(kbdev);
 	if (err)
 		goto init_core_mask_table_failed;
 
+#ifdef MALI_MTK_DEVFREQ_GOVERNOR
+	mtk_devfreq_governor_update_profile(dp);
+
+	kbdev->devfreq = devfreq_add_device(kbdev->dev, dp,
+				MTK_GPU_DEVFREQ_GOVERNOR_GPUEB, NULL);
+#else
 	kbdev->devfreq = devfreq_add_device(kbdev->dev, dp, "simple_ondemand", NULL);
+#endif /* MALI_MTK_DEVFREQ_GOVERNOR */
 	if (IS_ERR(kbdev->devfreq)) {
 		err = PTR_ERR(kbdev->devfreq);
 		kbdev->devfreq = NULL;
@@ -677,7 +709,12 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
 	kbdev->devfreq_cooling = of_devfreq_cooling_register_power(
-		kbdev->dev->of_node, kbdev->devfreq, &kbase_ipa_power_model_ops);
+		kbdev->dev->of_node, kbdev->devfreq,
+#ifdef MALI_MTK_DEVFREQ_THERMAL
+		&mtk_devfreq_cooling_power_ops);
+#else
+		&kbase_ipa_power_model_ops);
+#endif  /* MALI_MTK_DEVFREQ_THERMAL */
 	if (IS_ERR_OR_NULL(kbdev->devfreq_cooling)) {
 		err = PTR_ERR_OR_ZERO(kbdev->devfreq_cooling);
 		dev_err(kbdev->dev, "Failed to register cooling device (%d)", err);
@@ -707,8 +744,10 @@ devfreq_add_dev_failed:
 
 init_core_mask_table_failed:
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
+#ifndef MALI_MTK_DEVFREQ_THERMAL
 	kbase_ipa_term(kbdev);
 ipa_init_failed:
+#endif /* MALI_MTK_DEVFREQ_THERMAL */
 #endif
 	if (free_devfreq_freq_table)
 		kbase_devfreq_term_freq_table(kbdev);
@@ -740,6 +779,8 @@ void kbase_devfreq_term(struct kbase_device *kbdev)
 	kbase_devfreq_term_core_mask_table(kbdev);
 
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
+#ifndef MALI_MTK_DEVFREQ_THERMAL
 	kbase_ipa_term(kbdev);
+#endif /* MALI_MTK_DEVFREQ_THERMAL */
 #endif
 }

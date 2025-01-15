@@ -360,5 +360,5 @@ config MALI_FW_TRACE_MODE_AUTO_DISCARD
 
 endchoice
 
-source "kernel/drivers/gpu/mediatek/arm/arbitration/Mconfig"
+#source "kernel/drivers/gpu/mediatek/arm/arbitration/Mconfig"
 source "kernel/drivers/gpu/mediatek/arm/midgard/tests/Mconfig"
