@@ -3326,9 +3326,13 @@
 			compatible = "mediatek,mt8196-hfrpsys-hwv", "syscon";
 			reg = <0 0x31b50000 0 0x1000>;
 			#power-domain-cells = <1>;
+			clocks = <&disp_vdisp_ao_config_clk CLK_MM_V_DISP_VDISP_AO_CONFIG_DISP>,
+				 <&disp_vdisp_ao_config_clk CLK_MM_V_DISP_DPC_DISP>;
+			clock-names = "disp_ao_config", "disp_dpc";
 			mmpc = <&hfrpsys>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			mminfra-hwv-regmap = <&mminfra_hwv>;
+			disp-vcore-supply = <&vdisp>;
 			vde-vcore0-supply = <&vdec_vcore>;
 		};
 
@@ -4318,7 +4322,6 @@
 			reg = <0 0x3e800000 0 0x1000>;
 			mm-hw-ccf-regmap = <&mm_hwv>;
 			#clock-cells = <1>;
-			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DISP_VCORE>;
 		};
 
 		smi_disp_dram_sub_comm0: smi-sub-comm@3e810000 {
