@@ -140,6 +140,8 @@ enum clk_id {
 	CLK_HIFSEL,
 	CLK_JPGDEC,
 	CLK_AUDIO,
+	CLK_DISP_AO_CONFIG,
+	CLK_DISP_DPC,
 	CLK_MAX,
 };
 
@@ -154,6 +156,8 @@ static const char * const clk_names[] = {
 	"hif_sel",
 	"jpgdec",
 	"audio",
+	"disp_ao_config",
+	"disp_dpc",
 	NULL,
 };
 
@@ -1893,6 +1897,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_MM_VOTE_DIS0_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_DIS1_DORMANT] = {
@@ -1905,6 +1910,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_MM_VOTE_DIS1_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_OVL0_DORMANT] = {
@@ -1917,6 +1923,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_MM_VOTE_OVL0_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_OVL1_DORMANT] = {
@@ -1929,6 +1936,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_MM_VOTE_OVL1_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_DISP_EDPTX_DORMANT] = {
@@ -1941,6 +1949,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_MM_VOTE_DISP_EDPTX_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_DISP_DPTX_DORMANT] = {
@@ -1953,6 +1962,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_MM_VOTE_DISP_DPTX_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_MML0_SHUTDOWN] = {
