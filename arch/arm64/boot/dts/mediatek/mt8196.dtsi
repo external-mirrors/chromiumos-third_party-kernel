@@ -23,6 +23,7 @@
 	#size-cells = <2>;
 
 	aliases {
+		dvo0 = &disp_dvo0;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
 		i2c2 = &i2c2;
@@ -2170,6 +2171,21 @@
 			#clock-cells = <1>;
 		};
 
+		disp_dvo0: disp-dvo0@324c0000 {
+			compatible = "mediatek,mt8196-edp-dvo";
+			reg = <0 0x324c0000 0 0x1000>;
+			interrupts = <GIC_SPI 461 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&dispsys1_config_clk CLK_MM1_DISP_DVO0_DISP>,
+				 <&cksys_gp2_clk CLK_CK2_DVO_SEL>,
+				 <&apmixedsys_gp2_clk CLK_APMIXED2_TVDPLL3>,
+				 <&dispsys1_config_clk CLK_MM1_MOD6>;
+			clock-names = "engine",
+				      "pixel",
+				      "pll",
+				      "hf_fdvo_clk";
+			status = "disabled";
+		};
+
 		smi_larb33: larb@32600000 {
 			compatible = "mediatek,mt8196-smi-larb";
 			reg = <0 0x32600000 0 0x1000>;
@@ -2569,6 +2585,36 @@
 			clock-names = "apb", "smi";
 			mediatek,smi = <&smi_mdp_common>;
 			mediatek,common-id = <12>;
+		};
+
+		dp_tx: dp-tx@3ec00000 {
+			compatible = "mediatek,mt8196-dp-tx";
+			reg = <0 0x3ec00000 0 0x5000>,
+			      <0 0x128b0000 0 0x1500>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DISP_DPTX_DORMANT>,
+					<&scpsys MT8196_POWER_DOMAIN_SSUSB_DP_PHY_P0>;
+			power-domain-names = "pd_dp_tx", "pd_dp_phy";
+			interrupts = <GIC_SPI 447 IRQ_TYPE_LEVEL_HIGH 0>;
+			dptx,phy-params = <0x221c1814 0x24241e18 0x0000302a
+					   0x0e080400 0x000c0600 0x00000006>;
+			#phy-cells = <0>;
+			clocks = <&cksys_gp2_clk CLK_CK2_DP0_SEL>,
+				 <&cksys_clk CLK_CK_TCK_26M_MX9>;
+			clock-names = "MUX_DP",
+				      "CK_26M";
+		};
+
+		edp_tx: edp-tx@3ec40000 {
+			compatible = "mediatek,mt8196-edp-tx";
+			reg = <0 0x3ec40000 0 0x4000>,
+			      <0 0x130a0000 0 0x1500>,
+			      <0 0x31b50074 0 0x4>;
+			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DISP_EDPTX_DORMANT>;
+			clocks = <&cksys_gp2_clk CLK_CK2_DVO_SEL>;
+			clock-names = "power";
+			max-linkrate-mhz = <8100>;
+			interrupts = <GIC_SPI 448 IRQ_TYPE_LEVEL_HIGH 0>;
+			status = "disabled";
 		};
 
 		gpu_smmu: iommu@48600000 {
