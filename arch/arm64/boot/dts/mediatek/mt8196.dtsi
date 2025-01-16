@@ -23,6 +23,7 @@
 	#size-cells = <2>;
 
 	aliases {
+		dp-intf0 = &dp_intf0;
 		dvo0 = &disp_dvo0;
 		i2c0 = &i2c0;
 		i2c1 = &i2c1;
@@ -2171,6 +2172,31 @@
 			#clock-cells = <1>;
 		};
 
+		dp_intf0: dp-intf@32430000 {
+			compatible = "mediatek,mt8196-dp-intf";
+			reg = <0 0x32430000 0 0x1000>;
+			interrupts = <GIC_SPI 460 IRQ_TYPE_LEVEL_HIGH 0>;
+			clocks = <&dispsys1_config_clk CLK_MM1_DISP_DP_INTF0>,
+				 <&dispsys1_config_clk CLK_MM1_MOD4>,
+				 <&cksys_gp2_clk CLK_CK2_DP0_SEL>,
+				 <&cksys_gp2_clk CLK_CK2_TVDPLL1_D4>,
+				 <&cksys_gp2_clk CLK_CK2_TVDPLL1_D8>,
+				 <&cksys_gp2_clk CLK_CK2_TVDPLL1_D16>,
+				 <&apmixedsys_gp2_clk CLK_APMIXED2_TVDPLL1>,
+				 <&cksys_clk CLK_CK_TCK_26M_MX9>;
+			clock-names = "hf_fmm_ck",
+				      "hf_fdp_ck",
+				      "mux_dp",
+				      "tvdpll_d4",
+				      "tvdpll_d8",
+				      "tvdpll_d16",
+				      "dpi_ck",
+				      "dpi_26m";
+			num = <0>;
+			phys = <&dp_tx>;
+			phy-names = "dp_tx";
+		};
+
 		disp_dvo0: disp-dvo0@324c0000 {
 			compatible = "mediatek,mt8196-edp-dvo";
 			reg = <0 0x324c0000 0 0x1000>;
@@ -2590,7 +2616,9 @@
 		dp_tx: dp-tx@3ec00000 {
 			compatible = "mediatek,mt8196-dp-tx";
 			reg = <0 0x3ec00000 0 0x5000>,
-			      <0 0x128b0000 0 0x1500>;
+			      <0 0x128b0000 0 0x1500>,
+			      <0 0x1002d600 0 0x4>,
+			      <0 0x31b50078 0 0x4>;
 			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_DISP_DPTX_DORMANT>,
 					<&scpsys MT8196_POWER_DOMAIN_SSUSB_DP_PHY_P0>;
 			power-domain-names = "pd_dp_tx", "pd_dp_phy";
@@ -2600,8 +2628,8 @@
 			#phy-cells = <0>;
 			clocks = <&cksys_gp2_clk CLK_CK2_DP0_SEL>,
 				 <&cksys_clk CLK_CK_TCK_26M_MX9>;
-			clock-names = "MUX_DP",
-				      "CK_26M";
+			clock-names = "mux_dp",
+				      "ck_26m";
 		};
 
 		edp_tx: edp-tx@3ec40000 {
