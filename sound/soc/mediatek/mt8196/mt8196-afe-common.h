@@ -272,6 +272,7 @@ struct mt8196_afe_private {
 
 	/* channel merge */
 	unsigned int cm_rate[CM_NUM];
+	unsigned int cm_channels;
 };
 
 int mt8196_dai_adda_register(struct mtk_base_afe *afe);

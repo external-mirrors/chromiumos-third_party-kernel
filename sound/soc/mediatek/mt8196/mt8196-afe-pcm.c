@@ -110,6 +110,19 @@ void mt8196_fe_shutdown(struct snd_pcm_substream *substream,
 	}
 }
 
+int mt8196_fe_hw_params(struct snd_pcm_substream *substream,
+			 struct snd_pcm_hw_params *params,
+			 struct snd_soc_dai *dai)
+{
+	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
+	unsigned int channels = params_channels(params);
+	struct mt8196_afe_private *afe_priv = afe->platform_priv;
+
+	afe_priv->cm_channels = channels;
+
+	return mtk_afe_fe_hw_params(substream, params, dai);
+}
+
 int mt8196_fe_trigger(struct snd_pcm_substream *substream, int cmd,
 				struct snd_soc_dai *dai)
 {
@@ -279,7 +292,7 @@ int mt8196_get_memif_pbuf_size(struct snd_pcm_substream *substream)
 static const struct snd_soc_dai_ops mt8196_memif_dai_ops = {
 	.startup        = mt8196_fe_startup,
 	.shutdown       = mt8196_fe_shutdown,
-	.hw_params      = mtk_afe_fe_hw_params,
+	.hw_params      = mt8196_fe_hw_params,
 	.hw_free        = mtk_afe_fe_hw_free,
 	.prepare        = mtk_afe_fe_prepare,
 	.trigger        = mt8196_fe_trigger,
@@ -797,14 +810,14 @@ static int ul_cm0_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *cmpnt = snd_soc_dapm_to_component(w->dapm);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
-	unsigned int channels = 0;
+	struct mt8196_afe_private *afe_priv = afe->platform_priv;
+	unsigned int channels = afe_priv->cm_channels;
 
-	dev_dbg(afe->dev, "%s(), event 0x%x, name %s\n",
-		 __func__, event, w->name);
+	dev_dbg(afe->dev, "%s(), event 0x%x, name %s, channels %u\n",
+		 __func__, event, w->name, channels);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		channels = 3;
 		mt8196_enable_cm_bypass(afe, CM0, 0x0);
 		mt8196_set_cm(afe, CM0, true, false, channels);
 		break;
@@ -823,14 +836,14 @@ static int ul_cm1_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *cmpnt = snd_soc_dapm_to_component(w->dapm);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
-	unsigned int channels = 0;
+	struct mt8196_afe_private *afe_priv = afe->platform_priv;
+	unsigned int channels = afe_priv->cm_channels;
 
-	dev_info(afe->dev, "%s(), event 0x%x, name %s\n",
-		 __func__, event, w->name);
+	dev_dbg(afe->dev, "%s(), event 0x%x, name %s, channels %u\n",
+		 __func__, event, w->name, channels);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		channels = 4;
 		mt8196_enable_cm_bypass(afe, CM1, 0x0);
 		mt8196_set_cm(afe, CM1, true, false, channels);
 		break;
@@ -849,14 +862,14 @@ static int ul_cm2_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *cmpnt = snd_soc_dapm_to_component(w->dapm);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
-	unsigned int channels = 0;
+	struct mt8196_afe_private *afe_priv = afe->platform_priv;
+	unsigned int channels = afe_priv->cm_channels;
 
-	dev_info(afe->dev, "%s(), event 0x%x, name %s\n",
-		 __func__, event, w->name);
+	dev_dbg(afe->dev, "%s(), event 0x%x, name %s, channels %u\n",
+		 __func__, event, w->name, channels);
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		channels = 4;
 		mt8196_enable_cm_bypass(afe, CM2, 0x0);
 		mt8196_set_cm(afe, CM2, true, false, channels);
 		break;
