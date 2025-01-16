@@ -52,6 +52,44 @@
 	};
 };
 
+&dp_intf0 {
+	status = "okay";
+
+	port {
+		dp_intf0_out: endpoint {
+			remote-endpoint = <&dptx_in>;
+		};
+	};
+};
+
+&dp_tx {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dptx_pin>;
+	#sound-dai-cells = <0>;
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			dptx_in: endpoint {
+				remote-endpoint = <&dp_intf0_out>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+
+			dptx_out: endpoint {
+				data-lanes = <0 1 2 3>;
+			};
+		};
+	};
+};
+
 &main_pmic {
 	pmic-lvsys-notify {
 		compatible = "mediatek,mt6363-lvsys-notify";
@@ -234,6 +272,12 @@
 };
 
 &pio {
+	dptx_pin: dptx-default-pins {
+		pins-hpd {
+			pinmux = <PINMUX_GPIO118__FUNC_DP_TX_HPD>;
+		};
+	};
+
 	nor_pins_default: nor-default-pins {
 		pins0 {
 			pinmux = <PINMUX_GPIO102__FUNC_SF_CK>;
