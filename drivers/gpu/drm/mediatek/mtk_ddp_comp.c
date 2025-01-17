@@ -435,6 +435,11 @@ static const struct mtk_ddp_comp_funcs ddp_dsi = {
 	.encoder_index = mtk_dsi_encoder_index,
 };
 
+static const struct mtk_ddp_comp_funcs ddp_dvo = {
+	.start = mtk_dvo_start,
+	.stop = mtk_dvo_stop,
+};
+
 static const struct mtk_ddp_comp_funcs ddp_gamma = {
 	.clk_enable = mtk_gamma_clk_enable,
 	.clk_disable = mtk_gamma_clk_disable,
@@ -594,6 +599,7 @@ static const char * const mtk_ddp_comp_stem[MTK_DDP_COMP_TYPE_MAX] = {
 	[MTK_DP_INTF] = "dp-intf",
 	[MTK_DPI] = "dpi",
 	[MTK_DSI] = "dsi",
+	[MTK_DVO] = "dvo",
 	[MTK_OVL_BLENDER] = "blender",
 	[MTK_OVL_EXDMA] = "exdma",
 	[MTK_OVL_OUTPROC] = "outproc",
@@ -639,6 +645,7 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_DSI1]		= { MTK_DSI,			1, &ddp_dsi },
 	[DDP_COMPONENT_DSI2]		= { MTK_DSI,			2, &ddp_dsi },
 	[DDP_COMPONENT_DSI3]		= { MTK_DSI,			3, &ddp_dsi },
+	[DDP_COMPONENT_DVO0]            = { MTK_DVO,                    0, &ddp_dvo },
 	[DDP_COMPONENT_GAMMA]		= { MTK_DISP_GAMMA,		0, &ddp_gamma },
 	[DDP_COMPONENT_MDP_RSZ0]	= { MTK_DISP_MDP_RSZ,		0, &ddp_mdp_rsz},
 	[DDP_COMPONENT_MERGE0]		= { MTK_DISP_MERGE,		0, &ddp_merge },
@@ -796,7 +803,8 @@ int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
 	    type == MTK_DISP_RDMA ||
 	    type == MTK_DPI ||
 	    type == MTK_DP_INTF ||
-	    type == MTK_DSI)
+	    type == MTK_DSI ||
+	    type == MTK_DVO)
 		return 0;
 
 	priv = devm_kzalloc(comp->dev, sizeof(*priv), GFP_KERNEL);
