@@ -1158,10 +1158,13 @@ static void mtk_crtc_atomic_enable(struct drm_crtc *crtc,
 				   struct drm_atomic_state *state)
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct drm_crtc_state *crtc_state = state->crtcs[drm_crtc_index(crtc)].new_state;
+	struct mtk_crtc_state *mtk_crtc_state = to_mtk_crtc_state(crtc_state);
 	struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[0];
 	int ret;
 	int i, j;
 	int mmsys_cnt = 0;
+	struct mtk_drm_private *priv;
 
 	DRM_DEBUG_DRIVER("%s %d\n", __func__, crtc->base.id);
 
@@ -1192,6 +1195,27 @@ static void mtk_crtc_atomic_enable(struct drm_crtc *crtc,
 	}
 
 	mtk_crtc_update_output(crtc, state);
+
+	/* Get dsc_info from output comp */
+	comp = mtk_crtc->ddp_comp[mtk_crtc->ddp_comp_nr - 1];
+	i = mtk_crtc->conn_routes_sys;
+	priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[i];
+	dev_dbg(priv->dev, "Updated DSC info path index %d\n",
+		mtk_crtc->ddp_comp_nr - 1);
+	mtk_ddp_comp_get_dsc_info(comp, &mtk_crtc_state->dsc);
+
+	/* Set dsc_info in current crtc */
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		comp = mtk_crtc->ddp_comp[i];
+		j = mtk_crtc->conn_routes_sys;
+		priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[j];
+
+		if (mtk_ddp_comp_get_type(comp->id) == MTK_DISP_DSC) {
+			dev_dbg(priv->dev, "Updated DSC info path index %d\n",
+				mtk_crtc->ddp_comp_nr - 1);
+			mtk_ddp_comp_set_dsc_info(comp, &mtk_crtc_state->dsc);
+		}
+	}
 
 	ret = mtk_crtc_ddp_hw_init(mtk_crtc);
 	if (ret) {

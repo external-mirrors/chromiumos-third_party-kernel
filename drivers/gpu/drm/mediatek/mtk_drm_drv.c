@@ -272,6 +272,7 @@ static const unsigned int mt8196_mtk_ddp_disp0_ext[] = {
 
 static const unsigned int mt8196_mtk_ddp_disp1_ext[] = {
 	DDP_COMPONENT_DLI_ASYNC22,
+	DDP_COMPONENT_DSC0,
 	DDP_COMPONENT_DP_INTF0,
 };
 
@@ -287,6 +288,7 @@ static const unsigned int mt8196_mtk_ddp_disp0_third[] = {
 
 static const unsigned int mt8196_mtk_ddp_disp1_third[] = {
 	DDP_COMPONENT_DLI_ASYNC23,
+	DDP_COMPONENT_DSC1,
 };
 
 static const struct mtk_mmsys_driver_data mt2701_mmsys_driver_data = {
@@ -1189,6 +1191,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		if (comp_type == MTK_DISP_AAL ||
 		    comp_type == MTK_DISP_CCORR ||
 		    comp_type == MTK_DISP_COLOR ||
+		    comp_type == MTK_DISP_DSC ||
 		    comp_type == MTK_DISP_GAMMA ||
 		    comp_type == MTK_DISP_MERGE ||
 		    comp_type == MTK_DISP_OVL ||

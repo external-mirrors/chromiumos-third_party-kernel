@@ -784,6 +784,7 @@ int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
 	    type == MTK_DISP_BLS ||
 	    type == MTK_DISP_CCORR ||
 	    type == MTK_DISP_COLOR ||
+	    type == MTK_DISP_DSC ||
 	    type == MTK_DISP_GAMMA ||
 	    type == MTK_DISP_MERGE ||
 	    type == MTK_DISP_OVL ||
