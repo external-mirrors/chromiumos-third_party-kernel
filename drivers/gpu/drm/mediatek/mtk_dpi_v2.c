@@ -600,7 +600,7 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 		vm.hactive = ((vm.hactive * 8 + (12 * 8 - 1)) / (12 * 8)) * 4;
 		htotal = hblank + vm.hactive;
 		mode_htotal =  mode->htotal;
-		vm.pixelclock = ((mode->clock * 1000) * htotal) / mode_htotal;
+		vm.pixelclock = div_u64(mode->clock * 1000 * htotal, mode_htotal);
 
 		dev_dbg(dpi->dev, "DSC compress mode, hactive:%d, pixelclock:%lu\n",
 			vm.hactive, vm.pixelclock);

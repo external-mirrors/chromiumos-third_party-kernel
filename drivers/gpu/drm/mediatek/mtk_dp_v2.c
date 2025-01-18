@@ -2874,7 +2874,7 @@ u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode)
 	hactive = ((mode->hdisplay * DP_DSC_BPP + (12 * 8 - 1)) / (12 * 8)) * 4;
 	htotal = hblank + hactive;
 	mode_htotal =  mode->htotal;
-	pixel_clock = (mode->clock * htotal) / mode_htotal;
+	pixel_clock = div_u64(mode->clock * htotal, mode_htotal);
 
 	return pixel_clock;
 }
