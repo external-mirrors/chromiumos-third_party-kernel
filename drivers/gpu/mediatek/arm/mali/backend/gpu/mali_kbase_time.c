@@ -178,7 +178,7 @@ KBASE_EXPORT_TEST_API(kbase_backend_get_gpu_time_norequest);
  */
 static bool timedwait_cycle_count_active(struct kbase_device *kbdev)
 {
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	return true;
 #else
 	bool success = false;
@@ -240,7 +240,7 @@ void kbase_device_set_timeout_ms(struct kbase_device *kbdev, enum kbase_timeout_
 	selector_str = timeout_info[selector].selector_str;
 
 #if MALI_USE_CSF
-	if (IS_ENABLED(CONFIG_MALI_REAL_HW) && !IS_ENABLED(CONFIG_MALI_IS_FPGA) &&
+	if (IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) && !IS_ENABLED(CONFIG_MALI_MTK_IS_FPGA) &&
 	    unlikely(timeout_ms >= MAX_TIMEOUT_MS)) {
 		dev_warn(kbdev->dev, "%s is capped from %dms to %dms\n",
 			 timeout_info[selector].selector_str, timeout_ms, MAX_TIMEOUT_MS);

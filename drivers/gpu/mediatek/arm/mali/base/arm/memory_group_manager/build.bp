@@ -29,8 +29,8 @@ bob_kernel_module {
         "memory_group_manager.c",
     ],
     enabled: false,
-    mali_memory_group_manager: {
-        kbuild_options: ["CONFIG_MALI_MEMORY_GROUP_MANAGER=y"],
+    mali_mtk_memory_group_manager: {
+        kbuild_options: ["CONFIG_MALI_MTK_MEMORY_GROUP_MANAGER=y"],
         enabled: true,
     },
 }

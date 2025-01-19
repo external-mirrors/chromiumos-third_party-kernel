@@ -306,7 +306,7 @@ int kbase_csf_firmware_load_init(struct kbase_device *kbdev);
  */
 void kbase_csf_firmware_unload_term(struct kbase_device *kbdev);
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 /**
  * kbase_csf_firmware_mcu_register_write - Write to MCU register
  *
@@ -348,7 +348,7 @@ int kbase_csf_firmware_mcu_register_read(struct kbase_device *const kbdev, u32 c
  */
 int kbase_csf_firmware_mcu_register_poll(struct kbase_device *const kbdev, u32 const reg_addr,
 					 u32 const val_mask, u32 const reg_val);
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 /**
  * kbase_csf_firmware_ping - Send the ping request to firmware.
@@ -418,11 +418,11 @@ int kbase_csf_wait_protected_mode_enter(struct kbase_device *kbdev);
 
 static inline bool kbase_csf_firmware_mcu_halted(struct kbase_device *kbdev)
 {
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	return true;
 #else
 	return (kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(MCU_STATUS)) == MCU_STATUS_VALUE_HALT);
-#endif /* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_MTK_NO_MALI */
 }
 
 /**
@@ -644,13 +644,13 @@ int kbase_csf_firmware_mcu_shared_mapping_init(struct kbase_device *kbdev, unsig
 void kbase_csf_firmware_mcu_shared_mapping_term(struct kbase_device *kbdev,
 						struct kbase_csf_mapping *csf_mapping);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 extern bool fw_debug;
 #endif
 
 static inline long kbase_csf_timeout_in_jiffies(const unsigned int msecs)
 {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	return (fw_debug ? MAX_SCHEDULE_TIMEOUT : (long)msecs_to_jiffies(msecs));
 #else
 	return (long)msecs_to_jiffies(msecs);

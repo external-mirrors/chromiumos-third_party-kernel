@@ -47,7 +47,7 @@
 #include <asm/arch_timer.h>
 #include <mali_kbase_config_defaults.h>
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 /* Makes Driver wait indefinitely for an acknowledgment for the different
  * requests it sends to firmware. Otherwise the timeouts interfere with the
  * use of debugger for source-level debugging of firmware as Driver initiates

@@ -32,7 +32,7 @@
 #include <hwcnt/mali_kbase_hwcnt_context.h>
 #include <mali_kbase_reset_gpu.h>
 #include <mali_kbase_kinstr_jm.h>
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 #include <mali_kbase_gpu_metrics.h>
 #endif
 #include <backend/gpu/mali_kbase_cache_policy_backend.h>
@@ -287,12 +287,12 @@ int kbase_backend_slot_free(struct kbase_device *kbdev, unsigned int js)
 static inline void trace_atom_completion_for_gpu_metrics(struct kbase_jd_atom *const katom,
 							 ktime_t *end_timestamp)
 {
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	u64 complete_ns;
 	struct kbase_context *kctx = katom->kctx;
 	struct kbase_jd_atom *queued = kbase_gpu_inspect(kctx->kbdev, katom->slot_nr, 1);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	WARN_ON(!kbase_gpu_inspect(kctx->kbdev, katom->slot_nr, 0));
 #endif
 
@@ -877,7 +877,7 @@ void kbase_backend_slot_update(struct kbase_device *kbdev)
 
 		for (idx = 0; idx < SLOT_RB_SIZE; idx++) {
 			bool cores_ready;
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 			bool trace_atom_submit_for_gpu_metrics = true;
 #endif
 			int ret;
@@ -983,7 +983,7 @@ void kbase_backend_slot_update(struct kbase_device *kbdev)
 					enum kbase_atom_gpu_rb_state atom_0_gpu_rb_state =
 						katom[0]->gpu_rb_state;
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 					trace_atom_submit_for_gpu_metrics =
 						(atom_0_gpu_rb_state ==
 						 KBASE_ATOM_GPU_RB_NOT_IN_SLOT_RB);
@@ -1029,7 +1029,7 @@ void kbase_backend_slot_update(struct kbase_device *kbdev)
 
 					/* Inform platform at start/finish of atom */
 					kbasep_platform_event_atom_submit(katom[idx]);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 					if (likely(trace_atom_submit_for_gpu_metrics &&
 						   !kbase_jd_katom_is_protected(katom[idx])))
 						kbase_gpu_metrics_ctx_start_activity(

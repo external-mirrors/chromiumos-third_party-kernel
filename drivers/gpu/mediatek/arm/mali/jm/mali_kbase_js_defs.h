@@ -319,9 +319,9 @@ struct kbasep_js_device_data {
 
 	struct list_head suspended_soft_jobs_list;
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	bool softstop_always;
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 	int init_status;
 	u32 nr_contexts_pullable;
 	atomic_t nr_contexts_runnable;
@@ -339,7 +339,7 @@ struct kbasep_js_device_data {
 	 */
 	struct mutex runpool_mutex;
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	/**
 	 * @gpu_metrics_timer: High-resolution timer used to periodically emit the GPU metrics
 	 *                     tracepoints for applications that are using the GPU. The timer is

@@ -227,7 +227,7 @@ static inline phys_addr_t allocate_pgd_sub_page(struct kbase_page_metadata *page
 	sub_page_index = find_first_zero_bit(page_md->data.pt_mapped.allocated_sub_pages,
 					     GPU_PAGES_PER_CPU_PAGE);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	if (WARN_ON_ONCE(sub_page_index >= GPU_PAGES_PER_CPU_PAGE))
 		return KBASE_INVALID_PHYSICAL_ADDRESS;
 	if (WARN_ON_ONCE(page_md->data.pt_mapped.num_allocated_sub_pages > GPU_PAGES_PER_CPU_PAGE))
@@ -252,7 +252,7 @@ static int free_pgd_sub_page(phys_addr_t pgd)
 	struct kbase_page_metadata *page_md = kbase_page_private(p);
 	const u32 sub_page_index = get_pgd_sub_page_index(pgd);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	if (WARN_ON_ONCE(!test_bit(sub_page_index, page_md->data.pt_mapped.allocated_sub_pages)))
 		return page_md->data.pt_mapped.num_allocated_sub_pages;
 #endif
@@ -844,7 +844,7 @@ static size_t reg_grow_calc_extra_pages(struct kbase_device *kbdev, struct kbase
 	return minimum_extra + multiple - remainder;
 }
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 static void kbase_gpu_mmu_handle_write_faulting_as(struct kbase_device *kbdev,
 						   struct kbase_as *faulting_as, u64 start_pfn,
 						   size_t nr, u32 kctx_id, u64 dirty_pgds)
@@ -1323,7 +1323,7 @@ void kbase_mmu_page_fault_worker(struct work_struct *data)
 	case AS_FAULTSTATUS_EXCEPTION_TYPE_PERMISSION_FAULT_2:
 		fallthrough;
 	case AS_FAULTSTATUS_EXCEPTION_TYPE_PERMISSION_FAULT_3:
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 		/* If GWT was ever enabled then we need to handle
 		 * write fault pages even if the feature was disabled later.
 		 */
@@ -1667,7 +1667,7 @@ page_fault_retry:
 		/* reenable this in the mask */
 		kbase_mmu_hw_enable_fault(kbdev, faulting_as, KBASE_MMU_FAULT_TYPE_PAGE);
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 		if (kctx->gwt_enabled) {
 			/* GWT also tracks growable regions. */
 			struct kbasep_gwt_list_element *pos;
@@ -2596,7 +2596,7 @@ static void kbase_mmu_progress_migration_on_insert(struct tagged_addr phys,
 	struct page *phys_page = as_page(phys);
 	struct kbase_page_metadata *page_md = kbase_page_private(phys_page);
 
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		return;
 
 	spin_lock(&page_md->migrate_lock);
@@ -2633,7 +2633,7 @@ static void kbase_mmu_progress_migration_on_teardown(struct kbase_device *kbdev,
 {
 	size_t i;
 
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		return;
 
 	for (i = 0; i < requested_nr; i++) {
@@ -3620,7 +3620,7 @@ static int kbase_mmu_update_pages_no_flush(struct kbase_device *kbdev, struct kb
 			unsigned int level_index = (vpfn >> 9) & 0x1FFU;
 			struct tagged_addr *target_phys = phys - index_in_large_page(*phys);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 			WARN_ON_ONCE(!kbdev->mmu_mode->ate_is_valid(pgd_page[level_index],
 								    MIDGARD_MMU_LEVEL(2)));
 #endif
@@ -3638,7 +3638,7 @@ static int kbase_mmu_update_pages_no_flush(struct kbase_device *kbdev, struct kb
 				for (j = 0; j < GPU_PAGES_PER_CPU_PAGE; j++) {
 					phys_addr_t page_address =
 						base_phys_address + (j * GPU_PAGE_SIZE);
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 					WARN_ON_ONCE(!kbdev->mmu_mode->ate_is_valid(
 						pgd_page[index + i + j], MIDGARD_MMU_BOTTOMLEVEL));
 #endif
@@ -3786,7 +3786,7 @@ static void mmu_undo_migrate_pgd_sub_page(struct kbase_mmu_table *mmut, phys_add
 	parent_pgd_page = kmap_atomic_pgd(phys_to_page(parent_pgd), parent_pgd);
 	num_of_valid_entries = kbdev->mmu_mode->get_num_valid_entries(parent_pgd_page);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	/* The PTE should be pointing to the new sub page */
 	if (new_pgd_phys !=
 	    kbdev->mmu_mode->pte_to_phy_addr(kbdev->mgm_dev->ops.mgm_pte_to_original_pte(
@@ -3974,7 +3974,7 @@ static int mmu_migrate_pgd_sub_page(phys_addr_t old_pgd_phys, phys_addr_t new_pg
 	 */
 	num_of_valid_entries = kbdev->mmu_mode->get_num_valid_entries(parent_pgd_page);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	/* The PTE should be pointing to the page being migrated */
 	WARN_ON_ONCE(
 		old_pgd_phys !=
@@ -4053,7 +4053,7 @@ int kbase_mmu_migrate_pgd_page(struct tagged_addr old_pgd_phys, struct tagged_ad
 	int check_state, ret = 0;
 
 	/* If page migration support is not compiled in, return with fault */
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		return -EINVAL;
 	/* Due to the hard binding of mmu_command_instr with kctx_id via kbase_mmu_hw_op_param,
 	 * here we skip the no kctx case, which is only used with MCU's mmut.
@@ -4191,7 +4191,7 @@ int kbase_mmu_migrate_data_page(struct tagged_addr old_phys, struct tagged_addr 
 	unsigned int i;
 
 	/* If page migration support is not compiled in, return with fault */
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		return -EINVAL;
 	/* Due to the hard binding of mmu_command_instr with kctx_id via kbase_mmu_hw_op_param,
 	 * here we skip the no kctx case, which is only used with MCU's mmut.
@@ -4630,7 +4630,7 @@ void kbase_mmu_flush_pa_range(struct kbase_device *kbdev, struct kbase_context *
 #endif
 }
 
-#ifdef CONFIG_MALI_VECTOR_DUMP
+#ifdef CONFIG_MALI_MTK_VECTOR_DUMP
 static size_t kbasep_mmu_dump_level(struct kbase_context *kctx, phys_addr_t pgd, int level,
 				    char **const buffer, size_t *size_left)
 {
@@ -4769,7 +4769,7 @@ fail_free:
 	return NULL;
 }
 KBASE_EXPORT_TEST_API(kbase_mmu_dump);
-#endif /* CONFIG_MALI_VECTOR_DUMP */
+#endif /* CONFIG_MALI_MTK_VECTOR_DUMP */
 
 void kbase_mmu_bus_fault_worker(struct work_struct *data)
 {

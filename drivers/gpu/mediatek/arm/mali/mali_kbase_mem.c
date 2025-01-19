@@ -91,13 +91,13 @@ static DEFINE_STATIC_KEY_FALSE(large_pages_static_key);
 enum kbase_large_page_state { LARGE_PAGE_AUTO, LARGE_PAGE_ON, LARGE_PAGE_OFF, LARGE_PAGE_MAX };
 
 static enum kbase_large_page_state large_page_conf =
-	IS_ENABLED(CONFIG_LARGE_PAGE_SUPPORT) ? LARGE_PAGE_AUTO : LARGE_PAGE_OFF;
+	IS_ENABLED(CONFIG_MALI_MTK_LARGE_PAGE_SUPPORT) ? LARGE_PAGE_AUTO : LARGE_PAGE_OFF;
 
 static int set_large_page_conf(const char *val, const struct kernel_param *kp)
 {
 	char *user_input = strstrip((char *)val);
 
-	if (!IS_ENABLED(CONFIG_LARGE_PAGE_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_LARGE_PAGE_SUPPORT))
 		return 0;
 
 	if (!strcmp(user_input, "auto"))
@@ -149,7 +149,7 @@ MODULE_PARM_DESC(large_page_conf, "User override for large page usage on support
  */
 static void kbasep_mem_page_size_init(struct kbase_device *kbdev)
 {
-	if (!IS_ENABLED(CONFIG_LARGE_PAGE_SUPPORT)) {
+	if (!IS_ENABLED(CONFIG_MALI_MTK_LARGE_PAGE_SUPPORT)) {
 		dev_info(kbdev->dev, "Large page support was disabled at compile-time!");
 		return;
 	}
@@ -350,7 +350,7 @@ int kbase_gpu_mmap(struct kbase_context *kctx, struct kbase_va_region *reg, u64 
 	int group_id;
 	struct kbase_mem_phy_alloc *alloc;
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 	if (kctx->gwt_enabled)
 		gwt_mask = ~KBASE_REG_GPU_WR;
 #endif
@@ -1927,7 +1927,7 @@ void kbase_mem_kref_free(struct kref *kref)
 		/* raw pages, external cleanup */
 		break;
 	case KBASE_MEM_TYPE_IMPORTED_UMM:
-		if (!IS_ENABLED(CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND)) {
+		if (!IS_ENABLED(CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND)) {
 			WARN_ONCE(alloc->imported.umm.current_mapping_usage_count != 1,
 				  "WARNING: expected exactly 1 mapping, got %d",
 				  alloc->imported.umm.current_mapping_usage_count);
@@ -3875,7 +3875,7 @@ static int kbase_user_buf_map(struct kbase_context *kctx, struct kbase_va_region
 	for (i = 0; i < pinned_pages; i++)
 		pa[i] = as_tagged(page_to_phys(pages[i]));
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 	if (kctx->gwt_enabled)
 		gwt_mask = ~KBASE_REG_GPU_WR;
 #endif

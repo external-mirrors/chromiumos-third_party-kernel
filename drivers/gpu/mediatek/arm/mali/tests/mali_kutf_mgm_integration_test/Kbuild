@@ -18,7 +18,7 @@
 #
 #
 
-ifeq ($(CONFIG_MALI_KUTF_MGM_INTEGRATION_TEST),y)
+ifeq ($(CONFIG_MALI_MTK_KUTF_MGM_INTEGRATION_TEST),y)
 obj-m += mali_kutf_mgm_integration_test.o
 
 mali_kutf_mgm_integration_test-y := mali_kutf_mgm_integration_test_main.o

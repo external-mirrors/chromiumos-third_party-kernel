@@ -38,7 +38,7 @@
 #include <backend/gpu/mali_kbase_pm_defs.h>
 #include <mali_linux_trace.h>
 
-#if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS) || !MALI_USE_CSF
+#if defined(CONFIG_MALI_MTK_DEVFREQ) || defined(CONFIG_MALI_MTK_DVFS) || !MALI_USE_CSF
 /* Shift used for kbasep_pm_metrics_data.time_busy/idle - units of (1 << 8) ns
  * This gives a maximum period between samples of 2^(32+8)/100 ns = slightly
  * under 11s. Exceeding this will cause overflow
@@ -77,7 +77,7 @@
  */
 enum dvfs_metric_timer_state { TIMER_OFF, TIMER_STOPPED, TIMER_ON };
 
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 static enum hrtimer_restart dvfs_callback(struct hrtimer *timer)
 {
 	struct kbasep_pm_metrics_state *metrics;
@@ -97,7 +97,7 @@ static enum hrtimer_restart dvfs_callback(struct hrtimer *timer)
 	hrtimer_forward_now(timer, HR_TIMER_DELAY_MSEC(metrics->kbdev->pm.dvfs_period));
 	return HRTIMER_RESTART;
 }
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 
 int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 {
@@ -136,13 +136,13 @@ int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 #endif
 	spin_lock_init(&kbdev->pm.backend.metrics.lock);
 
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 	hrtimer_init(&kbdev->pm.backend.metrics.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	kbdev->pm.backend.metrics.timer.function = dvfs_callback;
 	kbdev->pm.backend.metrics.initialized = true;
 	atomic_set(&kbdev->pm.backend.metrics.timer_state, TIMER_OFF);
 	kbase_pm_metrics_start(kbdev);
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 
 #if MALI_USE_CSF
 	/* The sanity check on the GPU_ACTIVE performance counter
@@ -158,14 +158,14 @@ KBASE_EXPORT_TEST_API(kbasep_pm_metrics_init);
 
 void kbasep_pm_metrics_term(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
 	/* Cancel the timer, and block if the callback is currently executing (transition f) */
 	kbdev->pm.backend.metrics.initialized = false;
 	atomic_set(&kbdev->pm.backend.metrics.timer_state, TIMER_OFF);
 	hrtimer_cancel(&kbdev->pm.backend.metrics.timer);
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 
 #if MALI_USE_CSF
 	kbase_ipa_control_unregister(kbdev, kbdev->pm.backend.metrics.ipa_control_client);
@@ -180,7 +180,7 @@ KBASE_EXPORT_TEST_API(kbasep_pm_metrics_term);
  * function
  */
 #if MALI_USE_CSF
-#if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
+#if defined(CONFIG_MALI_MTK_DEVFREQ) || defined(CONFIG_MALI_MTK_DVFS)
 static void kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev)
 {
 	int err;
@@ -220,7 +220,7 @@ static void kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev)
 
 		diff_ns = (u64)diff_ns_signed;
 
-#if !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 		/* The GPU_ACTIVE counter shouldn't clock-up more time than has
 		 * actually elapsed - but still some margin needs to be given
 		 * when doing the comparison. There could be some drift between
@@ -283,7 +283,7 @@ static void kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev)
 
 	kbdev->pm.backend.metrics.time_period_start = now;
 }
-#endif /* defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS) */
+#endif /* defined(CONFIG_MALI_MTK_DEVFREQ) || defined(CONFIG_MALI_MTK_DVFS) */
 #else
 static void kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev, ktime_t now)
 {
@@ -318,7 +318,7 @@ static void kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev, ktime
 }
 #endif /* MALI_USE_CSF */
 
-#if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
+#if defined(CONFIG_MALI_MTK_DEVFREQ) || defined(CONFIG_MALI_MTK_DVFS)
 void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev, struct kbasep_pm_metrics *last,
 			       struct kbasep_pm_metrics *diff)
 {
@@ -351,7 +351,7 @@ void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev, struct kbasep_pm_metr
 KBASE_EXPORT_TEST_API(kbase_pm_get_dvfs_metrics);
 #endif
 
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 void kbase_pm_get_dvfs_action(struct kbase_device *kbdev)
 {
 	int utilisation;
@@ -420,7 +420,7 @@ void kbase_pm_metrics_stop(struct kbase_device *kbdev)
 	atomic_cmpxchg(&kbdev->pm.backend.metrics.timer_state, TIMER_ON, TIMER_STOPPED);
 }
 
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 
 #if !MALI_USE_CSF
 /**

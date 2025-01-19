@@ -25,7 +25,7 @@ mali_kbase-y += \
     tl/mali_kbase_tracepoints.o
 
 
-ifeq ($(CONFIG_MALI_CSF_SUPPORT),y)
+ifeq ($(CONFIG_MALI_MTK_CSF_SUPPORT),y)
     mali_kbase-y += tl/backend/mali_kbase_timeline_csf.o
 else
     mali_kbase-y += tl/backend/mali_kbase_timeline_jm.o

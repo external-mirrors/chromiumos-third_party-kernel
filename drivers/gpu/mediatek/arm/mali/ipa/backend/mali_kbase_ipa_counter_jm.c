@@ -92,7 +92,7 @@ static u32 kbase_g7x_power_model_get_memsys_counter(struct kbase_ipa_model_vinst
 static u32 kbase_g7x_power_model_get_sc_counter(struct kbase_ipa_model_vinstr_data *model_data,
 						u32 counter_block_offset)
 {
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	const u32 sc_base =
 		MEMSYS_BASE + (KBASE_DUMMY_MODEL_MAX_MEMSYS_BLOCKS * KBASE_IPA_NR_BYTES_PER_BLOCK);
 #else

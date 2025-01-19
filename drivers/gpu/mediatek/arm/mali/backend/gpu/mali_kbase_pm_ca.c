@@ -31,7 +31,7 @@
 
 int kbase_pm_ca_init(struct kbase_device *kbdev)
 {
-#ifdef CONFIG_MALI_DEVFREQ
+#ifdef CONFIG_MALI_MTK_DEVFREQ
 	struct kbase_pm_backend_data *pm_backend = &kbdev->pm.backend;
 
 	if (kbdev->current_core_mask)
@@ -48,7 +48,7 @@ void kbase_pm_ca_term(struct kbase_device *kbdev)
 	CSTD_UNUSED(kbdev);
 }
 
-#ifdef CONFIG_MALI_DEVFREQ
+#ifdef CONFIG_MALI_MTK_DEVFREQ
 void kbase_devfreq_set_core_mask(struct kbase_device *kbdev, u64 core_mask)
 {
 	struct kbase_pm_backend_data *pm_backend = &kbdev->pm.backend;
@@ -57,7 +57,7 @@ void kbase_devfreq_set_core_mask(struct kbase_device *kbdev, u64 core_mask)
 	u64 old_core_mask = 0;
 	bool mmu_sync_needed = false;
 
-	if (!IS_ENABLED(CONFIG_MALI_NO_MALI) &&
+	if (!IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) &&
 	    kbase_hw_has_issue(kbdev, KBASE_HW_ISSUE_GPU2019_3901)) {
 		mmu_sync_needed = true;
 		down_write(&kbdev->csf.mmu_sync_sem);
@@ -139,7 +139,7 @@ u64 kbase_pm_ca_get_core_mask(struct kbase_device *kbdev)
 
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 
-#ifdef CONFIG_MALI_DEVFREQ
+#ifdef CONFIG_MALI_MTK_DEVFREQ
 	/*
 	 * Although in the init we let the pm_backend->ca_cores_enabled to be
 	 * the max config (it uses the base_gpu_props), at this function we need
@@ -159,7 +159,7 @@ u64 kbase_pm_ca_get_instr_core_mask(struct kbase_device *kbdev)
 {
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	return (((1ull) << KBASE_DUMMY_MODEL_MAX_SHADER_CORES) - 1);
 #elif MALI_USE_CSF
 	return kbase_pm_get_ready_cores(kbdev, KBASE_PM_CORE_SHADER);

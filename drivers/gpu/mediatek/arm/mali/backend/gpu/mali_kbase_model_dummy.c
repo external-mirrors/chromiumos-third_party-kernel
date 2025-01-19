@@ -21,7 +21,7 @@
 
 /* NOTES:
  * - A default GPU can be compiled in during the build, by defining
- *   CONFIG_MALI_NO_MALI_DEFAULT_GPU. SCons sets this, which means that
+ *   CONFIG_MALI_MTK_NO_MALI_DEFAULT_GPU. SCons sets this, which means that
  *   insmod'ing mali_kbase.ko with no arguments after a build with "scons
  *   gpu=tXYZ" will yield the expected GPU ID for tXYZ. This can always be
  *   overridden by passing the 'no_mali_gpu' argument to insmod.
@@ -482,7 +482,7 @@ void *gpu_device_get_data(void *model)
 
 #define signal_int(m, s) m->slots[(s)].job_complete_irq_asserted = 1u
 
-static char *no_mali_gpu = CONFIG_MALI_NO_MALI_DEFAULT_GPU;
+static char *no_mali_gpu = CONFIG_MALI_MTK_NO_MALI_DEFAULT_GPU;
 module_param(no_mali_gpu, charp, 0000);
 MODULE_PARM_DESC(no_mali_gpu, "GPU to identify as");
 

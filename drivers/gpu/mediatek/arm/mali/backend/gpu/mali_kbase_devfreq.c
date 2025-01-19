@@ -367,7 +367,7 @@ static void kbasep_devfreq_read_suspend_clock(struct kbase_device *kbdev, struct
 	 * for clk driver. If 'opp-hz-real' does not exist,
 	 * read from 'opp-hz'.
 	 */
-	if (IS_ENABLED(CONFIG_MALI_DEVFREQ))
+	if (IS_ENABLED(CONFIG_MALI_MTK_DEVFREQ))
 		err = of_property_read_u64(node, "opp-hz", &freq);
 	else {
 		if (of_property_read_u64(node, "opp-hz-real", &freq))

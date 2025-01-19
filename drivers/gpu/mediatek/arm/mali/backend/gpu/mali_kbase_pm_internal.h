@@ -599,12 +599,12 @@ void kbase_pm_do_poweron(struct kbase_device *kbdev, bool is_resume);
  */
 void kbase_pm_do_poweroff(struct kbase_device *kbdev);
 
-#if defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS)
+#if defined(CONFIG_MALI_MTK_DEVFREQ) || defined(CONFIG_MALI_MTK_DVFS)
 void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev, struct kbasep_pm_metrics *last,
 			       struct kbasep_pm_metrics *diff);
-#endif /* defined(CONFIG_MALI_DEVFREQ) || defined(CONFIG_MALI_MIDGARD_DVFS) */
+#endif /* defined(CONFIG_MALI_MTK_DEVFREQ) || defined(CONFIG_MALI_MTK_DVFS) */
 
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 
 #if MALI_USE_CSF
 /**
@@ -639,7 +639,7 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation, u32 u
 			      u32 util_cl_share[2]);
 #endif
 
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 
 void kbase_pm_power_changed(struct kbase_device *kbdev);
 
@@ -672,7 +672,7 @@ void kbase_pm_cache_snoop_enable(struct kbase_device *kbdev);
  */
 void kbase_pm_cache_snoop_disable(struct kbase_device *kbdev);
 
-#ifdef CONFIG_MALI_DEVFREQ
+#ifdef CONFIG_MALI_MTK_DEVFREQ
 /**
  * kbase_devfreq_set_core_mask - Set devfreq core mask
  * @kbdev:     Device pointer

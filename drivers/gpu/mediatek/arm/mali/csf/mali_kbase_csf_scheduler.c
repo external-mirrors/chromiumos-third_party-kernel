@@ -37,10 +37,10 @@
 #include "mali_kbase_csf_mcu_shared_reg.h"
 #include <linux/version_compat_defs.h>
 #include <hwcnt/mali_kbase_hwcnt_context.h>
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 #include <mali_kbase_gpu_metrics.h>
 #include <csf/mali_kbase_csf_trace_buffer.h>
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 
 
 
@@ -100,7 +100,7 @@ bool is_gpu_level_suspend_supported(struct kbase_device *const kbdev)
 	return false;
 }
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 /**
  * gpu_metrics_ctx_init() - Take a reference on GPU metrics context if it exists,
  *                          otherwise allocate and initialise one.
@@ -336,11 +336,11 @@ static void emit_gpu_metrics_to_frontend(struct kbase_device *kbdev)
 	struct kbase_csf_scheduler *scheduler = &kbdev->csf.scheduler;
 	u64 ts;
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	WARN_ON_ONCE(!in_serving_softirq());
 #endif
 
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	return;
 #endif
 
@@ -368,7 +368,7 @@ static void emit_gpu_metrics_to_frontend_for_off_slot_group(struct kbase_queue_g
 	lockdep_assert_held(&scheduler->lock);
 	lockdep_assert_held(&scheduler->gpu_metrics_lock);
 
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	return;
 #endif
 
@@ -404,7 +404,7 @@ static enum hrtimer_restart gpu_metrics_timer_callback(struct hrtimer *timer)
 		      HRTIMER_MODE_REL_SOFT);
 	return HRTIMER_NORESTART;
 }
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 
 /**
  * wait_for_dump_complete_on_group_deschedule() - Wait for dump on fault and
@@ -608,7 +608,7 @@ static int force_scheduler_to_exit_sleep(struct kbase_device *kbdev)
 	}
 
 	scheduler->state = SCHED_SUSPENDED;
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	hrtimer_cancel(&scheduler->gpu_metrics_timer);
 #endif
 	KBASE_KTRACE_ADD(kbdev, SCHED_SUSPENDED, NULL, scheduler->state);
@@ -1182,7 +1182,7 @@ static void scheduler_wakeup(struct kbase_device *kbdev, bool kick)
 		dev_dbg(kbdev->dev, "Re-activating the Scheduler after suspend");
 		ret = scheduler_pm_active_handle_suspend(
 			kbdev, KBASE_PM_SUSPEND_HANDLER_DONT_REACTIVATE, false);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 		if (!ret) {
 			hrtimer_start(&scheduler->gpu_metrics_timer,
 				      HR_TIMER_DELAY_NSEC(kbase_gpu_metrics_get_tp_emit_interval()),
@@ -1228,7 +1228,7 @@ static int scheduler_suspend(struct kbase_device *kbdev)
 		dev_dbg(kbdev->dev, "Suspending the Scheduler");
 		scheduler_pm_idle(kbdev);
 		scheduler->state = SCHED_SUSPENDED;
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 		hrtimer_cancel(&scheduler->gpu_metrics_timer);
 #endif
 		KBASE_KTRACE_ADD(kbdev, SCHED_SUSPENDED, NULL, scheduler->state);
@@ -1704,7 +1704,7 @@ int kbase_csf_scheduler_queue_stop(struct kbase_queue *queue)
 
 static void update_hw_active(struct kbase_queue *queue, bool active)
 {
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	if (queue && queue->enabled) {
 		u64 *output_addr = queue->user_io_addr + PAGE_SIZE / sizeof(u64);
 
@@ -2720,10 +2720,10 @@ static void save_csg_slot(struct kbase_queue_group *group)
 						  CSG_STATUS_STATE) &
 		       CSG_STATUS_STATE_IDLE_MASK;
 
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 		for (i = 0; i < max_streams; i++)
 			update_hw_active(group->bound_queues[i], false);
-#endif /* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_MTK_NO_MALI */
 		for (i = 0; idle && i < max_streams; i++) {
 			struct kbase_queue *const queue = group->bound_queues[i];
 
@@ -2828,7 +2828,7 @@ static bool cleanup_csg_slot(struct kbase_queue_group *group)
 		as_fault = true;
 	spin_unlock_irqrestore(&kctx->kbdev->hwaccess_lock, flags);
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	spin_lock_bh(&kbdev->csf.scheduler.gpu_metrics_lock);
 	emit_gpu_metrics_to_frontend_for_off_slot_group(group);
 #endif
@@ -2854,7 +2854,7 @@ static bool cleanup_csg_slot(struct kbase_queue_group *group)
 	set_bit(slot, kbdev->csf.scheduler.csgs_events_enable_mask);
 	clear_bit(slot, kbdev->csf.scheduler.csg_inuse_bitmap);
 	spin_unlock_irqrestore(&kbdev->csf.scheduler.interrupt_lock, flags);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	spin_unlock_bh(&kbdev->csf.scheduler.gpu_metrics_lock);
 #endif
 
@@ -2991,7 +2991,7 @@ static void program_csg_slot(struct kbase_queue_group *group, s8 slot, u8 prio)
 		return;
 	}
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	spin_lock_bh(&kbdev->csf.scheduler.gpu_metrics_lock);
 #endif
 	spin_lock_irqsave(&kbdev->csf.scheduler.interrupt_lock, flags);
@@ -2999,7 +2999,7 @@ static void program_csg_slot(struct kbase_queue_group *group, s8 slot, u8 prio)
 	kbdev->csf.scheduler.csg_slots[slot].resident_group = group;
 	group->csg_nr = slot;
 	spin_unlock_irqrestore(&kbdev->csf.scheduler.interrupt_lock, flags);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	spin_unlock_bh(&kbdev->csf.scheduler.gpu_metrics_lock);
 #endif
 
@@ -3198,7 +3198,7 @@ static int term_group_sync(struct kbase_queue_group *group)
 		 */
 		group_term_timeout_ms += kbdev->csf.csg_suspend_timeout_ms;
 
-		if (IS_ENABLED(CONFIG_MALI_REAL_HW) && !IS_ENABLED(CONFIG_MALI_IS_FPGA) &&
+		if (IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) && !IS_ENABLED(CONFIG_MALI_MTK_IS_FPGA) &&
 		    unlikely(group_term_timeout_ms >= MAX_TIMEOUT_MS))
 			group_term_timeout_ms = MAX_TIMEOUT_MS;
 	}
@@ -4260,14 +4260,14 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 				KBASE_KTRACE_ADD_CSF_GRP(kbdev, SCHEDULER_PROTM_ENTER, input_grp,
 							 0u);
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 				spin_unlock_irqrestore(&scheduler->interrupt_lock, flags);
 
 				/* Coresight must be disabled before entering protected mode. */
 				kbase_debug_coresight_csf_disable_pmode_enter(kbdev);
 
 				spin_lock_irqsave(&scheduler->interrupt_lock, flags);
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 				if (kbase_csf_enter_protected_mode(kbdev)) {
 					dev_err(kbdev->dev, "Failed to enter protected mode");
@@ -4651,7 +4651,7 @@ static void scheduler_update_idle_slots_status(struct kbase_device *kbdev,
 		idle_flag = test_bit(i, scheduler->csg_slots_idle_mask);
 		if (idle_flag || group->reevaluate_idle_status) {
 			if (idle_flag) {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 				struct kbase_csf_cmd_stream_group_info *const ginfo =
 					&kbdev->csf.global_iface.groups[i];
 				if (!bitmap_empty(group->protm_pending_bitmap, ginfo->stream_num)) {
@@ -5958,7 +5958,7 @@ static void scheduler_inner_reset(struct kbase_device *kbdev)
 
 #ifdef KBASE_PM_RUNTIME
 	if (scheduler->state == SCHED_SLEEPING) {
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 		hrtimer_cancel(&scheduler->gpu_metrics_timer);
 #endif
 		scheduler->state = SCHED_SUSPENDED;
@@ -6046,7 +6046,7 @@ static void firmware_aliveness_monitor(struct work_struct *work)
 
 	mutex_lock(&kbdev->csf.scheduler.lock);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	if (fw_debug) {
 		/* ping requests cause distraction in firmware debugging */
 		goto exit;
@@ -6651,11 +6651,11 @@ int kbase_csf_scheduler_context_init(struct kbase_context *kctx)
 
 	WARN_ON_ONCE(!kbdev->csf.scheduler.kthread_running);
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	err = gpu_metrics_ctx_init(kctx);
 	if (err)
 		return err;
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 
 	for (priority = 0; priority < KBASE_QUEUE_GROUP_PRIORITY_COUNT; ++priority) {
 		INIT_LIST_HEAD(&kctx->csf.sched.runnable_groups[priority]);
@@ -6678,9 +6678,9 @@ int kbase_csf_scheduler_context_init(struct kbase_context *kctx)
 
 event_wait_add_failed:
 	kbase_ctx_sched_remove_ctx(kctx);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	gpu_metrics_ctx_term(kctx);
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 	return err;
 }
 
@@ -6693,9 +6693,9 @@ void kbase_csf_scheduler_context_term(struct kbase_context *kctx)
 							  &kctx->csf.pending_sync_update);
 
 	kbase_ctx_sched_remove_ctx(kctx);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	gpu_metrics_ctx_term(kctx);
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 }
 
 static void handle_pending_sync_update_works(struct kbase_csf_scheduler *scheduler)
@@ -6907,8 +6907,8 @@ int kbase_csf_scheduler_init(struct kbase_device *kbdev)
 		return -ENOMEM;
 	}
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
-#if !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
+#if !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	scheduler->gpu_metrics_tb =
 		kbase_csf_firmware_get_trace_buffer(kbdev, KBASE_CSFFW_GPU_METRICS_BUF_NAME);
 	if (!scheduler->gpu_metrics_tb) {
@@ -6923,12 +6923,12 @@ int kbase_csf_scheduler_init(struct kbase_device *kbdev)
 		dev_err(kbdev->dev, "Failed to get the handler of gpu_metrics from trace buffer");
 		return -ENOENT;
 	}
-#endif /* !CONFIG_MALI_NO_MALI */
+#endif /* !CONFIG_MALI_MTK_NO_MALI */
 
 	spin_lock_init(&scheduler->gpu_metrics_lock);
 	hrtimer_init(&scheduler->gpu_metrics_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_SOFT);
 	scheduler->gpu_metrics_timer.function = gpu_metrics_timer_callback;
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 
 	atomic_set(&scheduler->gpu_idle_timer_enabled, false);
 
@@ -7290,7 +7290,7 @@ int kbase_csf_scheduler_handle_runtime_suspend(struct kbase_device *kbdev)
 	}
 
 	scheduler->state = SCHED_SUSPENDED;
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	hrtimer_cancel(&scheduler->gpu_metrics_timer);
 #endif
 	KBASE_KTRACE_ADD(kbdev, SCHED_SUSPENDED, NULL, scheduler->state);

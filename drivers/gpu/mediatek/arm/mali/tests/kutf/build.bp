@@ -22,7 +22,7 @@
 bob_kernel_module {
     name: "kutf",
     defaults: [
-        "mali_kbase_shared_config_defaults",
+        "mali_mtk_kbase_shared_config_defaults",
         "kernel_test_configs",
         "kernel_test_includes",
     ],
@@ -37,7 +37,7 @@ bob_kernel_module {
         "kutf_kprobe.c",
     ],
     enabled: false,
-    mali_kutf: {
+    mali_mtk_kutf: {
         enabled: true,
     },
 }

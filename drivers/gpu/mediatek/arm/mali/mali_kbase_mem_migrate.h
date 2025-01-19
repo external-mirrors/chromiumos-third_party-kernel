@@ -53,7 +53,7 @@ struct page;
 /* Global integer used to determine if module parameter value has been
  * provided and if page migration feature is enabled.
  */
-#if !IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT)
+#if !IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT)
 extern const int kbase_page_migration_enabled;
 #else
 extern int kbase_page_migration_enabled;

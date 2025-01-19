@@ -125,7 +125,7 @@ static void pm_callback_power_off(struct kbase_device *kbdev)
 	WARN_ON(kbdev->pm.backend.gpu_powered);
 #if MALI_USE_CSF
 	if (likely(kbdev->csf.firmware_inited)) {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 		WARN_ON(kbase_csf_scheduler_get_nr_active_csgs(kbdev));
 #endif
 		WARN_ON(kbdev->pm.backend.mcu_state != KBASE_MCU_OFF);

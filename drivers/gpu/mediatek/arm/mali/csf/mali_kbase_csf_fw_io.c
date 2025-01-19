@@ -53,14 +53,14 @@ static inline u32 output_page_read(const u32 *const output, const u32 offset)
 	return output[offset / sizeof(u32)];
 }
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 static inline void output_page_write(u32 *const output, const u32 offset, const u32 value)
 {
 	WARN_ON(offset % sizeof(u32));
 
 	output[offset / sizeof(u32)] = value;
 }
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 
 void kbase_csf_fw_io_init(struct kbase_csf_fw_io *fw_io, struct kbase_device *kbdev)
@@ -312,7 +312,7 @@ bool kbase_csf_fw_io_check_status_gpu_suspended(struct kbase_csf_fw_io *fw_io)
 }
 KBASE_EXPORT_TEST_API(kbase_csf_fw_io_check_status_gpu_suspended);
 
-#if IS_ENABLED(CONFIG_MALI_DEBUG)
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)
 
 void kbase_csf_fw_io_mock_fw_global_write(struct kbase_csf_fw_io *fw_io, u32 offset, u32 value)
 {
@@ -349,4 +349,4 @@ void kbase_csf_fw_io_mock_fw_stream_write(struct kbase_csf_fw_io *fw_io, u32 gro
 }
 KBASE_EXPORT_TEST_API(kbase_csf_fw_io_mock_fw_stream_write);
 
-#endif /* IS_ENABLED(CONFIG_MALI_DEBUG) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_DEBUG) */

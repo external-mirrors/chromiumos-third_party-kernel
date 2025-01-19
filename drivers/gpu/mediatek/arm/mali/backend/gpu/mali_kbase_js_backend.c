@@ -28,7 +28,7 @@
 #include <mali_kbase_reset_gpu.h>
 #include <backend/gpu/mali_kbase_jm_internal.h>
 #include <backend/gpu/mali_kbase_js_internal.h>
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 #include <mali_kbase_gpu_metrics.h>
 #endif
 
@@ -39,12 +39,12 @@ static inline bool timer_callback_should_run(struct kbase_device *kbdev, int nr_
 {
 	lockdep_assert_held(&kbdev->js_data.runpool_mutex);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	if (kbdev->js_data.softstop_always) {
 		/* Debug support for allowing soft-stop on a single context */
 		return true;
 	}
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 	if (kbase_hw_has_issue(kbdev, KBASE_HW_ISSUE_9435)) {
 		/* Timeouts would have to be 4x longer (due to micro-
@@ -103,7 +103,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 			if (!kbase_hw_has_issue(kbdev, KBASE_HW_ISSUE_5736)) {
 				u32 ticks = atom->ticks++;
 
-#if !defined(CONFIG_MALI_JOB_DUMP) && !defined(CONFIG_MALI_VECTOR_DUMP)
+#if !defined(CONFIG_MALI_MTK_JOB_DUMP) && !defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 				u32 soft_stop_ticks, hard_stop_ticks, gpu_reset_ticks;
 				if (atom->core_req & BASE_JD_REQ_ONLY_COMPUTE) {
 					soft_stop_ticks = js_devdata->soft_stop_ticks_cl;
@@ -185,8 +185,8 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#else /* !CONFIG_MALI_JOB_DUMP */
-				/* NOTE: During CONFIG_MALI_JOB_DUMP, we use
+#else /* !CONFIG_MALI_MTK_JOB_DUMP */
+				/* NOTE: During CONFIG_MALI_MTK_JOB_DUMP, we use
 				 * the alternate timeouts, which makes the hard-
 				 * stop and GPU reset timeout much longer. We
 				 * also ensure that we don't soft-stop at all.
@@ -195,7 +195,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					/* Job has been scheduled for at least
 					 * js_devdata->soft_stop_ticks. We do
 					 * not soft-stop during
-					 * CONFIG_MALI_JOB_DUMP, however.
+					 * CONFIG_MALI_MTK_JOB_DUMP, however.
 					 */
 					dev_dbg(kbdev->dev, "Soft-stop");
 				} else if (ticks == js_devdata->hard_stop_ticks_dumping) {
@@ -220,7 +220,7 @@ static enum hrtimer_restart timer_callback(struct hrtimer *timer)
 					 */
 					reset_needed = true;
 				}
-#endif /* !CONFIG_MALI_JOB_DUMP */
+#endif /* !CONFIG_MALI_MTK_JOB_DUMP */
 			}
 		}
 	}
@@ -283,7 +283,7 @@ void kbase_backend_ctx_count_changed(struct kbase_device *kbdev)
 		KBASE_KTRACE_ADD_JM(kbdev, JS_POLICY_TIMER_START, NULL, NULL, 0u, 0u);
 	}
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	if (unlikely(suspend_timer)) {
 		js_devdata->gpu_metrics_timer_needed = false;
 		/* Cancel the timer as System suspend is happening */

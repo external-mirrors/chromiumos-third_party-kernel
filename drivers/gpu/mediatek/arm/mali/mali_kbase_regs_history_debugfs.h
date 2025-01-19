@@ -36,7 +36,7 @@
 
 struct kbase_device;
 
-#if defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 
 /**
  * kbase_io_history_init - initialize data struct for register access history
@@ -69,7 +69,7 @@ void kbase_io_history_dump(struct kbase_device *kbdev);
  */
 void kbasep_regs_history_debugfs_init(struct kbase_device *kbdev);
 
-#else /* !defined(CONFIG_DEBUG_FS) || IS_ENABLED(CONFIG_MALI_NO_MALI) */
+#else /* !defined(CONFIG_DEBUG_FS) || IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) */
 
 #define kbase_io_history_init(...) (0)
 
@@ -79,6 +79,6 @@ void kbasep_regs_history_debugfs_init(struct kbase_device *kbdev);
 
 #define kbasep_regs_history_debugfs_init CSTD_NOP
 
-#endif /* defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_NO_MALI) */
+#endif /* defined(CONFIG_DEBUG_FS) && !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) */
 
 #endif /*_KBASE_REGS_HISTORY_DEBUGFS_H*/

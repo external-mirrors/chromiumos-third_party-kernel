@@ -1169,7 +1169,7 @@ u32 kbase_regmap_backend_init(struct kbase_device *kbdev)
 	return init_array[i].arch_id;
 }
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 static char *enum_strings[] = {
 	[GPU_CONTROL__GPU_ID] = "GPU_CONTROL__GPU_ID",
 	[GPU_CONTROL__L2_FEATURES] = "GPU_CONTROL__L2_FEATURES",
@@ -1522,4 +1522,4 @@ const char *kbase_reg_get_enum_string(u32 reg_enum)
 		return "INVALID_REG";
 	return enum_strings[reg_enum];
 }
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */

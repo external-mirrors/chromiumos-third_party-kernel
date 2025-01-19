@@ -350,7 +350,7 @@ int kbase_sync_fence_out_info_get(struct kbase_jd_atom *katom, struct kbase_sync
 	return 0;
 }
 
-#ifdef CONFIG_MALI_FENCE_DEBUG
+#ifdef CONFIG_MALI_MTK_FENCE_DEBUG
 void kbase_sync_fence_in_dump(struct kbase_jd_atom *katom)
 {
 	/* Not implemented */

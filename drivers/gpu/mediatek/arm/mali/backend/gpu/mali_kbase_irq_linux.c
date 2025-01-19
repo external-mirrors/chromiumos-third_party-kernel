@@ -26,7 +26,7 @@
 
 #include <linux/interrupt.h>
 
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 static void *kbase_tag(void *ptr, u32 tag)
 {
 	return (void *)(((uintptr_t)ptr) | tag);
@@ -187,8 +187,8 @@ irq_handler_t kbase_get_interrupt_handler(struct kbase_device *kbdev, u32 irq_ta
 		return NULL;
 }
 
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
-#ifdef CONFIG_MALI_DEBUG
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
+#ifdef CONFIG_MALI_MTK_DEBUG
 int kbase_set_custom_irq_handler(struct kbase_device *kbdev, irq_handler_t custom_handler,
 				 u32 irq_tag)
 {
@@ -405,7 +405,7 @@ static int validate_interrupt(struct kbase_device *const kbdev, u32 tag)
 	return err;
 }
 
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 int kbase_validate_interrupts(struct kbase_device *const kbdev)
 {
 	int err;
@@ -437,8 +437,8 @@ out:
 
 	return err;
 }
-#endif /* CONFIG_MALI_REAL_HW */
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_REAL_HW */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 int kbase_install_interrupts(struct kbase_device *kbdev)
 {
@@ -491,4 +491,4 @@ void kbase_synchronize_irqs(struct kbase_device *kbdev)
 
 KBASE_EXPORT_TEST_API(kbase_synchronize_irqs);
 
-#endif /* IS_ENABLED(CONFIG_MALI_REAL_HW) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */

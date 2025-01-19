@@ -994,7 +994,7 @@ static int kbase_mem_flags_change_imported_umm(struct kbase_context *kctx,
 	new_flags = reg->flags & ~(KBASE_REG_SHARE_IN | KBASE_REG_SHARE_BOTH);
 	new_flags |= real_flags;
 
-	if (IS_ENABLED(CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND)) {
+	if (IS_ENABLED(CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND)) {
 		/* Future use will use the new flags, existing mapping
 		 * will NOT be updated as memory should not be in use
 		 * by the GPU when updating the flags.
@@ -1003,7 +1003,7 @@ static int kbase_mem_flags_change_imported_umm(struct kbase_context *kctx,
 		ret = 0;
 	} else if (reg->gpu_alloc->imported.umm.current_mapping_usage_count) {
 		/*
-		 * When CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND is not enabled the
+		 * When CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND is not enabled the
 		 * dma-buf GPU mapping should always be present, check that
 		 * this is the case and warn and skip the page table update if
 		 * not.
@@ -1169,7 +1169,7 @@ int kbase_sync_imported_umm(struct kbase_context *kctx, struct kbase_va_region *
 	if (reg->gpu_alloc->type != KBASE_MEM_TYPE_IMPORTED_UMM)
 		return ret;
 	/*
-	 * Attempting to sync with CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND
+	 * Attempting to sync with CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND
 	 * enabled can expose us to a Linux Kernel issue between v4.6 and
 	 * v4.19. We will not attempt to support cache syncs on dma-bufs that
 	 * are mapped on demand (i.e. not on import), even on pre-4.6, neither
@@ -1178,7 +1178,7 @@ int kbase_sync_imported_umm(struct kbase_context *kctx, struct kbase_va_region *
 	 * Instead, only support syncing when we always map dma-bufs on import,
 	 * or if the particular buffer is mapped right now.
 	 */
-	if (IS_ENABLED(CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND) &&
+	if (IS_ENABLED(CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND) &&
 	    !reg->gpu_alloc->imported.umm.current_mapping_usage_count)
 		return ret;
 
@@ -1344,7 +1344,7 @@ int kbase_mem_umm_map(struct kbase_context *kctx, struct kbase_va_region *reg)
 
 	alloc->imported.umm.current_mapping_usage_count++;
 	if (alloc->imported.umm.current_mapping_usage_count != 1) {
-		if (IS_ENABLED(CONFIG_MALI_DMA_BUF_LEGACY_COMPAT) ||
+		if (IS_ENABLED(CONFIG_MALI_MTK_DMA_BUF_LEGACY_COMPAT) ||
 		    alloc->imported.umm.need_sync) {
 			if (!kbase_is_region_invalid_or_free(reg)) {
 				err = kbase_sync_imported_umm(kctx, reg, KBASE_SYNC_TO_DEVICE);
@@ -1358,7 +1358,7 @@ int kbase_mem_umm_map(struct kbase_context *kctx, struct kbase_va_region *reg)
 	if (err)
 		goto bad_map_attachment;
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 	if (kctx->gwt_enabled)
 		gwt_mask = ~KBASE_REG_GPU_WR;
 #endif
@@ -1406,7 +1406,7 @@ void kbase_mem_umm_unmap(struct kbase_context *kctx, struct kbase_va_region *reg
 {
 	alloc->imported.umm.current_mapping_usage_count--;
 	if (alloc->imported.umm.current_mapping_usage_count) {
-		if (IS_ENABLED(CONFIG_MALI_DMA_BUF_LEGACY_COMPAT) ||
+		if (IS_ENABLED(CONFIG_MALI_MTK_DMA_BUF_LEGACY_COMPAT) ||
 		    alloc->imported.umm.need_sync) {
 			if (!kbase_is_region_invalid_or_free(reg)) {
 				int err = kbase_sync_imported_umm(kctx, reg, KBASE_SYNC_TO_CPU);
@@ -1564,7 +1564,7 @@ static struct kbase_va_region *kbase_mem_from_umm(struct kbase_context *kctx, in
 	reg->gpu_alloc->imported.umm.kctx = kctx;
 	reg->extension = 0;
 
-	if (!IS_ENABLED(CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND)) {
+	if (!IS_ENABLED(CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND)) {
 		int err;
 
 		reg->gpu_alloc->imported.umm.current_mapping_usage_count = 1;
@@ -2588,7 +2588,7 @@ out:
 	return err;
 }
 
-#ifdef CONFIG_MALI_VECTOR_DUMP
+#ifdef CONFIG_MALI_MTK_VECTOR_DUMP
 static void kbase_free_unused_jit_allocations(struct kbase_context *kctx)
 {
 	/* Free all cached/unused JIT allocations as their contents are not
@@ -2802,7 +2802,7 @@ int kbase_context_mmap(struct kbase_context *const kctx, struct vm_area_struct *
 		err = -EINVAL;
 		goto out_unlock;
 	case PFN_DOWN(BASE_MEM_MMU_DUMP_HANDLE):
-#if defined(CONFIG_MALI_VECTOR_DUMP)
+#if defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 		/* MMU dump */
 		err = kbase_mmu_dump_mmap(kctx, vma, &reg, &kaddr);
 		if (err != 0)
@@ -2814,7 +2814,7 @@ int kbase_context_mmap(struct kbase_context *const kctx, struct vm_area_struct *
 		/* Illegal handle for direct map */
 		err = -EINVAL;
 		goto out_unlock;
-#endif /* defined(CONFIG_MALI_VECTOR_DUMP) */
+#endif /* defined(CONFIG_MALI_MTK_VECTOR_DUMP) */
 #if MALI_USE_CSF
 	case PFN_DOWN(BASEP_MEM_CSF_USER_REG_PAGE_HANDLE):
 		kbase_gpu_vm_unlock_with_pmode_sync(kctx);
@@ -2894,7 +2894,7 @@ int kbase_context_mmap(struct kbase_context *const kctx, struct vm_area_struct *
 	} /* switch */
 
 	err = kbase_cpu_mmap(kctx, reg, vma, kaddr, nr_pages, aligned_offset, free_on_close);
-#if defined(CONFIG_MALI_VECTOR_DUMP)
+#if defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 	if (vma->vm_pgoff == PFN_DOWN(BASE_MEM_MMU_DUMP_HANDLE)) {
 		/* MMU dump - userspace should now have a reference on
 		 * the pages, so we can now free the kernel mapping
@@ -2913,7 +2913,7 @@ int kbase_context_mmap(struct kbase_context *const kctx, struct vm_area_struct *
 		 */
 		vma->vm_pgoff = PFN_DOWN(vma->vm_start);
 	}
-#endif /* defined(CONFIG_MALI_VECTOR_DUMP) */
+#endif /* defined(CONFIG_MALI_MTK_VECTOR_DUMP) */
 out_unlock:
 	kbase_gpu_vm_unlock_with_pmode_sync(kctx);
 out:
@@ -2975,7 +2975,7 @@ static void kbase_vmap_phy_pages_migrate_count_increment(struct tagged_addr *pag
 {
 	size_t i;
 
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		return;
 
 	for (i = 0; i < page_count; i++) {
@@ -3027,7 +3027,7 @@ static void kbase_vunmap_phy_pages_migrate_count_decrement(struct tagged_addr *p
 {
 	size_t i;
 
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		return;
 
 	for (i = 0; i < page_count; i++) {
@@ -3330,7 +3330,7 @@ static unsigned long get_queue_doorbell_pfn(struct kbase_device *kbdev, struct k
 	 * assigned one, otherwise a dummy page. Always return the
 	 * dummy page in no mali builds.
 	 */
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	return PFN_DOWN(as_phys_addr_t(kbdev->csf.dummy_db_page));
 #else
 	if (queue->doorbell_nr == KBASEP_USER_DB_NR_INVALID)
@@ -3679,7 +3679,7 @@ static vm_fault_t kbase_csf_user_reg_vm_fault(struct vm_fault *vmf)
 	 *
 	 * In no mail builds, always map in the dummy page.
 	 */
-	if (IS_ENABLED(CONFIG_MALI_NO_MALI) || !kbdev->pm.backend.gpu_powered)
+	if (IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) || !kbdev->pm.backend.gpu_powered)
 		pfn = PFN_DOWN(as_phys_addr_t(kbdev->csf.user_reg.dummy_page));
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 

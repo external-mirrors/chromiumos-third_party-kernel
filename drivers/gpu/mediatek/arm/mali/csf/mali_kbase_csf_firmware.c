@@ -68,7 +68,7 @@ MODULE_PARM_DESC(csf_firmware_boot_timeout_ms, "Maximum time to wait for firmwar
 
 static bool kbase_iter_trace_enable;
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 /* Makes Driver wait indefinitely for an acknowledgment for the different
  * requests it sends to firmware. Otherwise the timeouts interfere with the
  * use of debugger for source-level debugging of firmware as Driver initiates
@@ -1857,13 +1857,13 @@ static void global_init(struct kbase_device *const kbdev, u64 core_mask)
 	/* Unmask the interrupts */
 	kbase_csf_fw_io_global_write(fw_io, GLB_ACK_IRQ_MASK, ack_irq_mask);
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 	/* Enable FW MCU read/write debug interfaces */
 	kbase_csf_fw_io_global_write_mask(
 		fw_io, GLB_DEBUG_ACK_IRQ_MASK,
 		GLB_DEBUG_REQ_FW_AS_READ_MASK | GLB_DEBUG_REQ_FW_AS_WRITE_MASK,
 		GLB_DEBUG_REQ_FW_AS_READ_MASK | GLB_DEBUG_REQ_FW_AS_WRITE_MASK);
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 	kbase_csf_ring_doorbell(kbdev, CSF_KERNEL_DOORBELL_NR);
 
@@ -1898,7 +1898,7 @@ static int global_init_on_boot(struct kbase_device *const kbdev)
 
 	ret = wait_for_global_request(&kbdev->csf.fw_io, request_mask);
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 	if (!ret) {
 		kbase_debug_coresight_csf_state_request(kbdev, KBASE_DEBUG_CORESIGHT_CSF_ENABLED);
 
@@ -1908,7 +1908,7 @@ static int global_init_on_boot(struct kbase_device *const kbdev)
 			ret = -ETIME;
 		}
 	}
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 	return ret;
 }
@@ -2665,7 +2665,7 @@ void kbase_csf_firmware_unload_term(struct kbase_device *kbdev)
 	kbdev->as_free |= MCU_AS_BITMASK;
 }
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 int kbase_csf_firmware_mcu_register_write(struct kbase_device *const kbdev, u32 const reg_addr,
 					  u32 const reg_val)
 {
@@ -2784,7 +2784,7 @@ int kbase_csf_firmware_mcu_register_poll(struct kbase_device *const kbdev, u32 c
 
 	return -ETIMEDOUT;
 }
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 int kbase_csf_firmware_enable_gpu_idle_timer(struct kbase_device *kbdev)
 {

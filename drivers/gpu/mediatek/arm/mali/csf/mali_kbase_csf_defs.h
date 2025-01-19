@@ -37,9 +37,9 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 #include <debug/backend/mali_kbase_debug_coresight_internal_csf.h>
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 /* Maximum number of KCPU command queues to be created per GPU address space.
  */
@@ -630,7 +630,7 @@ struct kbase_queue_group {
 	void *csg_reg;
 	u8 csg_reg_bind_retries;
 	u32 sched_act_seq_num;
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	/**
 	 * @prev_act: Previous CSG activity transition in a GPU metrics.
 	 */
@@ -1197,7 +1197,7 @@ struct kbase_csf_scheduler {
 	struct completion kthread_signal;
 	bool kthread_running;
 	struct task_struct *gpuq_kthread;
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	/**
 	 *  @gpu_metrics_tb: Handler of firmware trace buffer for gpu_metrics
 	 */
@@ -1220,7 +1220,7 @@ struct kbase_csf_scheduler {
 	 *                    process context.
 	 */
 	spinlock_t gpu_metrics_lock;
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 	atomic_t gpu_idle_timer_enabled;
 	atomic_t fw_soi_enabled;
 };
@@ -1765,12 +1765,12 @@ struct kbase_csf_device {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct kbase_csf_dump_on_fault dof;
 #endif /* CONFIG_DEBUG_FS */
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 	/**
 	 * @coresight: Coresight device structure.
 	 */
 	struct kbase_debug_coresight_device coresight;
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 	struct kbase_csf_user_reg user_reg;
 	atomic_t pending_gpuq_kicks;
 	struct list_head pending_gpuq_kick_queues[KBASE_QUEUE_GROUP_PRIORITY_COUNT];

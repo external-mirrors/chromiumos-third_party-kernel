@@ -18,10 +18,10 @@
 #
 #
 
-menuconfig MALI_KUTF
+menuconfig MALI_MTK_KUTF
 	bool "Build Mali Kernel Unit Test Framework modules"
-	depends on MALI_MIDGARD && MALI_DEBUG
-	default y if MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_DEBUG
+	default y if MALI_MTK_DEBUG
 	help
 	  This option will build the Mali testing framework modules.
 
@@ -29,9 +29,9 @@ menuconfig MALI_KUTF
 	   - kutf.ko
 	   - kutf_test.ko
 
-config MALI_KUTF_IRQ_TEST
+config MALI_MTK_KUTF_IRQ_TEST
 	bool "Build Mali KUTF IRQ test module"
-	depends on MALI_KUTF
+	depends on MALI_MTK_KUTF
 	default y
 	help
 	  This option will build the IRQ latency measurement test module.
@@ -40,9 +40,9 @@ config MALI_KUTF_IRQ_TEST
 	  Modules:
 	    - mali_kutf_irq_test.ko
 
-config MALI_KUTF_CLK_RATE_TRACE
+config MALI_MTK_KUTF_CLK_RATE_TRACE
 	bool "Build Mali KUTF Clock rate trace test module"
-	depends on MALI_KUTF
+	depends on MALI_MTK_KUTF
 	default y
 	help
 	  This option will build the clock rate trace portal test module.
@@ -52,9 +52,9 @@ config MALI_KUTF_CLK_RATE_TRACE
 	  Modules:
 	    - mali_kutf_clk_rate_trace_test_portal.ko
 
-config MALI_KUTF_MGM_INTEGRATION_TEST
+config MALI_MTK_KUTF_MGM_INTEGRATION_TEST
 	bool "Build Mali KUTF MGM integration test module"
-	depends on MALI_KUTF
+	depends on MALI_MTK_KUTF
 	default y
 	help
 	  This option will build the MGM integration test module.
@@ -66,5 +66,5 @@ config MALI_KUTF_MGM_INTEGRATION_TEST
 
 
 
-comment "Enable MALI_DEBUG for KUTF modules support"
-	depends on MALI_MIDGARD && !MALI_DEBUG && MALI_KUTF
+comment "Enable MALI_MTK_DEBUG for KUTF modules support"
+	depends on MALI_MTK && !MALI_MTK_DEBUG && MALI_MTK_KUTF

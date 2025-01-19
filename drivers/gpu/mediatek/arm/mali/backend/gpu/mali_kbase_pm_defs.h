@@ -208,7 +208,7 @@ struct kbasep_pm_metrics_state {
 
 	struct kbasep_pm_metrics values;
 
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 	bool initialized;
 	struct hrtimer timer;
 	atomic_t timer_state;

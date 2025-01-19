@@ -29,8 +29,8 @@ bob_kernel_module {
         "protected_memory_allocator.c",
     ],
     enabled: false,
-    mali_protected_memory_allocator: {
-        kbuild_options: ["CONFIG_MALI_PROTECTED_MEMORY_ALLOCATOR=y"],
+    mali_mtk_protected_memory_allocator: {
+        kbuild_options: ["CONFIG_MALI_MTK_PROTECTED_MEMORY_ALLOCATOR=y"],
         enabled: true,
     },
 }

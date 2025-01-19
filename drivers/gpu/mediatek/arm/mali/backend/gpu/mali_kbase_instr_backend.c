@@ -89,7 +89,7 @@ int kbase_instr_hwcnt_enable_internal(struct kbase_device *kbdev, struct kbase_c
 
 	/* Configure */
 	prfcnt_config = (u32)kctx->as_nr << PRFCNT_CONFIG_AS_SHIFT;
-#ifdef CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
+#ifdef CONFIG_MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 	prfcnt_config |= (u32)kbdev->hwcnt.backend.override_counter_set
 			 << PRFCNT_CONFIG_SETSELECT_SHIFT;
 #else
@@ -443,11 +443,11 @@ int kbase_instr_backend_init(struct kbase_device *kbdev)
 
 	init_waitqueue_head(&kbdev->hwcnt.backend.wait);
 
-#ifdef CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
+#ifdef CONFIG_MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 /* Use the build time option for the override default. */
-#if defined(CONFIG_MALI_PRFCNT_SET_SECONDARY)
+#if defined(CONFIG_MALI_MTK_PRFCNT_SET_SECONDARY)
 	kbdev->hwcnt.backend.override_counter_set = KBASE_HWCNT_PHYSICAL_SET_SECONDARY;
-#elif defined(CONFIG_MALI_PRFCNT_SET_TERTIARY)
+#elif defined(CONFIG_MALI_MTK_PRFCNT_SET_TERTIARY)
 	kbdev->hwcnt.backend.override_counter_set = KBASE_HWCNT_PHYSICAL_SET_TERTIARY;
 #else
 	/* Default to primary */
@@ -462,7 +462,7 @@ void kbase_instr_backend_term(struct kbase_device *kbdev)
 	CSTD_UNUSED(kbdev);
 }
 
-#ifdef CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
+#ifdef CONFIG_MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 void kbase_instr_backend_debugfs_init(struct kbase_device *kbdev)
 {
 	/* No validation is done on the debugfs input. Invalid input could cause

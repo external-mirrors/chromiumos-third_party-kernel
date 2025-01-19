@@ -1221,7 +1221,7 @@ static int create_queue_group(struct kbase_context *const kctx,
 		} else {
 			int err = 0;
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 			group->prev_act = false;
 #endif
 			group->kctx = kctx;
@@ -1561,7 +1561,7 @@ void kbase_csf_queue_group_terminate(struct kbase_context *kctx, u8 group_handle
 }
 KBASE_EXPORT_TEST_API(kbase_csf_queue_group_terminate);
 
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 int kbase_csf_queue_group_suspend(struct kbase_context *kctx,
 				  struct kbase_suspend_copy_buffer *sus_buf, u8 group_handle)
 {
@@ -3048,9 +3048,9 @@ static inline int process_protm_exit(struct kbase_device *kbdev, u32 glb_ack)
 		kbase_hwcnt_backend_csf_protm_exited(&kbdev->hwcnt_gpu_iface);
 	}
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 	kbase_debug_coresight_csf_enable_pmode_exit(kbdev);
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 	return 0;
 }

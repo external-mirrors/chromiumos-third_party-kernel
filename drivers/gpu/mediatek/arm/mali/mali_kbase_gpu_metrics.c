@@ -19,7 +19,7 @@
  *
  */
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 
 #include "mali_power_gpu_work_period_trace.h"
 #include <mali_kbase_gpu_metrics.h>
@@ -38,7 +38,7 @@ MODULE_PARM_DESC(gpu_metrics_tp_emit_interval_ns,
 static inline void validate_tracepoint_data(struct kbase_gpu_metrics_ctx *gpu_metrics_ctx,
 					    u64 start_time, u64 end_time, u64 total_active)
 {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	WARN(start_time >= end_time, "start_time %llu >= end_time %llu for aid %u active_cnt %u",
 	     start_time, end_time, gpu_metrics_ctx->aid, gpu_metrics_ctx->active_cnt);
 

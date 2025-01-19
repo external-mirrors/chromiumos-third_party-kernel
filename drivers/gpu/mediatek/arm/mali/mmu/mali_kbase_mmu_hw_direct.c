@@ -231,7 +231,7 @@ static int wait_l2_power_trans_complete(struct kbase_device *kbdev)
 	return err;
 }
 
-#if !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 static int wait_cores_power_trans_complete(struct kbase_device *kbdev)
 {
 #define WAIT_TIMEOUT 50000 /* 50ms timeout */
@@ -315,7 +315,7 @@ static int apply_hw_issue_GPU2019_3901_wa(struct kbase_device *kbdev, u32 *mmu_c
 
 	return ret;
 }
-#endif /* !IS_ENABLED(CONFIG_MALI_NO_MALI) */
+#endif /* !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) */
 #endif /* MALI_USE_CSF */
 
 void kbase_mmu_hw_configure(struct kbase_device *kbdev, struct kbase_as *as)
@@ -528,7 +528,7 @@ int kbase_mmu_hw_do_flush(struct kbase_device *kbdev, struct kbase_as *as,
 	if (ret)
 		return ret;
 
-#if MALI_USE_CSF && !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if MALI_USE_CSF && !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	/* WA for the KBASE_HW_ISSUE_GPU2019_3901. */
 	if (kbase_hw_has_issue(kbdev, KBASE_HW_ISSUE_GPU2019_3901) &&
 	    mmu_cmd == AS_COMMAND_COMMAND_FLUSH_MEM) {

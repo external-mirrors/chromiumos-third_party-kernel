@@ -429,7 +429,7 @@ static inline int kbasep_csf_fw_io_handle_wait_result(struct kbase_csf_fw_io *fw
 									 wait_remaining;
 }
 
-#if IS_ENABLED(CONFIG_MALI_DEBUG) || IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) || IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 /**
  * kbase_csf_fw_io_mock_fw_global_write() - Mock a FW write to the global output page.
  *
@@ -462,6 +462,6 @@ void kbase_csf_fw_io_mock_fw_group_write(struct kbase_csf_fw_io *fw_io, u32 grou
 void kbase_csf_fw_io_mock_fw_stream_write(struct kbase_csf_fw_io *fw_io, u32 group_id,
 					  u32 stream_id, u32 offset, u32 value);
 
-#endif /* IS_ENABLED(CONFIG_MALI_DEBUG) || IS_ENABLED(CONFIG_MALI_NO_MALI) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_DEBUG) || IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) */
 
 #endif /* _KBASE_CSF_FW_IO_H_ */

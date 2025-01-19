@@ -19,117 +19,117 @@
  *
  */
 
-/* Kernel-side tests may include mali_kbase's headers. Therefore any config
+/* Kernel-side tests may include mali_mtk_kbase's headers. Therefore any config
  * options which affect the sizes of any structs (e.g. adding extra members)
  * must be included in these defaults, so that the structs are consistent in
- * both mali_kbase and the test modules. */
+ * both mali_mtk_kbase and the test modules. */
 bob_defaults {
-    name: "mali_kbase_shared_config_defaults",
+    name: "mali_mtk_kbase_shared_config_defaults",
     defaults: [
         "kernel_defaults",
     ],
-    mali_no_mali: {
+    mali_mtk_no_mali: {
         kbuild_options: [
-            "CONFIG_MALI_NO_MALI=y",
-            "CONFIG_MALI_NO_MALI_DEFAULT_GPU={{.gpu}}",
+            "CONFIG_MALI_MTK_NO_MALI=y",
+            "CONFIG_MALI_MTK_NO_MALI_DEFAULT_GPU={{.gpu}}",
             "CONFIG_GPU_HWVER={{.hwver}}",
         ],
     },
     gpu_has_csf: {
-        kbuild_options: ["CONFIG_MALI_CSF_SUPPORT=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_CSF_SUPPORT=y"],
     },
-    mali_devfreq: {
-        kbuild_options: ["CONFIG_MALI_DEVFREQ=y"],
+    mali_mtk_devfreq: {
+        kbuild_options: ["CONFIG_MALI_MTK_DEVFREQ=y"],
     },
-    mali_midgard_dvfs: {
-        kbuild_options: ["CONFIG_MALI_MIDGARD_DVFS=y"],
+    mali_mtk_dvfs: {
+        kbuild_options: ["CONFIG_MALI_MTK_DVFS=y"],
     },
-    mali_gator_support: {
-        kbuild_options: ["CONFIG_MALI_GATOR_SUPPORT=y"],
+    mali_mtk_gator_support: {
+        kbuild_options: ["CONFIG_MALI_MTK_GATOR_SUPPORT=y"],
     },
-    mali_midgard_enable_trace: {
-        kbuild_options: ["CONFIG_MALI_MIDGARD_ENABLE_TRACE=y"],
+    mali_mtk_enable_trace: {
+        kbuild_options: ["CONFIG_MALI_MTK_ENABLE_TRACE=y"],
     },
-    mali_arbiter_support: {
-        kbuild_options: ["CONFIG_MALI_ARBITER_SUPPORT=y"],
+    mali_mtk_arbiter_support: {
+        kbuild_options: ["CONFIG_MALI_MTK_ARBITER_SUPPORT=y"],
     },
-    mali_dma_buf_map_on_demand: {
-        kbuild_options: ["CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND=y"],
+    mali_mtk_dma_buf_map_on_demand: {
+        kbuild_options: ["CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND=y"],
     },
-    mali_dma_buf_legacy_compat: {
-        kbuild_options: ["CONFIG_MALI_DMA_BUF_LEGACY_COMPAT=y"],
+    mali_mtk_dma_buf_legacy_compat: {
+        kbuild_options: ["CONFIG_MALI_MTK_DMA_BUF_LEGACY_COMPAT=y"],
     },
-    page_migration_support: {
-        kbuild_options: ["CONFIG_PAGE_MIGRATION_SUPPORT=y"],
+    mali_mtk_page_migration_support: {
+        kbuild_options: ["CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT=y"],
     },
-    large_page_support: {
-        kbuild_options: ["CONFIG_LARGE_PAGE_SUPPORT=y"],
+    mali_mtk_large_page_support: {
+        kbuild_options: ["CONFIG_MALI_MTK_LARGE_PAGE_SUPPORT=y"],
     },
-    mali_corestack: {
-        kbuild_options: ["CONFIG_MALI_CORESTACK=y"],
+    mali_mtk_corestack: {
+        kbuild_options: ["CONFIG_MALI_MTK_CORESTACK=y"],
     },
-    mali_real_hw: {
-        kbuild_options: ["CONFIG_MALI_REAL_HW=y"],
+    mali_mtk_real_hw: {
+        kbuild_options: ["CONFIG_MALI_MTK_REAL_HW=y"],
     },
-    mali_debug: {
+    mali_mtk_debug: {
         kbuild_options: [
-            "CONFIG_MALI_DEBUG=y",
+            "CONFIG_MALI_MTK_DEBUG=y",
             "MALI_KERNEL_TEST_API={{.debug}}",
         ],
     },
-    mali_fence_debug: {
-        kbuild_options: ["CONFIG_MALI_FENCE_DEBUG=y"],
+    mali_mtk_fence_debug: {
+        kbuild_options: ["CONFIG_MALI_MTK_FENCE_DEBUG=y"],
     },
-    mali_system_trace: {
-        kbuild_options: ["CONFIG_MALI_SYSTEM_TRACE=y"],
+    mali_mtk_system_trace: {
+        kbuild_options: ["CONFIG_MALI_MTK_SYSTEM_TRACE=y"],
     },
     cinstr_vector_dump: {
-        kbuild_options: ["CONFIG_MALI_VECTOR_DUMP=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_VECTOR_DUMP=y"],
     },
     cinstr_gwt: {
-        kbuild_options: ["CONFIG_MALI_CINSTR_GWT=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_CINSTR_GWT=y"],
     },
     cinstr_primary_hwc: {
-        kbuild_options: ["CONFIG_MALI_PRFCNT_SET_PRIMARY=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_PRFCNT_SET_PRIMARY=y"],
     },
     cinstr_secondary_hwc: {
-        kbuild_options: ["CONFIG_MALI_PRFCNT_SET_SECONDARY=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_PRFCNT_SET_SECONDARY=y"],
     },
     cinstr_tertiary_hwc: {
-        kbuild_options: ["CONFIG_MALI_PRFCNT_SET_TERTIARY=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_PRFCNT_SET_TERTIARY=y"],
     },
     cinstr_hwc_set_select_via_debug_fs: {
-        kbuild_options: ["CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS=y"],
+        kbuild_options: ["CONFIG_MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS=y"],
     },
-    mali_job_dump: {
-        kbuild_options: ["CONFIG_MALI_JOB_DUMP"],
+    mali_mtk_job_dump: {
+        kbuild_options: ["CONFIG_MALI_MTK_JOB_DUMP"],
     },
-    mali_pwrsoft_765: {
-        kbuild_options: ["CONFIG_MALI_PWRSOFT_765=y"],
+    mali_mtk_pwrsoft_765: {
+        kbuild_options: ["CONFIG_MALI_MTK_PWRSOFT_765=y"],
     },
-    mali_hw_errata_1485982_not_affected: {
-        kbuild_options: ["CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED=y"],
+    mali_mtk_hw_errata_1485982_not_affected: {
+        kbuild_options: ["CONFIG_MALI_MTK_HW_ERRATA_1485982_NOT_AFFECTED=y"],
     },
-    mali_hw_errata_1485982_use_clock_alternative: {
-        kbuild_options: ["CONFIG_MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE=y"],
+    mali_mtk_hw_errata_1485982_use_clock_alternative: {
+        kbuild_options: ["CONFIG_MALI_MTK_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE=y"],
     },
-    mali_is_fpga: {
-        kbuild_options: ["CONFIG_MALI_IS_FPGA=y"],
+    mali_mtk_is_fpga: {
+        kbuild_options: ["CONFIG_MALI_MTK_IS_FPGA=y"],
     },
-    mali_coresight: {
-        kbuild_options: ["CONFIG_MALI_CORESIGHT=y"],
+    mali_mtk_coresight: {
+        kbuild_options: ["CONFIG_MALI_MTK_CORESIGHT=y"],
     },
-    mali_fw_trace_mode_manual: {
-        kbuild_options: ["CONFIG_MALI_FW_TRACE_MODE_MANUAL=y"],
+    mali_mtk_fw_trace_mode_manual: {
+        kbuild_options: ["CONFIG_MALI_MTK_FW_TRACE_MODE_MANUAL=y"],
     },
-    mali_fw_trace_mode_auto_print: {
-        kbuild_options: ["CONFIG_MALI_FW_TRACE_MODE_AUTO_PRINT=y"],
+    mali_mtk_fw_trace_mode_auto_print: {
+        kbuild_options: ["CONFIG_MALI_MTK_FW_TRACE_MODE_AUTO_PRINT=y"],
     },
-    mali_fw_trace_mode_auto_discard: {
-        kbuild_options: ["CONFIG_MALI_FW_TRACE_MODE_AUTO_DISCARD=y"],
+    mali_mtk_fw_trace_mode_auto_discard: {
+        kbuild_options: ["CONFIG_MALI_MTK_FW_TRACE_MODE_AUTO_DISCARD=y"],
     },
     kbuild_options: [
-        "CONFIG_MALI_PLATFORM_NAME={{.mali_platform_name}}",
+        "CONFIG_MALI_MTK_PLATFORM_NAME={{.mali_mtk_platform_name}}",
         "MALI_CUSTOMER_RELEASE={{.release}}",
         "MALI_UNIT_TEST={{.unit_test_code}}",
         "MALI_USE_CSF={{.gpu_has_csf}}",
@@ -153,9 +153,9 @@ bob_defaults {
 }
 
 bob_kernel_module {
-    name: "mali_kbase",
+    name: "mali_mtk_kbase",
     defaults: [
-        "mali_kbase_shared_config_defaults",
+        "mali_mtk_kbase_shared_config_defaults",
     ],
     srcs: [
         "*.c",
@@ -260,7 +260,7 @@ bob_kernel_module {
         ],
     },
     kbuild_options: [
-        "CONFIG_MALI_MIDGARD=m",
-        "CONFIG_MALI_KUTF=n",
+        "CONFIG_MALI_MTK=m",
+        "CONFIG_MALI_MTK_KUTF=n",
     ],
 }

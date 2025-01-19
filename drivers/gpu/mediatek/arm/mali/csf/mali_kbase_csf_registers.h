@@ -260,7 +260,7 @@
 #define GLB_DEBUG_FWUTF_RESULT GLB_DEBUG_ARG_OUT0 /* () Firmware debug test result */
 #define GLB_DEBUG_ACK 0x0FFC /* () Global debug acknowledge */
 
-#ifdef CONFIG_MALI_CORESIGHT
+#ifdef CONFIG_MALI_MTK_CORESIGHT
 #define GLB_DEBUG_REQ_FW_AS_WRITE_SHIFT 4
 #define GLB_DEBUG_REQ_FW_AS_WRITE_MASK (0x1 << GLB_DEBUG_REQ_FW_AS_WRITE_SHIFT)
 #define GLB_DEBUG_REQ_FW_AS_READ_SHIFT 5
@@ -268,7 +268,7 @@
 #define GLB_DEBUG_ARG_IN0 0x0FE0
 #define GLB_DEBUG_ARG_IN1 0x0FE4
 #define GLB_DEBUG_ARG_OUT0 0x0FE0
-#endif /* CONFIG_MALI_CORESIGHT */
+#endif /* CONFIG_MALI_MTK_CORESIGHT */
 
 /* End register offsets */
 

@@ -167,7 +167,7 @@ int kbase_reg_get_offset(struct kbase_device *kbdev, u32 reg_enum, u32 *offset);
  */
 int kbase_reg_get_enum(struct kbase_device *kbdev, u32 offset, u32 *reg_enum);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 /**
  * kbase_reg_get_enum_string - get the string for a particular enum
  * @reg_enum: Register enum
@@ -175,7 +175,7 @@ int kbase_reg_get_enum(struct kbase_device *kbdev, u32 offset, u32 *reg_enum);
  * Return: string containing the name of enum
  */
 const char *kbase_reg_get_enum_string(u32 reg_enum);
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 /**
  * kbase_reg_get_gpu_id - get GPU ID from register or dummy model
@@ -261,7 +261,7 @@ static inline u32 kbase_reg_gpu_irq_all(bool is_legacy)
 		mask |= (RESET_COMPLETED | POWER_CHANGED_ALL);
 #endif /* MALI_USE_CSF */
 		/* Include POWER_CHANGED_SINGLE in debug builds for use in irq latency test. */
-		if (IS_ENABLED(CONFIG_MALI_DEBUG))
+		if (IS_ENABLED(CONFIG_MALI_MTK_DEBUG))
 			mask |= POWER_CHANGED_SINGLE;
 	}
 

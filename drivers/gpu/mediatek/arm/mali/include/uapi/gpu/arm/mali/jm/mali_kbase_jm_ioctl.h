@@ -71,7 +71,7 @@
  * - Modified (backwards compatible) ioctl KBASE_IOCTL_MEM_IMPORT behavior for
  *   dma-buf. Now, buffers are mapped on GPU when first imported, no longer
  *   requiring external resource or sticky resource tracking. UNLESS,
- *   CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND is enabled.
+ *   CONFIG_MALI_MTK_DMA_BUF_MAP_ON_DEMAND is enabled.
  * 11.17:
  * - Added BASE_JD_REQ_JOB_SLOT.
  * - Reused padding field in base_jd_atom_v2 to pass job slot number.

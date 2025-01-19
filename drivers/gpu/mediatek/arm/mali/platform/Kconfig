@@ -20,7 +20,7 @@
 
 # Add your platform specific Kconfig file here
 #
-# "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/platform/xxx/Kconfig"
+# "$(MALI_MTK_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/platform/xxx/Kconfig"
 #
-# Where xxx is the platform name is the name set in MALI_PLATFORM_NAME
+# Where xxx is the platform name is the name set in MALI_MTK_PLATFORM_NAME
 #

@@ -40,7 +40,7 @@
 #include <hwcnt/mali_kbase_hwcnt_virtualizer.h>
 #include <mali_kbase_kinstr_prfcnt.h>
 #include <tl/mali_kbase_timeline.h>
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 #include <mali_kbase_gpu_metrics.h>
 #endif
 
@@ -89,15 +89,15 @@ static int kbase_backend_late_init(struct kbase_device *kbdev)
 	if (err)
 		goto fail_pm_powerup;
 
-#ifdef CONFIG_MALI_DEBUG
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
+#ifdef CONFIG_MALI_MTK_DEBUG
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 	if (kbase_validate_interrupts(kbdev) != 0) {
 		dev_err(kbdev->dev, "Interrupt validation failed.\n");
 		err = -EINVAL;
 		goto fail_interrupt_test;
 	}
-#endif /* IS_ENABLED(CONFIG_MALI_REAL_HW) */
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 	{
 		kbase_ipa_control_init(kbdev);
@@ -145,11 +145,11 @@ fail_pm_metrics_init:
 	{
 		kbase_ipa_control_term(kbdev);
 	}
-#ifdef CONFIG_MALI_DEBUG
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
+#ifdef CONFIG_MALI_MTK_DEBUG
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 fail_interrupt_test:
-#endif /* IS_ENABLED(CONFIG_MALI_REAL_HW) */
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 	kbase_pm_context_idle(kbdev);
 	kbase_hwaccess_pm_halt(kbdev);
@@ -288,15 +288,15 @@ static const struct kbase_device_init dev_init[] = {
 #ifdef MALI_MTK_COMMON
 	{mtk_common_device_init, mtk_common_device_term, "MTK common initialization failed"},
 #endif /* MALI_MTK_COMMON */
-#if !IS_ENABLED(CONFIG_MALI_REAL_HW)
+#if !IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 	{ kbase_gpu_device_create, kbase_gpu_device_destroy, "Dummy model initialization failed" },
-#else /* !IS_ENABLED(CONFIG_MALI_REAL_HW) */
+#else /* !IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */
 	{ kbase_get_irqs, NULL, "IRQ search failed" },
 	{ registers_map, registers_unmap, "Register map failed" },
-#endif /* !IS_ENABLED(CONFIG_MALI_REAL_HW) */
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#endif /* !IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	{ kbase_gpu_metrics_init, kbase_gpu_metrics_term, "GPU metrics initialization failed" },
-#endif /* IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD) */
 	{ power_control_init, power_control_term, "Power control initialization failed" },
 	{ kbase_device_io_history_init, kbase_device_io_history_term,
 	  "Register access history initialization failed" },
@@ -353,10 +353,10 @@ static const struct kbase_device_init dev_init[] = {
 	{ kbase_gpuprops_populate_user_buffer, kbase_gpuprops_free_user_buffer,
 	  "GPU property population failed" },
 	{ kbase_device_late_init, kbase_device_late_term, "Late device initialization failed" },
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 	{ kbase_debug_coresight_csf_init, kbase_debug_coresight_csf_term,
 	  "Coresight initialization failed" },
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 };
 
 static void kbase_device_term_partial(struct kbase_device *kbdev, unsigned int i)

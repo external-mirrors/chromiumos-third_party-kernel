@@ -193,11 +193,11 @@ int kbase_hwaccess_pm_init(struct kbase_device *kbdev)
 		set_bit(KBASE_GPU_SUPPORTS_FW_SLEEP_ON_IDLE, &kbdev->pm.backend.gpu_sleep_allowed);
 #endif
 
-	if (IS_ENABLED(CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED))
+	if (IS_ENABLED(CONFIG_MALI_MTK_HW_ERRATA_1485982_NOT_AFFECTED))
 		return 0;
 
 	/* WA1: L2 always_on for GPUs being affected by GPU2017-1336 */
-	if (!IS_ENABLED(CONFIG_MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE)) {
+	if (!IS_ENABLED(CONFIG_MALI_MTK_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE)) {
 		if (kbase_hw_has_issue(kbdev, KBASE_HW_ISSUE_GPU2017_1336))
 			kbdev->pm.backend.l2_always_on = true;
 
@@ -413,7 +413,7 @@ static void kbase_pm_gpu_poweroff_wait_wq(struct work_struct *data)
 
 static void kbase_pm_l2_clock_slow(struct kbase_device *kbdev)
 {
-#if defined(CONFIG_MALI_MIDGARD_DVFS)
+#if defined(CONFIG_MALI_MTK_DVFS)
 	struct clk *clk = kbdev->clocks[0];
 #endif
 
@@ -424,7 +424,7 @@ static void kbase_pm_l2_clock_slow(struct kbase_device *kbdev)
 	if (WARN_ON_ONCE(!kbdev->pm.backend.gpu_clock_suspend_freq))
 		return;
 
-#if defined(CONFIG_MALI_DEVFREQ)
+#if defined(CONFIG_MALI_MTK_DEVFREQ)
 
 	/* Suspend devfreq */
 	devfreq_suspend_device(kbdev->devfreq);
@@ -435,7 +435,7 @@ static void kbase_pm_l2_clock_slow(struct kbase_device *kbdev)
 	/* Slow down GPU clock to the suspend clock*/
 	kbase_devfreq_force_freq(kbdev, kbdev->pm.backend.gpu_clock_suspend_freq);
 
-#elif defined(CONFIG_MALI_MIDGARD_DVFS) /* CONFIG_MALI_DEVFREQ */
+#elif defined(CONFIG_MALI_MTK_DVFS) /* CONFIG_MALI_MTK_DEVFREQ */
 
 	if (WARN_ON_ONCE(!clk))
 		return;
@@ -450,19 +450,19 @@ static void kbase_pm_l2_clock_slow(struct kbase_device *kbdev)
 	if (WARN_ON_ONCE(clk_set_rate(clk, kbdev->pm.backend.gpu_clock_suspend_freq)))
 		dev_err(kbdev->dev, "Failed to set suspend freq\n");
 
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 }
 
 static void kbase_pm_l2_clock_normalize(struct kbase_device *kbdev)
 {
-#if defined(CONFIG_MALI_MIDGARD_DVFS)
+#if defined(CONFIG_MALI_MTK_DVFS)
 	struct clk *clk = kbdev->clocks[0];
 #endif
 
 	if (!kbdev->pm.backend.gpu_clock_slow_down_wa)
 		return;
 
-#if defined(CONFIG_MALI_DEVFREQ)
+#if defined(CONFIG_MALI_MTK_DEVFREQ)
 
 	/* Restore GPU clock to the previous one */
 	kbase_devfreq_force_freq(kbdev, kbdev->previous_frequency);
@@ -470,7 +470,7 @@ static void kbase_pm_l2_clock_normalize(struct kbase_device *kbdev)
 	/* Resume devfreq */
 	devfreq_resume_device(kbdev->devfreq);
 
-#elif defined(CONFIG_MALI_MIDGARD_DVFS) /* CONFIG_MALI_DEVFREQ */
+#elif defined(CONFIG_MALI_MTK_DVFS) /* CONFIG_MALI_MTK_DEVFREQ */
 
 	if (WARN_ON_ONCE(!clk))
 		return;
@@ -482,7 +482,7 @@ static void kbase_pm_l2_clock_normalize(struct kbase_device *kbdev)
 	/* Restart the metrics gathering framework */
 	kbase_pm_metrics_start(kbdev);
 
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
 }
 
 static void kbase_pm_gpu_clock_control_worker(struct work_struct *data)
@@ -1067,7 +1067,7 @@ static int pm_handle_mcu_sleep_on_runtime_suspend(struct kbase_device *kbdev)
 	lockdep_assert_held(&kbdev->csf.scheduler.lock);
 	lockdep_assert_held(&kbdev->pm.lock);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	/* In case of no active CSG on slot, powering up L2 could be skipped and
 	 * proceed directly to suspend GPU.
 	 * ToDo: firmware has to be reloaded after wake-up as no halt command

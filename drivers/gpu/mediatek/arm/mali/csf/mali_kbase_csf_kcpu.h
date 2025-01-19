@@ -179,7 +179,7 @@ struct kbase_suspend_copy_buffer {
 	struct kbase_mem_phy_alloc *cpu_alloc;
 };
 
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 /**
  * struct kbase_kcpu_command_group_suspend_info - structure which contains
  *		suspend buffer data captured for a suspended queue group.
@@ -227,7 +227,7 @@ struct kbase_kcpu_command {
 		struct kbase_kcpu_command_import_info import;
 		struct kbase_kcpu_command_jit_alloc_info jit_alloc;
 		struct kbase_kcpu_command_jit_free_info jit_free;
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 		struct kbase_kcpu_command_group_suspend_info suspend_buf_copy;
 #endif
 	} info;

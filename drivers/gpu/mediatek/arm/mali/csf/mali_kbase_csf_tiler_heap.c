@@ -112,7 +112,7 @@ static void remove_external_chunk_mappings(struct kbase_context *const kctx,
 		kbase_mem_shrink_cpu_mapping(kctx, chunk->region, 0,
 					     chunk->region->cpu_alloc->nents);
 	}
-#if !defined(CONFIG_MALI_VECTOR_DUMP)
+#if !defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 	chunk->region->flags |= KBASE_REG_DONT_NEED;
 #endif
 
@@ -228,7 +228,7 @@ static void remove_unlinked_chunk(struct kbase_context *kctx,
 	 */
 	WARN_ON(atomic64_read(&chunk->region->no_user_free_count) > 1);
 	kbase_va_region_no_user_free_dec(chunk->region);
-#if !defined(CONFIG_MALI_VECTOR_DUMP)
+#if !defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 	chunk->region->flags &= ~KBASE_REG_DONT_NEED;
 #endif
 	kbase_mem_free_region(kctx, chunk->region);
@@ -368,7 +368,7 @@ unroll_region:
 	 * regions), and so we must clear that flag too before freeing.
 	 */
 	kbase_va_region_no_user_free_dec(chunk->region);
-#if !defined(CONFIG_MALI_VECTOR_DUMP)
+#if !defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 	chunk->region->flags &= ~KBASE_REG_DONT_NEED;
 #endif
 	kbase_mem_free_region(kctx, chunk->region);
@@ -798,7 +798,7 @@ int kbase_csf_tiler_heap_init(struct kbase_context *const kctx, u32 const chunk_
 					    heap->max_chunks, heap->chunk_size, heap->chunk_count,
 					    heap->target_in_flight, 0);
 
-#if defined(CONFIG_MALI_VECTOR_DUMP)
+#if defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 	list_for_each_entry(chunk, &heap->chunks_list, link) {
 		KBASE_TLSTREAM_JD_TILER_HEAP_CHUNK_ALLOC(kctx->kbdev, kctx->id, heap->heap_id,
 							 chunk->gpu_va);

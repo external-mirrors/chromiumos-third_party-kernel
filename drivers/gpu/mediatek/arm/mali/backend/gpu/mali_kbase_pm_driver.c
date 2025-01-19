@@ -55,7 +55,7 @@
 
 #include <linux/of.h>
 
-#ifdef CONFIG_MALI_CORESTACK
+#ifdef CONFIG_MALI_MTK_CORESTACK
 bool corestack_driver_control = true;
 #else
 bool corestack_driver_control; /* Default value of 0/false */
@@ -1002,7 +1002,7 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 					backend->mcu_state = KBASE_MCU_HCTL_SHADERS_PEND_ON;
 				} else
 					backend->mcu_state = KBASE_MCU_ON_HWCNT_ENABLE;
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 				if (kbase_debug_coresight_csf_state_check(
 					    kbdev, KBASE_DEBUG_CORESIGHT_CSF_DISABLED)) {
 					kbase_debug_coresight_csf_state_request(
@@ -1012,7 +1012,7 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 						   kbdev, KBASE_DEBUG_CORESIGHT_CSF_ENABLED)) {
 					backend->mcu_state = KBASE_MCU_CORESIGHT_ENABLE;
 				}
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 			}
 			break;
 
@@ -1066,7 +1066,7 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				}
 			} else if (kbase_pm_handle_mcu_core_attr_update(kbdev))
 				backend->mcu_state = KBASE_MCU_ON_CORE_ATTR_UPDATE_PEND;
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 			else if (kbdev->csf.coresight.disable_on_pmode_enter) {
 				kbase_debug_coresight_csf_state_request(
 					kbdev, KBASE_DEBUG_CORESIGHT_CSF_DISABLED);
@@ -1162,16 +1162,16 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				else {
 #endif
 					backend->mcu_state = KBASE_MCU_ON_HALT;
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 					kbase_debug_coresight_csf_state_request(
 						kbdev, KBASE_DEBUG_CORESIGHT_CSF_DISABLED);
 					backend->mcu_state = KBASE_MCU_CORESIGHT_DISABLE;
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 				}
 			}
 			break;
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 		case KBASE_MCU_ON_PMODE_ENTER_CORESIGHT_DISABLE:
 			if (kbase_debug_coresight_csf_state_check(
 				    kbdev, KBASE_DEBUG_CORESIGHT_CSF_DISABLED)) {
@@ -1197,7 +1197,7 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				    kbdev, KBASE_DEBUG_CORESIGHT_CSF_ENABLED))
 				backend->mcu_state = KBASE_MCU_ON_HWCNT_ENABLE;
 			break;
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 
 		case KBASE_MCU_ON_HALT:
 			if (!kbase_pm_is_mcu_desired(kbdev)) {
@@ -1321,10 +1321,10 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 			if (!backend->in_reset)
 				backend->mcu_state = KBASE_MCU_OFF;
 
-#if IS_ENABLED(CONFIG_MALI_CORESIGHT)
+#if IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT)
 			kbdev->csf.coresight.disable_on_pmode_enter = false;
 			kbdev->csf.coresight.enable_on_pmode_exit = false;
-#endif /* IS_ENABLED(CONFIG_MALI_CORESIGHT) */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
 			break;
 
 		default:
@@ -3593,7 +3593,7 @@ static void kbase_pm_request_gpu_cycle_counter_do_request(struct kbase_device *k
 		/* This might happen after GPU reset.
 		 * Then counter needs to be kicked.
 		 */
-#if !IS_ENABLED(CONFIG_MALI_NO_MALI) && !MALI_USE_CSF
+#if !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) && !MALI_USE_CSF
 		if (!(kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(GPU_STATUS)) &
 		      GPU_STATUS_CYCLE_COUNT_ACTIVE)) {
 			kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(GPU_COMMAND),

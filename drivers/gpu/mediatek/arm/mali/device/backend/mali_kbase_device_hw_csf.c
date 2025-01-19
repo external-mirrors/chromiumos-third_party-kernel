@@ -168,7 +168,7 @@ void kbase_gpu_interrupt(struct kbase_device *kbdev, u32 val)
 		kbase_pm_disable_db_mirror_interrupt(kbdev);
 
 		if (likely(kbdev->pm.backend.mcu_state == KBASE_MCU_IN_SLEEP)) {
-			if (IS_ENABLED(CONFIG_MALI_DEBUG)) {
+			if (IS_ENABLED(CONFIG_MALI_MTK_DEBUG)) {
 				u32 const mcu_status =
 					kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(MCU_STATUS));
 				WARN_ON_ONCE(MCU_STATUS_VALUE_GET(mcu_status) !=

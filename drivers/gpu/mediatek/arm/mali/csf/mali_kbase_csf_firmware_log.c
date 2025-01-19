@@ -289,15 +289,15 @@ int kbase_csf_firmware_log_init(struct kbase_device *kbdev)
 	atomic_set(&fw_log->poll_period_ms, KBASE_CSF_FIRMWARE_LOG_POLL_PERIOD_MS_DEFAULT);
 
 	INIT_DEFERRABLE_WORK(&fw_log->poll_work, kbase_csf_firmware_log_poll);
-#ifdef CONFIG_MALI_FW_TRACE_MODE_AUTO_DISCARD
+#ifdef CONFIG_MALI_MTK_FW_TRACE_MODE_AUTO_DISCARD
 	fw_log->mode = KBASE_CSF_FIRMWARE_LOG_MODE_AUTO_DISCARD;
 	schedule_delayed_work(&fw_log->poll_work,
 			      msecs_to_jiffies(KBASE_CSF_FIRMWARE_LOG_POLL_PERIOD_MS_DEFAULT));
-#elif defined(CONFIG_MALI_FW_TRACE_MODE_AUTO_PRINT)
+#elif defined(CONFIG_MALI_MTK_FW_TRACE_MODE_AUTO_PRINT)
 	fw_log->mode = KBASE_CSF_FIRMWARE_LOG_MODE_AUTO_PRINT;
 	schedule_delayed_work(&fw_log->poll_work,
 			      msecs_to_jiffies(KBASE_CSF_FIRMWARE_LOG_POLL_PERIOD_MS_DEFAULT));
-#else /* CONFIG_MALI_FW_TRACE_MODE_MANUAL */
+#else /* CONFIG_MALI_MTK_FW_TRACE_MODE_MANUAL */
 	fw_log->mode = KBASE_CSF_FIRMWARE_LOG_MODE_MANUAL;
 #endif
 

@@ -36,7 +36,7 @@
 #include "mali_kbase_hwaccess_jm.h"
 #include <mali_kbase_hwaccess_time.h>
 #include <linux/priority_control_manager.h>
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 #include <mali_kbase_gpu_metrics.h>
 #endif
 
@@ -101,7 +101,7 @@ static int kbase_ktrace_get_ctx_refcnt(struct kbase_context *kctx)
  * Private functions
  */
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 /**
  * gpu_metrics_timer_callback() - Callback function for the GPU metrics hrtimer
  *
@@ -653,7 +653,7 @@ int kbasep_js_devdata_init(struct kbase_device *const kbdev)
 		}
 	}
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	hrtimer_init(&jsdd->gpu_metrics_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	jsdd->gpu_metrics_timer.function = gpu_metrics_timer_callback;
 	jsdd->gpu_metrics_timer_needed = false;
@@ -687,7 +687,7 @@ void kbasep_js_devdata_term(struct kbase_device *kbdev)
 				  zero_ctx_attr_ref_count, sizeof(zero_ctx_attr_ref_count)) == 0);
 	CSTD_UNUSED(zero_ctx_attr_ref_count);
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	js_devdata->gpu_metrics_timer_needed = false;
 	hrtimer_cancel(&js_devdata->gpu_metrics_timer);
 #endif
@@ -703,7 +703,7 @@ int kbasep_js_kctx_init(struct kbase_context *const kctx)
 	KBASE_DEBUG_ASSERT(kctx != NULL);
 
 	CSTD_UNUSED(ret);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	ret = gpu_metrics_ctx_init(kctx);
 	if (ret)
 		return ret;
@@ -784,7 +784,7 @@ void kbasep_js_kctx_term(struct kbase_context *kctx)
 	}
 
 	kbase_ctx_sched_remove_ctx(kctx);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	gpu_metrics_ctx_term(kctx);
 #endif
 }

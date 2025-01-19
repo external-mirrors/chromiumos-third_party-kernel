@@ -139,7 +139,7 @@ void kbasep_ktrace_add_csf_kcpu(struct kbase_device *kbdev, enum kbase_ktrace_co
  * @info_val: generic information about @code to add to the trace
  *
  * Note: Any functions called through this macro will still be evaluated in
- * Release builds (CONFIG_MALI_DEBUG not defined). Therefore, when
+ * Release builds (CONFIG_MALI_MTK_DEBUG not defined). Therefore, when
  * KBASE_KTRACE_ENABLE == 0 any functions called to get the parameters supplied
  * to this macro must:
  * a) be static or static inline, and
@@ -163,7 +163,7 @@ void kbasep_ktrace_add_csf_kcpu(struct kbase_device *kbdev, enum kbase_ktrace_co
  * @info_val: generic information about @code to add to the trace
  *
  * Note: Any functions called through this macro will still be evaluated in
- * Release builds (CONFIG_MALI_DEBUG not defined). Therefore, when
+ * Release builds (CONFIG_MALI_MTK_DEBUG not defined). Therefore, when
  * KBASE_KTRACE_ENABLE == 0 any functions called to get the parameters supplied
  * to this macro must:
  * a) be static or static inline, and

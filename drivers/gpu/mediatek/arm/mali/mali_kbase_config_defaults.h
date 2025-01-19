@@ -239,10 +239,10 @@ enum {
  *
  * Based on 10s timeout at 100MHz, scaled from a 50MHz GPU system.
  */
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP)
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP)
 /* Set a large value to avoid timing out while vector dumping */
 #define KCPU_FENCE_SIGNAL_TIMEOUT_CYCLES (250000000000ull)
-#elif IS_ENABLED(CONFIG_MALI_IS_FPGA)
+#elif IS_ENABLED(CONFIG_MALI_MTK_IS_FPGA)
 #define KCPU_FENCE_SIGNAL_TIMEOUT_CYCLES (2500000000ull)
 #else
 #define KCPU_FENCE_SIGNAL_TIMEOUT_CYCLES (1000000000ull)
@@ -283,7 +283,7 @@ enum {
 /* Firmware iterators' suspend timeout, default 4000ms. Customer can update this by
  * using debugfs -- csg_suspend_timeout
  */
-#if IS_ENABLED(CONFIG_MALI_REAL_HW) && !IS_ENABLED(CONFIG_MALI_IS_FPGA)
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) && !IS_ENABLED(CONFIG_MALI_MTK_IS_FPGA)
 #define CSG_SUSPEND_TIMEOUT_FIRMWARE_MS (4000)
 #else
 #define CSG_SUSPEND_TIMEOUT_FIRMWARE_MS (31000)
@@ -385,7 +385,7 @@ enum {
  */
 #define MMU_AS_INACTIVE_WAIT_TIMEOUT_CYCLES ((u64)50 * 1024 * 1024)
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 /* Default value of the time interval at which GPU metrics tracepoints are emitted. */
 #define DEFAULT_GPU_METRICS_TP_EMIT_INTERVAL_NS (500000000u) /* 500 ms */
 #endif

@@ -44,10 +44,10 @@ ifeq ($(MALI_USE_CSF),0)
 endif
 
 
-mali_kbase-$(CONFIG_MALI_DEVFREQ) += \
+mali_kbase-$(CONFIG_MALI_MTK_DEVFREQ) += \
     backend/gpu/mali_kbase_devfreq.o
 
-mali_kbase-$(CONFIG_MALI_NO_MALI) += backend/gpu/mali_kbase_model_linux.o
+mali_kbase-$(CONFIG_MALI_MTK_NO_MALI) += backend/gpu/mali_kbase_model_linux.o
 
 # NO_MALI Dummy model interface
-mali_kbase-$(CONFIG_MALI_NO_MALI) += backend/gpu/mali_kbase_model_dummy.o
+mali_kbase-$(CONFIG_MALI_MTK_NO_MALI) += backend/gpu/mali_kbase_model_dummy.o

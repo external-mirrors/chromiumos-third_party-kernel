@@ -18,7 +18,7 @@
 #
 #
 
-menuconfig MALI_BASE_MODULES
+menuconfig MALI_MTK_BASE_MODULES
 	bool "Mali Base extra modules"
 	default y if BACKEND_KERNEL
 	help
@@ -26,9 +26,9 @@ menuconfig MALI_BASE_MODULES
 	  Those modules provide extra features or debug interfaces and,
 	  are optional for the use of the Mali GPU modules.
 
-config DMA_SHARED_BUFFER_TEST_EXPORTER
+config MALI_MTK_DMA_SHARED_BUFFER_TEST_EXPORTER
 	bool "Build dma-buf framework test exporter module"
-	depends on MALI_BASE_MODULES
+	depends on MALI_MTK_BASE_MODULES
 	default y
 	help
 	  This option will build the dma-buf framework test exporter module.
@@ -37,9 +37,9 @@ config DMA_SHARED_BUFFER_TEST_EXPORTER
 	  Modules:
 	  - dma-buf-test-exporter.ko
 
-config MALI_MEMORY_GROUP_MANAGER
+config MALI_MTK_MEMORY_GROUP_MANAGER
 	bool "Build Mali Memory Group Manager module"
-	depends on MALI_BASE_MODULES
+	depends on MALI_MTK_BASE_MODULES
 	default y
 	help
 	  This option will build the memory group manager module.
@@ -49,9 +49,9 @@ config MALI_MEMORY_GROUP_MANAGER
 	  Modules:
 	  - memory_group_manager.ko
 
-config MALI_PROTECTED_MEMORY_ALLOCATOR
+config MALI_MTK_PROTECTED_MEMORY_ALLOCATOR
 	bool "Build Mali Protected Memory Allocator module"
-	depends on MALI_BASE_MODULES && GPU_HAS_CSF
+	depends on MALI_MTK_BASE_MODULES && GPU_HAS_CSF
 	default y
 	help
 	  This option will build the protected memory allocator module.

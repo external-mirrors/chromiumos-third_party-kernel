@@ -298,7 +298,7 @@ void kbase_csf_queue_group_terminate(struct kbase_context *kctx, u8 group_handle
  */
 void kbase_csf_term_descheduled_queue_group(struct kbase_queue_group *group);
 
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 /**
  * kbase_csf_queue_group_suspend - Suspend a GPU command queue group
  *

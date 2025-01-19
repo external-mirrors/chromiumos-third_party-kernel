@@ -27,4 +27,4 @@ ccflags-y += \
 
 subdir-ccflags-y += $(ccflags-y)
 
-obj-$(CONFIG_MALI_PROTECTED_MEMORY_ALLOCATOR) += protected_memory_allocator.o
+obj-$(CONFIG_MALI_MTK_PROTECTED_MEMORY_ALLOCATOR) += protected_memory_allocator.o

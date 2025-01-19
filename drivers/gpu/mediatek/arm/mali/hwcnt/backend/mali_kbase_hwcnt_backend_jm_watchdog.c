@@ -28,7 +28,7 @@
 #include <hwcnt/backend/mali_kbase_hwcnt_backend_jm_watchdog.h>
 #include <hwcnt/mali_kbase_hwcnt_watchdog_if.h>
 
-#if IS_ENABLED(CONFIG_MALI_IS_FPGA) && !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_IS_FPGA) && !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 /* Backend watch dog timer interval in milliseconds: 18 seconds. */
 static const u32 hwcnt_backend_watchdog_timer_interval_ms = 18000;
 #else

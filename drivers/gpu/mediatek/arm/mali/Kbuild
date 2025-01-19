@@ -52,15 +52,15 @@ ifeq ($(CONFIG_FW_LOADER), n)
     $(error CONFIG_FW_LOADER must be set in Kernel configuration)
 endif
 
-ifeq ($(CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS), y)
+ifeq ($(CONFIG_MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS), y)
     ifneq ($(CONFIG_DEBUG_FS), y)
-        $(error CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS depends on CONFIG_DEBUG_FS to be set in Kernel configuration)
+        $(error CONFIG_MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS depends on CONFIG_DEBUG_FS to be set in Kernel configuration)
     endif
 endif
 
-ifeq ($(CONFIG_MALI_FENCE_DEBUG), y)
+ifeq ($(CONFIG_MALI_MTK_FENCE_DEBUG), y)
     ifneq ($(CONFIG_SYNC_FILE), y)
-        $(error CONFIG_MALI_FENCE_DEBUG depends on CONFIG_SYNC_FILE to be set in Kernel configuration)
+        $(error CONFIG_MALI_MTK_FENCE_DEBUG depends on CONFIG_SYNC_FILE to be set in Kernel configuration)
     endif
 endif
 
@@ -71,7 +71,7 @@ endif
 # Driver version string which is returned to userspace via an ioctl
 MALI_RELEASE_NAME ?= '"r51p0-00eac0"'
 # Set up defaults if not defined by build system
-ifeq ($(CONFIG_MALI_DEBUG), y)
+ifeq ($(CONFIG_MALI_MTK_DEBUG), y)
     MALI_UNIT_TEST = 1
     MALI_CUSTOMER_RELEASE ?= 0
 else
@@ -81,9 +81,9 @@ endif
 MALI_COVERAGE ?= 0
 
 # Kconfig passes in the name with quotes for in-tree builds - remove them.
-MALI_PLATFORM_DIR := $(shell echo $(CONFIG_MALI_PLATFORM_NAME))
+MALI_PLATFORM_DIR := $(shell echo $(CONFIG_MALI_MTK_PLATFORM_NAME))
 
-ifeq ($(CONFIG_MALI_CSF_SUPPORT),y)
+ifeq ($(CONFIG_MALI_MTK_CSF_SUPPORT),y)
     MALI_JIT_PRESSURE_LIMIT_BASE = 0
     MALI_USE_CSF = 1
 else
@@ -92,7 +92,7 @@ else
 endif
 
 
-ifneq ($(CONFIG_MALI_KUTF), n)
+ifneq ($(CONFIG_MALI_MTK_KUTF), n)
     MALI_KERNEL_TEST_API ?= 1
 else
     MALI_KERNEL_TEST_API ?= 0
@@ -121,10 +121,10 @@ ccflags-y = \
 
 ifeq ($(KBUILD_EXTMOD),)
 # in-tree
-    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
+    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=../../$(src)/platform/$(CONFIG_MALI_MTK_PLATFORM_NAME)
 else
 # out-of-tree
-    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=$(src)/platform/$(CONFIG_MALI_PLATFORM_NAME)
+    ccflags-y +=-DMALI_KBASE_PLATFORM_PATH=$(src)/platform/$(CONFIG_MALI_MTK_PLATFORM_NAME)
 endif
 
 ccflags-y += \
@@ -144,9 +144,9 @@ subdir-ccflags-y += $(ccflags-y)
 #
 # Kernel Modules
 #
-obj-$(CONFIG_MALI_MIDGARD) += mali_kbase.o
-obj-$(CONFIG_MALI_ARBITRATION) += ../arbitration/
-obj-$(CONFIG_MALI_KUTF)    += tests/
+obj-$(CONFIG_MALI_MTK) += mali_kbase.o
+obj-$(CONFIG_MALI_MTK_ARBITRATION) += ../arbitration/
+obj-$(CONFIG_MALI_MTK_KUTF)    += tests/
 
 mali_kbase-y := \
     mali_kbase_cache_policy.o \
@@ -185,18 +185,18 @@ mali_kbase-y := \
 
 mali_kbase-$(CONFIG_DEBUG_FS) += mali_kbase_pbha_debugfs.o
 
-mali_kbase-$(CONFIG_MALI_CINSTR_GWT) += mali_kbase_gwt.o
+mali_kbase-$(CONFIG_MALI_MTK_CINSTR_GWT) += mali_kbase_gwt.o
 
 mali_kbase-$(CONFIG_SYNC_FILE) += \
     mali_kbase_fence_ops.o \
     mali_kbase_sync_file.o \
     mali_kbase_sync_common.o
 
-mali_kbase-$(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD) += \
+mali_kbase-$(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD) += \
         mali_power_gpu_work_period_trace.o \
         mali_kbase_gpu_metrics.o
 
-ifneq ($(CONFIG_MALI_CSF_SUPPORT),y)
+ifneq ($(CONFIG_MALI_MTK_CSF_SUPPORT),y)
     mali_kbase-y += \
         mali_kbase_jm.o \
         mali_kbase_dummy_job_wa.o \
@@ -228,12 +228,12 @@ INCLUDE_SUBDIR = \
     $(src)/thirdparty/Kbuild \
     $(src)/platform/$(MALI_PLATFORM_DIR)/Kbuild
 
-ifeq ($(CONFIG_MALI_CSF_SUPPORT),y)
+ifeq ($(CONFIG_MALI_MTK_CSF_SUPPORT),y)
     INCLUDE_SUBDIR += $(src)/csf/Kbuild
 endif
 
 
-ifeq ($(CONFIG_MALI_DEVFREQ),y)
+ifeq ($(CONFIG_MALI_MTK_DEVFREQ),y)
     ifeq ($(CONFIG_DEVFREQ_THERMAL),y)
         INCLUDE_SUBDIR += $(src)/ipa/Kbuild
     endif

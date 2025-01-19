@@ -73,7 +73,7 @@ static u64 kbase_job_write_affinity(struct kbase_device *kbdev, base_jd_core_req
 	}
 
 	if (unlikely(!affinity && !skip_affinity_check)) {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 		u64 shaders_ready = kbase_pm_get_ready_cores(kbdev, KBASE_PM_CORE_SHADER);
 
 		WARN_ON(!(shaders_ready & kbdev->pm.backend.shaders_avail));
@@ -86,7 +86,7 @@ static u64 kbase_job_write_affinity(struct kbase_device *kbdev, base_jd_core_req
 			affinity =
 				kbasep_apply_limited_core_mask(kbdev, affinity, limited_core_mask);
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 			/* affinity should never be 0 */
 			WARN_ON(!affinity);
 #endif
@@ -458,7 +458,7 @@ void kbase_job_done(struct kbase_device *kbdev, u32 done)
 					 */
 					kbase_gpu_complete_hw(kbdev, i, BASE_JD_EVENT_DONE, 0,
 							      &end_timestamp);
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 					/* Increment the end timestamp value by 1 ns to
 					 * avoid having the same value for 'start_time_ns'
 					 * and 'end_time_ns' for the 2nd atom whose job
@@ -509,13 +509,13 @@ void kbasep_job_slot_soft_or_hard_stop_do_action(struct kbase_device *kbdev, uns
 
 	if (action == JS_COMMAND_SOFT_STOP) {
 		if (kbase_jd_katom_is_protected(target_katom)) {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 			dev_dbg(kbdev->dev,
 				"Attempt made to soft-stop a job that cannot be soft-stopped. core_reqs = 0x%x",
 				(unsigned int)core_reqs);
 #else
 			CSTD_UNUSED(core_reqs);
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 			return;
 		}
 
@@ -1276,7 +1276,7 @@ static u64 kbasep_apply_limited_core_mask(const struct kbase_device *kbdev, cons
 {
 	const u64 result = affinity & limited_core_mask;
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	dev_dbg(kbdev->dev,
 		"Limiting affinity due to BASE_JD_REQ_LIMITED_CORE_MASK from 0x%lx to 0x%lx (mask is 0x%lx)\n",
 		(unsigned long)affinity, (unsigned long)result, (unsigned long)limited_core_mask);

@@ -18,7 +18,7 @@
 #
 #
 
-menuconfig MALI_MIDGARD
+menuconfig MALI_MTK
 	tristate "Mali Midgard series support"
 	select GPU_TRACEPOINTS if ANDROID
 	select DMA_SHARED_BUFFER
@@ -32,31 +32,31 @@ menuconfig MALI_MIDGARD
 	  To compile this driver as a module, choose M here:
 	  this will generate a single module, called mali_kbase.
 
-if MALI_MIDGARD
+if MALI_MTK
 
-config MALI_PLATFORM_NAME
-	depends on MALI_MIDGARD
+config MALI_MTK_PLATFORM_NAME
+	depends on MALI_MTK
 	string "Platform name"
 	default "devicetree"
 	help
 	  Enter the name of the desired platform configuration directory to
-	  include in the build. 'platform/$(MALI_PLATFORM_NAME)/Kbuild' must
+	  include in the build. 'platform/$(MALI_MTK_PLATFORM_NAME)/Kbuild' must
 	  exist.
 
 choice
 	prompt "Mali HW backend"
-	depends on MALI_MIDGARD
-	default MALI_REAL_HW
+	depends on MALI_MTK
+	default MALI_MTK_REAL_HW
 
-config MALI_REAL_HW
+config MALI_MTK_REAL_HW
 	bool "Enable build of Mali kernel driver for real HW"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	help
 	  This is the default HW backend.
 
-config MALI_NO_MALI
+config MALI_MTK_NO_MALI
 	bool "Enable build of Mali kernel driver for No Mali"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	help
 	  This can be used to test the driver in a simulated environment
 	  whereby the hardware is not physically present. If the hardware is physically
@@ -67,34 +67,34 @@ config MALI_NO_MALI
 
 endchoice
 
-config MALI_NO_MALI_DEFAULT_GPU
+config MALI_MTK_NO_MALI_DEFAULT_GPU
 	string "Default GPU for No Mali"
-	depends on MALI_NO_MALI
+	depends on MALI_MTK_NO_MALI
 	default "tMIx"
 	help
 	  This option sets the default GPU to identify as for No Mali builds.
 
-config MALI_IS_FPGA
+config MALI_MTK_IS_FPGA
 	bool "Enable build of Mali kernel driver for FPGA"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	help
 	  This is the default HW backend.
 
 menu "Platform specific options"
-source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/platform/Kconfig"
+source "$(MALI_MTK_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/platform/Kconfig"
 endmenu
 
-config MALI_CSF_SUPPORT
+config MALI_MTK_CSF_SUPPORT
 	bool "Enable Mali CSF based GPU support"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	help
 	  Enables support for CSF based GPUs.
 
-config MALI_DEVFREQ
+config MALI_MTK_DEVFREQ
 	bool "Enable devfreq support for Mali"
-	depends on MALI_MIDGARD && PM_DEVFREQ
+	depends on MALI_MTK && PM_DEVFREQ
 	select DEVFREQ_GOV_SIMPLE_ONDEMAND
 	default y
 	help
@@ -104,33 +104,33 @@ config MALI_DEVFREQ
 	  governor, the frequency of Mali will be dynamically selected from the
 	  available OPPs.
 
-config MALI_MIDGARD_DVFS
+config MALI_MTK_DVFS
 	bool "Enable legacy DVFS"
-	depends on MALI_MIDGARD && !MALI_DEVFREQ
+	depends on MALI_MTK && !MALI_MTK_DEVFREQ
 	default n
 	help
 	  Choose this option to enable legacy DVFS in the Mali Midgard DDK.
 
-config MALI_GATOR_SUPPORT
+config MALI_MTK_GATOR_SUPPORT
 	bool "Enable Streamline tracing support"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default y
 	help
 	  Enables kbase tracing used by the Arm Streamline Performance Analyzer.
 	  The tracepoints are used to derive GPU activity charts in Streamline.
 
-config MALI_MIDGARD_ENABLE_TRACE
+config MALI_MTK_ENABLE_TRACE
 	bool "Enable kbase tracing"
-	depends on MALI_MIDGARD
-	default y if MALI_DEBUG
+	depends on MALI_MTK
+	default y if MALI_MTK_DEBUG
 	default n
 	help
 	  Enables tracing in kbase. Trace log available through
 	  the "mali_trace" debugfs file, when the CONFIG_DEBUG_FS is enabled
 
-config MALI_ARBITER_SUPPORT
+config MALI_MTK_ARBITER_SUPPORT
 	bool "Enable arbiter support for Mali"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	help
 	  Enable support for the arbiter interface in the driver.
@@ -139,9 +139,9 @@ config MALI_ARBITER_SUPPORT
 
 	  If unsure, say N.
 
-config MALI_DMA_BUF_MAP_ON_DEMAND
+config MALI_MTK_DMA_BUF_MAP_ON_DEMAND
 	bool "Enable map imported dma-bufs on demand"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	help
 	  This option will cause kbase to set up the GPU mapping of imported
@@ -150,38 +150,38 @@ config MALI_DMA_BUF_MAP_ON_DEMAND
 	  This is intended for testing and the option will get removed in the
 	  future.
 
-config MALI_DMA_BUF_LEGACY_COMPAT
+config MALI_MTK_DMA_BUF_LEGACY_COMPAT
 	bool "Enable legacy compatibility cache flush on dma-buf map"
-	depends on MALI_MIDGARD && !MALI_DMA_BUF_MAP_ON_DEMAND
+	depends on MALI_MTK && !MALI_MTK_DMA_BUF_MAP_ON_DEMAND
 	default n
 	help
 	  This option enables compatibility with legacy dma-buf mapping
 	  behavior, then the dma-buf is mapped on import, by adding cache
-	  maintenance where MALI_DMA_BUF_MAP_ON_DEMAND would do the mapping,
+	  maintenance where MALI_MTK_DMA_BUF_MAP_ON_DEMAND would do the mapping,
 	  including a cache flush.
 
 	  This option might work-around issues related to missing cache
 	  flushes in other drivers. This only has an effect for clients using
 	  UK 11.18 or older. For later UK versions it is not possible.
 
-config MALI_CORESIGHT
-	depends on MALI_MIDGARD && MALI_CSF_SUPPORT && !MALI_NO_MALI
+config MALI_MTK_CORESIGHT
+	depends on MALI_MTK && MALI_MTK_CSF_SUPPORT && !MALI_MTK_NO_MALI
 	bool "Enable Kbase CoreSight tracing support"
 	default n
 
-menuconfig MALI_EXPERT
-	depends on MALI_MIDGARD
+menuconfig MALI_MTK_EXPERT
+	depends on MALI_MTK
 	bool "Enable Expert Settings"
 	default n
 	help
 	  Enabling this option and modifying the default settings may produce
 	  a driver with performance or other limitations.
 
-if MALI_EXPERT
+if MALI_MTK_EXPERT
 
-config LARGE_PAGE_SUPPORT
+config MALI_MTK_LARGE_PAGE_SUPPORT
 	bool "Support for 2MB page allocations"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default y
 	help
 	 Rather than allocating all GPU memory page-by-page, allow the system
@@ -194,9 +194,9 @@ config LARGE_PAGE_SUPPORT
 
 	 If in doubt, say Y.
 
-config PAGE_MIGRATION_SUPPORT
+config MALI_MTK_PAGE_MIGRATION_SUPPORT
 	bool "Enable support for page migration"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default y
 	default n if ANDROID
 	help
@@ -210,9 +210,9 @@ config PAGE_MIGRATION_SUPPORT
 	  If in doubt, say Y. To strip out page migration symbols and support,
 	  say N.
 
-config MALI_CORESTACK
+config MALI_MTK_CORESTACK
 	bool "Enable support of GPU core stack power control"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  Enabling this feature on supported GPUs will let the driver powering
@@ -224,19 +224,19 @@ config MALI_CORESTACK
 	  If unsure, say N.
 
 comment "Debug options"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 
-config MALI_DEBUG
+config MALI_MTK_DEBUG
 	bool "Enable debug build"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  Select this option for increased checking and reporting of errors.
 
-config MALI_FENCE_DEBUG
+config MALI_MTK_FENCE_DEBUG
 	bool "Enable debug sync fence usage"
-	depends on MALI_MIDGARD && MALI_EXPERT && SYNC_FILE
-	default y if MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_EXPERT && SYNC_FILE
+	default y if MALI_MTK_DEBUG
 	help
 	  Select this option to enable additional checking and reporting on the
 	  use of sync fences in the Mali driver.
@@ -250,10 +250,10 @@ config MALI_FENCE_DEBUG
 	  The timeout can be changed at runtime through the js_soft_timeout
 	  device attribute, where the timeout is specified in milliseconds.
 
-config MALI_SYSTEM_TRACE
+config MALI_MTK_SYSTEM_TRACE
 	bool "Enable system event tracing support"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default y if MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_EXPERT
+	default y if MALI_MTK_DEBUG
 	default n
 	help
 	  Choose this option to enable system trace events for each
@@ -262,22 +262,22 @@ config MALI_SYSTEM_TRACE
 	  you are doing.
 
 comment "Instrumentation options"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 
 choice
 	prompt "Select Performance counters set"
-	default MALI_PRFCNT_SET_PRIMARY
-	depends on MALI_MIDGARD && MALI_EXPERT
+	default MALI_MTK_PRFCNT_SET_PRIMARY
+	depends on MALI_MTK && MALI_MTK_EXPERT
 
-config MALI_PRFCNT_SET_PRIMARY
+config MALI_MTK_PRFCNT_SET_PRIMARY
 	bool "Primary"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	help
 	  Select this option to use primary set of performance counters.
 
-config MALI_PRFCNT_SET_SECONDARY
+config MALI_MTK_PRFCNT_SET_SECONDARY
 	bool "Secondary"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	help
 	  Select this option to use secondary set of performance counters. Kernel
 	  features that depend on an access to the primary set of counters may
@@ -285,11 +285,11 @@ config MALI_PRFCNT_SET_SECONDARY
 	  from working optimally and may cause instrumentation tools to return
 	  bogus results.
 
-	  If unsure, use MALI_PRFCNT_SET_PRIMARY.
+	  If unsure, use MALI_MTK_PRFCNT_SET_PRIMARY.
 
-config MALI_PRFCNT_SET_TERTIARY
+config MALI_MTK_PRFCNT_SET_TERTIARY
 	bool "Tertiary"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	help
 	  Select this option to use tertiary set of performance counters. Kernel
 	  features that depend on an access to the primary set of counters may
@@ -297,13 +297,13 @@ config MALI_PRFCNT_SET_TERTIARY
 	  from working optimally and may cause instrumentation tools to return
 	  bogus results.
 
-	  If unsure, use MALI_PRFCNT_SET_PRIMARY.
+	  If unsure, use MALI_MTK_PRFCNT_SET_PRIMARY.
 
 endchoice
 
-config MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
+config MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 	bool "Enable runtime selection of performance counters set via debugfs"
-	depends on MALI_MIDGARD && MALI_EXPERT && DEBUG_FS && !MALI_CSF_SUPPORT
+	depends on MALI_MTK && MALI_MTK_EXPERT && DEBUG_FS && !MALI_MTK_CSF_SUPPORT
 	default n
 	help
 	  Select this option to make the secondary set of performance counters
@@ -324,9 +324,9 @@ config MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS
 
 	  If unsure, say N.
 
-config MALI_JOB_DUMP
+config MALI_MTK_JOB_DUMP
 	bool "Enable system level support needed for job dumping"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  Choose this option to enable system level support needed for
@@ -335,11 +335,11 @@ config MALI_JOB_DUMP
 	  you are doing.
 
 comment "Workarounds"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 
-config MALI_PWRSOFT_765
+config MALI_MTK_PWRSOFT_765
 	bool "Enable workaround for PWRSOFT-765"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  PWRSOFT-765 fixes devfreq cooling devices issues. The fix was merged
@@ -349,9 +349,9 @@ config MALI_PWRSOFT_765
 	  If using kernel >= v4.10 then say N, otherwise if devfreq cooling
 	  changes have been backported say Y to avoid compilation errors.
 
-config MALI_HW_ERRATA_1485982_NOT_AFFECTED
+config MALI_MTK_HW_ERRATA_1485982_NOT_AFFECTED
 	bool "Disable workaround for KBASE_HW_ISSUE_GPU2017_1336"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  This option disables the default workaround for GPU2017-1336. The
@@ -361,9 +361,9 @@ config MALI_HW_ERRATA_1485982_NOT_AFFECTED
 	  protected mode content on fully coherent platforms, as the switch to IO
 	  coherency mode requires the L2 to be turned off.
 
-config MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
+config MALI_MTK_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
 	bool "Use alternative workaround for KBASE_HW_ISSUE_GPU2017_1336"
-	depends on MALI_MIDGARD && MALI_EXPERT && !MALI_HW_ERRATA_1485982_NOT_AFFECTED
+	depends on MALI_MTK && MALI_MTK_EXPERT && !MALI_MTK_HW_ERRATA_1485982_NOT_AFFECTED
 	default n
 	help
 	  This option uses an alternative workaround for GPU2017-1336. Lowering
@@ -374,18 +374,18 @@ config MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
 
 endif
 
-config MALI_ARBITRATION
+config MALI_MTK_ARBITRATION
 	tristate "Enable Virtualization reference code"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	help
 	  Enables the build of several reference modules used in the reference
 	  virtualization setup for Mali
 	  If unsure, say N.
 
-config MALI_TRACE_POWER_GPU_WORK_PERIOD
+config MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD
 	bool "Enable per-application GPU metrics tracepoints"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default y
 	help
 	  This option enables per-application GPU metrics tracepoints.
@@ -393,6 +393,6 @@ config MALI_TRACE_POWER_GPU_WORK_PERIOD
 	  If unsure, say N.
 
 
-source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/tests/Kconfig"
-source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/base/arm/Kconfig"
+source "$(MALI_MTK_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/tests/Kconfig"
+source "$(MALI_MTK_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/base/arm/Kconfig"
 endif

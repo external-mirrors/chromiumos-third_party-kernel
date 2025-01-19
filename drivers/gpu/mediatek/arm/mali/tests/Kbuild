@@ -25,9 +25,9 @@ ccflags-y += -I$(src)/include \
 subdir-ccflags-y += -I$(src)/include \
                     -I$(src)
 
-obj-$(CONFIG_MALI_KUTF) += kutf/
-obj-$(CONFIG_MALI_KUTF_IRQ_TEST) += mali_kutf_irq_test/
-obj-$(CONFIG_MALI_KUTF_CLK_RATE_TRACE) += mali_kutf_clk_rate_trace/kernel/
-obj-$(CONFIG_MALI_KUTF_MGM_INTEGRATION) += mali_kutf_mgm_integration_test/
+obj-$(CONFIG_MALI_MTK_KUTF) += kutf/
+obj-$(CONFIG_MALI_MTK_KUTF_IRQ_TEST) += mali_kutf_irq_test/
+obj-$(CONFIG_MALI_MTK_KUTF_CLK_RATE_TRACE) += mali_kutf_clk_rate_trace/kernel/
+obj-$(CONFIG_MALI_MTK_KUTF_MGM_INTEGRATION) += mali_kutf_mgm_integration_test/
 
 

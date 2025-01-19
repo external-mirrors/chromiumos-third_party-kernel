@@ -20,23 +20,23 @@
  */
 
 bob_kernel_module {
-    name: "mali_kutf_irq_test",
+    name: "mali_mtk_kutf_irq_test",
     defaults: [
-        "mali_kbase_shared_config_defaults",
+        "mali_mtk_kbase_shared_config_defaults",
         "kernel_test_configs",
         "kernel_test_includes",
     ],
     srcs: [
         "Kbuild",
-        "mali_kutf_irq_test_main.c",
+        "mali_mtk_kutf_irq_test_main.c",
     ],
     extra_symbols: [
-        "mali_kbase",
+        "mali_mtk_kbase",
         "kutf",
     ],
     enabled: false,
-    mali_kutf_irq_test: {
-        kbuild_options: ["CONFIG_MALI_KUTF_IRQ_TEST=y"],
+    mali_mtk_kutf_irq_test: {
+        kbuild_options: ["CONFIG_MALI_MTK_KUTF_IRQ_TEST=y"],
         enabled: true,
     },
 }

@@ -31,8 +31,8 @@ bob_defaults {
 
 bob_defaults {
     name: "kernel_test_configs",
-    mali_kutf: {
-        kbuild_options: ["CONFIG_MALI_KUTF=y"],
+    mali_mtk_kutf: {
+        kbuild_options: ["CONFIG_MALI_MTK_KUTF=y"],
     },
     unit_test_kernel_modules: {
         kbuild_options: ["CONFIG_UNIT_TEST_KERNEL_MODULES=y"],

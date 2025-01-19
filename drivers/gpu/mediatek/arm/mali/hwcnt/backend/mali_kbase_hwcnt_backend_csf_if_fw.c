@@ -225,7 +225,7 @@ kbasep_hwcnt_backend_csf_if_fw_cc_disable(struct kbase_hwcnt_backend_csf_if_fw_c
 		kbase_clk_rate_trace_manager_unsubscribe(rtm, &fw_ctx->rate_listener);
 }
 
-#if !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 /**
  * kbasep_hwcnt_backend_csf_core_mask() - Obtain Core Mask - MAX Core ID
  *
@@ -243,7 +243,7 @@ static void kbasep_hwcnt_backend_csf_if_fw_get_prfcnt_info(
 	struct kbase_hwcnt_backend_csf_if_ctx *ctx,
 	struct kbase_hwcnt_backend_csf_if_prfcnt_info *prfcnt_info)
 {
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	struct kbase_hwcnt_backend_csf_if_fw_ctx *fw_ctx =
 		(struct kbase_hwcnt_backend_csf_if_fw_ctx *)ctx;
 
@@ -402,11 +402,11 @@ static int kbasep_hwcnt_backend_csf_if_fw_ring_buf_alloc(
 
 	kfree(page_list);
 
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	fw_ring_buf->gpu_dump_base = (uintptr_t)cpu_addr;
 #else
 	fw_ring_buf->gpu_dump_base = gpu_va_base;
-#endif /* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_MTK_NO_MALI */
 	fw_ring_buf->cpu_dump_base = cpu_addr;
 	fw_ring_buf->phys = phys;
 	fw_ring_buf->num_pages = num_pages;
@@ -452,13 +452,13 @@ kbasep_hwcnt_backend_csf_if_fw_ring_buf_sync(struct kbase_hwcnt_backend_csf_if_c
 	WARN_ON(!ctx);
 	WARN_ON(!ring_buf);
 
-#if IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 	/* When using the dummy backend syncing the ring buffer is unnecessary as
 	 * the ring buffer is only accessed by the CPU. It may also cause data loss
 	 * due to cache invalidation so return early.
 	 */
 	return;
-#endif /* CONFIG_MALI_NO_MALI */
+#endif /* CONFIG_MALI_MTK_NO_MALI */
 
 	/* The index arguments for this function form an inclusive, exclusive
 	 * range.

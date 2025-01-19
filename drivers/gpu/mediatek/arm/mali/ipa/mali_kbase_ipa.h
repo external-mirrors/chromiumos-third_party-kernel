@@ -22,7 +22,7 @@
 #ifndef _KBASE_IPA_H_
 #define _KBASE_IPA_H_
 
-#if defined(CONFIG_MALI_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)
+#if defined(CONFIG_MALI_MTK_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)
 
 struct devfreq;
 
@@ -284,12 +284,12 @@ extern struct devfreq_cooling_power kbase_ipa_power_model_ops;
  */
 void kbase_ipa_reset_data(struct kbase_device *kbdev);
 
-#else /* !(defined(CONFIG_MALI_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)) */
+#else /* !(defined(CONFIG_MALI_MTK_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)) */
 
 static inline void kbase_ipa_protection_mode_switch_event(struct kbase_device *kbdev)
 {
 }
 
-#endif /* (defined(CONFIG_MALI_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)) */
+#endif /* (defined(CONFIG_MALI_MTK_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)) */
 
 #endif

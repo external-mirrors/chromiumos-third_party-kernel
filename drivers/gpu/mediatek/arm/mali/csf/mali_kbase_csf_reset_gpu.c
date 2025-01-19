@@ -638,26 +638,26 @@ static irqreturn_t kbase_gpueb_irq_handler(int irq, void *data)
 		kbdev->low_volt_count++;
 		dev_err(kbdev->dev, "%s: ++LOW_VOLT[%llu] BRCAST_TIMEOUT[%llu]", __func__,
 			kbdev->low_volt_count, kbdev->brcast_timeout_count);
-#if IS_ENABLED(CONFIG_MALI_MTK_LOG_BUFFER)
+#if IS_ENABLED(CONFIG_MALI_MTK_MTK_LOG_BUFFER)
 		mtk_logbuffer_type_print(kbdev, MTK_LOGBUFFER_TYPE_CRITICAL | MTK_LOGBUFFER_TYPE_EXCEPTION,
 			"%s: ++LOW_VOLT[%llu] BRCAST_TIMEOUT[%llu]\n", __func__,
 			kbdev->low_volt_count, kbdev->brcast_timeout_count);
-#endif /* CONFIG_MALI_MTK_LOG_BUFFER */
+#endif /* CONFIG_MALI_MTK_MTK_LOG_BUFFER */
 	} else if (gpueb_irq_status & BIT(1)) {
 		kbdev->brcast_timeout_count++;
 		dev_err(kbdev->dev, "%s: LOW_VOLT[%llu] ++BRCAST_TIMEOUT[%llu]", __func__,
 			kbdev->low_volt_count, kbdev->brcast_timeout_count);
-#if IS_ENABLED(CONFIG_MALI_MTK_LOG_BUFFER)
+#if IS_ENABLED(CONFIG_MALI_MTK_MTK_LOG_BUFFER)
 		mtk_logbuffer_type_print(kbdev, MTK_LOGBUFFER_TYPE_CRITICAL | MTK_LOGBUFFER_TYPE_EXCEPTION,
 			"%s: LOW_VOLT[%llu] ++BRCAST_TIMEOUT[%llu]\n", __func__,
 			kbdev->low_volt_count, kbdev->brcast_timeout_count);
-#endif /* CONFIG_MALI_MTK_LOG_BUFFER */
+#endif /* CONFIG_MALI_MTK_MTK_LOG_BUFFER */
 	}
 
 	if (kbase_prepare_to_reset_gpu(kbdev, RESET_FLAGS_NONE)) {
-#if IS_ENABLED(CONFIG_MALI_MTK_MBRAIN_SUPPORT)
+#if IS_ENABLED(CONFIG_MALI_MTK_MTK_MBRAIN_SUPPORT)
 		ged_mali_event_update_gpu_reset_nolock(GPU_RESET_GPUEB_IRQ_NOTIFY);
-#endif /* CONFIG_MALI_MTK_MBRAIN_SUPPORT */
+#endif /* CONFIG_MALI_MTK_MTK_MBRAIN_SUPPORT */
 		kbase_reset_gpu(kbdev);
 	} else
 		dev_err(kbdev->dev, "%s: GPU is already under reset", __func__);

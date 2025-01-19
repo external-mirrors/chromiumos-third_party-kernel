@@ -97,7 +97,7 @@ bool kbase_reg_is_valid(struct kbase_device *kbdev, u32 reg_enum)
 
 bool kbase_reg_is_accessible(struct kbase_device *kbdev, u32 reg_enum, u32 flags)
 {
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	if (WARN(!kbase_reg_is_valid(kbdev, reg_enum), "Invalid register enum 0x%x: %s", reg_enum,
 		 kbase_reg_get_enum_string(reg_enum)))
 		return false;
@@ -150,7 +150,7 @@ int kbase_regmap_init(struct kbase_device *kbdev)
 	if (WARN_ON(kbdev->dev == NULL))
 		return -ENODEV;
 
-	if (!IS_ENABLED(CONFIG_MALI_NO_MALI) && WARN_ON(kbdev->reg == NULL))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_NO_MALI) && WARN_ON(kbdev->reg == NULL))
 		return -ENXIO;
 
 	lut_arch_id = kbase_regmap_backend_init(kbdev);

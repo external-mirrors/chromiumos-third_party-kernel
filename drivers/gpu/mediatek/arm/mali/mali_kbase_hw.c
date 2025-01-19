@@ -95,7 +95,7 @@ void kbase_hw_set_features_mask(struct kbase_device *kbdev)
 	for (; *features != KBASE_HW_FEATURE_END; features++)
 		set_bit(*features, &kbdev->hw_features_mask[0]);
 
-#if defined(CONFIG_MALI_VECTOR_DUMP)
+#if defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 	/* When dumping is enabled, need to disable flush reduction optimization
 	 * for GPUs on which it is safe to have only cache clean operation at
 	 * the end of job chain.

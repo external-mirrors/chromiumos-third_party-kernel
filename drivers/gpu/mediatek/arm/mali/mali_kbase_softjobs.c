@@ -269,7 +269,7 @@ void kbasep_complete_triggered_soft_events(struct kbase_context *kctx, u64 evt)
 				cancel_timer = 0;
 			}
 			break;
-#ifdef CONFIG_MALI_FENCE_DEBUG
+#ifdef CONFIG_MALI_MTK_FENCE_DEBUG
 		case BASE_JD_REQ_SOFT_FENCE_WAIT:
 			/* Keep the timer running if fence debug is enabled and
 			 * there are waiting fence jobs.
@@ -285,7 +285,7 @@ void kbasep_complete_triggered_soft_events(struct kbase_context *kctx, u64 evt)
 	spin_unlock_irqrestore(&kctx->waiting_soft_jobs_lock, lflags);
 }
 
-#ifdef CONFIG_MALI_FENCE_DEBUG
+#ifdef CONFIG_MALI_MTK_FENCE_DEBUG
 static void kbase_fence_debug_check_atom(struct kbase_jd_atom *katom)
 {
 	struct kbase_context *kctx = katom->kctx;
@@ -381,7 +381,7 @@ static void kbase_fence_debug_timeout(struct kbase_jd_atom *katom)
 		queue_work(kctx->jctx.job_done_wq, &work->work);
 	}
 }
-#endif /* CONFIG_MALI_FENCE_DEBUG */
+#endif /* CONFIG_MALI_MTK_FENCE_DEBUG */
 
 void kbasep_soft_job_timeout_worker(struct timer_list *timer)
 {
@@ -413,7 +413,7 @@ void kbasep_soft_job_timeout_worker(struct timer_list *timer)
 			INIT_WORK(&katom->work, kbasep_soft_event_complete_job);
 			queue_work(kctx->jctx.job_done_wq, &katom->work);
 			break;
-#ifdef CONFIG_MALI_FENCE_DEBUG
+#ifdef CONFIG_MALI_MTK_FENCE_DEBUG
 		case BASE_JD_REQ_SOFT_FENCE_WAIT:
 			kbase_fence_debug_timeout(katom);
 			break;
@@ -496,7 +496,7 @@ static void kbasep_soft_event_cancel_job(struct kbase_jd_atom *katom)
 		kbase_js_sched_all(katom->kctx->kbdev);
 }
 
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 static void kbase_debug_copy_finish(struct kbase_jd_atom *katom)
 {
 	struct kbase_debug_copy_buffer *buffers = katom->softjob_data;
@@ -862,7 +862,7 @@ static int kbase_debug_copy(struct kbase_jd_atom *katom)
 
 	return 0;
 }
-#endif /* IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST */
 #endif /* !MALI_USE_CSF */
 
 #define KBASEP_JIT_ALLOC_GPU_ADDR_ALIGNMENT ((u32)0x7)
@@ -1177,7 +1177,7 @@ static int kbase_jit_allocate_process(struct kbase_jd_atom *katom)
 		new_addr = reg->start_pfn << PAGE_SHIFT;
 		*ptr = new_addr;
 
-#if defined(CONFIG_MALI_VECTOR_DUMP)
+#if defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 		/*
 		 * Retrieve the mmu flags for JIT allocation
 		 * only if dumping is enabled
@@ -1507,7 +1507,7 @@ int kbase_process_soft_job(struct kbase_jd_atom *katom)
 		ret = kbase_sync_fence_in_wait(katom);
 
 		if (ret == 1) {
-#ifdef CONFIG_MALI_FENCE_DEBUG
+#ifdef CONFIG_MALI_MTK_FENCE_DEBUG
 			kbasep_add_waiting_with_timeout(katom);
 #else
 			kbasep_add_waiting_soft_job(katom);
@@ -1525,7 +1525,7 @@ int kbase_process_soft_job(struct kbase_jd_atom *katom)
 	case BASE_JD_REQ_SOFT_EVENT_RESET:
 		kbasep_soft_event_update_locked(katom, BASE_JD_SOFT_EVENT_RESET);
 		break;
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 	case BASE_JD_REQ_SOFT_DEBUG_COPY: {
 		int res = kbase_debug_copy(katom);
 
@@ -1533,7 +1533,7 @@ int kbase_process_soft_job(struct kbase_jd_atom *katom)
 			katom->event_code = BASE_JD_EVENT_JOB_INVALID;
 		break;
 	}
-#endif /* IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST */
 	case BASE_JD_REQ_SOFT_JIT_ALLOC:
 		ret = kbase_jit_allocate_process(katom);
 		break;
@@ -1626,10 +1626,10 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom)
 		if (katom->jc == 0)
 			return -EINVAL;
 		break;
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 	case BASE_JD_REQ_SOFT_DEBUG_COPY:
 		return kbase_debug_copy_prepare(katom);
-#endif /* IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST */
 	case BASE_JD_REQ_SOFT_EXT_RES_MAP:
 		return kbase_ext_res_prepare(katom);
 	case BASE_JD_REQ_SOFT_EXT_RES_UNMAP:
@@ -1660,11 +1660,11 @@ void kbase_finish_soft_job(struct kbase_jd_atom *katom)
 		kbase_sync_fence_in_remove(katom);
 		break;
 #endif /* CONFIG_SYNC_FILE */
-#if IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST
+#if IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST
 	case BASE_JD_REQ_SOFT_DEBUG_COPY:
 		kbase_debug_copy_finish(katom);
 		break;
-#endif /* IS_ENABLED(CONFIG_MALI_VECTOR_DUMP) || MALI_UNIT_TEST */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_VECTOR_DUMP) || MALI_UNIT_TEST */
 	case BASE_JD_REQ_SOFT_JIT_ALLOC:
 		kbase_jit_allocate_finish(katom);
 		break;

@@ -25,4 +25,4 @@ ccflags-y += \
 
 subdir-ccflags-y += $(ccflags-y)
 
-obj-$(CONFIG_DMA_SHARED_BUFFER_TEST_EXPORTER) += dma-buf-test-exporter.o
+obj-$(CONFIG_MALI_MTK_DMA_SHARED_BUFFER_TEST_EXPORTER) += dma-buf-test-exporter.o

@@ -21,8 +21,8 @@
 
 /* Create the trace point if not configured in kernel */
 #ifndef CONFIG_TRACE_POWER_GPU_WORK_PERIOD
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 #define CREATE_TRACE_POINTS
 #include "mali_power_gpu_work_period_trace.h"
-#endif /* CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD */
+#endif /* CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD */
 #endif

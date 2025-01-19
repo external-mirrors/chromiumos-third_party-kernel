@@ -107,7 +107,7 @@ static bool set_pool_new_page_metadata(struct kbase_mem_pool *pool, struct page 
 	 * Only update page status and add the page to the memory pool if
 	 * it is not isolated.
 	 */
-	if (!IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT))
+	if (!IS_ENABLED(CONFIG_MALI_MTK_PAGE_MIGRATION_SUPPORT))
 		not_movable = true;
 	else {
 		spin_lock(&page_md->migrate_lock);

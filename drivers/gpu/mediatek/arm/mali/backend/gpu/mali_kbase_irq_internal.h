@@ -58,8 +58,8 @@ void kbase_release_interrupts(struct kbase_device *kbdev);
  */
 void kbase_synchronize_irqs(struct kbase_device *kbdev);
 
-#ifdef CONFIG_MALI_DEBUG
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
+#ifdef CONFIG_MALI_MTK_DEBUG
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 /**
  * kbase_validate_interrupts - Validate interrupts
  *
@@ -74,8 +74,8 @@ void kbase_synchronize_irqs(struct kbase_device *kbdev);
  * Return: 0 on success. Error code (negative) on failure.
  */
 int kbase_validate_interrupts(struct kbase_device *const kbdev);
-#endif /* IS_ENABLED(CONFIG_MALI_REAL_HW) */
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 /**
  * kbase_get_interrupt_handler - Return default interrupt handler

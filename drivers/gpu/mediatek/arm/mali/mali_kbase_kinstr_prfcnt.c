@@ -1532,9 +1532,9 @@ kbasep_kinstr_prfcnt_parse_request_enable(const struct prfcnt_request_enable *re
 	 * set because it's the only one to be supported. This will change in
 	 * the future.
 	 */
-#if defined(CONFIG_MALI_PRFCNT_SET_SECONDARY)
+#if defined(CONFIG_MALI_MTK_PRFCNT_SET_SECONDARY)
 	default_set = KBASE_HWCNT_SET_SECONDARY;
-#elif defined(CONFIG_MALI_PRFCNT_SET_TERTIARY)
+#elif defined(CONFIG_MALI_MTK_PRFCNT_SET_TERTIARY)
 	default_set = KBASE_HWCNT_SET_TERTIARY;
 #else
 	/* Default to primary */
@@ -1980,9 +1980,9 @@ int kbasep_kinstr_populate_prfcnt_enum_list(const struct kbase_hwcnt_metadata *m
 	if (!err) {
 		size_t counter_set;
 
-#if defined(CONFIG_MALI_PRFCNT_SET_SECONDARY)
+#if defined(CONFIG_MALI_MTK_PRFCNT_SET_SECONDARY)
 		counter_set = KBASE_HWCNT_SET_SECONDARY;
-#elif defined(CONFIG_MALI_PRFCNT_SET_TERTIARY)
+#elif defined(CONFIG_MALI_MTK_PRFCNT_SET_TERTIARY)
 		counter_set = KBASE_HWCNT_SET_TERTIARY;
 #else
 		/* Default to primary */

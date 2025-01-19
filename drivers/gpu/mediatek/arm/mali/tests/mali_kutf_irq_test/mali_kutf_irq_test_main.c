@@ -97,7 +97,7 @@ static irqreturn_t kbase_gpu_irq_custom_handler(int irq, void *data)
 	if (!val)
 		result = IRQ_NONE;
 	else {
-#if IS_ENABLED(CONFIG_MALI_REAL_HW)
+#if IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 		dev_dbg(kbdev->dev, "%s: irq %d irqstatus 0x%x\n", __func__, irq, val);
 		kbase_gpu_interrupt(kbdev, val);
 #endif

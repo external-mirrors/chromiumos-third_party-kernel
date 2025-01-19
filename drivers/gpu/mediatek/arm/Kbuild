@@ -18,4 +18,4 @@
 #
 #
 
-obj-$(CONFIG_MALI_MIDGARD) += mali/
+obj-$(CONFIG_MALI_MTK) += mali/

@@ -18,7 +18,7 @@
 #
 #
 
-menuconfig MALI_MIDGARD
+menuconfig MALI_MTK
 	bool "Mali Midgard series support"
 	default y
 	help
@@ -27,15 +27,15 @@ menuconfig MALI_MIDGARD
 	  To compile this driver as a module, choose M here:
 	  this will generate a single module, called mali_kbase.
 
-config MALI_PLATFORM_NAME
-	depends on MALI_MIDGARD
+config MALI_MTK_PLATFORM_NAME
+	depends on MALI_MTK
 	string "Platform name"
 	default "hisilicon" if PLATFORM_HIKEY960
 	default "hisilicon" if PLATFORM_HIKEY970
 	default "devicetree"
 	help
 	  Enter the name of the desired platform configuration directory to
-	  include in the build. 'platform/$(MALI_PLATFORM_NAME)/Kbuild' must
+	  include in the build. 'platform/$(MALI_MTK_PLATFORM_NAME)/Kbuild' must
 	  exist.
 
 	  When PLATFORM_CUSTOM is set, this needs to be set manually to
@@ -43,19 +43,19 @@ config MALI_PLATFORM_NAME
 
 choice
 	prompt "Mali HW backend"
-	depends on MALI_MIDGARD
-	default MALI_NO_MALI if NO_MALI
-	default MALI_REAL_HW
+	depends on MALI_MTK
+	default MALI_MTK_NO_MALI if NO_MALI
+	default MALI_MTK_REAL_HW
 
-config MALI_REAL_HW
+config MALI_MTK_REAL_HW
 	bool "Enable build of Mali kernel driver for real HW"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	help
 	  This is the default HW backend.
 
-config MALI_NO_MALI
+config MALI_MTK_NO_MALI
 	bool "Enable build of Mali kernel driver for No Mali"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	help
 	  This can be used to test the driver in a simulated environment
 	  whereby the hardware is not physically present. If the hardware is physically
@@ -66,25 +66,25 @@ config MALI_NO_MALI
 
 endchoice
 
-config MALI_IS_FPGA
+config MALI_MTK_IS_FPGA
 	bool "Enable build of Mali kernel driver for FPGA"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	default y if PLATFORM_IS_FPGA
 	help
 	  This is the default HW backend.
 
 
-config MALI_CSF_SUPPORT
+config MALI_MTK_CSF_SUPPORT
 	bool "Enable Mali CSF based GPU support"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default y if GPU_HAS_CSF
 	help
 	  Enables support for CSF based GPUs.
 
-config MALI_DEVFREQ
+config MALI_MTK_DEVFREQ
 	bool "Enable devfreq support for Mali"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default y
 	help
 	  Support devfreq for Mali.
@@ -93,33 +93,33 @@ config MALI_DEVFREQ
 	  governor, the frequency of Mali will be dynamically selected from the
 	  available OPPs.
 
-config MALI_MIDGARD_DVFS
+config MALI_MTK_DVFS
 	bool "Enable legacy DVFS"
-	depends on MALI_MIDGARD && !MALI_DEVFREQ
+	depends on MALI_MTK && !MALI_MTK_DEVFREQ
 	default n
 	help
 	  Choose this option to enable legacy DVFS in the Mali Midgard DDK.
 
-config MALI_GATOR_SUPPORT
+config MALI_MTK_GATOR_SUPPORT
 	bool "Enable Streamline tracing support"
-	depends on MALI_MIDGARD && !BACKEND_USER
+	depends on MALI_MTK && !BACKEND_USER
 	default y
 	help
 	  Enables kbase tracing used by the Arm Streamline Performance Analyzer.
 	  The tracepoints are used to derive GPU activity charts in Streamline.
 
-config MALI_MIDGARD_ENABLE_TRACE
+config MALI_MTK_ENABLE_TRACE
 	bool "Enable kbase tracing"
-	depends on MALI_MIDGARD
-	default y if MALI_DEBUG
+	depends on MALI_MTK
+	default y if MALI_MTK_DEBUG
 	default n
 	help
 	  Enables tracing in kbase. Trace log available through
 	  the "mali_trace" debugfs file, when the CONFIG_DEBUG_FS is enabled
 
-config MALI_ARBITER_SUPPORT
+config MALI_MTK_ARBITER_SUPPORT
 	bool "Enable arbiter support for Mali"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	help
 	  Enable support for the arbiter interface in the driver.
@@ -130,12 +130,12 @@ config MALI_ARBITER_SUPPORT
 
 config DMA_BUF_SYNC_IOCTL_SUPPORTED
 	bool "Enable Kernel DMA buffers support DMA_BUF_IOCTL_SYNC"
-	depends on MALI_MIDGARD && BACKEND_KERNEL
+	depends on MALI_MTK && BACKEND_KERNEL
 	default y
 
-config MALI_DMA_BUF_MAP_ON_DEMAND
+config MALI_MTK_DMA_BUF_MAP_ON_DEMAND
 	bool "Enable map imported dma-bufs on demand"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default n
 	default y if !DMA_BUF_SYNC_IOCTL_SUPPORTED
 	help
@@ -145,37 +145,37 @@ config MALI_DMA_BUF_MAP_ON_DEMAND
 	  This is intended for testing and the option will get removed in the
 	  future.
 
-config MALI_DMA_BUF_LEGACY_COMPAT
+config MALI_MTK_DMA_BUF_LEGACY_COMPAT
 	bool "Enable legacy compatibility cache flush on dma-buf map"
-	depends on MALI_MIDGARD && !MALI_DMA_BUF_MAP_ON_DEMAND
+	depends on MALI_MTK && !MALI_MTK_DMA_BUF_MAP_ON_DEMAND
 	default n
 	help
 	  This option enables compatibility with legacy dma-buf mapping
 	  behavior, then the dma-buf is mapped on import, by adding cache
-	  maintenance where MALI_DMA_BUF_MAP_ON_DEMAND would do the mapping,
+	  maintenance where MALI_MTK_DMA_BUF_MAP_ON_DEMAND would do the mapping,
 	  including a cache flush.
 
 	  This option might work-around issues related to missing cache
 	  flushes in other drivers. This only has an effect for clients using
 	  UK 11.18 or older. For later UK versions it is not possible.
 
-config MALI_CORESIGHT
-	depends on MALI_MIDGARD && MALI_CSF_SUPPORT && !NO_MALI
+config MALI_MTK_CORESIGHT
+	depends on MALI_MTK && MALI_MTK_CSF_SUPPORT && !NO_MALI
 	select CSFFW_DEBUG_FW_AS_RW
 	bool "Enable Kbase CoreSight tracing support"
 	default n
 
-menuconfig MALI_EXPERT
-	depends on MALI_MIDGARD
+menuconfig MALI_MTK_EXPERT
+	depends on MALI_MTK
 	bool "Enable Expert Settings"
 	default y
 	help
 	  Enabling this option and modifying the default settings may produce
 	  a driver with performance or other limitations.
 
-config MALI_CORESTACK
+config MALI_MTK_CORESTACK
 	bool "Enable support of GPU core stack power control"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  Enabling this feature on supported GPUs will let the driver powering
@@ -186,9 +186,9 @@ config MALI_CORESTACK
 
 	  If unsure, say N.
 
-config PAGE_MIGRATION_SUPPORT
+config MALI_MTK_PAGE_MIGRATION_SUPPORT
 	bool "Compile with page migration support"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default y
 	default n if ANDROID
 	help
@@ -198,7 +198,7 @@ config PAGE_MIGRATION_SUPPORT
 	  support is explicitly compiled in. This has no effect when
 	  PAGE_MIGRATION_OVERRIDE is disabled.
 
-config LARGE_PAGE_SUPPORT
+config MALI_MTK_LARGE_PAGE_SUPPORT
 	bool "Support for 2MB page allocations"
 	depends on BACKEND_KERNEL
 	default y
@@ -213,35 +213,35 @@ config LARGE_PAGE_SUPPORT
 
 	  If in doubt, say Y.
 
-config MALI_DEBUG
+config MALI_MTK_DEBUG
 	bool "Enable debug build"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default y if DEBUG
 	default n
 	help
 	  Select this option for increased checking and reporting of errors.
 
-config MALI_GCOV_KERNEL
+config MALI_MTK_GCOV_KERNEL
 	bool "Enable branch coverage via gcov"
-	depends on MALI_MIDGARD && MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_DEBUG
 	default n
 	help
 	  Choose this option to enable building kbase with branch
 	  coverage information. When built against a supporting kernel,
 	  the coverage information will be available via debugfs.
 
-config MALI_KCOV
+config MALI_MTK_KCOV
 	bool "Enable kcov coverage to support fuzzers"
-	depends on MALI_MIDGARD && MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_DEBUG
 	default n
 	help
 	  Choose this option to enable building with fuzzing-oriented
 	  coverage, to improve the random test cases that are generated.
 
-config MALI_FENCE_DEBUG
+config MALI_MTK_FENCE_DEBUG
 	bool "Enable debug sync fence usage"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default y if MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_EXPERT
+	default y if MALI_MTK_DEBUG
 	help
 	  Select this option to enable additional checking and reporting on the
 	  use of sync fences in the Mali driver.
@@ -255,10 +255,10 @@ config MALI_FENCE_DEBUG
 	  The timeout can be changed at runtime through the js_soft_timeout
 	  device attribute, where the timeout is specified in milliseconds.
 
-config MALI_SYSTEM_TRACE
+config MALI_MTK_SYSTEM_TRACE
 	bool "Enable system event tracing support"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default y if MALI_DEBUG
+	depends on MALI_MTK && MALI_MTK_EXPERT
+	default y if MALI_MTK_DEBUG
 	default n
 	help
 	  Choose this option to enable system trace events for each
@@ -268,14 +268,14 @@ config MALI_SYSTEM_TRACE
 
 # Instrumentation options.
 
-# config MALI_PRFCNT_SET_PRIMARY exists in the Kernel Kconfig but is configured using CINSTR_PRIMARY_HWC in Mconfig.
-# config MALI_PRFCNT_SET_SECONDARY exists in the Kernel Kconfig but is configured using CINSTR_SECONDARY_HWC in Mconfig.
-# config MALI_PRFCNT_SET_TERTIARY exists in the Kernel Kconfig but is configured using CINSTR_TERTIARY_HWC in Mconfig.
-# config MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS exists in the Kernel Kconfig but is configured using CINSTR_HWC_SET_SELECT_VIA_DEBUG_FS in Mconfig.
+# config MALI_MTK_PRFCNT_SET_PRIMARY exists in the Kernel Kconfig but is configured using CINSTR_PRIMARY_HWC in Mconfig.
+# config MALI_MTK_PRFCNT_SET_SECONDARY exists in the Kernel Kconfig but is configured using CINSTR_SECONDARY_HWC in Mconfig.
+# config MALI_MTK_PRFCNT_SET_TERTIARY exists in the Kernel Kconfig but is configured using CINSTR_TERTIARY_HWC in Mconfig.
+# config MALI_MTK_PRFCNT_SET_SELECT_VIA_DEBUG_FS exists in the Kernel Kconfig but is configured using CINSTR_HWC_SET_SELECT_VIA_DEBUG_FS in Mconfig.
 
-config MALI_JOB_DUMP
+config MALI_MTK_JOB_DUMP
 	bool "Enable system level support needed for job dumping"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  Choose this option to enable system level support needed for
@@ -283,9 +283,9 @@ config MALI_JOB_DUMP
 	  minimal overhead when not in use. Enable only if you know what
 	  you are doing.
 
-config MALI_PWRSOFT_765
+config MALI_MTK_PWRSOFT_765
 	bool "Enable workaround for PWRSOFT-765"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	help
 	  PWRSOFT-765 fixes devfreq cooling devices issues. The fix was merged
@@ -296,9 +296,9 @@ config MALI_PWRSOFT_765
 	  changes have been backported say Y to avoid compilation errors.
 
 
-config MALI_HW_ERRATA_1485982_NOT_AFFECTED
+config MALI_MTK_HW_ERRATA_1485982_NOT_AFFECTED
 	bool "Disable workaround for KBASE_HW_ISSUE_GPU2017_1336"
-	depends on MALI_MIDGARD && MALI_EXPERT
+	depends on MALI_MTK && MALI_MTK_EXPERT
 	default n
 	default y if PLATFORM_JUNO
 	help
@@ -309,9 +309,9 @@ config MALI_HW_ERRATA_1485982_NOT_AFFECTED
 	  protected mode content on fully coherent platforms, as the switch to IO
 	  coherency mode requires the L2 to be turned off.
 
-config MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
+config MALI_MTK_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
 	bool "Use alternative workaround for KBASE_HW_ISSUE_GPU2017_1336"
-	depends on MALI_MIDGARD && MALI_EXPERT && !MALI_HW_ERRATA_1485982_NOT_AFFECTED
+	depends on MALI_MTK && MALI_MTK_EXPERT && !MALI_MTK_HW_ERRATA_1485982_NOT_AFFECTED
 	default n
 	help
 	  This option uses an alternative workaround for GPU2017-1336. Lowering
@@ -320,9 +320,9 @@ config MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
 	  tree using the property, opp-mali-errata-1485982. Otherwise the
 	  slowest clock will be selected.
 
-config MALI_TRACE_POWER_GPU_WORK_PERIOD
+config MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD
 	bool "Enable per-application GPU metrics tracepoints"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	default y
 	help
 	  This option enables per-application GPU metrics tracepoints.
@@ -331,28 +331,28 @@ config MALI_TRACE_POWER_GPU_WORK_PERIOD
 
 choice
 	prompt "CSF Firmware trace mode"
-	depends on MALI_MIDGARD
-	default MALI_FW_TRACE_MODE_MANUAL
+	depends on MALI_MTK
+	default MALI_MTK_FW_TRACE_MODE_MANUAL
 	help
 	  CSF Firmware log operating mode.
 
-config MALI_FW_TRACE_MODE_MANUAL
+config MALI_MTK_FW_TRACE_MODE_MANUAL
 	bool "manual mode"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	help
 	  firmware log can be read manually by the userspace (and it will
 	  also be dumped automatically into dmesg on GPU reset).
 
-config MALI_FW_TRACE_MODE_AUTO_PRINT
+config MALI_MTK_FW_TRACE_MODE_AUTO_PRINT
 	bool "automatic printing mode"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	help
 	  firmware log will be periodically emptied into dmesg, manual
 	  reading through debugfs is disabled.
 
-config MALI_FW_TRACE_MODE_AUTO_DISCARD
+config MALI_MTK_FW_TRACE_MODE_AUTO_DISCARD
 	bool "automatic discarding mode"
-	depends on MALI_MIDGARD
+	depends on MALI_MTK
 	help
 	  firmware log will be periodically discarded, the remaining log can be
 	  read manually by the userspace (and it will also be dumped

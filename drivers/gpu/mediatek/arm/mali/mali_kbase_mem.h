@@ -1531,7 +1531,7 @@ void kbase_mmu_disable_as(struct kbase_device *kbdev, int as_nr);
 
 void kbase_mmu_interrupt(struct kbase_device *kbdev, u32 irq_stat);
 
-#if defined(CONFIG_MALI_VECTOR_DUMP)
+#if defined(CONFIG_MALI_MTK_VECTOR_DUMP)
 /**
  * kbase_mmu_dump() - Dump the MMU tables to a buffer.
  *

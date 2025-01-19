@@ -36,7 +36,7 @@
 #define BASE_MAX_NR_CLOCKS_REGULATORS 2
 #endif
 
-#if IS_ENABLED(CONFIG_MALI_IS_FPGA) && !IS_ENABLED(CONFIG_MALI_NO_MALI)
+#if IS_ENABLED(CONFIG_MALI_MTK_IS_FPGA) && !IS_ENABLED(CONFIG_MALI_MTK_NO_MALI)
 /* Backend watch dog timer interval in milliseconds: 18 seconds. */
 #define HWCNT_BACKEND_WATCHDOG_TIMER_INTERVAL_MS ((u32)18000)
 #else
@@ -1836,9 +1836,9 @@ kbasep_hwcnt_backend_csf_info_create(struct kbase_hwcnt_backend_csf_if *csf_if, 
 
 	*info = (struct kbase_hwcnt_backend_csf_info)
 	{
-#if defined(CONFIG_MALI_PRFCNT_SET_SECONDARY)
+#if defined(CONFIG_MALI_MTK_PRFCNT_SET_SECONDARY)
 		.counter_set = KBASE_HWCNT_SET_SECONDARY,
-#elif defined(CONFIG_MALI_PRFCNT_SET_TERTIARY)
+#elif defined(CONFIG_MALI_MTK_PRFCNT_SET_TERTIARY)
 		.counter_set = KBASE_HWCNT_SET_TERTIARY,
 #else
 		/* Default to primary */

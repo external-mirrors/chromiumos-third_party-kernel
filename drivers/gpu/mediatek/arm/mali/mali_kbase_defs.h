@@ -52,9 +52,9 @@
 #include <linux/version_compat_defs.h>
 
 
-#ifdef CONFIG_MALI_DEVFREQ
+#ifdef CONFIG_MALI_MTK_DEVFREQ
 #include <linux/devfreq.h>
-#endif /* CONFIG_MALI_DEVFREQ */
+#endif /* CONFIG_MALI_MTK_DEVFREQ */
 
 #include <arbiter/mali_kbase_arbiter_defs.h>
 
@@ -145,7 +145,7 @@ struct kbase_as;
 struct kbase_mmu_setup;
 struct kbase_kinstr_jm;
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 /**
  * struct kbase_gpu_metrics - Object containing members that are used to emit
  *                            GPU metrics tracepoints for all applications that
@@ -1113,7 +1113,7 @@ struct kbase_device {
 	char devname[DEVNAME_SIZE];
 	u32 id;
 
-#if !IS_ENABLED(CONFIG_MALI_REAL_HW)
+#if !IS_ENABLED(CONFIG_MALI_MTK_REAL_HW)
 	void *model;
 	struct kmem_cache *irq_slab;
 	struct workqueue_struct *irq_workq;
@@ -1121,7 +1121,7 @@ struct kbase_device {
 	atomic_t serving_gpu_irq;
 	atomic_t serving_mmu_irq;
 	spinlock_t reg_op_lock;
-#endif /* !IS_ENABLED(CONFIG_MALI_REAL_HW) */
+#endif /* !IS_ENABLED(CONFIG_MALI_MTK_REAL_HW) */
 	struct kbase_pm_device_data pm;
 
 	struct kbase_mem_pool_group mem_pools;
@@ -1206,7 +1206,7 @@ struct kbase_device {
 	struct list_head kctx_list;
 	struct mutex kctx_list_lock;
 
-#ifdef CONFIG_MALI_DEVFREQ
+#ifdef CONFIG_MALI_MTK_DEVFREQ
 	struct devfreq_dev_profile devfreq_profile;
 	struct devfreq *devfreq;
 	unsigned long current_freqs[BASE_MAX_NR_CLOCKS_REGULATORS];
@@ -1241,7 +1241,7 @@ struct kbase_device {
 		ktime_t last_sample_time;
 	} ipa;
 #endif /* CONFIG_DEVFREQ_THERMAL */
-#endif /* CONFIG_MALI_DEVFREQ */
+#endif /* CONFIG_MALI_MTK_DEVFREQ */
 	unsigned long previous_frequency;
 
 #if !MALI_USE_CSF
@@ -1252,9 +1252,9 @@ struct kbase_device {
 	struct dentry *debugfs_ctx_directory;
 	struct dentry *debugfs_instr_directory;
 
-#ifdef CONFIG_MALI_DEBUG
+#ifdef CONFIG_MALI_MTK_DEBUG
 	u64 debugfs_as_read_bitmap;
-#endif /* CONFIG_MALI_DEBUG */
+#endif /* CONFIG_MALI_MTK_DEBUG */
 
 #if !MALI_USE_CSF
 	wait_queue_head_t job_fault_wq;
@@ -1341,9 +1341,9 @@ struct kbase_device {
 	/* See KBASE_SERIALIZE_* for details */
 	u8 serialize_jobs;
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 	u8 backup_serialize_jobs;
-#endif /* CONFIG_MALI_CINSTR_GWT */
+#endif /* CONFIG_MALI_MTK_CINSTR_GWT */
 
 #endif /* MALI_USE_CSF */
 
@@ -1377,7 +1377,7 @@ struct kbase_device {
 	struct kmem_cache *va_region_slab;
 	struct kmem_cache *page_metadata_slab;
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	/**
 	 * @gpu_metrics: GPU device wide structure used for emitting GPU metrics tracepoints.
 	 */
@@ -2007,7 +2007,7 @@ struct kbase_context {
 	struct kbase_process *kprcs;
 	struct list_head kprcs_link;
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 	bool gwt_enabled;
 	bool gwt_was_enabled;
 	struct list_head gwt_current_list;
@@ -2029,7 +2029,7 @@ struct kbase_context {
 
 	struct task_struct *task;
 
-#if IS_ENABLED(CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD)
+#if IS_ENABLED(CONFIG_MALI_MTK_TRACE_POWER_GPU_WORK_PERIOD)
 	/**
 	 * @gpu_metrics_ctx: Pointer to the GPU metrics context corresponding to the
 	 *                   application that created the Kbase context.
@@ -2040,7 +2040,7 @@ struct kbase_context {
 	char comm[TASK_COMM_LEN];
 };
 
-#ifdef CONFIG_MALI_CINSTR_GWT
+#ifdef CONFIG_MALI_MTK_CINSTR_GWT
 /**
  * struct kbasep_gwt_list_element - Structure used to collect GPU
  *                                  write faults.

@@ -61,7 +61,7 @@ struct kbase_platform_config *kbase_get_platform_config(void)
 	return &versatile_platform_config;
 }
 
-#ifdef CONFIG_MALI_MIDGARD_DVFS
+#ifdef CONFIG_MALI_MTK_DVFS
 #if MALI_USE_CSF
 int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation)
 #else
@@ -71,4 +71,4 @@ int kbase_platform_dvfs_event(struct kbase_device *kbdev, u32 utilisation, u32 u
 {
 	return 1;
 }
-#endif /* CONFIG_MALI_MIDGARD_DVFS */
+#endif /* CONFIG_MALI_MTK_DVFS */
