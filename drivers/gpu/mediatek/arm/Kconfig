@@ -19,5 +19,5 @@
 #
 
 menu "ARM GPU Configuration"
-source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/midgard/Kconfig"
+source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/mali/Kconfig"
 endmenu
