@@ -20,6 +20,9 @@
 
 menuconfig MALI_MTK
 	tristate "Mali Midgard series support"
+	depends on ARM64
+	depends on !MALI && MALI!=m
+	depends on MTK_GPU_SUPPORT
 	select GPU_TRACEPOINTS if ANDROID
 	select DMA_SHARED_BUFFER
 	select PM_DEVFREQ
