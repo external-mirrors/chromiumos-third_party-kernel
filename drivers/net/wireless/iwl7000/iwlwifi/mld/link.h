@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #ifndef __iwl_mld_link_h__
 #define __iwl_mld_link_h__
@@ -107,5 +107,7 @@ bool iwl_mld_cancel_missed_beacon_notif(struct iwl_mld *mld,
 int iwl_mld_link_set_associated(struct iwl_mld *mld, struct ieee80211_vif *vif,
 				struct ieee80211_bss_conf *link);
 
-unsigned int iwl_mld_get_link_grade(struct ieee80211_bss_conf *link_conf);
+unsigned int iwl_mld_get_link_grade(struct iwl_mld *mld,
+				    struct ieee80211_bss_conf *link_conf);
+
 #endif /* __iwl_mld_link_h__ */
