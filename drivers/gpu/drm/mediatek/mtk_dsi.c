@@ -12,6 +12,7 @@
 #include <linux/of_platform.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/reset.h>
 #include <linux/units.h>
 
@@ -689,6 +690,7 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 	dsi->data_rate = DIV_ROUND_UP_ULL(dsi->vm.pixelclock * bit_per_pixel,
 					  dsi->lanes);
 
+	pm_runtime_get_sync(dsi->host.dev);
 	ret = clk_set_rate(dsi->hs_clk, dsi->data_rate);
 	if (ret < 0) {
 		dev_err(dev, "Failed to set data rate: %d\n", ret);
@@ -763,6 +765,7 @@ static void mtk_dsi_poweroff(struct mtk_dsi *dsi)
 	clk_disable_unprepare(dsi->digital_clk);
 
 	phy_power_off(dsi->phy);
+	pm_runtime_put_sync(dsi->host.dev);
 
 	dsi->lanes_ready = false;
 }
@@ -1240,6 +1243,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	dsi->bridge.funcs = &mtk_dsi_bridge_funcs;
 	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
+	pm_runtime_enable(dev);
 
 	return 0;
 }
@@ -1250,6 +1254,7 @@ static void mtk_dsi_remove(struct platform_device *pdev)
 
 	mtk_output_dsi_disable(dsi);
 	mipi_dsi_host_unregister(&dsi->host);
+	pm_runtime_disable(&pdev->dev);
 }
 
 static const struct mtk_dsi_driver_data mt8173_dsi_driver_data = {
