@@ -77,6 +77,7 @@
 #define PACKED_PS_18BIT_RGB666		1
 #define LOOSELY_PS_24BIT_RGB666		2
 #define PACKED_PS_24BIT_RGB888		3
+#define COMPRESSED_PIXEL_STREAM		5
 
 #define DSI_VSA_NL(data)		(0x20 + (data)->reg_40_ofs)
 #define DSI_VBP_NL(data)		(0x24 + (data)->reg_40_ofs)
@@ -214,6 +215,7 @@ struct mtk_dsi_driver_data {
 	const u32 dsi_dbg_sel;
 	const u32 dsi_shadow_dbg;
 	const u32 dsi_vm_cmd_con;
+	const u32 max_linkrate_kbps;
 };
 
 struct mtk_dsi {
@@ -244,6 +246,8 @@ struct mtk_dsi {
 	u32 irq_data;
 	wait_queue_head_t irq_wait_queue;
 	const struct mtk_dsi_driver_data *driver_data;
+	struct drm_dsc_config *dsc_config;
+	bool dsc_enable;
 };
 
 static inline struct mtk_dsi *bridge_to_dsi(struct drm_bridge *b)
@@ -427,23 +431,26 @@ static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 	ps_val = ps_wc;
 
 	/* Pixel Stream type */
-	switch (dsi->format) {
-	default:
-		fallthrough;
-	case MIPI_DSI_FMT_RGB888:
-		ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_24BIT_RGB888);
-		break;
-	case MIPI_DSI_FMT_RGB666:
-		ps_val |= FIELD_PREP(DSI_PS_SEL, LOOSELY_PS_24BIT_RGB666);
-		break;
-	case MIPI_DSI_FMT_RGB666_PACKED:
-		ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_18BIT_RGB666);
-		break;
-	case MIPI_DSI_FMT_RGB565:
-		ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_16BIT_RGB565);
-		break;
+	if (dsi->dsc_enable) {
+		ps_val |= FIELD_PREP(DSI_PS_SEL, COMPRESSED_PIXEL_STREAM);
+	} else {
+		switch (dsi->format) {
+		default:
+			fallthrough;
+		case MIPI_DSI_FMT_RGB888:
+			ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_24BIT_RGB888);
+			break;
+		case MIPI_DSI_FMT_RGB666:
+			ps_val |= FIELD_PREP(DSI_PS_SEL, LOOSELY_PS_24BIT_RGB666);
+			break;
+		case MIPI_DSI_FMT_RGB666_PACKED:
+			ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_18BIT_RGB666);
+			break;
+		case MIPI_DSI_FMT_RGB565:
+			ps_val |= FIELD_PREP(DSI_PS_SEL, PACKED_PS_16BIT_RGB565);
+			break;
+		}
 	}
-
 	if (config_vact) {
 		vact_nl = FIELD_PREP(VACT_NL, dsi->vm.vactive);
 		writel(vact_nl, dsi->regs + DSI_VACT_NL(dsi->driver_data));
@@ -711,7 +718,19 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	dsi->data_rate = DIV_ROUND_UP_ULL(dsi->vm.pixelclock * bit_per_pixel,
 					  dsi->lanes);
-
+	if (dsi->dsc_enable) {
+		dsi->vm.hactive = DIV_ROUND_UP_ULL(dsi->vm.hactive, 3);
+		dsi->vm.pixelclock = (dsi->vm.hactive + dsi->vm.hfront_porch
+			+ dsi->vm.hback_porch
+			+ dsi->vm.hsync_len) *
+			dsi->vm.pixelclock /
+			(dsi->vm.hactive * 3
+			+ dsi->vm.hfront_porch
+			+ dsi->vm.hback_porch
+			+ dsi->vm.hsync_len);
+		dsi->data_rate = DIV_ROUND_UP_ULL(dsi->vm.pixelclock * bit_per_pixel,
+					  dsi->lanes);
+	}
 	pm_runtime_get_sync(dsi->host.dev);
 	ret = clk_set_rate(dsi->hs_clk, dsi->data_rate);
 	if (ret < 0) {
@@ -898,7 +917,12 @@ mtk_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 	if (bpp < 0)
 		return MODE_ERROR;
 
-	if (mode->clock * bpp / dsi->lanes > 1500000)
+	if (mode->hdisplay > 3840)
+		return MODE_BAD_HVALUE;
+	if (mode->vdisplay > 2160)
+		return MODE_BAD_VVALUE;
+
+	if (mode->clock * bpp / dsi->lanes > dsi->driver_data->max_linkrate_kbps)
 		return MODE_CLOCK_HIGH;
 
 	return MODE_OK;
@@ -976,6 +1000,26 @@ unsigned int mtk_dsi_encoder_index(struct device *dev)
 	return encoder_index;
 }
 
+void mtk_dsi_get_dsc_info(struct device *dev, struct dsc_info *dsc_info)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+
+	if (!dsi || !dsc_info) {
+		dev_err(dev,"Invalid dsi or dsc_info is NULL\n");
+		return;
+	}
+	if (!dsi->dsc_config || dsi->dsc_config->dsc_version_major == 0) {
+		dev_err(dev,"Invalid dsc version or dsc_config is NULL\n");
+		dsc_info->compression_enable = false;
+		dsi->dsc_enable = false;
+		memset(&dsc_info->dsc_config, 0, sizeof(dsc_info->dsc_config));
+		return;
+	}
+	dsc_info->compression_enable = true;
+	dsi->dsc_enable = true;
+	memcpy(&dsc_info->dsc_config, dsi->dsc_config, sizeof(dsc_info->dsc_config));
+}
+
 static int mtk_dsi_bind(struct device *dev, struct device *master, void *data)
 {
 	int ret;
@@ -1012,6 +1056,7 @@ static int mtk_dsi_host_attach(struct mipi_dsi_host *host,
 	dsi->lanes = device->lanes;
 	dsi->format = device->format;
 	dsi->mode_flags = device->mode_flags;
+	dsi->dsc_config = device->dsc;
 	dsi->next_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 0, 0);
 	if (IS_ERR(dsi->next_bridge))
 		return PTR_ERR(dsi->next_bridge);
@@ -1282,11 +1327,13 @@ static void mtk_dsi_remove(struct platform_device *pdev)
 static const struct mtk_dsi_driver_data mt8173_dsi_driver_data = {
 	.reg_cmdq_off = 0x200,
 	.dsi_vm_cmd_con = 0x130,
+	.max_linkrate_kbps = 1500000,
 };
 
 static const struct mtk_dsi_driver_data mt2701_dsi_driver_data = {
 	.reg_cmdq_off = 0x180,
 	.dsi_vm_cmd_con = 0x130,
+	.max_linkrate_kbps = 1500000,
 };
 
 static const struct mtk_dsi_driver_data mt8183_dsi_driver_data = {
@@ -1294,6 +1341,7 @@ static const struct mtk_dsi_driver_data mt8183_dsi_driver_data = {
 	.has_shadow_ctl = true,
 	.has_size_ctl = true,
 	.dsi_vm_cmd_con = 0x130,
+	.max_linkrate_kbps = 1500000,
 };
 
 static const struct mtk_dsi_driver_data mt8186_dsi_driver_data = {
@@ -1301,6 +1349,7 @@ static const struct mtk_dsi_driver_data mt8186_dsi_driver_data = {
 	.has_shadow_ctl = true,
 	.has_size_ctl = true,
 	.dsi_vm_cmd_con = 0x130,
+	.max_linkrate_kbps = 1500000,
 };
 
 static const struct mtk_dsi_driver_data mt8188_dsi_driver_data = {
@@ -1310,6 +1359,7 @@ static const struct mtk_dsi_driver_data mt8188_dsi_driver_data = {
 	.cmdq_long_packet_ctl = true,
 	.support_per_frame_lp = true,
 	.dsi_vm_cmd_con = 0x130,
+	.max_linkrate_kbps = 1500000,
 };
 
 static const struct mtk_dsi_driver_data mt8196_dsi_driver_data = {
@@ -1336,6 +1386,7 @@ static const struct mtk_dsi_driver_data mt8196_dsi_driver_data = {
 	.dsi_dbg_sel = 0x274,
 	.dsi_shadow_dbg = 0x0d0,
 	.dsi_vm_cmd_con = 0x110,
+	.max_linkrate_kbps = 2000000,
 };
 
 static const struct of_device_id mtk_dsi_of_match[] = {

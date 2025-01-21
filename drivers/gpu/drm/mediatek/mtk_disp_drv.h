@@ -100,6 +100,7 @@ void mtk_dpi_get_dsc_info_v2(struct device *dev, struct dsc_info *dsc_info);
 void mtk_dsi_ddp_start(struct device *dev);
 void mtk_dsi_ddp_stop(struct device *dev);
 unsigned int mtk_dsi_encoder_index(struct device *dev);
+void mtk_dsi_get_dsc_info(struct device *dev, struct dsc_info *dsc_info);
 
 void mtk_dvo_start(struct device *dev);
 void mtk_dvo_stop(struct device *dev);
