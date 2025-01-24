@@ -161,22 +161,17 @@ static int mtk_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 static unsigned int mtk_cpufreq_hw_get(unsigned int cpu)
 {
 	struct cpufreq_mtk *c;
-	unsigned int index, freq, nr_opp;
+	unsigned int index;
 
 	c = mtk_freq_domain_map[cpu];
-	nr_opp = c->nr_opp;
 
 	if (per_core_enabled)
 		index = readl_relaxed(per_core_base + CPU_OFS * cpu);
 	else
-		freq = readl_relaxed(c->reg_bases[REG_FREQ_PERF_STATE]);
+		index = readl_relaxed(c->reg_bases[REG_FREQ_PERF_STATE]);
 
-	if (per_core_enabled && index <= LUT_MAX_ENTRIES - 1) {
-		index = min(index, LUT_MAX_ENTRIES - 1);
+	if (index < c->nr_opp)
 		return c->table[index].frequency;
-	} else if (c->table[0].frequency >= freq && freq >= c->table[nr_opp - 1].frequency) {
-		return freq;
-	}
 
 	return 0;
 }
