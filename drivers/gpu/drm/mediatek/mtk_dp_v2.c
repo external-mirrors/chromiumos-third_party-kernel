@@ -64,6 +64,7 @@
 
 #include "mtk_dp_v2.h"
 #include "mtk_dp_reg_v2.h"
+#include "mtk_dp_mst.h"
 
 #define AUX_CMD_I2C_R				0x05
 #define AUX_CMD_I2C_R_MOT0			0x01
@@ -95,6 +96,7 @@
 #define ACK_ESI_RETRY_TIMES			3
 #define MAX_MAC_REG_RANG			0x8000
 #define MAX_PHYD_REG_RANG			0x1500
+#define MST_HPD_EVENT_HANDLE_TIMES		200
 #define MTK_DP_SIP_ATF_VIDEO_UNMUTE		BIT(5)
 
 enum aux_reply_cmd {
@@ -3793,12 +3795,17 @@ static void mtk_dp_init_port_v2(struct mtk_dp *mtk_dp)
 
 static void mtk_dp_disconnect_release_v2(struct mtk_dp *mtk_dp)
 {
-	mtk_dp_video_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
-	mtk_dp_audio_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
-	mtk_dp_video_disable_v2(mtk_dp, DP_ENCODER_ID_0);
+	if (mtk_dp->mst_enable) {
+		mtk_dp_mst_drv_unprepare(mtk_dp);
+		mtk_dp->mst_enable = false;
+	} else {
+		mtk_dp_video_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
+		mtk_dp_audio_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
+		mtk_dp_video_disable_v2(mtk_dp, DP_ENCODER_ID_0);
 
-	kfree(mtk_dp->mtk_con[DP_FIRST_CON]->edid);
-	mtk_dp->mtk_con[DP_FIRST_CON]->edid = NULL;
+		kfree(mtk_dp->mtk_con[DP_FIRST_CON]->edid);
+		mtk_dp->mtk_con[DP_FIRST_CON]->edid = NULL;
+	}
 
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp, false);
 
@@ -3975,12 +3982,32 @@ static enum drm_connector_status mtk_dp_con_detect_v2
 	struct mtk_dp *mtk_dp;
 	struct mtk_dp_con *mtk_con;
 	enum drm_connector_status ret = connector_status_disconnected;
+	enum drm_dp_mst_mode dp_mode;
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
 
 	if (!mtk_dp->training_info.cable_plug_in)
 		goto end;
+
+	if (mtk_dp->data->mst_support) {
+		dp_mode = drm_dp_read_mst_cap(&mtk_dp->aux, mtk_dp->rx_cap);
+		if (dp_mode == DRM_DP_MST) {
+			if (!mtk_dp->mst_enable && mtk_dp->dp_ready) {
+				dev_dbg(mtk_dp->dev, "support MST\n");
+				mtk_dp->mst_enable = true;
+
+				mtk_dp_mst_drv_prepare(mtk_dp);
+			}
+			return connector_status_disconnected;
+		}
+
+		if (mtk_dp->mst_enable) {
+			dev_dbg(mtk_dp->dev, "support SST\n");
+			mtk_dp_mst_drv_unprepare(mtk_dp);
+			mtk_dp->mst_enable = false;
+		}
+	}
 
 	if (mtk_dp->training_info.sink_count)
 		ret = connector_status_connected;
@@ -4241,12 +4268,22 @@ static int mtk_dp_bridge_attach_v2(struct drm_bridge *bridge,
 		return ret;
 	}
 
+	if (mtk_dp->data->mst_support)
+		mtk_dp_mst_drv_init(mtk_dp);
 	mtk_dp_create_connector_v2(mtk_dp);
 
 	mtk_dp_init_port_v2(mtk_dp);
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, true);
 
 	return 0;
+}
+
+static void mtk_dp_bridge_detach(struct drm_bridge *bridge)
+{
+	struct mtk_dp *mtk_dp = mtk_dp_from_bridge_v2(bridge);
+
+	if (mtk_dp->data->mst_support)
+		mtk_dp_mst_drv_deinit(mtk_dp);
 }
 
 static u32 *mtk_dp_bridge_atomic_get_output_bus_fmts_v2(struct drm_bridge *bridge,
@@ -4275,6 +4312,9 @@ static u32 *mtk_dp_bridge_atomic_get_input_bus_fmts_v2(struct drm_bridge *bridge
 {
 	u32 *input_fmts;
 	bool dsc = false;
+	int slots = 0;
+	int need_pbn = 0;
+	int valid_pbn = 0;
 	u8 bpp;
 	bool support_422 = false;
 	struct mtk_dp *mtk_dp = mtk_dp_from_bridge_v2(bridge);
@@ -4312,6 +4352,23 @@ static u32 *mtk_dp_bridge_atomic_get_input_bus_fmts_v2(struct drm_bridge *bridge
 		goto end;
 	}
 
+	/* divide the total equally for one stream */
+	valid_pbn = (dfixed_trunc(state->pbn_div) * 63) / DP_ENCODER_NUM;
+	need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, 24, false);
+	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
+					       dfixed_trunc(state->pbn_div), need_pbn);
+	if (slots && (slots * dfixed_trunc(state->pbn_div)) < valid_pbn) {
+		goto fmts;
+	} else if (support_422) {
+		need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, 16, false);
+		slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
+						       dfixed_trunc(state->pbn_div), need_pbn);
+		if (slots && (slots * dfixed_trunc(state->pbn_div)) < valid_pbn)
+			goto ycbcr422;
+	}
+
+	goto end;
+
 fmts:
 	input_fmts = kcalloc(ARRAY_SIZE(mt8196_input_fmts),
 			     sizeof(*input_fmts),
@@ -4345,6 +4402,7 @@ static const struct drm_bridge_funcs mtk_dp_bridge_funcs = {
 	.atomic_get_input_bus_fmts = mtk_dp_bridge_atomic_get_input_bus_fmts_v2,
 	.atomic_reset = drm_atomic_helper_bridge_reset,
 	.attach = mtk_dp_bridge_attach_v2,
+	.detach = mtk_dp_bridge_detach,
 };
 
 static void mtk_dp_training_check_swing_pre_v2(struct mtk_dp *mtk_dp,
@@ -4907,6 +4965,81 @@ static bool mtk_dp_link_ok_v2(struct mtk_dp *mtk_dp,
 	return false;
 }
 
+static bool mtk_dp_mst_link_status(struct mtk_dp *mtk_dp)
+{
+	u8 link_status[DP_LINK_STATUS_SIZE] = {};
+	const size_t esi_link_status_size = DP_LINK_STATUS_SIZE - 2;
+
+	if (drm_dp_dpcd_read(&mtk_dp->aux, DP_LANE0_1_STATUS_ESI, link_status,
+			     esi_link_status_size) != esi_link_status_size) {
+		dev_dbg(mtk_dp->dev, "fail to read link status\n");
+		return false;
+	}
+
+	return mtk_dp_link_ok_v2(mtk_dp, link_status);
+}
+
+static bool mtk_dp_mst_hpd_event_handler(struct mtk_dp *mtk_dp)
+{
+	bool link_ok = true;
+	bool handled = true;
+	int retry;
+	int rc;
+	int i;
+
+	for (i = 0; i < MST_HPD_EVENT_HANDLE_TIMES; i++) {
+		u8 esi[4] = {};
+		u8 ack[4] = {};
+
+		rc = drm_dp_dpcd_read(&mtk_dp->aux, DP_SINK_COUNT_ESI, esi, 4);
+		if (rc != 4) {
+			dev_err(mtk_dp->dev, "fail to get ESI\n");
+			link_ok = false;
+			break;
+		}
+		dev_dbg(mtk_dp->dev, "DPRX ESI: %4ph\n", esi);
+
+		/* check link fail */
+		if (link_ok && esi[3] & LINK_STATUS_CHANGED) {
+			if (!mtk_dp_mst_link_status(mtk_dp))
+				link_ok = false;
+			ack[3] |= LINK_STATUS_CHANGED;
+		}
+
+		drm_dp_mst_hpd_irq_handle_event(&mtk_dp->mgr, esi, ack, &handled);
+
+		if (esi[1] & DP_CP_IRQ) {
+			dev_dbg(mtk_dp->dev, "DP CP IRQ\n");
+			ack[1] |= DP_CP_IRQ;
+		}
+
+		if (!memchr_inv(ack, 0, sizeof(ack)))
+			break;
+
+		for (retry = 0; retry < ACK_ESI_RETRY_TIMES; retry++) {
+			rc = drm_dp_dpcd_write(&mtk_dp->aux, DP_SINK_COUNT_ESI + 1, &ack[1], 3);
+			if (rc == 3)
+				break;
+		}
+		if (retry == ACK_ESI_RETRY_TIMES)
+			dev_err(mtk_dp->dev, "fail to ack ESI\n");
+
+		if (ack[1] & (DP_DOWN_REP_MSG_RDY | DP_UP_REQ_MSG_RDY))
+			drm_dp_mst_hpd_irq_send_new_request(&mtk_dp->mgr);
+
+		usleep_range(1000, 1100);
+	}
+
+	if (!link_ok) {
+		dev_err(mtk_dp->dev, "mst link fail, training again\n");
+		mtk_dp->dp_ready = false;
+		mtk_dp_training_handle_v2(mtk_dp);
+		return false;
+	}
+
+	return true;
+}
+
 static void mtk_dp_check_device_service_irq_v2(struct mtk_dp *mtk_dp)
 {
 	u8 val;
@@ -5080,7 +5213,10 @@ static irqreturn_t mtk_dp_hpd_event_thread_v2(int hpd, void *dev)
 		 * when the link is unsuccessful (removed or unstable),
 		 * returning IRQ_NONE will prevent further processing
 		 */
-		if (!mtk_dp_hpd_event_handler_v2(mtk_dp))
+		if (mtk_dp->mst_start) {
+			if (!mtk_dp_mst_hpd_event_handler(mtk_dp))
+				return IRQ_NONE;
+		} else if (!mtk_dp_hpd_event_handler_v2(mtk_dp))
 			return IRQ_NONE;
 	}
 
