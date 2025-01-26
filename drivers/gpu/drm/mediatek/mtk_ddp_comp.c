@@ -237,7 +237,7 @@ static void mtk_dither_set(struct device *dev, unsigned int bpc,
 			      DISP_DITHERING, cmdq_pkt);
 }
 
-static void mtk_dsc_config(struct device *dev, unsigned int w,
+void mtk_dsc_config(struct device *dev, unsigned int w,
 			   unsigned int h, unsigned int vrefresh,
 			   unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
 {
@@ -252,7 +252,7 @@ static void mtk_dsc_config(struct device *dev, unsigned int w,
 			   DISP_REG_DSC_CON, DSC_DUAL_INOUT);
 }
 
-static void mtk_dsc_start(struct device *dev)
+void mtk_dsc_start(struct device *dev)
 {
 	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
 
@@ -260,7 +260,7 @@ static void mtk_dsc_start(struct device *dev)
 	mtk_ddp_write_mask(NULL, DSC_EN, &priv->cmdq_reg, priv->regs, DISP_REG_DSC_CON, DSC_EN);
 }
 
-static void mtk_dsc_stop(struct device *dev)
+void mtk_dsc_stop(struct device *dev)
 {
 	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
 
@@ -419,6 +419,12 @@ static const struct mtk_ddp_comp_funcs ddp_dpi = {
 	.start = mtk_dpi_start,
 	.stop = mtk_dpi_stop,
 	.encoder_index = mtk_dpi_encoder_index,
+};
+
+static const struct mtk_ddp_comp_funcs ddp_dpi_v2 = {
+	.start = mtk_dpi_start_v2,
+	.stop = mtk_dpi_stop_v2,
+	.encoder_index = mtk_dpi_encoder_index_v2,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_dsc = {
@@ -678,6 +684,15 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_WDMA1]		= { MTK_DISP_WDMA,		1, NULL },
 };
 
+static void mtk_ddp_comp_override_dpi_v2_funcs(struct mtk_ddp_comp *ddp_comp)
+{
+	if (mtk_ddp_matches[ddp_comp->id].type != MTK_DP_INTF)
+		return;
+
+	/* Overriding v2 funcs for mtk_dpi_v2 */
+	ddp_comp->funcs = &ddp_dpi_v2;
+}
+
 static bool mtk_ddp_comp_find(struct device *dev,
 			      const unsigned int *path,
 			      unsigned int path_len,
@@ -688,9 +703,13 @@ static bool mtk_ddp_comp_find(struct device *dev,
 	if (path == NULL)
 		return false;
 
-	for (i = 0U; i < path_len; i++)
+	for (i = 0U; i < path_len; i++) {
+		if (mtk_dpi_v2)
+			mtk_ddp_comp_override_dpi_v2_funcs(&ddp_comp[path[i]]);
+
 		if (dev == ddp_comp[path[i]].dev)
 			return true;
+	}
 
 	return false;
 }
@@ -705,9 +724,13 @@ static int mtk_ddp_comp_find_in_route(struct device *dev,
 	if (!routes)
 		return -EINVAL;
 
-	for (i = 0; i < num_routes; i++)
+	for (i = 0; i < num_routes; i++) {
+		if (mtk_dpi_v2)
+			mtk_ddp_comp_override_dpi_v2_funcs(&ddp_comp[routes[i].route_ddp]);
+
 		if (dev == ddp_comp[routes[i].route_ddp].dev)
 			return BIT(routes[i].crtc_id);
+	}
 
 	return -ENODEV;
 }

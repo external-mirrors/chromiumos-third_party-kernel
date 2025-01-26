@@ -95,6 +95,8 @@ struct mtk_drm_ovlsys_private {
 	unsigned int use_path;
 };
 
+extern bool mtk_dpi_v2;
+
 extern struct platform_driver mtk_disp_aal_driver;
 extern struct platform_driver mtk_disp_blender_driver;
 extern struct platform_driver mtk_disp_ccorr_driver;
@@ -108,6 +110,7 @@ extern struct platform_driver mtk_disp_ovl_driver;
 extern struct platform_driver mtk_disp_ovlsys_adaptor_driver;
 extern struct platform_driver mtk_disp_rdma_driver;
 extern struct platform_driver mtk_dpi_driver;
+extern struct platform_driver mtk_dpi_driver_v2;
 extern struct platform_driver mtk_dsi_driver;
 extern struct platform_driver mtk_dvo_driver;
 extern struct platform_driver mtk_ethdr_driver;

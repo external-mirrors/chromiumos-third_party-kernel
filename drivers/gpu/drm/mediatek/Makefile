@@ -17,6 +17,7 @@ mediatek-drm-y := mtk_crtc.o \
 		  mtk_drm_drv.o \
 		  mtk_dsi.o \
 		  mtk_dpi.o \
+		  mtk_dpi_v2.o \
 		  mtk_dvo.o \
 		  mtk_ethdr.o \
 		  mtk_gem.o \
@@ -32,4 +33,6 @@ mediatek-drm-hdmi-objs := mtk_cec.o \
 
 obj-$(CONFIG_DRM_MEDIATEK_HDMI) += mediatek-drm-hdmi.o
 
-obj-$(CONFIG_DRM_MEDIATEK_DP) += mtk_dp.o
+obj-$(CONFIG_DRM_MEDIATEK_DP) += mtk_dp.o mtk-dp-v2.o
+
+mtk-dp-v2-objs := mtk_dp_v2.o

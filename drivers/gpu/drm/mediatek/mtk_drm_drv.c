@@ -197,6 +197,7 @@ static const struct mtk_drm_route mt8188_mtk_ddp_main_routes[] = {
 
 static const struct mtk_drm_route mt8196_mtk_ddp_routes[] = {
 	{2, DDP_COMPONENT_DSI0},
+	{2, DDP_COMPONENT_DP_INTF1},
 };
 
 static const unsigned int mt8192_mtk_ddp_main[] = {
@@ -1014,6 +1015,8 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	  .data = (void *)MTK_DPI },
 	{ .compatible = "mediatek,mt8195-dp-intf",
 	  .data = (void *)MTK_DP_INTF },
+	{ .compatible = "mediatek,mt8196-dp-intf",
+	  .data = (void *)MTK_DP_INTF },
 	{ .compatible = "mediatek,mt2701-dsi",
 	  .data = (void *)MTK_DSI },
 	{ .compatible = "mediatek,mt8173-dsi",
@@ -1304,6 +1307,7 @@ static struct platform_driver * const mtk_drm_drivers[] = {
 	&mtk_disp_ovlsys_adaptor_driver,
 	&mtk_disp_rdma_driver,
 	&mtk_dpi_driver,
+	&mtk_dpi_driver_v2,
 	&mtk_drm_platform_driver,
 	&mtk_dsi_driver,
 	&mtk_dvo_driver,
