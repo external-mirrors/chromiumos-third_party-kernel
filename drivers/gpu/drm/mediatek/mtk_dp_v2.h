@@ -27,6 +27,7 @@ void mtk_dp_audio_info_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 		       int *ch, int *fs, int *len);
 int mtk_dp_update_bits_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask);
 void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp, bool video_enable);
+void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp, u32 value);
 
 static inline struct mtk_dp_con *encoder_to_mtk_con(struct drm_encoder *encoder,
 						    enum drm_dp_mst_mode dp_mode)

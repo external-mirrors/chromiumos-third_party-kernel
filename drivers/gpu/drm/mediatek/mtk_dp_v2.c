@@ -64,6 +64,8 @@
 
 #include "mtk_dp_v2.h"
 #include "mtk_dp_reg_v2.h"
+#include "mtk_dp_hdcp1x.h"
+#include "mtk_dp_hdcp2.h"
 #include "mtk_dp_mst.h"
 
 #define AUX_CMD_I2C_R				0x05
@@ -3817,6 +3819,182 @@ static void mtk_dp_disconnect_release_v2(struct mtk_dp *mtk_dp)
 	mtk_dp_init_variable_v2(mtk_dp);
 }
 
+void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp, u32 value)
+{
+	if (mtk_dp->hdcp_info.content_protection == value)
+		return;
+
+	mtk_dp->hdcp_info.content_protection = value;
+	if (mtk_dp->hdcp_info.content_protection == DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+		return;
+
+	schedule_work(&mtk_dp->prop_work);
+}
+
+static void mtk_dp_hdcp_get_info(struct mtk_dp *mtk_dp)
+{
+	mtk_dp_hdcp2x_get_info(&mtk_dp->hdcp_info);
+	mtk_dp_hdcp1x_get_info(&mtk_dp->hdcp_info);
+}
+
+static void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp)
+{
+	dev_dbg(mtk_dp->dev, "[HDCP] dp disable HDCP\n");
+	mutex_lock(&mtk_dp->hdcp_mutex);
+
+	if (mtk_dp->hdcp_info.auth_status == AUTH_ZERO)
+		goto end;
+
+	mtk_dp->hdcp_info.cancel_check = true;
+	cancel_delayed_work_sync(&mtk_dp->check_work);
+
+	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X)
+		mtk_dp_hdcp2x_disable(&mtk_dp->hdcp_info);
+	else if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_1X)
+		mtk_dp_hdcp1x_disable(&mtk_dp->hdcp_info);
+
+end:
+	mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_DESIRED);
+
+	mutex_unlock(&mtk_dp->hdcp_mutex);
+}
+
+static void mtk_dp_hdcp_check_work(struct work_struct *work)
+{
+	struct mtk_dp *mtk_dp = container_of(to_delayed_work(work),
+		struct mtk_dp, check_work);
+
+	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X &&
+	    (!mtk_dp_hdcp2x_check_link(&mtk_dp->hdcp_info))) {
+		schedule_delayed_work(&mtk_dp->check_work, DRM_HDCP2_CHECK_PERIOD_MS);
+	} else if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_1X &&
+		(!mtk_dp_hdcp1x_check_link(&mtk_dp->hdcp_info))) {
+		schedule_delayed_work(&mtk_dp->check_work, DRM_HDCP_CHECK_PERIOD_MS);
+	}
+}
+
+static void mtk_dp_hdcp_handle(struct work_struct *data)
+{
+	struct mtk_dp *mtk_dp = container_of(data, struct mtk_dp, hdcp_work);
+	unsigned long check_link_interval = DRM_HDCP_CHECK_PERIOD_MS;
+	int ret = -EINVAL;
+
+	mutex_lock(&mtk_dp->hdcp_mutex);
+
+	if (mtk_dp->hdcp_info.auth_status == AUTH_PASS)
+		goto end;
+
+	mtk_dp_hdcp_get_info(mtk_dp);
+
+	if (mtk_dp->hdcp_info.hdcp2_info.capable) {
+		ret = mtk_dp_hdcp2x_enable(&mtk_dp->hdcp_info);
+		if (!ret)
+			check_link_interval = DRM_HDCP2_CHECK_PERIOD_MS;
+	}
+
+	if (ret && mtk_dp->hdcp_info.hdcp1x_info.capable &&
+	    mtk_dp->hdcp_info.hdcp_content_type != DRM_MODE_HDCP_CONTENT_TYPE1)
+		ret = mtk_dp_hdcp1x_enable(&mtk_dp->hdcp_info);
+
+	if (!ret) {
+		mtk_dp->hdcp_info.cancel_check = false;
+		schedule_delayed_work(&mtk_dp->check_work, check_link_interval);
+		mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_ENABLED);
+	}
+
+end:
+	mutex_unlock(&mtk_dp->hdcp_mutex);
+}
+
+void mtk_dp_hdcp_enable(struct mtk_dp *mtk_dp)
+{
+	if (!mtk_dp->training_info.cable_plug_in || !mtk_dp->dp_ready) {
+		dev_dbg(mtk_dp->dev, "cable_plug_in:%d, dp_ready:%d",
+		       mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
+		return;
+	}
+
+	dev_dbg(mtk_dp->dev, "[HDCP] dp start HDCP work\n");
+	queue_work(mtk_dp->hdcp_workqueue, &mtk_dp->hdcp_work);
+}
+
+static void mtk_dp_hdcp_prop_work(struct work_struct *work)
+{
+	struct mtk_dp *mtk_dp;
+	struct drm_device *drm_dev;
+
+	mtk_dp = container_of(work, struct mtk_dp, prop_work);
+
+	if (!mtk_dp->mtk_con[DP_FIRST_CON]) {
+		dev_dbg(mtk_dp->dev, "[HDCP] Connector is null\n");
+		return;
+	}
+
+	drm_dev = mtk_dp->mtk_con[DP_FIRST_CON]->connector.dev;
+
+	drm_modeset_lock(&drm_dev->mode_config.connection_mutex, NULL);
+
+	if (mtk_dp->hdcp_info.content_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED) {
+		dev_dbg(mtk_dp->dev, "[HDCP] Update CP, content protection: %d, auth status:%d\n",
+		       mtk_dp->hdcp_info.content_protection, mtk_dp->hdcp_info.auth_status);
+
+		/* only update between ENABLED/DESIRED */
+		drm_hdcp_update_content_protection(&mtk_dp->mtk_con[0]->connector,
+						   mtk_dp->hdcp_info.content_protection);
+	}
+
+	drm_modeset_unlock(&drm_dev->mode_config.connection_mutex);
+}
+
+static void mtk_dp_hdcp_atomic_check(struct mtk_dp *mtk_dp, struct drm_connector_state *state)
+{
+	unsigned int current_protection = mtk_dp->hdcp_info.content_protection;
+	unsigned int new_protection = state->content_protection;
+	bool type_changed = state->hdcp_content_type != mtk_dp->hdcp_info.hdcp_content_type;
+	bool protection_changed = current_protection != new_protection;
+	bool disable = false;
+	bool enable = false;
+
+	dev_dbg(mtk_dp->dev, "[HDCP] atomic check, old[%d, %d], new[%d, %d]\n",
+	       mtk_dp->hdcp_info.content_protection, mtk_dp->hdcp_info.hdcp_content_type,
+		state->content_protection, state->hdcp_content_type);
+
+	if (type_changed) {
+		/*
+		 * With the current protection as ENABLED/DESIRED,
+		 * re-authenticate with new content type if the content type changed.
+		 */
+		mtk_dp->hdcp_info.hdcp_content_type = state->hdcp_content_type;
+		mtk_dp->hdcp_info.hdcp2_info.stream_id_type = state->hdcp_content_type;
+
+		/*
+		 * The current version is HDCP 1.4,
+		 * if you want to play HDCP2.0 content,
+		 * you need to first disable the previous HDCP1.4 and re-enable HDCP2.0
+		 */
+		if (current_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+			disable = true;
+
+		if (new_protection != DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+			enable = true;
+	} else if (protection_changed) {
+		if (new_protection == DRM_MODE_CONTENT_PROTECTION_UNDESIRED)
+			disable = true;
+		else
+			enable = true;
+	} else if (new_protection == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
+		enable = true;
+	}
+
+	if (disable)
+		mtk_dp_hdcp_disable(mtk_dp);
+
+	if (enable) {
+		mtk_dp->hdcp_info.content_protection = DRM_MODE_CONTENT_PROTECTION_DESIRED;
+		mtk_dp_hdcp_enable(mtk_dp);
+	}
+}
+
 static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 						 struct drm_display_mode *mode, int bpp, bool *dsc)
 {
@@ -3910,6 +4088,8 @@ static void mtk_dp_encoder_disable_v2(struct drm_encoder *encoder)
 
 	mtk_con->video_enable = false;
 
+	mtk_dp_hdcp_disable(mtk_dp);
+
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp, false);
 }
 
@@ -3957,6 +4137,19 @@ static void mtk_dp_encoder_enable_v2(struct drm_encoder *encoder)
 		mtk_dp->info[DP_ENCODER_ID_0].pattern_gen, mtk_dp->audio_enable);
 
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp, true);
+
+	/* HDCP */
+	if (!IS_ERR(mtk_dp->connector_state)) {
+		dev_dbg(mtk_dp->dev, "hdcp_content_type:%d, content protection: %d",
+		       mtk_dp->connector_state->hdcp_content_type,
+		       mtk_dp->connector_state->content_protection);
+		if (mtk_dp->connector_state->content_protection ==
+			DRM_MODE_CONTENT_PROTECTION_DESIRED) {
+			mtk_dp->hdcp_info.hdcp_content_type =
+				mtk_dp->connector_state->hdcp_content_type;
+			mtk_dp_hdcp_enable(mtk_dp);
+		}
+	}
 }
 
 static int mtk_dp_encoder_atomic_check_v2(struct drm_encoder *encoder,
@@ -4151,6 +4344,18 @@ static int mtk_dp_con_atomic_check_v2(struct drm_connector *connector,
 {
 	struct drm_connector_state *conn_state;
 	struct drm_crtc_state *crtc_state;
+	struct mtk_dp_con *mtk_con;
+	struct mtk_dp *mtk_dp;
+	enum dp_encoder_id encoder_id;
+
+	mtk_con = container_of(connector, struct mtk_dp_con, connector);
+	mtk_dp = mtk_con->mtk_dp;
+	encoder_id = mtk_con->encoder_id;
+
+	if (encoder_id == DP_ENCODER_ID_0) {
+		mtk_dp->connector_state = drm_atomic_get_connector_state(state, connector);
+		mtk_dp_hdcp_atomic_check(mtk_dp, mtk_dp->connector_state);
+	}
 
 	conn_state = drm_atomic_get_new_connector_state(state, connector);
 	if (WARN_ON(!conn_state))
@@ -5575,6 +5780,17 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	ret = devm_drm_bridge_add(dev, &mtk_dp->bridge);
 	if (ret)
 		return ret;
+
+	mutex_init(&mtk_dp->hdcp_mutex);
+	init_waitqueue_head(&mtk_dp->hdcp_info.hdcp2_info.cp_irq_queue);
+	INIT_WORK(&mtk_dp->hdcp_work, mtk_dp_hdcp_handle);
+	INIT_WORK(&mtk_dp->prop_work, mtk_dp_hdcp_prop_work);
+	INIT_DELAYED_WORK(&mtk_dp->check_work, mtk_dp_hdcp_check_work);
+	mtk_dp->hdcp_workqueue = create_workqueue("mtk_dp_hdcp_work");
+	if (!mtk_dp->hdcp_workqueue) {
+		dev_dbg(mtk_dp->dev, "failed to create hdcp work queue");
+		return -ENOMEM;
+	}
 
 	mtk_dp_enable_mac_power_v2(mtk_dp);
 

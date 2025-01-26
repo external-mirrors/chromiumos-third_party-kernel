@@ -16,6 +16,8 @@
 
 #include <linux/media-bus-format.h>
 
+#include "tlc_dp_hdcp.h"
+
 #define DP_SUPPORT_MAX_LINKRATE		DP_LINK_RATE_HBR3
 #define DP_SUPPORT_MAX_LANECOUNT	DP_2LANE
 #define DP_SUPPORT_DSC		1
@@ -400,6 +402,15 @@ struct mtk_dp {
 
 	/* irq_thread_lock is used to protect phy_status */
 	spinlock_t irq_thread_lock;
+
+	struct mtk_hdcp_info hdcp_info;
+	struct work_struct hdcp_work;
+	struct work_struct prop_work;
+	struct delayed_work check_work;
+	struct workqueue_struct *hdcp_workqueue;
+	struct drm_connector_state *connector_state;
+	/* This mutex is used to synchronize HDCP operations in the driver */
+	struct mutex hdcp_mutex;
 
 	void __iomem *regs;
 	void __iomem *phyd_regs;
