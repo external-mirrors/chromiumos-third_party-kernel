@@ -12,6 +12,7 @@
 #include "mtk_disp_blender.h"
 #include "mtk_mdp_rdma.h"
 #include "mtk_plane.h"
+#include "mtk_ddp_comp.h"
 
 int mtk_aal_clk_enable(struct device *dev);
 void mtk_aal_clk_disable(struct device *dev);
@@ -89,10 +90,12 @@ void mtk_dsc_config(struct device *dev, unsigned int w,
 		    unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
 void mtk_dsc_start(struct device *dev);
 void mtk_dsc_stop(struct device *dev);
+void mtk_dsc_set_dsc_info(struct device *dev, const struct dsc_info *dsc_info);
 
 void mtk_dpi_start_v2(struct device *dev);
 void mtk_dpi_stop_v2(struct device *dev);
 unsigned int mtk_dpi_encoder_index_v2(struct device *dev);
+void mtk_dpi_get_dsc_info_v2(struct device *dev, struct dsc_info *dsc_info);
 
 void mtk_dsi_ddp_start(struct device *dev);
 void mtk_dsi_ddp_stop(struct device *dev);

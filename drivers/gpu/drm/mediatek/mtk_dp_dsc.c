@@ -1,0 +1,521 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2024 MediaTek Inc.
+ */
+
+#include <drm/display/drm_dsc_helper.h>
+
+#include <linux/clk.h>
+#include <linux/component.h>
+#include <linux/of_device.h>
+#include <linux/of_irq.h>
+#include <linux/platform_device.h>
+#include <linux/ratelimit.h>
+#include <linux/delay.h>
+
+#include "mtk_drm_drv.h"
+#include "mtk_ddp_comp.h"
+
+#define DISP_REG_DSC_CON			0x0000
+#define DSC_EN						BIT(0)
+#define DSC_DUAL_INOUT				BIT(2)
+#define DSC_IN_SRC_SEL				BIT(3)
+#define DSC_BYPASS					BIT(4)
+#define DSC_RELAY					BIT(5)
+#define DSC_EMPTY_FLAG_SEL			GENMASK(15, 14)
+#define DSC_EMPTY_FLAG_ALWAYS_LOW	BIT(15)
+#define DSC_UFOE_SEL				BIT(16)
+#define DSC_INPUT_SWITCH_SWAP		BIT(17)
+#define DSC_PT_MEM_EN				BIT(7)
+#define DSC_OUTPUT_SWA				BIT(18)
+#define DSC_ZERO_FIFO_STALL_DISABLE	BIT(20)
+
+#define DISP_REG_DSC_INTEN			0x0004
+#define DSC_INTEN_SEL				GENMASK(6, 0)
+#define DISP_REG_DSC_INTSTA			0x0008
+#define DSC_DONE					BIT(0)
+#define DSC_ERR						BIT(1)
+#define DSC_ZERO_FIFO				BIT(2)
+#define DSC_ABN_EOF					BIT(3)
+
+#define DISP_REG_DSC_INTACK			0x000c
+#define DSC_INTACK_SEL				GENMASK(6, 0)
+#define DSC_INTACK_BUF_UNDERFLOW	BIT(6)
+
+#define DISP_REG_DSC_SPR			0x0014
+#define CFG_FLD_DSC_SPR_EN			BIT(26)
+#define CFG_FLD_DSC_SPR_FORMAT_SEL	BIT(24)
+
+#define DISP_REG_DSC_PIC_W			0x0018
+#define CFG_FLD_PIC_WIDTH			GENMASK(15, 0)
+#define CFG_FLD_PIC_HEIGHT_M1		GENMASK(31, 16)
+
+#define DISP_REG_DSC_PIC_H			0x001c
+#define DISP_REG_DSC_SLICE_W		0x0020
+#define CFG_FLD_SLICE_WIDTH			GENMASK(15, 0)
+
+#define DISP_REG_DSC_SLICE_H		0x0024
+
+#define DISP_REG_DSC_CHUNK_SIZE		0x0028
+
+#define DISP_REG_DSC_BUF_SIZE		0x002c
+
+#define DISP_REG_DSC_MODE			0x0030
+#define DSC_SLICE_MODE				BIT(0)
+#define DSC_RGB_SWAP				BIT(2)
+#define DISP_REG_DSC_CFG			0x0034
+
+#define DISP_REG_DSC_PAD			0x0038
+#define DISP_REG_DSC_ENC_WIDTH		0x003c
+
+#define DISP_REG_DSC_PIC_PRE_PAD_SIZE	0x0040
+#define DSC_PIC_PREPAD_HEIGHT_SEL	GENMASK(15, 0)
+#define DSC_PIC_PREPAD_WIDTH_SEL	GENMASK(31, 16)
+
+#define DISP_REG_DSC_DBG_CON		0x0060
+#define DSC_CKSM_CAL_EN				BIT(9)
+#define DISP_REG_DSC_OBUF			0x0070
+#define DISP_REG_DSC_PPS0			0x0080
+#define DISP_REG_DSC_PPS1			0x0084
+#define DISP_REG_DSC_PPS2			0x0088
+#define DISP_REG_DSC_PPS3			0x008c
+#define DISP_REG_DSC_PPS4			0x0090
+#define DISP_REG_DSC_PPS5			0x0094
+#define DISP_REG_DSC_PPS6			0x0098
+#define DISP_REG_DSC_PPS7			0x009c
+#define DISP_REG_DSC_PPS8			0x00a0
+#define DISP_REG_DSC_PPS9			0x00a4
+#define DISP_REG_DSC_PPS10			0x00a8
+#define DISP_REG_DSC_PPS11			0x00ac
+#define DISP_REG_DSC_PPS12			0x00b0
+#define DISP_REG_DSC_PPS13			0x00b4
+#define DISP_REG_DSC_PPS14			0x00b8
+#define DISP_REG_DSC_PPS15			0x00bc
+#define DISP_REG_DSC_PPS16			0x00c0
+#define DISP_REG_DSC_PPS17			0x00c4
+#define DISP_REG_DSC_PPS18			0x00c8
+#define DISP_REG_DSC_PPS19			0x00cc
+
+#define DISP_REG_DSC_SHADOW			0x0200
+#define DISP_DSC_VERSION_MINOR		(0x000001e0)
+#define DSC_FORCE_COMMIT			BIT(0)
+#define DSC_BYPASS_SHADOW			BIT(1)
+#define DSC_READ_WORKING			BIT(2)
+#define DISP_REG_DSC1_OFFSET		0x0400
+
+struct mtk_dsc_data {
+	u32 max_clock_khz;
+	bool dsc_bypass_enable;
+};
+
+struct mtk_dsc {
+	struct device *dev;
+	void __iomem *regs;
+	struct clk *clk;
+	struct mtk_ddp_comp	 ddp_comp;
+	const struct mtk_dsc_data *data;
+	struct drm_dsc_config dsc_cfg;
+	bool compression_enable;
+};
+
+static void mtk_dsc_write(struct mtk_dsc *dsc, u32 offset, u32 data)
+{
+	writel(data, dsc->regs + offset);
+}
+
+static void mtk_dsc_write_mask(struct mtk_dsc *dsc, u32 offset, u32 data, u32 mask)
+{
+	u32 temp = readl(dsc->regs + offset);
+
+	writel((temp & ~mask) | (data & mask), dsc->regs + offset);
+}
+
+static u32 mtk_dsc_read(struct mtk_dsc *dsc, u32 offset)
+{
+	u32 val = readl(dsc->regs + offset);
+
+	return val;
+}
+
+void mtk_dsc_start(struct device *dev)
+{
+	struct mtk_dsc *dsc = dev_get_drvdata(dev);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_EN, DSC_EN);
+
+	dev_dbg(dsc->dev, "DSC_CON:0x%x", mtk_dsc_read(dsc, DISP_REG_DSC_CON));
+}
+
+void mtk_dsc_stop(struct device *dev)
+{
+	struct mtk_dsc *dsc = dev_get_drvdata(dev);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0x0, DSC_EN);
+}
+
+void mtk_dsc_set_dsc_info(struct device *dev, const struct dsc_info *dsc_info)
+{
+	struct mtk_dsc *mtk_dsc = dev_get_drvdata(dev);
+
+	if (dsc_info) {
+		mtk_dsc->compression_enable = dsc_info->compression_enable;
+		memcpy(&mtk_dsc->dsc_cfg, &dsc_info->dsc_config, sizeof(struct drm_dsc_config));
+	}
+
+	dev_dbg(dev, "set dsc info, compression_enable:%d\n", mtk_dsc->compression_enable);
+}
+
+void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
+		unsigned int vrefresh, unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_dsc *dsc = dev_get_drvdata(dev);
+	unsigned int init_delay_limit, init_delay_height_min, init_delay_height;
+	unsigned int pic_group_width, pic_height_ext_num;
+	unsigned int slice_group_width;
+	unsigned int pad_num;
+	unsigned int bp_enable;
+	unsigned int slice_mode;
+	unsigned int rgb_swap = 0;
+	unsigned int dsc_cfg = 0xb687d82b;
+
+	dev_dbg(dsc->dev, "w:%d, h:%d, compression_enable:%d\n", w, h, dsc->compression_enable);
+
+	if(dsc->data->dsc_bypass_enable) {
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_BYPASS , DSC_BYPASS);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_UFOE_SEL , DSC_UFOE_SEL);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_DUAL_INOUT , DSC_DUAL_INOUT);
+		return;
+	}
+
+	if (!dsc->compression_enable) {
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_RELAY, DSC_RELAY);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CHUNK_SIZE, w << 16, GENMASK(31, 16));
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_W, w, GENMASK(15, 0));
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_H, h, GENMASK(15, 0));
+		return;
+	}
+
+	bp_enable = dsc->dsc_cfg.block_pred_enable ? 1 : 0;
+	slice_mode = dsc->dsc_cfg.pic_width / dsc->dsc_cfg.slice_width - 1;
+	pic_group_width = (dsc->dsc_cfg.pic_width + 2) / 3;
+	pic_height_ext_num = (h + dsc->dsc_cfg.slice_height - 1) / dsc->dsc_cfg.slice_height;
+	slice_group_width = (dsc->dsc_cfg.slice_width + 2) / 3;
+	pad_num = (dsc->dsc_cfg.slice_chunk_size * (slice_mode + 1) + 2) / 3 * 3
+		- dsc->dsc_cfg.slice_chunk_size * (slice_mode + 1);
+	init_delay_limit = ((128 + (dsc->dsc_cfg.initial_xmit_delay + 2) / 3) * 3
+		+ dsc->dsc_cfg.slice_width - 1) / dsc->dsc_cfg.slice_width;
+	init_delay_height_min = (init_delay_limit > 15) ? 15 : init_delay_limit;
+	init_delay_height = init_delay_height_min;
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_EN);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_DUAL_INOUT);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_IN_SRC_SEL);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_BYPASS);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_RELAY);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_PT_MEM_EN, DSC_PT_MEM_EN);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_EMPTY_FLAG_ALWAYS_LOW, DSC_EMPTY_FLAG_SEL);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_UFOE_SEL, DSC_UFOE_SEL);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_ZERO_FIFO_STALL_DISABLE,
+		DSC_ZERO_FIFO_STALL_DISABLE);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTEN, 0x7F, DSC_INTEN_SEL);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTACK, DSC_INTACK_BUF_UNDERFLOW, DSC_INTACK_SEL);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTACK, DSC_INTACK_BUF_UNDERFLOW, DSC_INTACK_SEL);
+
+	mtk_dsc_write(dsc, DISP_REG_DSC_SPR, 0x0);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_W, w, GENMASK(15, 0));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_W, (pic_group_width - 1) << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_H, (h - 1), GENMASK(15, 0));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_H,
+		(pic_height_ext_num * dsc->dsc_cfg.slice_height - 1) << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_SLICE_W, dsc->dsc_cfg.slice_width, GENMASK(15, 0));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_SLICE_W, (slice_group_width - 1) << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_SLICE_H, (dsc->dsc_cfg.slice_height - 1), GENMASK(15, 0));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_SLICE_H, (pic_height_ext_num - 1) << 16, GENMASK(29, 16));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_SLICE_H,
+		(dsc->dsc_cfg.slice_width % 3) << 30, GENMASK(31, 30));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CHUNK_SIZE, dsc->dsc_cfg.slice_chunk_size, GENMASK(15, 0));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CHUNK_SIZE,
+		(((dsc->dsc_cfg.slice_chunk_size << slice_mode) + 2) / 3) << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_BUF_SIZE,
+		dsc->dsc_cfg.slice_chunk_size * dsc->dsc_cfg.slice_height, GENMASK(23, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_MODE, slice_mode, BIT(0));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_MODE, rgb_swap << 2, BIT(2));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_MODE, init_delay_height << 8, GENMASK(11, 8));
+
+	mtk_dsc_write(dsc, DISP_REG_DSC_CFG, dsc_cfg);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PAD, pad_num, GENMASK(2, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_ENC_WIDTH, dsc->dsc_cfg.pic_width << 16, GENMASK(31, 16));
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_ENC_WIDTH, dsc->dsc_cfg.slice_width, GENMASK(15, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_PRE_PAD_SIZE, h, DSC_PIC_PREPAD_HEIGHT_SEL);
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_PRE_PAD_SIZE, w << 16, DSC_PIC_PREPAD_WIDTH_SEL);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_DBG_CON, BIT(9), BIT(9));
+
+	mtk_dsc_write(dsc, DISP_REG_DSC_OBUF, 0x410);
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS0, (dsc->dsc_cfg.line_buf_depth == 0) ?
+		0x9 : dsc->dsc_cfg.line_buf_depth, GENMASK(3, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS0, (dsc->dsc_cfg.bits_per_component == 0) ?
+		0x8 << 4 : dsc->dsc_cfg.bits_per_component << 4, GENMASK(7, 4));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS0, (dsc->dsc_cfg.bits_per_pixel == 0) ?
+		0x80 << 8 : dsc->dsc_cfg.bits_per_pixel << 8, GENMASK(17, 8));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS0, (dsc->dsc_cfg.convert_rgb == 0) ?
+		BIT(18) : dsc->dsc_cfg.convert_rgb << 18, BIT(18));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS0, bp_enable << 19, BIT(19));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS1, (dsc->dsc_cfg.initial_dec_delay == 0) ?
+		0x268 << 16 : dsc->dsc_cfg.initial_dec_delay << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS1, (dsc->dsc_cfg.initial_xmit_delay == 0) ?
+		0x200 : dsc->dsc_cfg.initial_xmit_delay, GENMASK(15, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS2, (dsc->dsc_cfg.initial_scale_value == 0) ?
+		0x20 : dsc->dsc_cfg.initial_scale_value, GENMASK(15, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS2, (dsc->dsc_cfg.scale_increment_interval == 0) ?
+		0x387 << 16 : dsc->dsc_cfg.scale_increment_interval << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS3, (dsc->dsc_cfg.first_line_bpg_offset == 0) ?
+		0xc << 16 : dsc->dsc_cfg.first_line_bpg_offset << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS3, (dsc->dsc_cfg.scale_decrement_interval == 0) ?
+		0xa : dsc->dsc_cfg.scale_decrement_interval, GENMASK(15, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS4, (dsc->dsc_cfg.nfl_bpg_offset == 0) ?
+		0x319 : dsc->dsc_cfg.nfl_bpg_offset, GENMASK(15, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS4, (dsc->dsc_cfg.slice_bpg_offset == 0) ?
+		0x263 << 16 : dsc->dsc_cfg.slice_bpg_offset << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS5, (dsc->dsc_cfg.initial_offset == 0) ?
+		0x1800 : dsc->dsc_cfg.initial_offset, GENMASK(15, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS5, (dsc->dsc_cfg.final_offset == 0) ?
+		0x10f0 << 16 : dsc->dsc_cfg.final_offset << 16, GENMASK(31, 16));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS6, (dsc->dsc_cfg.flatness_min_qp == 0) ?
+		0x3 : dsc->dsc_cfg.flatness_min_qp, GENMASK(4, 0));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS6, (dsc->dsc_cfg.flatness_max_qp == 0) ?
+		0xc << 8 : dsc->dsc_cfg.flatness_max_qp << 8, GENMASK(12, 8));
+
+	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS6, (dsc->dsc_cfg.rc_model_size == 0) ?
+		0x2000 << 16 : dsc->dsc_cfg.rc_model_size << 16, GENMASK(31, 16));
+
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS7, dsc->dsc_cfg.rc_tgt_offset_low << 28 |
+		dsc->dsc_cfg.rc_tgt_offset_high << 24 |
+		dsc->dsc_cfg.rc_quant_incr_limit1 << 16 |
+		dsc->dsc_cfg.rc_quant_incr_limit0 << 8 |
+		dsc->dsc_cfg.rc_edge_factor);
+
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS8, dsc->dsc_cfg.rc_buf_thresh[3] << 24 |
+		dsc->dsc_cfg.rc_buf_thresh[2] << 16 |
+		dsc->dsc_cfg.rc_buf_thresh[1] << 8 |
+		dsc->dsc_cfg.rc_buf_thresh[0]);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS9, dsc->dsc_cfg.rc_buf_thresh[7] << 24 |
+		dsc->dsc_cfg.rc_buf_thresh[6] << 16 |
+		dsc->dsc_cfg.rc_buf_thresh[5] << 8 |
+		dsc->dsc_cfg.rc_buf_thresh[4]);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS10, dsc->dsc_cfg.rc_buf_thresh[11] << 24 |
+		dsc->dsc_cfg.rc_buf_thresh[10] << 16 |
+		dsc->dsc_cfg.rc_buf_thresh[9] << 8 |
+		dsc->dsc_cfg.rc_buf_thresh[8]);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS11, dsc->dsc_cfg.rc_buf_thresh[13] << 8 |
+		dsc->dsc_cfg.rc_buf_thresh[12]);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS12,
+		dsc->dsc_cfg.rc_range_params[1].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[1].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[1].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[0].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[0].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[0].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS13,
+		dsc->dsc_cfg.rc_range_params[3].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[3].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[3].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[2].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[2].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[2].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS14,
+		dsc->dsc_cfg.rc_range_params[5].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[5].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[5].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[4].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[4].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[4].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS15,
+		dsc->dsc_cfg.rc_range_params[7].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[7].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[7].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[6].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[6].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[6].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS16,
+		dsc->dsc_cfg.rc_range_params[9].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[9].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[9].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[8].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[8].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[8].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS17,
+		dsc->dsc_cfg.rc_range_params[11].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[11].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[11].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[10].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[10].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[10].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS18,
+		dsc->dsc_cfg.rc_range_params[13].range_bpg_offset << 26 |
+		dsc->dsc_cfg.rc_range_params[13].range_max_qp << 21 |
+		dsc->dsc_cfg.rc_range_params[13].range_min_qp << 16 |
+		dsc->dsc_cfg.rc_range_params[12].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[12].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[12].range_min_qp);
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS19,
+		dsc->dsc_cfg.rc_range_params[14].range_bpg_offset << 10 |
+		dsc->dsc_cfg.rc_range_params[14].range_max_qp << 5 |
+		dsc->dsc_cfg.rc_range_params[14].range_min_qp);
+
+	if (dsc->dsc_cfg.dsc_version_minor == 1)
+		mtk_dsc_write(dsc, DISP_REG_DSC_SHADOW, 0x20);
+	else if (dsc->dsc_cfg.dsc_version_minor == 2)
+		mtk_dsc_write(dsc, DISP_REG_DSC_SHADOW, 0x40);
+	else
+		dev_dbg(dev, "wrong version minor:%d", dsc->dsc_cfg.dsc_version_minor);
+}
+
+int mtk_dsc_clk_enable(struct device *dev)
+{
+	struct mtk_dsc *dsc = dev_get_drvdata(dev);
+	int ret;
+
+	ret = clk_prepare_enable(dsc->clk);
+	if (ret < 0)
+		dev_err(dsc->dev, "Failed to enable clk:%d\n", ret);
+
+	return ret;
+}
+
+void mtk_dsc_clk_disable(struct device *dev)
+{
+	struct mtk_dsc *dsc = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(dsc->clk);
+}
+
+static int mtk_dsc_bind(struct device *dev, struct device *master,
+			void *data)
+{
+	return 0;
+}
+
+static void mtk_dsc_unbind(struct device *dev, struct device *master,
+				void *data)
+{
+}
+
+static const struct component_ops mtk_dsc_component_ops = {
+	.bind = mtk_dsc_bind,
+	.unbind = mtk_dsc_unbind,
+};
+
+static int mtk_dsc_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct mtk_dsc *dsc;
+	enum mtk_ddp_comp_id comp_id;
+	int ret;
+
+	dsc = devm_kzalloc(dev, sizeof(*dsc), GFP_KERNEL);
+	if (!dsc)
+		return -ENOMEM;
+
+	dsc->dev = dev;
+
+	dsc->regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(dsc->regs))
+		return dev_err_probe(dev, PTR_ERR(dsc->regs),
+					 "Failed to ioremap mem resource\n");
+
+	comp_id = mtk_ddp_comp_get_id(dev->of_node, MTK_DISP_DSC);
+	if (comp_id < 0) {
+		dev_err(dev, "Failed to identify by alias: %d\n", comp_id);
+		return comp_id;
+	}
+
+	ret = mtk_ddp_comp_init(dev->of_node, &dsc->ddp_comp, comp_id);
+	if (ret) {
+		dev_err(dev, "Failed to initialize component: %d\n", ret);
+		return ret;
+	}
+
+	dsc->data = of_device_get_match_data(dev);
+
+	platform_set_drvdata(pdev, dsc);
+
+	ret = component_add(dev, &mtk_dsc_component_ops);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to add component.\n");
+
+	dsc->clk = devm_clk_get(dsc->dev, NULL);
+	if (IS_ERR(dsc->clk))
+		return dev_err_probe(dev, PTR_ERR(dsc->clk),
+				"Failed to get clock\n");
+
+	dev_dbg(dsc->dev, "done\n");
+
+	return ret;
+}
+
+static int mtk_dsc_remove(struct platform_device *pdev)
+{
+	component_del(&pdev->dev, &mtk_dsc_component_ops);
+
+	return 0;
+}
+
+static const struct mtk_dsc_data mt8195_dsc_driver_conf = {
+	.max_clock_khz = 600000,
+	.dsc_bypass_enable = true,
+};
+
+static const struct mtk_dsc_data mt8196_dsc_driver_conf = {
+	.max_clock_khz = 600000,
+};
+
+static const struct of_device_id mtk_dsc_driver_dt_match[] = {
+	{ .compatible = "mediatek,mt8195-disp-dsc",
+	  .data = &mt8195_dsc_driver_conf},
+	{ .compatible = "mediatek,mt8196-disp-dsc",
+	  .data = &mt8196_dsc_driver_conf},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, mtk_dsc_driver_dt_match);
+
+struct platform_driver mtk_dsc_driver = {
+	.probe = mtk_dsc_probe,
+	.remove = mtk_dsc_remove,
+	.driver = {
+		.name = "mediatek-disp-dsc",
+		.owner = THIS_MODULE,
+		.of_match_table = mtk_dsc_driver_dt_match,
+	},
+};

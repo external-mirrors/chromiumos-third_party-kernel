@@ -16,6 +16,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_work.h>
@@ -90,6 +91,7 @@ struct mtk_crtc {
 
 struct mtk_crtc_state {
 	struct drm_crtc_state		base;
+	struct dsc_info			dsc;
 
 	bool				pending_config;
 	unsigned int			pending_width;

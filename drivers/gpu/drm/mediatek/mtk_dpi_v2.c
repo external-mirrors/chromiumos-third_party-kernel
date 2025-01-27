@@ -29,6 +29,7 @@
 
 #include "mtk_ddp_comp.h"
 #include "mtk_disp_drv.h"
+#include "mtk_crtc.h"
 #include "mtk_dpi_regs_v2.h"
 #include "mtk_drm_drv.h"
 
@@ -98,6 +99,10 @@ struct mtk_dpi {
 	struct pinctrl_state *pins_dpi;
 	u32 output_fmt;
 	int refcount;
+	bool dsc_enable;
+	struct drm_dsc_config dsc_config;
+	struct drm_property *prop_dsc_enable;
+	struct drm_property *prop_dsc_cfg;
 };
 
 static inline struct mtk_dpi *bridge_to_dpi_v2(struct drm_bridge *b)
@@ -171,6 +176,7 @@ struct mtk_dpi_conf {
 	u32 csc_enable_bit;
 	u32 pixels_per_iter;
 	bool edge_cfg_in_mmsys;
+	bool dsc_support;
 	bool use_version_2;
 };
 
@@ -583,10 +589,24 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 	struct videomode vm = { 0 };
 	unsigned long pll_rate;
 	unsigned int clksrc = TCK_26M;
+	u16 hblank;
+	u64 htotal;
+	u64 mode_htotal;
 	int ret = 0;
 
 	drm_display_mode_to_videomode(mode, &vm);
-	vm.pixelclock = mode->clock * 1000;
+	if (dpi->dsc_enable) {
+		hblank = mode->htotal - mode->hdisplay;
+		vm.hactive = ((vm.hactive * 8 + (12 * 8 - 1)) / (12 * 8)) * 4;
+		htotal = hblank + vm.hactive;
+		mode_htotal =  mode->htotal;
+		vm.pixelclock = ((mode->clock * 1000) * htotal) / mode_htotal;
+
+		dev_dbg(dpi->dev, "DSC compress mode, hactive:%d, pixelclock:%lu\n",
+			vm.hactive, vm.pixelclock);
+		dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
+	} else
+		vm.pixelclock = mode->clock * 1000;
 
 	if (vm.pixelclock < 70000000)
 		clksrc = TVDPLL_D16;
@@ -781,6 +801,11 @@ static void mtk_dpi_bridge_mode_set_v2(struct drm_bridge *bridge,
 	dpi->channel_swap = MTK_DPI_OUT_CHANNEL_SWAP_RGB;
 	dpi->yc_map = MTK_DPI_OUT_YC_MAP_RGB;
 
+	dpi->dsc_enable = dpi->prop_dsc_enable->values[0];
+	memcpy(&dpi->dsc_config, dpi->prop_dsc_cfg->values, sizeof(struct drm_dsc_config));
+	dev_dbg(dpi->dev, "dsc enable:%d\n", dpi->dsc_enable);
+	dev_dbg(dpi->dev, "dsc version:%d", dpi->dsc_config.dsc_version_minor);
+
 	bridge_state = drm_priv_to_bridge_state(bridge->base.state);
 
 	out_bus_format = bridge_state->output_bus_cfg.format;
@@ -816,6 +841,11 @@ static void mtk_dpi_bridge_pre_enable_v2(struct drm_bridge *bridge)
 
 	if (dpi->pinctrl && dpi->pins_dpi)
 		pinctrl_select_state(dpi->pinctrl, dpi->pins_dpi);
+
+	if (dpi->dsc_enable) {
+		dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
+		dev_dbg(dpi->dev, "dsc enable with the output format as RGB\n");
+	}
 
 	mtk_dpi_power_on_v2(dpi);
 	mtk_dpi_set_display_mode_v2(dpi, &dpi->mode);
@@ -883,11 +913,27 @@ unsigned int mtk_dpi_encoder_index_v2(struct device *dev)
 	return encoder_index;
 }
 
+void mtk_dpi_get_dsc_info_v2(struct device *dev, struct dsc_info *dsc_info)
+{
+	struct mtk_dpi *dpi = dev_get_drvdata(dev);
+
+	if (dsc_info) {
+		dsc_info->compression_enable = dpi->dsc_enable;
+		memcpy(&dsc_info->dsc_config, &dpi->dsc_config, sizeof(struct drm_dsc_config));
+	}
+
+	dev_dbg(dev, "get dsc info, compression_enable:%d\n", dsc_info->compression_enable);
+}
+
 static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data)
 {
 	struct mtk_dpi *dpi = dev_get_drvdata(dev);
 	struct drm_device *drm_dev = data;
 	struct mtk_drm_private *priv = drm_dev->dev_private;
+	struct drm_property *prop;
+	char dsc_enable[] = "dp_dsc_enable";
+	char dsc_cfg[] = "dp_dsc_cfg";
+	char result[20];
 	int ret;
 
 	dev_dbg(dev, "encoder init\n");
@@ -898,6 +944,25 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 		dev_err(dev, "Failed to initialize decoder: %d\n", ret);
 		return ret;
 	}
+
+	snprintf(result, sizeof(result), "%s%d", dsc_enable, dpi->num);
+	prop = drm_property_create_bool(dpi->encoder.dev,
+					DRM_MODE_PROP_ATOMIC, result);
+	if (!prop) {
+		dev_err(dev, "failed to create property dp_dsc_enable\n");
+		return ret;
+	}
+	dpi->prop_dsc_enable = prop;
+
+	snprintf(result, sizeof(result), "%s%d", dsc_cfg, dpi->num);
+	prop = drm_property_create(dpi->encoder.dev,
+				   DRM_MODE_PROP_BLOB | DRM_MODE_PROP_IMMUTABLE,
+				   result, sizeof(struct drm_dsc_config));
+	if (!prop) {
+		dev_err(dev, "failed to create property dp_dsc_cfg\n");
+		return ret;
+	}
+	dpi->prop_dsc_cfg = prop;
 
 	ret = mtk_find_possible_crtcs(drm_dev, dpi->dev);
 	if (ret < 0)
@@ -956,6 +1021,7 @@ static const struct mtk_dpi_conf mt8196_dpintf_conf = {
 	.channel_swap_shift = DPINTF_CH_SWAP,
 	.yuv422_en_bit = DPINTF_YUV422_EN,
 	.csc_enable_bit = DPINTF_CSC_ENABLE,
+	.dsc_support = true,
 	.use_version_2 = true,
 };
 

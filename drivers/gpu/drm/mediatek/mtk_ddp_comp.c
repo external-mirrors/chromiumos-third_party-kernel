@@ -425,6 +425,7 @@ static const struct mtk_ddp_comp_funcs ddp_dpi_v2 = {
 	.start = mtk_dpi_start_v2,
 	.stop = mtk_dpi_stop_v2,
 	.encoder_index = mtk_dpi_encoder_index_v2,
+	.get_dsc_info = mtk_dpi_get_dsc_info_v2,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_dsc = {
@@ -433,6 +434,7 @@ static const struct mtk_ddp_comp_funcs ddp_dsc = {
 	.config = mtk_dsc_config,
 	.start = mtk_dsc_start,
 	.stop = mtk_dsc_stop,
+	.set_dsc_info = mtk_dsc_set_dsc_info,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_dsi = {

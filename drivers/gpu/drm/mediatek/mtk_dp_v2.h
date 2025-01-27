@@ -28,6 +28,8 @@ void mtk_dp_audio_info_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 int mtk_dp_update_bits_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask);
 void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp, bool video_enable);
 void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp, u32 value);
+u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode);
+void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
 
 static inline struct mtk_dp_con *encoder_to_mtk_con(struct drm_encoder *encoder,
 						    enum drm_dp_mst_mode dp_mode)

@@ -568,7 +568,10 @@ int mtk_dp_mst_drv_calculate_pbn(struct mtk_dp *mtk_dp,
 	u32 pixel_clock;
 	u32 need_pbn;
 
-	pixel_clock = mode->clock;
+	if (dsc)
+		pixel_clock = mtk_dp_dsc_cal_clock_v2(mode);
+	else
+		pixel_clock = mode->clock;
 
 	need_pbn = drm_dp_calc_pbn_mode(pixel_clock, bpp << 4);
 
@@ -992,6 +995,15 @@ static void mtk_dp_mst_encoder_atomic_mode_set(struct drm_encoder *encoder,
 
 	bpp = mtk_dp_color_get_bpp_v2(mtk_dp->info[id].format, mtk_dp->info[id].depth);
 	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, &mtk_dp->mode[id], bpp, &dsc);
+
+	mtk_dp->dsc_enable[id] = dsc;
+	if (mtk_dp->dsc_enable[id]) {
+		mtk_dp->info[id].format = DP_PIXELFORMAT_RGB;
+		mtk_dp_dsc_check_prepare_v2(mtk_dp, id);
+		mtk_dp->prop_dsc_enable[id]->values[0] = 1;
+	} else {
+		mtk_dp->prop_dsc_enable[id]->values[0] = 0;
+	}
 
 	dev_dbg(mtk_dp->dev, "encoder[%d] mst mode set, dsc:%d, tt:%d %d, act:%d %d, fps:%d, clk:%d\n",
 		id, mtk_dp->dsc_enable[id],

@@ -14,6 +14,7 @@
 #include <linux/soc/mediatek/mtk-mutex.h>
 
 #include <drm/drm_modes.h>
+#include <drm/display/drm_dsc_helper.h>
 
 struct device;
 struct device_node;
@@ -54,6 +55,11 @@ enum mtk_ddp_comp_type {
 	MTK_OVL_OUTPROC,
 	MTK_VDISP_AO,
 	MTK_DDP_COMP_TYPE_MAX,
+};
+
+struct dsc_info {
+	bool compression_enable;
+	struct drm_dsc_config dsc_config;
 };
 
 struct mtk_ddp_comp;
@@ -102,6 +108,8 @@ struct mtk_ddp_comp_funcs {
 	size_t (*crc_cnt)(struct device *dev);
 	u32 *(*crc_entry)(struct device *dev);
 	void (*crc_read)(struct device *dev);
+	void (*get_dsc_info)(struct device *dev, struct dsc_info *dsc_info);
+	void (*set_dsc_info)(struct device *dev, const struct dsc_info *dsc_info);
 };
 
 struct mtk_ddp_comp {
@@ -349,6 +357,18 @@ static inline void mtk_ddp_comp_encoder_index_set(struct mtk_ddp_comp *comp)
 {
 	if (comp->funcs && comp->funcs->encoder_index)
 		comp->encoder_index = (int)comp->funcs->encoder_index(comp->dev);
+}
+
+static inline void mtk_ddp_comp_get_dsc_info(struct mtk_ddp_comp *comp, struct dsc_info *dsc_info)
+{
+	if (comp->funcs && comp->funcs->get_dsc_info)
+		comp->funcs->get_dsc_info(comp->dev, dsc_info);
+}
+
+static inline void mtk_ddp_comp_set_dsc_info(struct mtk_ddp_comp *comp, const struct dsc_info *dsc_info)
+{
+	if (comp->funcs && comp->funcs->set_dsc_info)
+		comp->funcs->set_dsc_info(comp->dev, dsc_info);
 }
 
 int mtk_ddp_comp_get_id(struct device_node *node,
