@@ -307,10 +307,10 @@ struct mtk_apu_hw_logger *get_mtk_apu_hw_logger_device(struct device_node *hw_lo
 	dev = &pdev->dev;
 
 	if (!dev->driver)
-		return -EPROBE_DEFER;
+		return ERR_PTR(-EPROBE_DEFER);
 
 	if (dev->driver != &hw_logger_driver.driver)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	hw_logger_data = dev_get_drvdata(dev);
 	put_device(dev);
