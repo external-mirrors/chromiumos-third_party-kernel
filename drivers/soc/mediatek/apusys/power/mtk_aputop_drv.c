@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <linux/soc/mediatek/mtk_apu_pwr.h>
 #include "mtk_apu_top.h"
 
 static int mtk_apu_top_probe(struct platform_device *pdev)

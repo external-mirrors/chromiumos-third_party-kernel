@@ -74,8 +74,8 @@ static struct regmap *get_mbox_regmap(struct device *dev)
 
 	link = device_link_add(dev, &mbox_pdev->dev, DL_FLAG_PM_RUNTIME);
 	if (!link)
-		return dev_err_probe(dev, -EPROBE_DEFER,
-				     "failed to add device link between power and mailbox\n");
+		return dev_err_ptr_probe(dev, -EPROBE_DEFER,
+					 "failed to add device link between power and mailbox\n");
 
 	platform_device_put(mbox_pdev);
 
