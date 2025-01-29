@@ -150,4 +150,11 @@ void iwl_mld_emlsr_check_chan_load(struct ieee80211_hw *hw,
  */
 void iwl_mld_retry_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif);
 
+struct iwl_mld_link_sel_data {
+	u8 link_id;
+	const struct cfg80211_chan_def *chandef;
+	s32 signal;
+	u16 grade;
+};
+
 #endif /* __iwl_mld_mlo_h__ */
