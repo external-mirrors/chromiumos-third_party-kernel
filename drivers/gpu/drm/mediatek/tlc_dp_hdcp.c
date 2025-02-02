@@ -218,7 +218,7 @@ int tee_clear_paring(struct mtk_hdcp_info *hdcp_info)
 }
 
 /* Write An to HW */
-int tee_hdcp1x_set_tx_an(struct mtk_hdcp_info *hdcp_info, u8 *an_code)
+int tee_hdcp1x_set_tx_an(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *an_code)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
@@ -226,6 +226,7 @@ int tee_hdcp1x_set_tx_an(struct mtk_hdcp_info *hdcp_info, u8 *an_code)
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_WRITE_VAL;
 	tci->cmd_body.cmd_hdcp_write_val.len = DRM_HDCP_AN_LEN;
 	tci->cmd_body.cmd_hdcp_write_val.type = TYPE_HDCP_PARAM_AN;
@@ -240,7 +241,7 @@ int tee_hdcp1x_set_tx_an(struct mtk_hdcp_info *hdcp_info, u8 *an_code)
 	return 0;
 }
 
-int tee_hdcp_update_encrypt(struct mtk_hdcp_info *hdcp_info, bool enable, u8 version)
+int tee_hdcp_update_encrypt(u8 id, struct mtk_hdcp_info *hdcp_info, bool enable, u8 version)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
@@ -248,6 +249,7 @@ int tee_hdcp_update_encrypt(struct mtk_hdcp_info *hdcp_info, bool enable, u8 ver
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_ENABLE_ENCRYPT;
 	tci->cmd_body.cmd_hdcp_write_val.type = enable ? TYPE_HDCP_ENABLE_ENCRYPT :
 		TYPE_HDCP_DISABLE_ENCRYPT;
@@ -265,7 +267,7 @@ int tee_hdcp_update_encrypt(struct mtk_hdcp_info *hdcp_info, bool enable, u8 ver
 	return 0;
 }
 
-int tee_hdcp1x_soft_rst(struct mtk_hdcp_info *hdcp_info)
+int tee_hdcp1x_soft_rst(u8 id, struct mtk_hdcp_info *hdcp_info)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
@@ -273,6 +275,7 @@ int tee_hdcp1x_soft_rst(struct mtk_hdcp_info *hdcp_info)
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_WRITE_VAL;
 	tci->cmd_body.cmd_hdcp_write_val.type = TYPE_HDCP_PARAM_RST_1;
 	/* No need input. Set default value 0 for check */
@@ -288,13 +291,14 @@ int tee_hdcp1x_soft_rst(struct mtk_hdcp_info *hdcp_info)
 	return 0;
 }
 
-int tee_hdcp2_soft_rst(struct mtk_hdcp_info *hdcp_info)
+int tee_hdcp2_soft_rst(u8 id, struct mtk_hdcp_info *hdcp_info)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
 	struct tci_t *tci = (struct tci_t *)dp_tee_priv->shm->kaddr;
 	int rc;
 
+	tci->encoder_id = id;
 	tci->command_id = CMD_WRITE_VAL;
 	tci->cmd_body.cmd_hdcp_write_val.type = TYPE_HDCP_PARAM_RST_2;
 	/* No need input. Set default value 0 for check */
@@ -333,7 +337,7 @@ int tee_get_aksv(struct mtk_hdcp_info *hdcp_info, u8 *aksv)
 	return 0;
 }
 
-int tee_calculate_lm(struct mtk_hdcp_info *hdcp_info, u8 *bksv)
+int tee_calculate_lm(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *bksv)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
@@ -341,6 +345,7 @@ int tee_calculate_lm(struct mtk_hdcp_info *hdcp_info, u8 *bksv)
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_CALCULATE_LM;
 	memcpy(tci->cmd_body.cmd_hdcp_calculate_lm.bksv, bksv, DRM_HDCP_KSV_LEN);
 
@@ -353,7 +358,7 @@ int tee_calculate_lm(struct mtk_hdcp_info *hdcp_info, u8 *bksv)
 	return 0;
 }
 
-int tee_compare_r0(struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len)
+int tee_compare_r0(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
@@ -361,6 +366,7 @@ int tee_compare_r0(struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len)
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_COMPARE_R0;
 	tci->cmd_body.cmd_hdcp_compare.rx_val_len = len;
 	memcpy(tci->cmd_body.cmd_hdcp_compare.rx_val, r0, len);
@@ -374,7 +380,7 @@ int tee_compare_r0(struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len)
 	return 0;
 }
 
-int tee_hdcp1x_compute_compare_v(struct mtk_hdcp_info *hdcp_info,
+int tee_hdcp1x_compute_compare_v(u8 id, struct mtk_hdcp_info *hdcp_info,
 				 u8 *crypto_param, u32 param_len, u8 *rx_v)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
@@ -383,6 +389,7 @@ int tee_hdcp1x_compute_compare_v(struct mtk_hdcp_info *hdcp_info,
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_COMPARE_V1;
 	tci->cmd_body.cmd_hdcp_compare.rx_val_len = 20;
 	tci->cmd_body.cmd_hdcp_compare.param_len = param_len;
@@ -523,7 +530,7 @@ int tee_lc_l_prime(struct mtk_hdcp_info *hdcp_info, u8 *rn, u8 *rx_l, u32 len)
 	return tci_resp->return_code;
 }
 
-int tee_ske_enc_ks(struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks)
+int tee_ske_enc_ks(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
 	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
@@ -532,6 +539,7 @@ int tee_ske_enc_ks(struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks)
 	int rc;
 
 	/* Copy parameters */
+	tci->encoder_id = id;
 	tci->command_id = CMD_SKE_CAL_EKS;
 	memcpy(tci->cmd_body.cmd_hdcp_ske_eks.riv, riv, HDCP_2_2_RIV_LEN);
 
@@ -606,6 +614,27 @@ int tee_hdcp2_set_rx_info(struct mtk_hdcp_info *hdcp_info, u8 *rx_info)
 	memcpy(tci->cmd_body.cmd_hdcp_set_rx_info.rx_info, rx_info, HDCP_2_2_RXINFO_LEN);
 
 	rc = dp_tee_op_send(hdcp_info, dp_tee_priv, TCI_LENGTH, CMD_SET_RX_INFO);
+	if (rc) {
+		dev_err(mtk_dp->dev, "[TLC_HDCP] tee_op_send failed, error=%x\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+int tee_hdcp_toggle_encrypt(struct mtk_hdcp_info *hdcp_info)
+{
+	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
+	struct dp_tee_private *dp_tee_priv = hdcp_info->g_dp_tee_priv;
+	struct tci_t *tci = (struct tci_t *)dp_tee_priv->shm->kaddr;
+	int rc;
+
+	tci->command_id = CMD_WRITE_VAL;
+	tci->cmd_body.cmd_hdcp_write_val.type = TYPE_HDCP_ENCRYPT_TOGGLE;
+	tci->cmd_body.cmd_hdcp_write_val.len = DEFAULT_WRITE_VAL_LEN;
+	memset(tci->cmd_body.cmd_hdcp_write_val.val, DEFAULT_WRITE_VAL, DEFAULT_WRITE_VAL_LEN);
+
+	rc = dp_tee_op_send(hdcp_info, dp_tee_priv, TCI_LENGTH, CMD_WRITE_VAL);
 	if (rc) {
 		dev_err(mtk_dp->dev, "[TLC_HDCP] tee_op_send failed, error=%x\n", rc);
 		return rc;

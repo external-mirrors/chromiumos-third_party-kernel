@@ -36,6 +36,7 @@
 #define TYPE_HDCP_PARAM_RST_2	12
 #define TYPE_HDCP_ENABLE_ENCRYPT	13
 #define TYPE_HDCP_DISABLE_ENCRYPT	14
+#define TYPE_HDCP_ENCRYPT_TOGGLE	21
 
 /* reserved:2 */
 #define HDCP2_CERTRX_LEN		(HDCP_2_2_RECEIVER_ID_LEN + HDCP_2_2_K_PUB_RX_LEN + \
@@ -144,6 +145,7 @@ union tci_cmd_body_t {
 struct tci_t {
 	u32 command_id;
 	u32 return_code;
+	u8 encoder_id;
 	union tci_cmd_body_t cmd_body;
 };
 

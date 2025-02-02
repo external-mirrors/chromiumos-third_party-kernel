@@ -404,11 +404,12 @@ struct mtk_dp {
 	spinlock_t irq_thread_lock;
 
 	struct mtk_hdcp_info hdcp_info;
-	struct work_struct hdcp_work;
+	struct work_struct hdcp_enable_work;
+	struct work_struct hdcp_disable_work;
 	struct work_struct prop_work;
 	struct delayed_work check_work;
 	struct workqueue_struct *hdcp_workqueue;
-	struct drm_connector_state *connector_state;
+	struct drm_connector_state con_state[DP_ENCODER_NUM];
 	/* This mutex is used to synchronize HDCP operations in the driver */
 	struct mutex hdcp_mutex;
 

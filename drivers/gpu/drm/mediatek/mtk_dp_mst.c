@@ -819,6 +819,9 @@ static void mtk_dp_mst_encoder_atomic_disable(struct drm_encoder *encoder, struc
 {
 	struct mtk_dp_con *mtk_con;
 	struct mtk_dp *mtk_dp;
+	bool all_video_disable = true;
+	int con_id;
+	u8 i;
 
 	mtk_con = encoder_to_mtk_con(encoder, DRM_DP_MST);
 	if (!mtk_con)
@@ -833,6 +836,19 @@ static void mtk_dp_mst_encoder_atomic_disable(struct drm_encoder *encoder, struc
 	mtk_con->video_enable = false;
 
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp, false);
+
+	for (i = 0; i < DP_ENCODER_NUM; i++) {
+		con_id = encoder_id_to_con_id(mtk_dp, i, DRM_DP_MST);
+		if (con_id >= 0 && mtk_dp->mtk_con[con_id]->video_enable) {
+			all_video_disable = false;
+			break;
+		}
+	}
+
+	mtk_dp_hdcp_disable(mtk_dp);
+
+	if (!all_video_disable)
+		mtk_dp_hdcp_enable(mtk_dp);
 }
 
 static void mtk_dp_mst_encoder_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *state)
@@ -858,6 +874,17 @@ static void mtk_dp_mst_encoder_atomic_enable(struct drm_encoder *encoder, struct
 	mtk_con->video_enable = true;
 
 	mtk_dp_mst_drv_start(mtk_dp, mtk_con);
+
+	dev_dbg(mtk_dp->dev, "content type:%d, content protection:%d",
+		mtk_dp->con_state[mtk_con->encoder_id].hdcp_content_type,
+		mtk_dp->con_state[mtk_con->encoder_id].content_protection);
+	if (mtk_dp->con_state[mtk_con->encoder_id].content_protection ==
+		DRM_MODE_CONTENT_PROTECTION_DESIRED) {
+		if (mtk_dp->hdcp_info.auth_status != AUTH_ZERO)
+			mtk_dp_hdcp_disable(mtk_dp);
+
+		mtk_dp_hdcp_enable(mtk_dp);
+	}
 }
 
 static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
@@ -1192,9 +1219,14 @@ static int mtk_dp_mst_connector_atomic_check(struct drm_connector *connector,
 			struct drm_atomic_state *state)
 {
 	struct mtk_dp_con *mtk_con = container_of(connector, struct mtk_dp_con, connector);
-	struct mtk_dp *mtk_dp = mtk_con->mtk_dp;
+	struct drm_connector_state *conn_state;
 
-	return drm_dp_atomic_release_time_slots(state, &mtk_dp->mgr, mtk_con->port);
+	if (mtk_con->encoder) {
+		conn_state = drm_atomic_get_connector_state(state, connector);
+		mtk_dp_hdcp_atomic_check(mtk_con->mtk_dp, mtk_con->encoder_id, conn_state);
+	}
+
+	return drm_dp_atomic_release_time_slots(state, &mtk_con->mtk_dp->mgr, mtk_con->port);
 }
 
 static int mtk_dp_mst_connector_detect(struct drm_connector *connector,
@@ -1287,6 +1319,8 @@ static struct drm_connector *mtk_dp_add_connector(struct drm_dp_mst_topology_mgr
 
 	if (mtk_con->connector.funcs->reset)
 		mtk_con->connector.funcs->reset(&mtk_con->connector);
+
+	drm_connector_attach_content_protection_property(&mtk_con->connector, true);
 
 	ret = drm_connector_register(&mtk_con->connector);
 	if (ret) {

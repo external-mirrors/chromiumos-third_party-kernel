@@ -78,13 +78,21 @@ static int mtk_dp_hdcp1x_init(struct mtk_hdcp_info *hdcp_info)
 	hdcp_info->hdcp1x_info.b_info[1] = 0x00;
 	hdcp_info->hdcp1x_info.device_count = 0x00;
 
-	ret = tee_hdcp_update_encrypt(hdcp_info, false, HDCP_NONE);
-	if (ret)
-		return ret;
+	for (i = 0; i < DP_ENCODER_NUM; i++) {
+		ret = tee_hdcp_update_encrypt(i, hdcp_info, false, HDCP_NONE);
+		if (ret)
+			return ret;
+	}
 
 	mtk_dp_hdcp1x_start_cipher(hdcp_info, false);
 
-	return tee_hdcp1x_soft_rst(hdcp_info);
+	for (i = 0; i < DP_ENCODER_NUM; i++) {
+		ret = tee_hdcp1x_soft_rst(i, hdcp_info);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static int mtk_dp_hdcp1x_read_sink_b_ksv(struct mtk_hdcp_info *hdcp_info)
@@ -154,12 +162,16 @@ static int mtk_dp_hdcp1x_read_sink_ksv(struct mtk_hdcp_info *hdcp_info, u8 dev_c
 	ssize_t ret;
 	u8 i;
 
+	dev_dbg(mtk_dp->dev, "[HDCP1.X] dev_count:%d\n", dev_count);
+
 	if (times > 0) {
 		for (i = 0; i < times; i++) {
 			ret = drm_dp_dpcd_read(&mtk_dp->aux, DP_AUX_HDCP_KSV_FIFO,
 					       hdcp_info->hdcp1x_info.ksvfifo + i * 15, 15);
 			if (ret < 0)
 				return ret;
+			dev_dbg(mtk_dp->dev, "[HDCP1.X] Read ksvfifo[%d]:0x%x\n",
+				i * 15, hdcp_info->hdcp1x_info.ksvfifo[i * 15]);
 		}
 	}
 
@@ -168,14 +180,9 @@ static int mtk_dp_hdcp1x_read_sink_ksv(struct mtk_hdcp_info *hdcp_info, u8 dev_c
 				       hdcp_info->hdcp1x_info.ksvfifo + times * 15, remain * 5);
 		if (ret < 0)
 			return ret;
+		dev_dbg(mtk_dp->dev, "[HDCP1.X] Read ksvfifo[%d]:0x%x\n",
+			times * 15, hdcp_info->hdcp1x_info.ksvfifo[times * 15]);
 	}
-
-	dev_dbg(mtk_dp->dev, "[HDCP1.X] Read ksvfifo:0x%x, 0x%x, 0x%x, 0x%x, 0x%x\n",
-		hdcp_info->hdcp1x_info.ksvfifo[0],
-		hdcp_info->hdcp1x_info.ksvfifo[1],
-		hdcp_info->hdcp1x_info.ksvfifo[2],
-		hdcp_info->hdcp1x_info.ksvfifo[3],
-		hdcp_info->hdcp1x_info.ksvfifo[4]);
 
 	return 0;
 }
@@ -207,6 +214,9 @@ static int mtk_dp_hdcp1x_auth_with_repeater(struct mtk_hdcp_info *hdcp_info)
 	u8 *buffer;
 	u32 len;
 	int ret;
+	u8 id;
+
+	id = mtk_dp->mst_enable ? DP_ENCODER_ID_0 : DP_SST_ENCODER_PORT;
 
 	if (hdcp_info->hdcp1x_info.device_count > HDCP1X_REP_MAXDEVS) {
 		dev_err(mtk_dp->dev, "[HDCP1.X] Repeater:%d exceed max devs\n",
@@ -232,7 +242,7 @@ static int mtk_dp_hdcp1x_auth_with_repeater(struct mtk_hdcp_info *hdcp_info)
 	memcpy(buffer, hdcp_info->hdcp1x_info.ksvfifo, len - HDCP1X_B_INFO_LEN);
 	memcpy(buffer + (len - HDCP1X_B_INFO_LEN), hdcp_info->hdcp1x_info.b_info,
 	       HDCP1X_B_INFO_LEN);
-	ret = tee_hdcp1x_compute_compare_v(hdcp_info, buffer, len, hdcp_info->hdcp1x_info.v);
+	ret = tee_hdcp1x_compute_compare_v(id, hdcp_info, buffer, len, hdcp_info->hdcp1x_info.v);
 	if (!ret)
 		dev_dbg(mtk_dp->dev, "[HDCP1.X] Check V' pass\n");
 	else
@@ -301,10 +311,19 @@ static int mtk_dp_hdcp1x_write_an(struct mtk_hdcp_info *hdcp_info)
 	u8 an_value[DRM_HDCP_AN_LEN] = { /* on DP Spec p99 */
 		0x03, 0x04, 0x07, 0x0C, 0x13, 0x1C, 0x27, 0x34};
 	int ret;
+	u8 id;
 
-	ret = tee_hdcp1x_set_tx_an(hdcp_info, an_value);
-	if (ret)
-		return ret;
+	if (!mtk_dp->mst_enable) {
+		ret = tee_hdcp1x_set_tx_an(DP_SST_ENCODER_PORT, hdcp_info, an_value);
+		if (ret)
+			return ret;
+	} else {
+		for (id = 0; id < DP_ENCODER_NUM; id++) {
+			ret = tee_hdcp1x_set_tx_an(id, hdcp_info, an_value);
+			if (ret)
+				return ret;
+		}
+	}
 
 	ret = drm_dp_dpcd_write(&mtk_dp->aux, DP_AUX_HDCP_AN, an_value, DRM_HDCP_AN_LEN);
 	if (ret < 0)
@@ -323,6 +342,9 @@ static int mtk_dp_hdcp1x_check_r0(struct mtk_hdcp_info *hdcp_info)
 	int i, tries;
 	ssize_t ret;
 	bool tmp;
+	u8 id;
+
+	id = mtk_dp->mst_enable ? DP_ENCODER_ID_0 : DP_SST_ENCODER_PORT;
 
 	tmp = mtk_dp_hdcp1x_get_r0_available(hdcp_info);
 	if (!tmp) {
@@ -347,24 +369,57 @@ static int mtk_dp_hdcp1x_check_r0(struct mtk_hdcp_info *hdcp_info)
 	}
 
 	tries = 3;
-	while (i < tries) {
+	for (i = 0; i < tries; i++) {
 		ret = drm_dp_dpcd_read(&mtk_dp->aux, DP_AUX_HDCP_RI_PRIME, value, DRM_HDCP_RI_LEN);
-		if (ret < 0)
-			return ret;
-
-		ret = tee_compare_r0(hdcp_info, value, DRM_HDCP_RI_LEN);
-		if (!ret)
-			return ret;
+		if (ret == DRM_HDCP_RI_LEN) {
+			ret = tee_compare_r0(id, hdcp_info, value, DRM_HDCP_RI_LEN);
+			if (!ret)
+				return ret;
+		}
 
 		dev_dbg(mtk_dp->dev, "[HDCP1.X] R0 check FAIL, Rx_R0:0x%x, 0x%x, retry\n",
 			value[0x1], value[0x0]);
 		mdelay(5);
-
-		i++;
 	}
 
 	dev_err(mtk_dp->dev, "[HDCP1.X] R0 check fail\n");
 	return -EINVAL;
+}
+
+static int mtk_dp_hdcp1x_update_encrypt(struct mtk_hdcp_info *hdcp_info, bool enable)
+{
+	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
+	int ret;
+	u8 id;
+
+	if (!mtk_dp->mst_enable) {
+		ret = tee_hdcp_update_encrypt(DP_SST_ENCODER_PORT, hdcp_info, enable, enable ? HDCP_V1 : HDCP_NONE);
+		if (ret)
+			return ret;
+
+		mtk_dp_update_bits_v2(mtk_dp, REG_3000_DP_ENCODER0_P0,
+				      enable ? HDCP_FRAME_EN_DP_ENCODER0_P0_FLDMASK : 0,
+				      HDCP_FRAME_EN_DP_ENCODER0_P0_FLDMASK);
+
+		return 0;
+	}
+
+	ret = tee_hdcp_toggle_encrypt(hdcp_info);
+	if (ret)
+		return ret;
+
+	mtk_dp_update_bits_v2(mtk_dp, REG_3984_DP_MST_DPTX, enable ? BIT(0) : 0, BIT(0));
+	ret = tee_hdcp_toggle_encrypt(hdcp_info);
+	if (ret)
+		return ret;
+
+	for (id = 0; id < DP_ENCODER_NUM; id++) {
+		ret = tee_hdcp_update_encrypt(id, hdcp_info, enable, enable ? HDCP_V1 : HDCP_NONE);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 /* Implements Part 1 of the HDCP authorization procedure */
@@ -374,6 +429,7 @@ static int mtk_dp_hdcp1x_auth(struct mtk_hdcp_info *hdcp_info)
 	int ret, i, tries = 2;
 	bool success = false;
 	ktime_t end;
+	u8 id;
 
 	if (!hdcp_info->hdcp1x_info.capable)
 		return -EAGAIN;
@@ -407,9 +463,18 @@ static int mtk_dp_hdcp1x_auth(struct mtk_hdcp_info *hdcp_info)
 
 	mtk_dp_hdcp1x_set_repeater(hdcp_info, hdcp_info->hdcp1x_info.repeater);
 
-	ret = tee_calculate_lm(hdcp_info, hdcp_info->hdcp1x_info.b_ksv);
-	if (ret)
-		return ret;
+	if (!mtk_dp->mst_enable) {
+		ret = tee_calculate_lm(DP_SST_ENCODER_PORT, hdcp_info, hdcp_info->hdcp1x_info.b_ksv);
+		if (ret)
+			return ret;
+	} else {
+		for (id = 0; id < DP_ENCODER_NUM; id++) {
+			ret = tee_calculate_lm(id, hdcp_info, hdcp_info->hdcp1x_info.b_ksv);
+			if (ret)
+				return ret;
+		}
+	}
+
 	mtk_dp_hdcp1x_start_cipher(hdcp_info, true);
 
 	/* Wait 100ms(at least) before check R0 */
@@ -417,7 +482,8 @@ static int mtk_dp_hdcp1x_auth(struct mtk_hdcp_info *hdcp_info)
 	ret = mtk_dp_hdcp1x_check_r0(hdcp_info);
 	if (ret)
 		return ret;
-	ret = tee_hdcp_update_encrypt(hdcp_info, true, HDCP_V1);
+
+	ret = mtk_dp_hdcp1x_update_encrypt(hdcp_info, true);
 	if (ret)
 		return ret;
 
@@ -456,7 +522,7 @@ static int mtk_dp_hdcp1x_auth(struct mtk_hdcp_info *hdcp_info)
 	return 0;
 
 fail:
-	tee_hdcp_update_encrypt(hdcp_info, false, HDCP_NONE);
+	mtk_dp_hdcp1x_update_encrypt(hdcp_info, false);
 
 	return ret;
 }
@@ -495,18 +561,10 @@ fail:
 int mtk_dp_hdcp1x_disable(struct mtk_hdcp_info *hdcp_info)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
-	int ret;
 
 	if (hdcp_info->auth_status == AUTH_PASS) {
-		ret = tee_hdcp_update_encrypt(hdcp_info, false, HDCP_NONE);
-		if (ret)
-			return ret;
-
 		mtk_dp_hdcp1x_start_cipher(hdcp_info, false);
-
-		ret = tee_hdcp1x_soft_rst(hdcp_info);
-		if (ret)
-			return ret;
+		mtk_dp_hdcp1x_update_encrypt(hdcp_info, false);
 	}
 
 	tee_remove_device(hdcp_info);
@@ -526,7 +584,7 @@ int mtk_dp_hdcp1x_check_link(struct mtk_hdcp_info *hdcp_info)
 
 	guard(mutex)(&mtk_dp->hdcp_mutex);
 
-	if (mtk_dp->hdcp_info.cancel_check || mtk_dp->hdcp_info.auth_status != AUTH_PASS)
+	if (mtk_dp->hdcp_info.auth_status != AUTH_PASS)
 		return -EINVAL;
 
 	if (!mtk_dp->training_info.cable_plug_in)
@@ -534,26 +592,27 @@ int mtk_dp_hdcp1x_check_link(struct mtk_hdcp_info *hdcp_info)
 
 	ret = drm_dp_dpcd_read(&mtk_dp->aux, DP_AUX_HDCP_BSTATUS, &bstatus, 1);
 	if (ret != 1) {
-		dev_dbg(mtk_dp->dev, "[HDCP1.X] Read bstatus failed, reauth\n");
+		dev_err(mtk_dp->dev, "[HDCP1.X] Read bstatus failed, reauth\n");
 		goto err;
 	}
 
 	ret = bstatus & (DP_BSTATUS_LINK_FAILURE | DP_BSTATUS_REAUTH_REQ);
-	if (!ret) {
-		mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_ENABLED);
+	if (ret) {
+		dev_err(mtk_dp->dev, "[HDCP1.X] link failed / reauth req:0x%x\n", bstatus);
 		goto err;
 	}
 
+	return ret;
+
 err:
 	ret = mtk_dp_hdcp1x_disable(hdcp_info);
-	if (ret || !mtk_dp->training_info.cable_plug_in) {
-		mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_DESIRED);
+	if (ret || !mtk_dp->training_info.cable_plug_in)
 		return -EAGAIN;
-	}
+	mtk_dp_hdcp_update_value(mtk_dp);
 
 	ret = mtk_dp_hdcp1x_enable(hdcp_info);
-	if (ret)
-		mtk_dp_hdcp_update_value(mtk_dp, DRM_MODE_CONTENT_PROTECTION_DESIRED);
+	if (!ret)
+		mtk_dp_hdcp_update_value(mtk_dp);
 
 	return ret;
 }

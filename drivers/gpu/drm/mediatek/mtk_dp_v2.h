@@ -27,7 +27,10 @@ void mtk_dp_audio_info_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 		       int *ch, int *fs, int *len);
 int mtk_dp_update_bits_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask);
 void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp, bool video_enable);
-void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp, u32 value);
+void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp);
+void mtk_dp_hdcp_enable(struct mtk_dp *mtk_dp);
+void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp);
+void mtk_dp_hdcp_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id, struct drm_connector_state *state);
 u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode);
 void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
 

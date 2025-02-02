@@ -56,8 +56,8 @@ struct hdcp2_info_tx {
 	struct hdcp2_rep_stream_manage stream_manage;
 	struct hdcp2_rep_send_ack send_ack;
 	struct hdcp2_tx_caps tx_caps;
-	u8 k[HDCP2_K_LEN];
-	u8 stream_id_type[HDCP2_STREAMID_TYPE_LEN];
+	u16 k;
+	u32 seq_num_m;
 };
 
 struct hdcp2_info_rx {
@@ -86,8 +86,6 @@ struct hdcp2_info {
 	bool repeater;
 	bool stored_km;
 	u8 device_count;
-	u8 stream_id_type;
-	u32 seq_num_v_cnt;
 	atomic_t cp_irq;
 	int cp_irq_cached;
 	wait_queue_head_t cp_irq_queue;
@@ -98,11 +96,8 @@ struct hdcp2_info {
 
 struct mtk_hdcp_info {
 	bool g_init;
-	bool cancel_check;
 	u8 auth_status;
 	u8 auth_version;
-	u32 hdcp_content_type;
-	u32 content_protection;
 	struct hdcp2_info hdcp2_info;
 	struct hdcp1x_info hdcp1x_info;
 	struct dp_tee_private *g_dp_tee_priv;
@@ -112,15 +107,15 @@ struct mtk_hdcp_info {
 int tee_add_device(struct mtk_hdcp_info *hdcp_info, u32 version);
 void tee_remove_device(struct mtk_hdcp_info *hdcp_info);
 int tee_clear_paring(struct mtk_hdcp_info *hdcp_info);
-int tee_calculate_lm(struct mtk_hdcp_info *hdcp_info, u8 *bksv);
+int tee_calculate_lm(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *bksv);
 int tee_get_aksv(struct mtk_hdcp_info *hdcp_info, u8 *aksv);
-int tee_compare_r0(struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len);
-int tee_hdcp1x_compute_compare_v(struct mtk_hdcp_info *hdcp_info,
+int tee_compare_r0(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len);
+int tee_hdcp1x_compute_compare_v(u8 id, struct mtk_hdcp_info *hdcp_info,
 				u8 *crypto_param, u32 param_len, u8 *rx_v);
-int tee_hdcp1x_set_tx_an(struct mtk_hdcp_info *hdcp_info, u8 *an_code);
-int tee_hdcp1x_soft_rst(struct mtk_hdcp_info *hdcp_info);
-int tee_hdcp2_soft_rst(struct mtk_hdcp_info *hdcp_info);
-int tee_hdcp_update_encrypt(struct mtk_hdcp_info *hdcp_info, bool enable, u8 version);
+int tee_hdcp1x_set_tx_an(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *an_code);
+int tee_hdcp1x_soft_rst(u8 id, struct mtk_hdcp_info *hdcp_info);
+int tee_hdcp2_soft_rst(u8 id, struct mtk_hdcp_info *hdcp_info);
+int tee_hdcp_update_encrypt(u8 id, struct mtk_hdcp_info *hdcp_info, bool enable, u8 version);
 int tee_ake_certificate(struct mtk_hdcp_info *hdcp_info,
 				u8 *certificate, bool *stored, u8 *out_m, u8 *out_ekm);
 int tee_enc_rsaes_oaep(struct mtk_hdcp_info *hdcp_info, u8 *ekm);
@@ -128,12 +123,13 @@ int tee_ake_h_prime(struct mtk_hdcp_info *hdcp_info,
 				u8 *rtx, u8 *rrx, u8 *rx_caps, u8 *tx_caps, u8 *rx_h, u32 rx_h_len);
 int tee_ake_paring(struct mtk_hdcp_info *hdcp_info, u8 *rx_ekm);
 int tee_lc_l_prime(struct mtk_hdcp_info *hdcp_info, u8 *rn, u8 *rx_l, u32 len);
-int tee_ske_enc_ks(struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks);
+int tee_ske_enc_ks(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks);
 int tee_hdcp2_compute_compare_v(struct mtk_hdcp_info *hdcp_info,
 				u8 *crypto_param, u32 param_len, u8 *rx_v, u8 *tx_v);
 int tee_hdcp2_compute_compare_m(struct mtk_hdcp_info *hdcp_info,
 				u8 *crypto_param, u32 param_len, u8 *rx_m);
 int tee_hdcp2_set_rx_info(struct mtk_hdcp_info *hdcp_info, u8 *rx_info);
+int tee_hdcp_toggle_encrypt(struct mtk_hdcp_info *hdcp_info);
 #else
 static inline int tee_add_device(struct mtk_hdcp_info *hdcp_info, u32 version)
 {
@@ -147,7 +143,7 @@ static inline int tee_clear_paring(struct mtk_hdcp_info *hdcp_info)
 {
 	return -EFAULT;
 }
-static inline int tee_calculate_lm(struct mtk_hdcp_info *hdcp_info, u8 *bksv)
+static inline int tee_calculate_lm(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *bksv)
 {
 	return -EFAULT;
 }
@@ -155,28 +151,28 @@ static inline int tee_get_aksv(struct mtk_hdcp_info *hdcp_info, u8 *aksv)
 {
 	return -EFAULT;
 }
-static inline int tee_compare_r0(struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len)
+static inline int tee_compare_r0(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *r0, u32 len)
 {
 	return -EFAULT;
 }
-static inline int tee_hdcp1x_compute_compare_v(struct mtk_hdcp_info *hdcp_info,
+static inline int tee_hdcp1x_compute_compare_v(u8 id, struct mtk_hdcp_info *hdcp_info,
 				u8 *crypto_param, u32 param_len, u8 *rx_v)
 {
 	return -EFAULT;
 }
-static inline int tee_hdcp1x_set_tx_an(struct mtk_hdcp_info *hdcp_info, u8 *an_code)
+static inline int tee_hdcp1x_set_tx_an(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *an_code)
 {
 	return -EFAULT;
 }
-static inline int tee_hdcp1x_soft_rst(struct mtk_hdcp_info *hdcp_info)
+static inline int tee_hdcp1x_soft_rst(u8 id, struct mtk_hdcp_info *hdcp_info)
 {
 	return -EFAULT;
 }
-static inline int tee_hdcp2_soft_rst(struct mtk_hdcp_info *hdcp_info)
+static inline int tee_hdcp2_soft_rst(u8 id, struct mtk_hdcp_info *hdcp_info)
 {
 	return -EFAULT;
 }
-static inline int tee_hdcp_update_encrypt(struct mtk_hdcp_info *hdcp_info, bool enable, u8 version)
+static inline int tee_hdcp_update_encrypt(u8 id, struct mtk_hdcp_info *hdcp_info, bool enable, u8 version)
 {
 	return -EFAULT;
 }
@@ -202,7 +198,7 @@ static inline int tee_lc_l_prime(struct mtk_hdcp_info *hdcp_info, u8 *rn, u8 *rx
 {
 	return -EFAULT;
 }
-static inline int tee_ske_enc_ks(struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks)
+static inline int tee_ske_enc_ks(u8 id, struct mtk_hdcp_info *hdcp_info, u8 *riv, u8 *eks)
 {
 	return -EFAULT;
 }
@@ -217,6 +213,10 @@ static inline int tee_hdcp2_compute_compare_m(struct mtk_hdcp_info *hdcp_info,
 	return -EFAULT;
 }
 static inline int tee_hdcp2_set_rx_info(struct mtk_hdcp_info *hdcp_info, u8 *rx_info)
+{
+	return -EFAULT;
+}
+static inline int tee_hdcp_toggle_encrypt(struct mtk_hdcp_info *hdcp_info);
 {
 	return -EFAULT;
 }
