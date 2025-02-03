@@ -429,8 +429,8 @@ static int mtk_venc_mem_alloc(struct venc_inst *inst,
 	buf->iova = (unsigned long long)dma_addr;
 
 	mtk_venc_debug(inst->ctx,
-		       "allocate buffer, size: %d, va: 0x%llx, iova: 0x%llx",
-		       buf->size, (u64)buf->va, buf->iova);
+		       "allocate buffer, size: %d, va: %p, iova: %pad",
+		       buf->size, buf->va, &buf->iova);
 
 	return 0;
 }
@@ -443,8 +443,8 @@ static void mtk_venc_mem_free(struct venc_inst *inst,
 		return;
 
 	mtk_venc_debug(inst->ctx,
-		       "free buffer, size: %d, va: 0x%llx, iova: 0x%llx",
-		       buf->size, (u64)buf->va, buf->iova);
+		       "allocate buffer, size: %d, va: %p, iova: %pad",
+		       buf->size, buf->va, &buf->iova);
 
 	dma_free_coherent(dev, buf->size, buf->va, buf->iova);
 	buf->va = NULL;

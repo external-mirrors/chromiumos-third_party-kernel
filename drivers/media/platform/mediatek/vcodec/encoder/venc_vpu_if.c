@@ -24,8 +24,7 @@ static void handle_enc_init_msg(struct venc_vpu_inst *vpu, const void *data)
 		pa_start = (__u64)mtk_vcodec_vcp_get_vsi_iova(fw);
 		vsi_offset = ((msg->vpu_vsi_addr & IPI_VSI_OFFSET_MASK) -
 			(pa_start & IPI_VSI_OFFSET_MASK));
-		vpu->vsi = (void *)((__u64)mtk_vcodec_vcp_get_vsi(fw, 0) +
-			vsi_offset);
+		vpu->vsi = mtk_vcodec_vcp_get_vsi(fw, 0) + vsi_offset;
 	} else {
 		vpu->vsi = mtk_vcodec_fw_map_dm_addr(fw, vpu->inst_addr);
 	}
