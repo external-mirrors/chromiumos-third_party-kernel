@@ -525,7 +525,7 @@ static struct platform_driver mtk_apu_driver = {
 	},
 };
 
-int mtk_apu_rproc_init(void)
+static int mtk_apu_rproc_init(void)
 {
 	int ret;
 
