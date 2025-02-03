@@ -102,7 +102,7 @@ static int mt8196_rproc_stop(struct mtk_apu *apu)
 	return mtk_apu_rv_smc_call(apu->dev, MTK_APUSYS_KERNEL_OP_APUSYS_RV_STOP_MP, 0);
 }
 
-int apu_infra_lock(struct mtk_apu *apu, uint32_t op, enum apu_infra_bit_id id)
+static int apu_infra_lock(struct mtk_apu *apu, uint32_t op, enum apu_infra_bit_id id)
 {
 	uint32_t timeout_cnt = 0;
 	uint32_t timeout = 1000000;

@@ -124,7 +124,7 @@ int mtk_apu_config_setup(struct mtk_apu *apu)
 		return -ENOMEM;
 	}
 	mdla_rv_mem->size = MDLA_RESERVE_MEM_SZ;
-	mdla_rv_mem->buf = mdla_buf;
+	mdla_rv_mem->buf = (uint64_t)mdla_buf;
 	mdla_rv_mem->da = mdla_da;
 
 	return 0;
