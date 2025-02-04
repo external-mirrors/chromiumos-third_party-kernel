@@ -29,7 +29,7 @@
 /* WRITE_TMO_MS is the time within which a cmd complete or ack notification must
  * arrive after a command is sent to the PPM.
  */
-#define WRITE_TMO_MS	5000
+#define WRITE_TMO_MS	500
 
 struct cros_ucsi_data {
 	struct device *dev;
