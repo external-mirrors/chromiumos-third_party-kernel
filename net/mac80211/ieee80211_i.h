@@ -751,7 +751,7 @@ struct ieee80211_if_mesh {
  * @IEEE80211_SDATA_DISCONNECT_RESUME: Disconnect after resume.
  * @IEEE80211_SDATA_IN_DRIVER: indicates interface was added to driver
  * @IEEE80211_SDATA_DISCONNECT_HW_RESTART: Disconnect after hardware restart
- *	recovery
+ *  recovery
  */
 enum ieee80211_sub_if_data_flags {
 	IEEE80211_SDATA_ALLMULTI		= BIT(0),
