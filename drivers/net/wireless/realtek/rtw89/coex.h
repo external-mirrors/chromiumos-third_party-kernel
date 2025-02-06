@@ -192,6 +192,8 @@ enum btc_wa_type {
 	BTC_WA_5G_HI_CH_RX = BIT(0),
 	BTC_WA_NULL_AP = BIT(1),
 	BTC_WA_HFP_ZB = BIT(2),  /* HFP PTA req bit4 define issue */
+	BTC_WA_HFP_LAG = BIT(3),  /* 52BT WL break BT Rx lag issue */
+	BTC_WA_INIT_SCAN = BIT(4)  /* 52A/C/D init scan move to wl slot WA */
 };
 
 enum btc_3cx_type {
@@ -285,6 +287,8 @@ void rtw89_coex_power_on(struct rtw89_dev *rtwdev);
 void rtw89_btc_set_policy(struct rtw89_dev *rtwdev, u16 policy_type);
 void rtw89_btc_set_policy_v1(struct rtw89_dev *rtwdev, u16 policy_type);
 void rtw89_coex_recognize_ver(struct rtw89_dev *rtwdev);
+void rtw89_btc_ntfy_preserve_bt_time(struct rtw89_dev *rtwdev, u32 ms);
+void rtw89_btc_ntfy_conn_rfk(struct rtw89_dev *rtwdev, bool state);
 
 static inline u8 rtw89_btc_phymap(struct rtw89_dev *rtwdev,
 				  enum rtw89_phy_idx phy_idx,
@@ -305,6 +309,15 @@ static inline u8 rtw89_btc_path_phymap(struct rtw89_dev *rtwdev,
 				       enum rtw89_rf_path path)
 {
 	return rtw89_btc_phymap(rtwdev, phy_idx, BIT(path));
+}
+
+/* return bt req len in TU */
+static inline u16 rtw89_coex_query_bt_req_len(struct rtw89_dev *rtwdev,
+					      enum rtw89_phy_idx phy_idx)
+{
+	struct rtw89_btc *btc = &rtwdev->btc;
+
+	return btc->bt_req_len;
 }
 
 static inline

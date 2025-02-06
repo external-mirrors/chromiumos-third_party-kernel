@@ -49,6 +49,11 @@
 #define ACPI_NOTIFY_CROS_EC_PANIC 0xB0
 
 /*
+ * ACPI notify value for MKBP host event.
+ */
+#define ACPI_NOTIFY_CROS_EC_MKBP 0x80
+
+/*
  * Command interface between EC and AP, for LPC, I2C and SPI interfaces.
  */
 enum {

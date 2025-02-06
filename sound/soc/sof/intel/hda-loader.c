@@ -48,9 +48,10 @@ static void hda_ssp_set_cbp_cfp(struct snd_sof_dev *sdev)
 	}
 }
 
-struct hdac_ext_stream *hda_cl_stream_prepare(struct snd_sof_dev *sdev, unsigned int format,
-					      unsigned int size, struct snd_dma_buffer *dmab,
-					      bool persistent_buffer, int direction)
+struct hdac_ext_stream*
+hda_cl_stream_prepare(struct snd_sof_dev *sdev, unsigned int format, unsigned int size,
+		      struct snd_dma_buffer *dmab, bool persistent_buffer,
+		      int direction)
 {
 	struct hdac_ext_stream *hext_stream;
 	struct hdac_stream *hstream;
@@ -264,7 +265,7 @@ static int cl_trigger(struct snd_sof_dev *sdev,
 }
 
 int hda_cl_cleanup(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
-			bool persistent_buffer, struct hdac_ext_stream *hext_stream)
+		   bool persistent_buffer, struct hdac_ext_stream *hext_stream)
 {
 	struct hdac_stream *hstream = &hext_stream->hstream;
 	int sd_offset = SOF_STREAM_SD_OFFSET(hstream);
@@ -287,6 +288,7 @@ int hda_cl_cleanup(struct snd_sof_dev *sdev, struct snd_dma_buffer *dmab,
 			  sd_offset + SOF_HDA_ADSP_REG_SD_BDLPU, 0);
 
 	snd_sof_dsp_write(sdev, HDA_DSP_HDA_BAR, sd_offset, 0);
+
 	if (!persistent_buffer) {
 		snd_dma_free_pages(dmab);
 		dmab->area = NULL;
@@ -354,8 +356,8 @@ int hda_dsp_cl_boot_firmware_iccmax(struct snd_sof_dev *sdev)
 	 * the data, so use a buffer of PAGE_SIZE for receiving.
 	 */
 	iccmax_stream = hda_cl_stream_prepare(sdev, HDA_CL_STREAM_FORMAT, PAGE_SIZE,
-					      &hda->iccmax_dmab, persistent_cl_buffer,
-					      SNDRV_PCM_STREAM_CAPTURE);
+				       &hda->iccmax_dmab, persistent_cl_buffer,
+				       SNDRV_PCM_STREAM_CAPTURE);
 	if (IS_ERR(iccmax_stream)) {
 		dev_err(sdev->dev, "error: dma prepare for ICCMAX stream failed\n");
 		return PTR_ERR(iccmax_stream);
@@ -368,7 +370,7 @@ int hda_dsp_cl_boot_firmware_iccmax(struct snd_sof_dev *sdev)
 	 * If the cleanup also fails, we return the initial error
 	 */
 	ret1 = hda_cl_cleanup(sdev, &hda->iccmax_dmab,
-			persistent_cl_buffer, iccmax_stream);
+			      persistent_cl_buffer, iccmax_stream);
 	if (ret1 < 0) {
 		dev_err(sdev->dev, "error: ICCMAX stream cleanup failed\n");
 
@@ -431,7 +433,6 @@ int hda_dsp_cl_boot_firmware(struct snd_sof_dev *sdev)
 		dev_err(sdev->dev, "error: firmware size must be greater than firmware offset\n");
 		return -EINVAL;
 	}
-
 
 	/* init for booting wait */
 	init_waitqueue_head(&sdev->boot_wait);
@@ -523,8 +524,7 @@ cleanup:
 	 * This should be done even if firmware loading fails.
 	 * If the cleanup also fails, we return the initial error
 	 */
-	ret1 = hda_cl_cleanup(sdev, &hda->cl_dmab,
-				persistent_cl_buffer, hext_stream);
+	ret1 = hda_cl_cleanup(sdev, &hda->cl_dmab, persistent_cl_buffer, hext_stream);
 	if (ret1 < 0) {
 		dev_err(sdev->dev, "error: Code loader DSP cleanup failed\n");
 
@@ -574,7 +574,6 @@ int hda_dsp_ipc4_load_library(struct snd_sof_dev *sdev,
 		hda->cl_dmab.bytes = 0;
 	}
 
-
 	/* prepare DMA for code loader stream */
 	hext_stream = hda_cl_stream_prepare(sdev, HDA_CL_STREAM_FORMAT,
 					    stripped_firmware.size,
@@ -611,8 +610,7 @@ int hda_dsp_ipc4_load_library(struct snd_sof_dev *sdev,
 
 cleanup:
 	/* clean up even in case of error and return the first error */
-	ret1 = hda_cl_cleanup(sdev, &hda->cl_dmab, persistent_cl_buffer,
-				hext_stream);
+	ret1 = hda_cl_cleanup(sdev, &hda->cl_dmab, persistent_cl_buffer, hext_stream);
 	if (ret1 < 0) {
 		dev_err(sdev->dev, "%s: Code loader DSP cleanup failed\n", __func__);
 

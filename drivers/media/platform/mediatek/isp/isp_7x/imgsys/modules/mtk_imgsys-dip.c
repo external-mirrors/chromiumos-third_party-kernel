@@ -12,8 +12,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/remoteproc.h>
 
-#include "mtk-hcp.h"
-#include "mtk-hcp_isp71.h"
+#include "mtk_imgsys-scp.h"
 #include "../mtk_imgsys-engine.h"
 #include "../mtk_imgsys-hw.h"
 #include "mtk_imgsys-dip.h"
@@ -286,7 +285,7 @@ void imgsys_dip_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
 	if (frm_dump_info->eng_e != IMGSYS_NDD_ENG_DIP)
 		return;
 
-	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, DIP_MEM_C_ID);
+	cq_va = imgsys_scp_get_reserve_mem_virt(DIP_MEM_C_ID);
 	if (!cq_va)
 		return;
 

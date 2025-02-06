@@ -6,7 +6,7 @@
  *
  */
 
-#include "mtk-hcp_isp71.h"
+#include "mtk_imgsys-scp.h"
 #include "mtk_imgsys-debug.h"
 #include <linux/device.h>
 #include <linux/of_address.h>
@@ -302,13 +302,13 @@ void imgsys_wpe_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
 	if (!frm_dump_info->user_buffer)
 		return;
 
-	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, WPE_MEM_C_ID);
+	cq_va = imgsys_scp_get_reserve_mem_virt(WPE_MEM_C_ID);
 	if (!cq_va)
 		return;
 
 	cq_va += frm_dump_info->cq_ofst[frm_dump_info->eng_e];
 
-	psp_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, WPE_MEM_C_ID);
+	psp_va = imgsys_scp_get_reserve_mem_virt(WPE_MEM_C_ID);
 	if (!psp_va)
 		return;
 

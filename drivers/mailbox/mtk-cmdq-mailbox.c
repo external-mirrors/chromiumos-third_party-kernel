@@ -387,22 +387,15 @@ static int cmdq_mbox_send_data(struct mbox_chan *chan, void *data)
 	/* Client should not flush new tasks if suspended. */
 	WARN_ON(cmdq->suspended);
 
-	ret = pm_runtime_get_sync(cmdq->mbox.dev);
-	if (ret < 0)
-		return ret;
-
 	if (CMDQ_IS_SECURE_THREAD(idx, cmdq)) {
 		ret = cmdq_sec_mbox.ops->send_data(chan, data);
 		pm_runtime_mark_last_busy(cmdq->mbox.dev);
-		pm_runtime_put_autosuspend(cmdq->mbox.dev);
 		return ret;
 	}
 
 	task = kzalloc(sizeof(*task), GFP_ATOMIC);
-	if (!task) {
-		pm_runtime_put_autosuspend(cmdq->mbox.dev);
+	if (!task)
 		return -ENOMEM;
-	}
 
 	task->cmdq = cmdq;
 	INIT_LIST_HEAD(&task->list_entry);
@@ -450,7 +443,6 @@ static int cmdq_mbox_send_data(struct mbox_chan *chan, void *data)
 	list_move_tail(&task->list_entry, &thread->task_busy_list);
 
 	pm_runtime_mark_last_busy(cmdq->mbox.dev);
-	pm_runtime_put_autosuspend(cmdq->mbox.dev);
 
 	return 0;
 }
@@ -475,12 +467,9 @@ static void cmdq_mbox_shutdown(struct mbox_chan *chan)
 	unsigned long flags;
 	u32 idx = CMDQ_THR_IDX(thread, cmdq);
 
-	WARN_ON(pm_runtime_get_sync(cmdq->mbox.dev) < 0);
-
 	if (CMDQ_IS_SECURE_THREAD(idx, cmdq)) {
 		cmdq_sec_mbox.ops->shutdown(chan);
 		pm_runtime_mark_last_busy(cmdq->mbox.dev);
-		pm_runtime_put_autosuspend(cmdq->mbox.dev);
 		return;
 	}
 
@@ -513,7 +502,6 @@ done:
 	spin_unlock_irqrestore(&thread->chan->lock, flags);
 
 	pm_runtime_mark_last_busy(cmdq->mbox.dev);
-	pm_runtime_put_autosuspend(cmdq->mbox.dev);
 }
 
 static int cmdq_mbox_flush(struct mbox_chan *chan, unsigned long timeout)
@@ -525,16 +513,10 @@ static int cmdq_mbox_flush(struct mbox_chan *chan, unsigned long timeout)
 	unsigned long flags;
 	u32 enable;
 	u32 idx = CMDQ_THR_IDX(thread, cmdq);
-	int ret;
-
-	ret = pm_runtime_get_sync(cmdq->mbox.dev);
-	if (ret < 0)
-		return ret;
 
 	if (CMDQ_IS_SECURE_THREAD(idx, cmdq)) {
 		cmdq_sec_mbox.ops->flush(chan, timeout);
 		pm_runtime_mark_last_busy(cmdq->mbox.dev);
-		pm_runtime_put_autosuspend(cmdq->mbox.dev);
 		return 0;
 	}
 
@@ -561,7 +543,6 @@ static int cmdq_mbox_flush(struct mbox_chan *chan, unsigned long timeout)
 out:
 	spin_unlock_irqrestore(&thread->chan->lock, flags);
 	pm_runtime_mark_last_busy(cmdq->mbox.dev);
-	pm_runtime_put_autosuspend(cmdq->mbox.dev);
 
 	return 0;
 
@@ -576,8 +557,22 @@ wait:
 		return -EFAULT;
 	}
 	pm_runtime_mark_last_busy(cmdq->mbox.dev);
-	pm_runtime_put_autosuspend(cmdq->mbox.dev);
+
 	return 0;
+}
+
+static int cmdq_mbox_pm_resume(struct mbox_chan *chan)
+{
+	struct cmdq *cmdq = dev_get_drvdata(chan->mbox->dev);
+
+	return pm_runtime_get_sync(cmdq->mbox.dev);
+}
+
+static void cmdq_mbox_pm_susepnd(struct mbox_chan *chan)
+{
+	struct cmdq *cmdq = dev_get_drvdata(chan->mbox->dev);
+
+	pm_runtime_put_autosuspend(cmdq->mbox.dev);
 }
 
 static const struct mbox_chan_ops cmdq_mbox_chan_ops = {
@@ -585,6 +580,8 @@ static const struct mbox_chan_ops cmdq_mbox_chan_ops = {
 	.startup = cmdq_mbox_startup,
 	.shutdown = cmdq_mbox_shutdown,
 	.flush = cmdq_mbox_flush,
+	.power_get = cmdq_mbox_pm_resume,
+	.power_put = cmdq_mbox_pm_susepnd,
 };
 
 static struct mbox_chan *cmdq_xlate(struct mbox_controller *mbox,
@@ -720,12 +717,6 @@ static int cmdq_probe(struct platform_device *pdev)
 		}
 	}
 
-	err = devm_mbox_controller_register(dev, &cmdq->mbox);
-	if (err < 0) {
-		dev_err(dev, "failed to register mailbox: %d\n", err);
-		return err;
-	}
-
 	platform_set_drvdata(pdev, cmdq);
 
 	WARN_ON(clk_bulk_prepare(cmdq->pdata->gce_num, cmdq->clocks));
@@ -745,6 +736,12 @@ static int cmdq_probe(struct platform_device *pdev)
 
 	pm_runtime_set_autosuspend_delay(dev, CMDQ_MBOX_AUTOSUSPEND_DELAY_MS);
 	pm_runtime_use_autosuspend(dev);
+
+	err = devm_mbox_controller_register(dev, &cmdq->mbox);
+	if (err < 0) {
+		dev_err(dev, "failed to register mailbox: %d\n", err);
+		return err;
+	}
 
 	return 0;
 }

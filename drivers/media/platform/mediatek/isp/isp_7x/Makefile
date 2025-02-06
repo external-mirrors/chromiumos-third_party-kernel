@@ -11,7 +11,4 @@ subdir-ccflags-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += -DIMGSYS_WPE_NUM=2
 subdir-ccflags-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += -DIMGSYS_TRAW_NUM=2
 
 obj-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += imgsys/
-obj-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += mtk-hcp/
-obj-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += mtk-ipesys-me/
-
 

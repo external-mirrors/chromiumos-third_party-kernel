@@ -513,6 +513,8 @@ static const struct usb_device_id blacklist_table[] = {
 						     BTUSB_WIDEBAND_SPEECH },
 	{ USB_DEVICE(0x13d3, 0x3592), .driver_info = BTUSB_REALTEK |
 						     BTUSB_WIDEBAND_SPEECH },
+	{ USB_DEVICE(0x0489, 0xe122), .driver_info = BTUSB_REALTEK |
+						     BTUSB_WIDEBAND_SPEECH },
 
 	/* Realtek 8852BE Bluetooth devices */
 	{ USB_DEVICE(0x0cb8, 0xc559), .driver_info = BTUSB_REALTEK |
@@ -757,6 +759,7 @@ struct qca_dump_info {
 #define BTUSB_WAKEUP_AUTOSUSPEND	14
 #define BTUSB_USE_ALT3_FOR_WBS	15
 #define BTUSB_HW_SSR_ACTIVE	17
+#define BTUSB_ALT_CHANGED	18
 
 
 /* Per core spec 5, vol 4, part B, table 2.1,
@@ -1288,7 +1291,15 @@ static int btusb_submit_intr_urb(struct hci_dev *hdev, gfp_t mem_flags)
 	if (!urb)
 		return -ENOMEM;
 
-	size = le16_to_cpu(data->intr_ep->wMaxPacketSize);
+	if (le16_to_cpu(data->udev->descriptor.idVendor)  == 0x0a12 &&
+	    le16_to_cpu(data->udev->descriptor.idProduct) == 0x0001)
+		/* Fake CSR devices don't seem to support sort-transter */
+		size = le16_to_cpu(data->intr_ep->wMaxPacketSize);
+	else
+		/* Use maximum HCI Event size so the USB stack handles
+		 * ZPL/short-transfer automatically.
+		 */
+		size = HCI_MAX_EVENT_SIZE;
 
 	buf = kmalloc(size, mem_flags);
 	if (!buf) {
@@ -1729,15 +1740,6 @@ done:
 	kfree_skb(skb);
 }
 
-#ifdef CONFIG_DEV_COREDUMP
-static bool btusb_coredump_enabled(struct hci_dev *hdev)
-{
-	struct btusb_data *data = hci_get_drvdata(hdev);
-
-	return !data->intf->dev.coredump_disabled;
-}
-#endif
-
 static int btusb_open(struct hci_dev *hdev)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
@@ -2046,15 +2048,60 @@ static void btusb_notify(struct hci_dev *hdev, unsigned int evt)
 	}
 }
 
+static struct usb_host_interface *btusb_find_altsetting(struct btusb_data *data,
+							int alt)
+{
+	struct usb_interface *intf = data->isoc;
+	int i;
+
+	BT_DBG("Looking for Alt no :%d", alt);
+
+	if (!intf)
+		return NULL;
+
+	for (i = 0; i < intf->num_altsetting; i++) {
+		if (intf->altsetting[i].desc.bAlternateSetting == alt)
+			return &intf->altsetting[i];
+	}
+
+	return NULL;
+}
+
 static inline int __set_isoc_interface(struct hci_dev *hdev, int altsetting)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 	struct usb_interface *intf = data->isoc;
 	struct usb_endpoint_descriptor *ep_desc;
+	struct usb_host_interface *alt;
 	int i, err;
 
 	if (!data->isoc)
 		return -ENODEV;
+
+	/* For some Realtek chips, they actually have the altsetting 6, but its
+	 * altsetting descriptor is not exposed. We can activate altsetting 6 by
+	 * replacing the altsetting 5.
+	 */
+	if (altsetting == 6 && !btusb_find_altsetting(data, 6) &&
+	    btrealtek_test_flag(hdev, REALTEK_ALT6_FORCE)) {
+		alt = NULL;
+		for (i = 0; i < intf->num_altsetting; i++) {
+			if (intf->altsetting[i].desc.bAlternateSetting == 5) {
+				alt = &intf->altsetting[i];
+				break;
+			}
+		}
+		if (alt) {
+			for (i = 0; i < alt->desc.bNumEndpoints; i++) {
+				ep_desc = &alt->endpoint[i].desc;
+				if (usb_endpoint_is_isoc_out(ep_desc) ||
+				    usb_endpoint_is_isoc_in(ep_desc))
+					ep_desc->wMaxPacketSize = 63;
+			}
+			alt->desc.bAlternateSetting = 6;
+			set_bit(BTUSB_ALT_CHANGED, &data->flags);
+		}
+	}
 
 	err = usb_set_interface(data->udev, data->isoc_ifnum, altsetting);
 	if (err < 0) {
@@ -2066,6 +2113,27 @@ static inline int __set_isoc_interface(struct hci_dev *hdev, int altsetting)
 
 	data->isoc_tx_ep = NULL;
 	data->isoc_rx_ep = NULL;
+
+	/* Recover alt 5 desc if alt 0 is set. */
+	if (!altsetting && test_bit(BTUSB_ALT_CHANGED, &data->flags)) {
+		alt = NULL;
+		for (i = 0; i < intf->num_altsetting; i++) {
+			if (intf->altsetting[i].desc.bAlternateSetting == 6) {
+				alt = &intf->altsetting[i];
+				break;
+			}
+		}
+		if (alt) {
+			for (i = 0; i < alt->desc.bNumEndpoints; i++) {
+				ep_desc = &alt->endpoint[i].desc;
+				if (usb_endpoint_is_isoc_out(ep_desc) ||
+				    usb_endpoint_is_isoc_in(ep_desc))
+					ep_desc->wMaxPacketSize = 49;
+			}
+			alt->desc.bAlternateSetting = 5;
+			clear_bit(BTUSB_ALT_CHANGED, &data->flags);
+		}
+	}
 
 	for (i = 0; i < intf->cur_altsetting->desc.bNumEndpoints; i++) {
 		ep_desc = &intf->cur_altsetting->endpoint[i].desc;
@@ -2129,25 +2197,6 @@ static int btusb_switch_alt_setting(struct hci_dev *hdev, int new_alts)
 	return 0;
 }
 
-static struct usb_host_interface *btusb_find_altsetting(struct btusb_data *data,
-							int alt)
-{
-	struct usb_interface *intf = data->isoc;
-	int i;
-
-	BT_DBG("Looking for Alt no :%d", alt);
-
-	if (!intf)
-		return NULL;
-
-	for (i = 0; i < intf->num_altsetting; i++) {
-		if (intf->altsetting[i].desc.bAlternateSetting == alt)
-			return &intf->altsetting[i];
-	}
-
-	return NULL;
-}
-
 static void btusb_work(struct work_struct *work)
 {
 	struct btusb_data *data = container_of(work, struct btusb_data, work);
@@ -2185,7 +2234,8 @@ static void btusb_work(struct work_struct *work)
 			 * MTU >= 3 (packets) * 25 (size) - 3 (headers) = 72
 			 * see also Core spec 5, vol 4, B 2.1.1 & Table 2.1.
 			 */
-			if (btusb_find_altsetting(data, 6))
+			if (btusb_find_altsetting(data, 6) ||
+			    btrealtek_test_flag(hdev, REALTEK_ALT6_FORCE))
 				new_alts = 6;
 			else if (btusb_find_altsetting(data, 3) &&
 				 hdev->sco_mtu >= 72 &&
@@ -4354,9 +4404,6 @@ static int btusb_probe(struct usb_interface *intf,
 	hdev->notify = btusb_notify;
 	hdev->wakeup = btusb_wakeup;
 	hdev->do_wakeup = btusb_do_wakeup;
-#ifdef CONFIG_DEV_COREDUMP
-	hdev->dump.enabled = btusb_coredump_enabled;
-#endif
 
 #ifdef CONFIG_PM
 	err = btusb_config_oob_wake(hdev);
@@ -4808,7 +4855,7 @@ static void btusb_coredump(struct device *dev)
 	struct btusb_data *data = dev_get_drvdata(dev);
 	struct hci_dev *hdev = data->hdev;
 
-	if (!dev->coredump_disabled && hdev->dump.coredump)
+	if (hdev->dump.coredump)
 		hdev->dump.coredump(hdev);
 }
 #endif

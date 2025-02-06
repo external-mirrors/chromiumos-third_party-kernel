@@ -12,8 +12,7 @@
 #include <linux/remoteproc.h>
 #include <dt-bindings/memory/mtk-memory-port.h>
 
-#include "mtk-hcp.h"
-#include "mtk-hcp_isp71.h"
+#include "mtk_imgsys-scp.h"
 #include "../mtk_imgsys-debug.h"
 #include "../mtk_imgsys-engine.h"
 #include "mtk_imgsys-traw.h"
@@ -640,7 +639,7 @@ void imgsys_traw_ndd_dump(struct mtk_imgsys_dev *imgsys_dev,
 		return;
 	}
 
-	cq_va = mtk_hcp_get_reserve_mem_virt(imgsys_dev->scp_pdev, TRAW_MEM_C_ID);
+	cq_va = imgsys_scp_get_reserve_mem_virt(TRAW_MEM_C_ID);
 	if (!cq_va)
 		return;
 

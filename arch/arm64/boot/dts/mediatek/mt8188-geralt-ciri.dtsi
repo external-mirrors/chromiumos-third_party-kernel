@@ -37,6 +37,8 @@
 		reg = <0x1a>;
 		interrupt-parent = <&pio>;
 		interrupts = <108 IRQ_TYPE_EDGE_BOTH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&hp_int>;
 		realtek,jd-src = <1>;
 		#sound-dai-cells = <0>;
 		status = "okay";
@@ -45,12 +47,10 @@
 
 &max98390_38 {
 	sound-name-prefix = "Front Right";
-	maxim,dsm_param_name = "dsm_param.bin";
 };
 
 &max98390_39 {
 	sound-name-prefix = "Front Left";
-	maxim,dsm_param_name = "dsm_param.bin";
 };
 
 &mipi_tx_config0 {
@@ -166,18 +166,6 @@
 	};
 };
 
-&thermal_zones {
-	soc_max {
-		trips {
-			target: target@1 {
-				temperature = <90000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-		};
-	};
-};
-
 &aud_etdm_hp_on {
 	pins-mclk {
 		pinmux = <PINMUX_GPIO114__FUNC_O_I2SO2_MCK>;
@@ -190,6 +178,48 @@
 		bias-pull-down;
 		input-enable;
 	};
+};
+
+&cpu_little0_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+&cpu_little1_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+&cpu_little2_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+&cpu_little3_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+&cpu_big0_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+&cpu_big1_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+&soc_max_alert0 {
+	temperature = <90000>;
+	hysteresis = <2000>;
+	type = "passive";
 };
 
 &pio {

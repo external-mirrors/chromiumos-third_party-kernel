@@ -1,97 +1,43 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2021 MediaTek Inc.
+ * Copyright (c) 2024 Google Inc.
  */
-#include <linux/bits.h>
 #include <linux/device.h>
-#include <linux/io.h>
-#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/regmap.h>
-#include <linux/slab.h>
 #include <linux/thermal.h>
 
-struct thermal_zone_device *tzd_cpu_little1;
-struct thermal_zone_device *tzd_cpu_little2;
-struct thermal_zone_device *tzd_cpu_little3;
-struct thermal_zone_device *tzd_cpu_little4;
-struct thermal_zone_device *tzd_cpu_big0;
-struct thermal_zone_device *tzd_cpu_big1;
-struct thermal_zone_device *tzd_apu;
-struct thermal_zone_device *tzd_gpu1;
-struct thermal_zone_device *tzd_gpu2;
-struct thermal_zone_device *tzd_soc1;
-struct thermal_zone_device *tzd_soc2;
-struct thermal_zone_device *tzd_soc3;
-struct thermal_zone_device *tzd_cam1;
-struct thermal_zone_device *tzd_cam2;
+#define TZ_DEV_SZ_MAX 20
+
+static struct thermal_zone_device *tz_devs[TZ_DEV_SZ_MAX];
+static const char **tz_dev_names;
+static u32 tz_dev_sz;
 
 static int vtemp_get_temp(struct thermal_zone_device *tz, int *temp)
 {
-	int tz_temp0 = 0;
-	int tz_temp_max = 0;
+	int i, ret;
+	int tz_temp, tz_temp_max = 0;
 
-	thermal_zone_get_temp(tzd_cpu_little1, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
+	for (i = 0; i < tz_dev_sz; i++) {
+		if (!tz_devs[i]) {
+			dev_warn(&tz->device, "Thermal zone %s is NULL\n", tz_dev_names[i]);
+			continue;
+		}
 
-	thermal_zone_get_temp(tzd_cpu_little2, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_cpu_little3, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_cpu_little4, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_cpu_big0, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_cpu_big1, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_apu, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_gpu1, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_gpu2, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_soc1, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_soc2, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_soc3, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_cam1, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
-
-	thermal_zone_get_temp(tzd_cam2, &tz_temp0);
-	if (tz_temp0 > tz_temp_max)
-		tz_temp_max = tz_temp0;
+		ret = thermal_zone_get_temp(tz_devs[i], &tz_temp);
+		if (ret < 0) {
+			if (ret != -EAGAIN)
+				dev_warn(&tz->device,
+					 "Failed to get temp from %s: %d\n",
+					 tz_dev_names[i], ret);
+			continue;
+		}
+		tz_temp_max = max(tz_temp_max, tz_temp);
+	}
 
 	*temp = tz_temp_max;
-
-	/* printk("[thermal_zone_get_temp] *temp:%d\n", *temp); */
 
 	return 0;
 }
@@ -103,32 +49,46 @@ static const struct thermal_zone_device_ops vtemp_ops = {
 static int vtemp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct thermal_zone_device *tzdev;
+	struct device_node *np = dev_of_node(dev);
+	struct thermal_zone_device *tz_vtemp;
+	int i, ret;
 
-	tzd_cpu_little1 = thermal_zone_get_zone_by_name("cpu_little1");
-	tzd_cpu_little2 = thermal_zone_get_zone_by_name("cpu_little2");
-	tzd_cpu_little3 = thermal_zone_get_zone_by_name("cpu_little3");
-	tzd_cpu_little4 = thermal_zone_get_zone_by_name("cpu_little4");
-	tzd_cpu_big0 = thermal_zone_get_zone_by_name("cpu_big0");
-	tzd_cpu_big1 = thermal_zone_get_zone_by_name("cpu_big1");
-	tzd_apu = thermal_zone_get_zone_by_name("apu");
-	tzd_gpu1 = thermal_zone_get_zone_by_name("gpu1");
-	tzd_gpu2 = thermal_zone_get_zone_by_name("gpu2");
-	tzd_soc1 = thermal_zone_get_zone_by_name("soc1");
-	tzd_soc2 = thermal_zone_get_zone_by_name("soc2");
-	tzd_soc3 = thermal_zone_get_zone_by_name("soc3");
-	tzd_cam1 = thermal_zone_get_zone_by_name("cam1");
-	tzd_cam2 = thermal_zone_get_zone_by_name("cam2");
+	tz_dev_names = devm_kcalloc(dev, TZ_DEV_SZ_MAX, sizeof(*tz_dev_names), GFP_KERNEL);
+	if (!tz_dev_names)
+		return -ENOMEM;
 
-	tzdev = devm_thermal_of_zone_register(dev, 0,
-			NULL, &vtemp_ops);
+	ret = of_property_read_string_array(np, "mediatek,tz-names", tz_dev_names, TZ_DEV_SZ_MAX);
+	if (ret < 0)
+		return ret;
+
+	tz_dev_sz = (u32)ret;
+	for (i = 0; i < tz_dev_sz; i++) {
+		tz_devs[i] = thermal_zone_get_zone_by_name(tz_dev_names[i]);
+		if (IS_ERR(tz_devs[i])) {
+			ret = PTR_ERR(tz_devs[i]);
+
+			/* The thermal zone may not be ready yet, defer probing to retry. */
+			if (ret == -ENODEV) {
+				dev_dbg(dev, "thermal zone %s is not ready, defer probing.\n",
+					 tz_dev_names[i]);
+				return -EPROBE_DEFER;
+			}
+
+			dev_err(dev, "Failed to get thermal zone %s: %d\n", tz_dev_names[i], ret);
+			return ret;
+		}
+	}
+
+	tz_vtemp = devm_thermal_of_zone_register(dev, 0, NULL, &vtemp_ops);
+	if (IS_ERR(tz_vtemp))
+		return dev_err_probe(dev, PTR_ERR(tz_vtemp),
+				     "Failed to register vtemp thermal zone\n");
+
 	return 0;
 }
 
 static const struct of_device_id vtemp_of_match[] = {
-	{
-		.compatible = "mediatek,virtual-temp",
-	},
+	{ .compatible = "mediatek,virtual-temp", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, vtemp_of_match);
@@ -144,5 +104,5 @@ static struct platform_driver vtemp_driver = {
 module_platform_driver(vtemp_driver);
 
 MODULE_AUTHOR("Michael Kao <michael.kao@mediatek.com>");
-MODULE_DESCRIPTION("Example on virtual temp driver");
+MODULE_DESCRIPTION("MediaTek Virtual Temp driver v2");
 MODULE_LICENSE("GPL v2");

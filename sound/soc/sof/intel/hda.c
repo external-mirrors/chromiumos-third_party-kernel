@@ -1305,7 +1305,6 @@ int hda_dsp_remove(struct snd_sof_dev *sdev)
 	if (hda->iccmax_dmab.area)
 		snd_dma_free_pages(&hda->iccmax_dmab);
 
-
 skip_disable_dsp:
 	free_irq(sdev->ipc_irq, sdev);
 	if (sdev->msi_enabled)
