@@ -27,8 +27,6 @@
 #include "../common/mtk-dsp-sof-common.h"
 #include "../common/mtk-soc-card.h"
 
-#define MT8196_SUPPORT_ADSP
-
 #define NAU8825_HS_PRESENT	BIT(0)
 #define RT5682S_HS_PRESENT	BIT(1)
 #define RT5650_HS_PRESENT	BIT(2)
@@ -189,7 +187,6 @@ static int mt8196_i2s_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	return 0;
 }
 
-#if defined(MT8196_SUPPORT_ADSP)
 static int mt8196_sof_be_hw_params(struct snd_pcm_substream *substream,
 				   struct snd_pcm_hw_params *params)
 {
@@ -245,15 +242,10 @@ static const struct sof_conn_stream g_sof_conn_streams[] = {
 		.stream_dir = SNDRV_PCM_STREAM_CAPTURE
 	},
 };
-#endif
 
 /* FE */
 SND_SOC_DAILINK_DEFS(playback1,
 	DAILINK_COMP_ARRAY(COMP_CPU("DL1")),
-	DAILINK_COMP_ARRAY(COMP_DUMMY()),
-	DAILINK_COMP_ARRAY(COMP_EMPTY()));
-SND_SOC_DAILINK_DEFS(playback2,
-	DAILINK_COMP_ARRAY(COMP_CPU("DL2")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(playback_24ch,
@@ -272,12 +264,16 @@ SND_SOC_DAILINK_DEFS(capture2,
 	DAILINK_COMP_ARRAY(COMP_CPU("UL2")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
-SND_SOC_DAILINK_DEFS(capture_cm0,
-	DAILINK_COMP_ARRAY(COMP_CPU("UL_CM0")),
-	DAILINK_COMP_ARRAY(COMP_DUMMY()),
-	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(playback_hdmi,
 	DAILINK_COMP_ARRAY(COMP_CPU("HDMI")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
+SND_SOC_DAILINK_DEFS(playback2,
+	DAILINK_COMP_ARRAY(COMP_CPU("DL2")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
+SND_SOC_DAILINK_DEFS(capture_cm0,
+	DAILINK_COMP_ARRAY(COMP_CPU("UL_CM0")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 /* BE */
@@ -313,76 +309,70 @@ SND_SOC_DAILINK_DEFS(tdm_dptx,
 	DAILINK_COMP_ARRAY(COMP_CPU("TDM_DPTX")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
-#if defined(MT8196_SUPPORT_ADSP)
 SND_SOC_DAILINK_DEFS(AFE_SOF_DL_24CH,
-		     DAILINK_COMP_ARRAY(COMP_CPU("SOF_DL_24CH")),
-		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
-		     DAILINK_COMP_ARRAY(COMP_EMPTY()));
+	DAILINK_COMP_ARRAY(COMP_CPU("SOF_DL_24CH")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(AFE_SOF_DL1,
-		     DAILINK_COMP_ARRAY(COMP_CPU("SOF_DL1")),
-		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
-		     DAILINK_COMP_ARRAY(COMP_EMPTY()));
+	DAILINK_COMP_ARRAY(COMP_CPU("SOF_DL1")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(AFE_SOF_UL0,
-		     DAILINK_COMP_ARRAY(COMP_CPU("SOF_UL0")),
-		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
-		     DAILINK_COMP_ARRAY(COMP_EMPTY()));
+	DAILINK_COMP_ARRAY(COMP_CPU("SOF_UL0")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(AFE_SOF_UL1,
-		     DAILINK_COMP_ARRAY(COMP_CPU("SOF_UL1")),
-		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
-		     DAILINK_COMP_ARRAY(COMP_EMPTY()));
+	DAILINK_COMP_ARRAY(COMP_CPU("SOF_UL1")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(AFE_SOF_UL2,
-		     DAILINK_COMP_ARRAY(COMP_CPU("SOF_UL2")),
-		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
-		     DAILINK_COMP_ARRAY(COMP_EMPTY()));
-#endif
+	DAILINK_COMP_ARRAY(COMP_CPU("SOF_UL2")),
+	DAILINK_COMP_ARRAY(COMP_DUMMY()),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 
 static struct snd_soc_dai_link mt8196_mt6681_dai_links[] = {
+	/*
+	 * The SOF topology expects PCM streams 0~4 to be available
+	 * for the SOF PCM streams. Put the SOF BE definitions here
+	 * so that the PCM device numbers are skipped over.
+	 * (BE dailinks do not have PCM devices created.)
+	 */
+	{
+		.name = "AFE_SOF_DL_24CH",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.ops = &mt8196_sof_be_ops,
+		SND_SOC_DAILINK_REG(AFE_SOF_DL_24CH),
+	},
+	{
+		.name = "AFE_SOF_DL1",
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.ops = &mt8196_sof_be_ops,
+		SND_SOC_DAILINK_REG(AFE_SOF_DL1),
+	},
+	{
+		.name = "AFE_SOF_UL0",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.ops = &mt8196_sof_be_ops,
+		SND_SOC_DAILINK_REG(AFE_SOF_UL0),
+	},
+	{
+		.name = "AFE_SOF_UL1",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.ops = &mt8196_sof_be_ops,
+		SND_SOC_DAILINK_REG(AFE_SOF_UL1),
+	},
+	{
+		.name = "AFE_SOF_UL2",
+		.no_pcm = 1,
+		.dpcm_capture = 1,
+		.ops = &mt8196_sof_be_ops,
+		SND_SOC_DAILINK_REG(AFE_SOF_UL2),
+	},
 	/* Front End DAI links */
-	{
-		.name = "DL_24CH_FE",
-		.stream_name = "DL_24CH Playback",
-		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
-			    SND_SOC_DPCM_TRIGGER_PRE},
-		.dynamic = 1,
-		.dpcm_playback = 1,
-		SND_SOC_DAILINK_REG(playback_24ch),
-	},
-	{
-		.name = "DL1_FE",
-		.stream_name = "DL1 Playback",
-		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
-			    SND_SOC_DPCM_TRIGGER_PRE},
-		.dynamic = 1,
-		.dpcm_playback = 1,
-		SND_SOC_DAILINK_REG(playback1),
-	},
-	{
-		.name = "UL0_FE",
-		.stream_name = "UL0 Capture",
-		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
-			    SND_SOC_DPCM_TRIGGER_PRE},
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		SND_SOC_DAILINK_REG(capture0),
-	},
-	{
-		.name = "UL1_FE",
-		.stream_name = "UL1 Capture",
-		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
-			    SND_SOC_DPCM_TRIGGER_PRE},
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		SND_SOC_DAILINK_REG(capture1),
-	},
-	{
-		.name = "UL2_FE",
-		.stream_name = "UL2 Capture",
-		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
-			    SND_SOC_DPCM_TRIGGER_PRE},
-		.dynamic = 1,
-		.dpcm_capture = 1,
-		SND_SOC_DAILINK_REG(capture2),
-	},
 	{
 		.name = "HDMI_FE",
 		.stream_name = "HDMI Playback",
@@ -402,13 +392,58 @@ static struct snd_soc_dai_link mt8196_mt6681_dai_links[] = {
 		SND_SOC_DAILINK_REG(playback2),
 	},
 	{
-		.name = "Capture_9",
-		.stream_name = "Capture_9",
+		.name = "UL_CM0_FE",
+		.stream_name = "UL_CM0 Capture",
 		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
 			    SND_SOC_DPCM_TRIGGER_PRE},
 		.dynamic = 1,
 		.dpcm_capture = 1,
 		SND_SOC_DAILINK_REG(capture_cm0),
+	},
+	{
+		.name = "DL_24CH_FE",
+		.stream_name = "DL_24CH Playback",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
+				SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		SND_SOC_DAILINK_REG(playback_24ch),
+	},
+	{
+		.name = "DL1_FE",
+		.stream_name = "DL1 Playback",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
+				SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		SND_SOC_DAILINK_REG(playback1),
+	},
+	{
+		.name = "UL0_FE",
+		.stream_name = "UL0 Capture",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
+				SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		SND_SOC_DAILINK_REG(capture0),
+	},
+	{
+		.name = "UL1_FE",
+		.stream_name = "UL1 Capture",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
+				SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		SND_SOC_DAILINK_REG(capture1),
+	},
+	{
+		.name = "UL2_FE",
+		.stream_name = "UL2 Capture",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
+				SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		SND_SOC_DAILINK_REG(capture2),
 	},
 	/* Back End DAI links */
 	{
@@ -421,16 +456,6 @@ static struct snd_soc_dai_link mt8196_mt6681_dai_links[] = {
 		.ignore_suspend = 1,
 		.be_hw_params_fixup = mt8196_i2s_hw_params_fixup,
 		SND_SOC_DAILINK_REG(i2sin6),
-	},
-	{
-		.name = "I2SOUT3_BE",
-		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
-			| SND_SOC_DAIFMT_GATED,
-		.ops = &mt8196_mt6681_i2s_ops,
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.ignore_suspend = 1,
-		SND_SOC_DAILINK_REG(i2sout3),
 	},
 	{
 		.name = "I2SOUT4_BE",
@@ -487,44 +512,16 @@ static struct snd_soc_dai_link mt8196_mt6681_dai_links[] = {
 		.ignore_suspend = 1,
 		SND_SOC_DAILINK_REG(tdm_dptx),
 	},
-#if defined(MT8196_SUPPORT_ADSP)
-	/* SOF BE */
 	{
-		.name = "AFE_SOF_DL_24CH",
+		.name = "I2SOUT3_BE",
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
+			| SND_SOC_DAIFMT_GATED,
+		.ops = &mt8196_mt6681_i2s_ops,
 		.no_pcm = 1,
 		.dpcm_playback = 1,
-		.ops = &mt8196_sof_be_ops,
-		SND_SOC_DAILINK_REG(AFE_SOF_DL_24CH),
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(i2sout3),
 	},
-	{
-		.name = "AFE_SOF_DL1",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.ops = &mt8196_sof_be_ops,
-		SND_SOC_DAILINK_REG(AFE_SOF_DL1),
-	},
-	{
-		.name = "AFE_SOF_UL0",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.ops = &mt8196_sof_be_ops,
-		SND_SOC_DAILINK_REG(AFE_SOF_UL0),
-	},
-	{
-		.name = "AFE_SOF_UL1",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.ops = &mt8196_sof_be_ops,
-		SND_SOC_DAILINK_REG(AFE_SOF_UL1),
-	},
-	{
-		.name = "AFE_SOF_UL2",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.ops = &mt8196_sof_be_ops,
-		SND_SOC_DAILINK_REG(AFE_SOF_UL2),
-	},
-#endif
 };
 
 static int mt8196_dumb_amp_init(struct snd_soc_pcm_runtime *rtd)
