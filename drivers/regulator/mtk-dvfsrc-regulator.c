@@ -6,10 +6,10 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/of_.h>
+#include <linux/of.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
-#include <linux/soc/mediatek/mtk_dvfsrc.h>
+#include <soc/mediatek/mtk_dvfsrc.h>
 
 #define DVFSRC_ID_VCORE		0
 #define DVFSRC_ID_VSCP		1
@@ -139,6 +139,25 @@ static const struct dvfsrc_regulator_init_data regulator_mt6873_data = {
 	.regulator_info = &mt6873_regulators[0],
 };
 
+static const unsigned int mt8196_voltages[] = {
+	575000,
+	600000,
+	650000,
+	725000,
+	825000,
+	875000,
+};
+
+static struct dvfsrc_regulator mt8196_regulators[] = {
+	MT_DVFSRC_REGULAR("dvfsrc-vcore", VCORE,
+			  mt8196_voltages)
+};
+
+static const struct dvfsrc_regulator_init_data regulator_mt8196_data = {
+	.size = ARRAY_SIZE(mt8196_regulators),
+	.regulator_info = &mt8196_regulators[0],
+};
+
 static const struct of_device_id mtk_dvfsrc_regulator_match[] = {
 	{
 		.compatible = "mediatek,mt8183-dvfsrc",
@@ -149,6 +168,9 @@ static const struct of_device_id mtk_dvfsrc_regulator_match[] = {
 	}, {
 		.compatible = "mediatek,mt6873-dvfsrc",
 		.data = &regulator_mt6873_data,
+	}, {
+		.compatible = "mediatek,mt8196-dvfsrc",
+		.data = &regulator_mt8196_data,
 	}, {
 		/* sentinel */
 	},

@@ -1,0 +1,17 @@
+config MTK_GPU_SUPPORT
+	bool "Support MTK GPU"
+	help
+	  config supports MTK GPU driver
+	  CONFIG_MTK_GPU_SUPPORT defines
+	  The gpu driver would be built-in, as kernel module or not supported
+
+config MTK_GPUFREQ_V2
+	bool "MTK GPUFREQ Version 2"
+	depends on MTK_GPU_SUPPORT
+	default y
+	help
+	  Support for gpufreq version 2.
+	  CONFIG_MTK_GPUFREQ_V2 defines
+	  if the gpufreq driver should go to version 2
+
+source "$(MALI_KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/arm/Kconfig"

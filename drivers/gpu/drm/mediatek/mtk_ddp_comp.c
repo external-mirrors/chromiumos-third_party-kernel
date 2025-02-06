@@ -46,6 +46,10 @@
 #define DSC_BYPASS				BIT(4)
 #define DSC_UFOE_SEL				BIT(16)
 
+#define DISP_REG_MDP_RSZ_EN			0x0000
+#define DISP_REG_MDP_RSZ_INPUT_SIZE		0x0010
+#define DISP_REG_MDP_RSZ_OUTPUT_SIZE		0x0014
+
 #define DISP_REG_OD_EN				0x0000
 #define DISP_REG_OD_CFG				0x0020
 #define OD_RELAYMODE				BIT(0)
@@ -57,6 +61,16 @@
 #define POSTMASK_RELAY_MODE				BIT(0)
 #define DISP_REG_POSTMASK_SIZE			0x0030
 
+#define DISP_REG_TDSHP_EN			0x0000
+#define DISP_TDSHP_TDS_EN			BIT(31)
+#define DISP_REG_TDSHP_CTRL			0x0100
+#define DISP_TDSHP_CTRL_EN			BIT(0)
+#define DISP_TDSHP_PWR_SCL_EN			BIT(2)
+#define DISP_REG_TDSHP_CFG			0x0110
+#define DISP_REG_TDSHP_INPUT_SIZE		0x0120
+#define DISP_REG_TDSHP_OUTPUT_OFFSET		0x0124
+#define DISP_REG_TDSHP_OUTPUT_SIZE		0x0128
+
 #define DISP_REG_UFO_START			0x0000
 #define UFO_BYPASS				BIT(2)
 
@@ -66,14 +80,37 @@ struct mtk_ddp_comp_dev {
 	struct cmdq_client_reg cmdq_reg;
 };
 
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+static void mtk_ddp_write_cmdq_pkt(struct cmdq_pkt *cmdq_pkt, struct cmdq_client_reg *cmdq_reg,
+				   unsigned int offset, unsigned int value, unsigned int mask)
+{
+	offset += cmdq_reg->offset;
+
+	if (cmdq_reg->subsys != CMDQ_SUBSYS_INVALID) {
+		if (mask == GENMASK(31, 0))
+			cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys, offset, value);
+		else
+			cmdq_pkt_write_mask(cmdq_pkt, cmdq_reg->subsys, offset, value, mask);
+	} else {
+		/* only MMIO access, no need to check mminfro_offset */
+		cmdq_pkt_assign(cmdq_pkt, 0, CMDQ_ADDR_HIGH(cmdq_reg->pa_base));
+		if (mask == GENMASK(31, 0))
+			cmdq_pkt_write_s_value(cmdq_pkt, CMDQ_THR_SPR_IDX0,
+					       CMDQ_ADDR_LOW(offset), value);
+		else
+			cmdq_pkt_write_s_mask_value(cmdq_pkt, CMDQ_THR_SPR_IDX0,
+						    CMDQ_ADDR_LOW(offset), value, mask);
+	}
+}
+#endif
+
 void mtk_ddp_write(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 		   struct cmdq_client_reg *cmdq_reg, void __iomem *regs,
 		   unsigned int offset)
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (cmdq_pkt)
-		cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys,
-			       cmdq_reg->offset + offset, value);
+		mtk_ddp_write_cmdq_pkt(cmdq_pkt, cmdq_reg, offset, value, GENMASK(31, 0));
 	else
 #endif
 		writel(value, regs + offset);
@@ -85,8 +122,7 @@ void mtk_ddp_write_relaxed(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (cmdq_pkt)
-		cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys,
-			       cmdq_reg->offset + offset, value);
+		mtk_ddp_write_cmdq_pkt(cmdq_pkt, cmdq_reg, offset, value, GENMASK(31, 0));
 	else
 #endif
 		writel_relaxed(value, regs + offset);
@@ -98,8 +134,7 @@ void mtk_ddp_write_mask(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (cmdq_pkt) {
-		cmdq_pkt_write_mask(cmdq_pkt, cmdq_reg->subsys,
-				    cmdq_reg->offset + offset, value, mask);
+		mtk_ddp_write_cmdq_pkt(cmdq_pkt, cmdq_reg, offset, value, mask);
 	} else {
 #endif
 		u32 tmp = readl(regs + offset);
@@ -108,6 +143,21 @@ void mtk_ddp_write_mask(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 		writel(tmp, regs + offset);
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	}
+#endif
+}
+
+void mtk_ddp_sec_write(struct cmdq_pkt *cmdq_pkt,
+		       enum cmdq_iwc_addr_metadata_type type,
+		       unsigned int base, unsigned int base_offset,
+		       struct cmdq_client_reg *cmdq_reg, unsigned int offset)
+{
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	if (!cmdq_pkt)
+		return;
+
+	cmdq_sec_pkt_write(cmdq_pkt, cmdq_reg->subsys, cmdq_reg->pa_base,
+			   cmdq_reg->offset + offset,
+			   type, base, base_offset);
 #endif
 }
 
@@ -235,6 +285,18 @@ static void mtk_od_start(struct device *dev)
 	writel(1, priv->regs + DISP_REG_OD_EN);
 }
 
+static void mtk_mdp_rsz_config(struct device *dev, unsigned int w,
+			       unsigned int h, unsigned int vrefresh,
+			       unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	mtk_ddp_write(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_MDP_RSZ_INPUT_SIZE);
+	mtk_ddp_write(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_MDP_RSZ_OUTPUT_SIZE);
+}
+
 static void mtk_postmask_config(struct device *dev, unsigned int w,
 				unsigned int h, unsigned int vrefresh,
 				unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
@@ -261,12 +323,63 @@ static void mtk_postmask_stop(struct device *dev)
 	writel_relaxed(0x0, priv->regs + DISP_REG_POSTMASK_EN);
 }
 
+static void mtk_disp_tdshp_config(struct device *dev, unsigned int w,
+				  unsigned int h, unsigned int vrefresh,
+				  unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	if (bpc == 8)
+		mtk_ddp_write_mask(cmdq_pkt, DISP_TDSHP_PWR_SCL_EN | DISP_TDSHP_CTRL_EN,
+				   &priv->cmdq_reg, priv->regs, DISP_REG_TDSHP_CTRL, ~0);
+	else if (bpc == 10)
+		mtk_ddp_write_mask(cmdq_pkt, DISP_TDSHP_CTRL_EN, &priv->cmdq_reg, priv->regs,
+				   DISP_REG_TDSHP_CTRL, ~0);
+	else
+		DRM_INFO("Invalid bpc %u\n", bpc);
+
+	mtk_ddp_write(cmdq_pkt, w << 16 | h, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_TDSHP_INPUT_SIZE);
+	mtk_ddp_write(cmdq_pkt, w << 16 | h, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_TDSHP_OUTPUT_SIZE);
+	mtk_ddp_write(cmdq_pkt, 0x0, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_TDSHP_OUTPUT_OFFSET);
+
+	mtk_ddp_write(cmdq_pkt, 0x1, &priv->cmdq_reg,
+		      priv->regs, DISP_REG_TDSHP_CFG);
+
+	mtk_ddp_write_mask(cmdq_pkt, DISP_TDSHP_TDS_EN, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_TDSHP_EN, DISP_TDSHP_TDS_EN);
+}
+
+static void mtk_disp_tdshp_start(struct device *dev)
+{
+	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	writel(DISP_TDSHP_CTRL_EN, priv->regs + DISP_REG_TDSHP_CTRL);
+}
+
+static void mtk_disp_tdshp_stop(struct device *dev)
+{
+	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	writel(0x0, priv->regs + DISP_REG_TDSHP_CTRL);
+}
+
 static void mtk_ufoe_start(struct device *dev)
 {
 	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
 
 	writel(UFO_BYPASS, priv->regs + DISP_REG_UFO_START);
 }
+
+static const struct mtk_ddp_comp_funcs ddp_tdshp = {
+	.clk_enable = mtk_ddp_clk_enable,
+	.clk_disable = mtk_ddp_clk_disable,
+	.config = mtk_disp_tdshp_config,
+	.start = mtk_disp_tdshp_start,
+	.stop = mtk_disp_tdshp_stop,
+};
 
 static const struct mtk_ddp_comp_funcs ddp_aal = {
 	.clk_enable = mtk_aal_clk_enable,
@@ -322,6 +435,11 @@ static const struct mtk_ddp_comp_funcs ddp_dsi = {
 	.encoder_index = mtk_dsi_encoder_index,
 };
 
+static const struct mtk_ddp_comp_funcs ddp_dvo = {
+	.start = mtk_dvo_start,
+	.stop = mtk_dvo_stop,
+};
+
 static const struct mtk_ddp_comp_funcs ddp_gamma = {
 	.clk_enable = mtk_gamma_clk_enable,
 	.clk_disable = mtk_gamma_clk_disable,
@@ -363,8 +481,41 @@ static const struct mtk_ddp_comp_funcs ddp_ovl = {
 	.layer_config = mtk_ovl_layer_config,
 	.bgclr_in_on = mtk_ovl_bgclr_in_on,
 	.bgclr_in_off = mtk_ovl_bgclr_in_off,
+	.get_blend_modes = mtk_ovl_get_blend_modes,
 	.get_formats = mtk_ovl_get_formats,
 	.get_num_formats = mtk_ovl_get_num_formats,
+};
+
+static const struct mtk_ddp_comp_funcs ddp_ovlsys_adaptor = {
+	.clk_enable = mtk_ovlsys_adaptor_clk_enable,
+	.clk_disable = mtk_ovlsys_adaptor_clk_disable,
+	.config = mtk_ovlsys_adaptor_config,
+	.crc_cnt = mtk_ovlsys_adaptor_crc_cnt,
+	.crc_entry = mtk_ovlsys_adaptor_crc_entry,
+	.crc_read = mtk_ovlsys_adaptor_crc_read,
+	.start = mtk_ovlsys_adaptor_start,
+	.stop = mtk_ovlsys_adaptor_stop,
+	.layer_check = mtk_ovlsys_adaptor_layer_check,
+	.layer_nr = mtk_ovlsys_adaptor_layer_nr,
+	.layer_config = mtk_ovlsys_adaptor_layer_config,
+	.register_vblank_cb = mtk_ovlsys_adaptor_register_vblank_cb,
+	.unregister_vblank_cb = mtk_ovlsys_adaptor_unregister_vblank_cb,
+	.enable_vblank = mtk_ovlsys_adaptor_enable_vblank,
+	.disable_vblank = mtk_ovlsys_adaptor_disable_vblank,
+	.dma_dev_get = mtk_ovlsys_adaptor_dma_dev_get,
+	.connect = mtk_ovlsys_adaptor_connect,
+	.disconnect = mtk_ovlsys_adaptor_disconnect,
+	.add = mtk_ovlsys_adaptor_add_comp,
+	.remove = mtk_ovlsys_adaptor_remove_comp,
+	.get_blend_modes = mtk_ovlsys_adaptor_get_blend_modes,
+	.get_formats = mtk_ovlsys_adaptor_get_formats,
+	.get_num_formats = mtk_ovlsys_adaptor_get_num_formats,
+};
+
+static const struct mtk_ddp_comp_funcs ddp_mdp_rsz = {
+	.clk_enable = mtk_ddp_clk_enable,
+	.clk_disable = mtk_ddp_clk_disable,
+	.config = mtk_mdp_rsz_config,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_postmask = {
@@ -416,6 +567,7 @@ static const struct mtk_ddp_comp_funcs ddp_ovl_adaptor = {
 	.disconnect = mtk_ovl_adaptor_disconnect,
 	.add = mtk_ovl_adaptor_add_comp,
 	.remove = mtk_ovl_adaptor_remove_comp,
+	.get_blend_modes = mtk_ovl_adaptor_get_blend_modes,
 	.get_formats = mtk_ovl_adaptor_get_formats,
 	.get_num_formats = mtk_ovl_adaptor_get_num_formats,
 	.mode_valid = mtk_ovl_adaptor_mode_valid,
@@ -429,20 +581,28 @@ static const char * const mtk_ddp_comp_stem[MTK_DDP_COMP_TYPE_MAX] = {
 	[MTK_DISP_DITHER] = "dither",
 	[MTK_DISP_DSC] = "dsc",
 	[MTK_DISP_GAMMA] = "gamma",
+	[MTK_DISP_MDP_RSZ] = "mdp-rsz",
 	[MTK_DISP_MERGE] = "merge",
 	[MTK_DISP_MUTEX] = "mutex",
 	[MTK_DISP_OD] = "od",
 	[MTK_DISP_OVL] = "ovl",
 	[MTK_DISP_OVL_2L] = "ovl-2l",
 	[MTK_DISP_OVL_ADAPTOR] = "ovl_adaptor",
+	[MTK_DISP_OVLSYS_ADAPTOR] = "ovlsys_adaptor",
 	[MTK_DISP_POSTMASK] = "postmask",
 	[MTK_DISP_PWM] = "pwm",
 	[MTK_DISP_RDMA] = "rdma",
+	[MTK_DISP_TDSHP] = "tdshp",
 	[MTK_DISP_UFOE] = "ufoe",
+	[MTK_DISP_VIRTUAL] = "virtual",
 	[MTK_DISP_WDMA] = "wdma",
 	[MTK_DP_INTF] = "dp-intf",
 	[MTK_DPI] = "dpi",
 	[MTK_DSI] = "dsi",
+	[MTK_DVO] = "dvo",
+	[MTK_OVL_BLENDER] = "blender",
+	[MTK_OVL_EXDMA] = "exdma",
+	[MTK_OVL_OUTPROC] = "outproc",
 };
 
 struct mtk_ddp_comp_match {
@@ -455,22 +615,39 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_AAL0]		= { MTK_DISP_AAL,		0, &ddp_aal },
 	[DDP_COMPONENT_AAL1]		= { MTK_DISP_AAL,		1, &ddp_aal },
 	[DDP_COMPONENT_BLS]		= { MTK_DISP_BLS,		0, NULL },
-	[DDP_COMPONENT_CCORR]		= { MTK_DISP_CCORR,		0, &ddp_ccorr },
+	[DDP_COMPONENT_CCORR0]		= { MTK_DISP_CCORR,		0, &ddp_ccorr },
+	[DDP_COMPONENT_CCORR1]		= { MTK_DISP_CCORR,		1, &ddp_ccorr },
 	[DDP_COMPONENT_COLOR0]		= { MTK_DISP_COLOR,		0, &ddp_color },
 	[DDP_COMPONENT_COLOR1]		= { MTK_DISP_COLOR,		1, &ddp_color },
 	[DDP_COMPONENT_DITHER0]		= { MTK_DISP_DITHER,		0, &ddp_dither },
+	[DDP_COMPONENT_DLI_ASYNC0]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC1]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC8]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC21]     = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC22]     = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLI_ASYNC23]     = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLO_ASYNC1]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLO_ASYNC2]      = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_DLO_ASYNC3]      = { MTK_DISP_VIRTUAL,           -1, NULL },
 	[DDP_COMPONENT_DP_INTF0]	= { MTK_DP_INTF,		0, &ddp_dpi },
 	[DDP_COMPONENT_DP_INTF1]	= { MTK_DP_INTF,		1, &ddp_dpi },
 	[DDP_COMPONENT_DPI0]		= { MTK_DPI,			0, &ddp_dpi },
 	[DDP_COMPONENT_DPI1]		= { MTK_DPI,			1, &ddp_dpi },
 	[DDP_COMPONENT_DRM_OVL_ADAPTOR]	= { MTK_DISP_OVL_ADAPTOR,	0, &ddp_ovl_adaptor },
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0] = { MTK_DISP_OVLSYS_ADAPTOR, 0, &ddp_ovlsys_adaptor},
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1] = { MTK_DISP_OVLSYS_ADAPTOR, 1, &ddp_ovlsys_adaptor},
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0] = { MTK_DISP_OVLSYS_ADAPTOR, 0, &ddp_ovlsys_adaptor},
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1] = { MTK_DISP_OVLSYS_ADAPTOR, 1, &ddp_ovlsys_adaptor},
+	[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2] = { MTK_DISP_OVLSYS_ADAPTOR, 2, &ddp_ovlsys_adaptor},
 	[DDP_COMPONENT_DSC0]		= { MTK_DISP_DSC,		0, &ddp_dsc },
 	[DDP_COMPONENT_DSC1]		= { MTK_DISP_DSC,		1, &ddp_dsc },
 	[DDP_COMPONENT_DSI0]		= { MTK_DSI,			0, &ddp_dsi },
 	[DDP_COMPONENT_DSI1]		= { MTK_DSI,			1, &ddp_dsi },
 	[DDP_COMPONENT_DSI2]		= { MTK_DSI,			2, &ddp_dsi },
 	[DDP_COMPONENT_DSI3]		= { MTK_DSI,			3, &ddp_dsi },
+	[DDP_COMPONENT_DVO0]            = { MTK_DVO,                    0, &ddp_dvo },
 	[DDP_COMPONENT_GAMMA]		= { MTK_DISP_GAMMA,		0, &ddp_gamma },
+	[DDP_COMPONENT_MDP_RSZ0]	= { MTK_DISP_MDP_RSZ,		0, &ddp_mdp_rsz},
 	[DDP_COMPONENT_MERGE0]		= { MTK_DISP_MERGE,		0, &ddp_merge },
 	[DDP_COMPONENT_MERGE1]		= { MTK_DISP_MERGE,		1, &ddp_merge },
 	[DDP_COMPONENT_MERGE2]		= { MTK_DISP_MERGE,		2, &ddp_merge },
@@ -480,7 +657,10 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_OD0]		= { MTK_DISP_OD,		0, &ddp_od },
 	[DDP_COMPONENT_OD1]		= { MTK_DISP_OD,		1, &ddp_od },
 	[DDP_COMPONENT_OVL0]		= { MTK_DISP_OVL,		0, &ddp_ovl },
+	[DDP_COMPONENT_OVL0_DLO_ASYNC5] = { MTK_DISP_VIRTUAL,           -1, NULL },
+	[DDP_COMPONENT_OVL0_DLO_ASYNC6] = { MTK_DISP_VIRTUAL,           -1, NULL },
 	[DDP_COMPONENT_OVL1]		= { MTK_DISP_OVL,		1, &ddp_ovl },
+	[DDP_COMPONENT_OVL1_DLO_ASYNC5] = { MTK_DISP_VIRTUAL,           -1, NULL },
 	[DDP_COMPONENT_OVL_2L0]		= { MTK_DISP_OVL_2L,		0, &ddp_ovl },
 	[DDP_COMPONENT_OVL_2L1]		= { MTK_DISP_OVL_2L,		1, &ddp_ovl },
 	[DDP_COMPONENT_OVL_2L2]		= { MTK_DISP_OVL_2L,		2, &ddp_ovl },
@@ -492,6 +672,7 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_RDMA1]		= { MTK_DISP_RDMA,		1, &ddp_rdma },
 	[DDP_COMPONENT_RDMA2]		= { MTK_DISP_RDMA,		2, &ddp_rdma },
 	[DDP_COMPONENT_RDMA4]		= { MTK_DISP_RDMA,		4, &ddp_rdma },
+	[DDP_COMPONENT_TDSHP0]		= { MTK_DISP_TDSHP,		0, &ddp_tdshp },
 	[DDP_COMPONENT_UFOE]		= { MTK_DISP_UFOE,		0, &ddp_ufoe },
 	[DDP_COMPONENT_WDMA0]		= { MTK_DISP_WDMA,		0, NULL },
 	[DDP_COMPONENT_WDMA1]		= { MTK_DISP_WDMA,		1, NULL },
@@ -531,27 +712,6 @@ static int mtk_ddp_comp_find_in_route(struct device *dev,
 	return -ENODEV;
 }
 
-static bool mtk_ddp_path_available(const unsigned int *path,
-				   unsigned int path_len,
-				   struct device_node **comp_node)
-{
-	unsigned int i;
-
-	if (!path || !path_len)
-		return false;
-
-	for (i = 0U; i < path_len; i++) {
-		/* OVL_ADAPTOR doesn't have a device node */
-		if (path[i] == DDP_COMPONENT_DRM_OVL_ADAPTOR)
-			continue;
-
-		if (!comp_node[path[i]])
-			return false;
-	}
-
-	return true;
-}
-
 int mtk_ddp_comp_get_id(struct device_node *node,
 			enum mtk_ddp_comp_type comp_type)
 {
@@ -567,53 +727,36 @@ int mtk_ddp_comp_get_id(struct device_node *node,
 	return -EINVAL;
 }
 
+enum mtk_ddp_comp_type mtk_ddp_comp_get_type(unsigned int comp_id)
+{
+	return mtk_ddp_matches[comp_id].type;
+}
+
 int mtk_find_possible_crtcs(struct drm_device *drm, struct device *dev)
 {
 	struct mtk_drm_private *private = drm->dev_private;
-	const struct mtk_mmsys_driver_data *data;
-	struct mtk_drm_private *priv_n;
-	int i = 0, j;
 	int ret;
 
-	for (j = 0; j < private->data->mmsys_dev_num; j++) {
-		priv_n = private->all_drm_private[j];
-		data = priv_n->data;
-
-		if (mtk_ddp_path_available(data->main_path, data->main_len,
-					   priv_n->comp_node)) {
-			if (mtk_ddp_comp_find(dev, data->main_path,
-					      data->main_len,
-					      priv_n->ddp_comp))
-				return BIT(i);
-			i++;
-		}
-
-		if (mtk_ddp_path_available(data->ext_path, data->ext_len,
-					   priv_n->comp_node)) {
-			if (mtk_ddp_comp_find(dev, data->ext_path,
-					      data->ext_len,
-					      priv_n->ddp_comp))
-				return BIT(i);
-			i++;
-		}
-
-		if (mtk_ddp_path_available(data->third_path, data->third_len,
-					   priv_n->comp_node)) {
-			if (mtk_ddp_comp_find(dev, data->third_path,
-					      data->third_len,
-					      priv_n->ddp_comp))
-				return BIT(i);
-			i++;
-		}
-	}
-
-	ret = mtk_ddp_comp_find_in_route(dev,
-					 private->data->conn_routes,
-					 private->data->num_conn_routes,
-					 private->ddp_comp);
-
-	if (ret < 0)
-		DRM_INFO("Failed to find comp in ddp table, ret = %d\n", ret);
+	if (mtk_ddp_comp_find(dev,
+			      private->data->main_path,
+			      private->data->main_len,
+			      private->ddp_comp))
+		ret = BIT(0);
+	else if (mtk_ddp_comp_find(dev,
+				   private->data->ext_path,
+				   private->data->ext_len,
+				   private->ddp_comp))
+		ret = BIT(1);
+	else if (mtk_ddp_comp_find(dev,
+				   private->data->third_path,
+				   private->data->third_len,
+				   private->ddp_comp))
+		ret = BIT(2);
+	else
+		ret = mtk_ddp_comp_find_in_route(dev,
+						 private->data->conn_routes,
+						 private->data->num_conn_routes,
+						 private->ddp_comp);
 
 	return ret;
 }
@@ -660,7 +803,8 @@ int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
 	    type == MTK_DISP_RDMA ||
 	    type == MTK_DPI ||
 	    type == MTK_DP_INTF ||
-	    type == MTK_DSI)
+	    type == MTK_DSI ||
+	    type == MTK_DVO)
 		return 0;
 
 	priv = devm_kzalloc(comp->dev, sizeof(*priv), GFP_KERNEL);

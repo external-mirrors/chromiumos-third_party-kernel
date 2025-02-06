@@ -688,21 +688,18 @@ struct v4l2_subdev_ir_ops {
 /**
  * struct v4l2_subdev_pad_config - Used for storing subdev pad information.
  *
- * @try_fmt: &struct v4l2_mbus_framefmt
- * @try_crop: &struct v4l2_rect to be used for crop
- * @try_compose: &struct v4l2_rect to be used for compose
+ * @format: &struct v4l2_mbus_framefmt
+ * @crop: &struct v4l2_rect to be used for crop
+ * @compose: &struct v4l2_rect to be used for compose
  *
  * This structure only needs to be passed to the pad op if the 'which' field
  * of the main argument is set to %V4L2_SUBDEV_FORMAT_TRY. For
  * %V4L2_SUBDEV_FORMAT_ACTIVE it is safe to pass %NULL.
- *
- * Note: This struct is also used in active state, and the 'try' prefix is
- * historical and to be removed.
  */
 struct v4l2_subdev_pad_config {
-	struct v4l2_mbus_framefmt try_fmt;
-	struct v4l2_rect try_crop;
-	struct v4l2_rect try_compose;
+	struct v4l2_mbus_framefmt format;
+	struct v4l2_rect crop;
+	struct v4l2_rect compose;
 };
 
 /**
@@ -756,6 +753,7 @@ struct v4l2_subdev_krouting {
  *
  * @_lock: default for 'lock'
  * @lock: mutex for the state. May be replaced by the user.
+ * @sd: the sub-device which the state is related to
  * @pads: &struct v4l2_subdev_pad_config array
  * @routing: routing table for the subdev
  * @stream_configs: stream configurations (only for V4L2_SUBDEV_FL_STREAMS)
@@ -768,6 +766,7 @@ struct v4l2_subdev_state {
 	/* lock for the struct v4l2_subdev_state fields */
 	struct mutex _lock;
 	struct mutex *lock;
+	struct v4l2_subdev *sd;
 	struct v4l2_subdev_pad_config *pads;
 	struct v4l2_subdev_krouting routing;
 	struct v4l2_subdev_stream_configs stream_configs;
@@ -776,7 +775,6 @@ struct v4l2_subdev_state {
 /**
  * struct v4l2_subdev_pad_ops - v4l2-subdev pad level operations
  *
- * @init_cfg: initialize the pad config to default values
  * @enum_mbus_code: callback for VIDIOC_SUBDEV_ENUM_MBUS_CODE() ioctl handler
  *		    code.
  * @enum_frame_size: callback for VIDIOC_SUBDEV_ENUM_FRAME_SIZE() ioctl handler
@@ -840,8 +838,6 @@ struct v4l2_subdev_state {
  *	directly, use v4l2_subdev_disable_streams() instead.
  */
 struct v4l2_subdev_pad_ops {
-	int (*init_cfg)(struct v4l2_subdev *sd,
-			struct v4l2_subdev_state *state);
 	int (*enum_mbus_code)(struct v4l2_subdev *sd,
 			      struct v4l2_subdev_state *state,
 			      struct v4l2_subdev_mbus_code_enum *code);
@@ -918,6 +914,8 @@ struct v4l2_subdev_ops {
 /**
  * struct v4l2_subdev_internal_ops - V4L2 subdev internal ops
  *
+ * @init_state: initialize the subdev state to default values
+ *
  * @registered: called when this subdev is registered. When called the v4l2_dev
  *	field is set to the correct v4l2_device.
  *
@@ -943,6 +941,8 @@ struct v4l2_subdev_ops {
  *	these ops.
  */
 struct v4l2_subdev_internal_ops {
+	int (*init_state)(struct v4l2_subdev *sd,
+			  struct v4l2_subdev_state *state);
 	int (*registered)(struct v4l2_subdev *sd);
 	void (*unregistered)(struct v4l2_subdev *sd);
 	int (*open)(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh);
@@ -1146,8 +1146,8 @@ struct v4l2_subdev_fh {
 #if defined(CONFIG_VIDEO_V4L2_SUBDEV_API)
 
 /**
- * v4l2_subdev_get_pad_format - ancillary routine to call
- *	&struct v4l2_subdev_pad_config->try_fmt
+ * v4l2_subdev_get_pad_format - ancillary routine to get
+ *	&struct v4l2_subdev_pad_config->format
  *
  * @sd: pointer to &struct v4l2_subdev
  * @state: pointer to &struct v4l2_subdev_state
@@ -1162,12 +1162,12 @@ v4l2_subdev_get_pad_format(struct v4l2_subdev *sd,
 		return NULL;
 	if (WARN_ON(pad >= sd->entity.num_pads))
 		pad = 0;
-	return &state->pads[pad].try_fmt;
+	return &state->pads[pad].format;
 }
 
 /**
- * v4l2_subdev_get_pad_crop - ancillary routine to call
- *	&struct v4l2_subdev_pad_config->try_crop
+ * v4l2_subdev_get_pad_crop - ancillary routine to get
+ *	&struct v4l2_subdev_pad_config->crop
  *
  * @sd: pointer to &struct v4l2_subdev
  * @state: pointer to &struct v4l2_subdev_state.
@@ -1182,12 +1182,12 @@ v4l2_subdev_get_pad_crop(struct v4l2_subdev *sd,
 		return NULL;
 	if (WARN_ON(pad >= sd->entity.num_pads))
 		pad = 0;
-	return &state->pads[pad].try_crop;
+	return &state->pads[pad].crop;
 }
 
 /**
- * v4l2_subdev_get_pad_compose - ancillary routine to call
- *	&struct v4l2_subdev_pad_config->try_compose
+ * v4l2_subdev_get_pad_compose - ancillary routine to get
+ *	&struct v4l2_subdev_pad_config->compose
  *
  * @sd: pointer to &struct v4l2_subdev
  * @state: pointer to &struct v4l2_subdev_state.
@@ -1202,7 +1202,7 @@ v4l2_subdev_get_pad_compose(struct v4l2_subdev *sd,
 		return NULL;
 	if (WARN_ON(pad >= sd->entity.num_pads))
 		pad = 0;
-	return &state->pads[pad].try_compose;
+	return &state->pads[pad].compose;
 }
 
 /*
@@ -1540,51 +1540,84 @@ int v4l2_subdev_set_routing_with_fmt(struct v4l2_subdev *sd,
 				     const struct v4l2_subdev_krouting *routing,
 				     const struct v4l2_mbus_framefmt *fmt);
 
+/*
+ * A macro to generate the macro or function name for sub-devices state access
+ * wrapper macros below.
+ */
+#define __v4l2_subdev_state_gen_call(NAME, _1, ARG, ...)	\
+	__v4l2_subdev_state_get_ ## NAME ## ARG
+
 /**
- * v4l2_subdev_state_get_stream_format() - Get pointer to a stream format
+ * v4l2_subdev_state_get_format() - Get pointer to a stream format
  * @state: subdevice state
  * @pad: pad id
- * @stream: stream id
+ * @...: stream id (optional argument)
  *
  * This returns a pointer to &struct v4l2_mbus_framefmt for the given pad +
  * stream in the subdev state.
  *
- * If the state does not contain the given pad + stream, NULL is returned.
+ * For stream-unaware drivers the format for the corresponding pad is returned.
+ * If the pad does not exist, NULL is returned.
  */
+/*
+ * Wrap v4l2_subdev_state_get_format(), allowing the function to be called with
+ * two or three arguments. The purpose of the __v4l2_subdev_state_get_format()
+ * macro below is to come up with the name of the function or macro to call,
+ * using the last two arguments (_stream and _pad). The selected function or
+ * macro is then called using the arguments specified by the caller. A similar
+ * arrangement is used for v4l2_subdev_state_crop() and
+ * v4l2_subdev_state_compose() below.
+ */
+#define v4l2_subdev_state_get_format(state, pad, ...)			\
+	__v4l2_subdev_state_gen_call(format, ##__VA_ARGS__, , _pad)	\
+		(state, pad, ##__VA_ARGS__)
+#define __v4l2_subdev_state_get_format_pad(state, pad)	\
+	__v4l2_subdev_state_get_format(state, pad, 0)
 struct v4l2_mbus_framefmt *
-v4l2_subdev_state_get_stream_format(struct v4l2_subdev_state *state,
-				    unsigned int pad, u32 stream);
+__v4l2_subdev_state_get_format(struct v4l2_subdev_state *state,
+			       unsigned int pad, u32 stream);
 
 /**
- * v4l2_subdev_state_get_stream_crop() - Get pointer to a stream crop rectangle
+ * v4l2_subdev_state_get_crop() - Get pointer to a stream crop rectangle
  * @state: subdevice state
  * @pad: pad id
- * @stream: stream id
+ * @...: stream id (optional argument)
  *
  * This returns a pointer to crop rectangle for the given pad + stream in the
  * subdev state.
  *
- * If the state does not contain the given pad + stream, NULL is returned.
+ * For stream-unaware drivers the crop rectangle for the corresponding pad is
+ * returned. If the pad does not exist, NULL is returned.
  */
+#define v4l2_subdev_state_get_crop(state, pad, ...)			\
+	__v4l2_subdev_state_gen_call(crop, ##__VA_ARGS__, , _pad)	\
+		(state, pad, ##__VA_ARGS__)
+#define __v4l2_subdev_state_get_crop_pad(state, pad)	\
+	__v4l2_subdev_state_get_crop(state, pad, 0)
 struct v4l2_rect *
-v4l2_subdev_state_get_stream_crop(struct v4l2_subdev_state *state,
-				  unsigned int pad, u32 stream);
+__v4l2_subdev_state_get_crop(struct v4l2_subdev_state *state, unsigned int pad,
+			     u32 stream);
 
 /**
- * v4l2_subdev_state_get_stream_compose() - Get pointer to a stream compose
- *					    rectangle
+ * v4l2_subdev_state_get_compose() - Get pointer to a stream compose rectangle
  * @state: subdevice state
  * @pad: pad id
- * @stream: stream id
+ * @...: stream id (optional argument)
  *
  * This returns a pointer to compose rectangle for the given pad + stream in the
  * subdev state.
  *
- * If the state does not contain the given pad + stream, NULL is returned.
+ * For stream-unaware drivers the compose rectangle for the corresponding pad is
+ * returned. If the pad does not exist, NULL is returned.
  */
+#define v4l2_subdev_state_get_compose(state, pad, ...)			\
+	__v4l2_subdev_state_gen_call(compose, ##__VA_ARGS__, , _pad)	\
+		(state, pad, ##__VA_ARGS__)
+#define __v4l2_subdev_state_get_compose_pad(state, pad)	\
+	__v4l2_subdev_state_get_compose(state, pad, 0)
 struct v4l2_rect *
-v4l2_subdev_state_get_stream_compose(struct v4l2_subdev_state *state,
-				     unsigned int pad, u32 stream);
+__v4l2_subdev_state_get_compose(struct v4l2_subdev_state *state,
+				unsigned int pad, u32 stream);
 
 /**
  * v4l2_subdev_routing_find_opposite_end() - Find the opposite stream

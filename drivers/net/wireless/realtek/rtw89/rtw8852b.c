@@ -1278,9 +1278,9 @@ static void rtw8852b_ctrl_bw(struct rtw89_dev *rtwdev, u8 pri_ch, u8 bw,
 
 		/*Set RF mode at A */
 		rtw89_phy_write32_idx(rtwdev, R_P0_RFMODE_ORI_RX,
-				      B_P0_RFMODE_ORI_RX_ALL, 0xaaa, phy_idx);
+				      B_P0_RFMODE_ORI_RX_ALL, 0x333, phy_idx);
 		rtw89_phy_write32_idx(rtwdev, R_P1_RFMODE_ORI_RX,
-				      B_P1_RFMODE_ORI_RX_ALL, 0xaaa, phy_idx);
+				      B_P1_RFMODE_ORI_RX_ALL, 0x333, phy_idx);
 		break;
 	default:
 		rtw89_warn(rtwdev, "Fail to switch bw (bw:%d, pri ch:%d)\n", bw,
@@ -1567,10 +1567,16 @@ static void rtw8852b_rfk_channel(struct rtw89_dev *rtwdev)
 {
 	enum rtw89_phy_idx phy_idx = RTW89_PHY_0;
 
+	rtw89_btc_ntfy_conn_rfk(rtwdev, true);
+
 	rtw8852b_rx_dck(rtwdev, phy_idx);
 	rtw8852b_iqk(rtwdev, phy_idx);
+	rtw89_btc_ntfy_preserve_bt_time(rtwdev, 30);
 	rtw8852b_tssi(rtwdev, phy_idx, true);
+	rtw89_btc_ntfy_preserve_bt_time(rtwdev, 30);
 	rtw8852b_dpk(rtwdev, phy_idx);
+
+	rtw89_btc_ntfy_conn_rfk(rtwdev, false);
 }
 
 static void rtw8852b_rfk_band_changed(struct rtw89_dev *rtwdev,

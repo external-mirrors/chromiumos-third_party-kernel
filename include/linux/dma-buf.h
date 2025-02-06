@@ -515,6 +515,7 @@ struct dma_buf_attachment {
 	const struct dma_buf_attach_ops *importer_ops;
 	void *importer_priv;
 	void *priv;
+  unsigned long dma_map_attrs;
 };
 
 /**

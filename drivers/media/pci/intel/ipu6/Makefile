@@ -1,60 +1,24 @@
-# SPDX-License-Identifier: GPL-2.0
-# Copyright (c) 2017 - 2020 Intel Corporation.
+# SPDX-License-Identifier: GPL-2.0-only
 
-ifneq ($(EXTERNAL_BUILD), 1)
-srcpath := $(srctree)
-endif
+intel-ipu6-y			:= ipu6.o \
+				ipu6-bus.o \
+				ipu6-dma.o \
+				ipu6-mmu.o \
+				ipu6-buttress.o \
+				ipu6-cpd.o \
+				ipu6-fw-com.o
 
-ccflags-y += -DIPU_TPG_FRAME_SYNC -DIPU_PSYS_GPC \
-		-DIPU_ISYS_GPC
+obj-$(CONFIG_VIDEO_INTEL_IPU6)	+= intel-ipu6.o
 
-intel-ipu6-objs				+= ../ipu.o \
-					   ../ipu-bus.o \
-					   ../ipu-dma.o \
-					   ../ipu-mmu.o \
-					   ../ipu-buttress.o \
-					   ../ipu-trace.o \
-					   ../ipu-cpd.o \
-					   ipu6.o \
-					   ../ipu-fw-com.o
+intel-ipu6-isys-y		:= ipu6-isys.o \
+				ipu6-isys-csi2.o \
+				ipu6-fw-isys.o \
+				ipu6-isys-video.o \
+				ipu6-isys-queue.o \
+				ipu6-isys-subdev.o \
+				ipu6-isys-mcd-phy.o \
+				ipu6-isys-jsl-phy.o \
+				ipu6-isys-dwc-phy.o
 
-obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6.o
-
-intel-ipu6-isys-objs			+= ../ipu-isys.o \
-					   ../ipu-isys-csi2.o \
-					   ipu6-isys.o \
-					   ipu6-isys-phy.o \
-					   ipu6-isys-dwc-phy.o \
-					   ipu6-isys-csi2.o \
-					   ipu6-isys-gpc.o \
-					   ../ipu-isys-csi2-be-soc.o \
-					   ../ipu-fw-isys.o \
-					   ../ipu-isys-video.o \
-					   ../ipu-isys-queue.o \
-					   ../ipu-isys-subdev.o
-intel-ipu6-isys-objs			+= ../ipu-isys-csi2-be.o
-
-obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6-isys.o
-
-intel-ipu6-psys-objs			+= ../ipu-psys.o \
-					   ipu6-psys.o \
-					   ipu-resources.o \
-					   ipu6-psys-gpc.o \
-					   ipu6-l-scheduler.o \
-					   ipu6-ppg.o
-
-intel-ipu6-psys-objs			+= ipu-fw-resources.o \
-					   ipu6-fw-resources.o \
-					   ipu6se-fw-resources.o \
-					   ipu6ep-fw-resources.o \
-					   ../ipu-fw-psys.o
-
-ifeq ($(CONFIG_COMPAT),y)
-intel-ipu6-psys-objs			+= ../ipu-psys-compat32.o
-endif
-
-obj-$(CONFIG_VIDEO_INTEL_IPU6)		+= intel-ipu6-psys.o
-
-ccflags-y += -I$(srcpath)/$(src)/../../../../../include/
-ccflags-y += -I$(srcpath)/$(src)/../
-ccflags-y += -I$(srcpath)/$(src)/
+obj-$(CONFIG_VIDEO_INTEL_IPU6)	+= intel-ipu6-isys.o
+obj-$(CONFIG_VIDEO_INTEL_IPU6)	+= psys/

@@ -5,6 +5,33 @@
 menu "MediaTek SoC drivers"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 
+source "drivers/soc/mediatek/apusys/Kconfig"
+
+config MTK_DVFSRC
+	tristate "MediaTek DVFSRC Support"
+	depends on ARCH_MEDIATEK
+	select PM_GENERIC_DOMAINS if PM
+	depends on MTK_SCPSYS
+	help
+	  Say yes here to add support for the MediaTek DVFSRC (dynamic voltage
+	  and frequency scaling resource collector) found
+	  on different MediaTek SoCs. The DVFSRC is a proprietary
+	  hardware which is used to collect all the requests from
+	  system and turn into the decision of minimum Vcore voltage
+	  and minimum DRAM frequency to fulfill those requests.
+
+config MTK_DVFSRC_START
+	tristate "MediaTek DVFSRC Support"
+	depends on ARCH_MEDIATEK
+	select PM_GENERIC_DOMAINS if PM
+	depends on MTK_SCPSYS
+	depends on MTK_DVFSRC
+	help
+	  Say yes here to release Bandwitch for MediaTek DVFSRC,
+	  the system will run in highest opp when you disable the config.
+	  Please check all the requests from system is correct,
+	  otherwise, the system may be hang.
+
 config MTK_CMDQ
 	tristate "MediaTek CMDQ Support"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
@@ -26,6 +53,14 @@ config MTK_DEVAPC
 	  The violation information is logged for further analysis or
 	  countermeasures.
 
+config MTK_MBOX
+    tristate "MediaTek Mbox Support"
+    help
+      Say yes here to add support for the MediaTek Mbox driver.
+      MTK MBOX is a physical H/W which consists of configurable 128
+      or 256 bytes SRAM and 32 bit irq. The driver does read/write
+      SRAM and IRQ handling.
+
 config MTK_INFRACFG
 	bool "MediaTek INFRACFG Support"
 	select REGMAP
@@ -33,6 +68,16 @@ config MTK_INFRACFG
 	  Say yes here to add support for the MediaTek INFRACFG controller. The
 	  INFRACFG controller contains various infrastructure registers not
 	  directly associated to any device.
+
+config MTK_IPI
+    tristate "MediaTek IPI Support"
+    depends on RPMSG_MTK
+    help
+      Say yes here to add support for the MediaTek IPI between tinysys.
+      MTK IPI consists of APIs to do Linux to/from uP/DSP communication
+      based on rpmsg. Synchronization among tasks is also handled by
+      this layer. If uP/DSP drivers handle by themselves, they can use
+      rpmsg directly.
 
 config MTK_PMIC_WRAP
 	tristate "MediaTek PMIC Wrapper Support"

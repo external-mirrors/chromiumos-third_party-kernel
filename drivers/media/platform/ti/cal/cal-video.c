@@ -697,7 +697,7 @@ static int cal_video_check_format(struct cal_ctx *ctx)
 
 	state = v4l2_subdev_lock_and_get_active_state(&ctx->phy->subdev);
 
-	format = v4l2_subdev_get_pad_format(&ctx->phy->subdev, state, remote_pad->index);
+	format = v4l2_subdev_state_get_format(state, remote_pad->index);
 	if (!format) {
 		ret = -EINVAL;
 		goto out;
@@ -1009,7 +1009,7 @@ int cal_ctx_v4l2_init(struct cal_ctx *ctx)
 	q->mem_ops = &vb2_dma_contig_memops;
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	q->lock = &ctx->mutex;
-	q->min_buffers_needed = 3;
+	q->min_queued_buffers = 3;
 	q->dev = ctx->cal->dev;
 
 	ret = vb2_queue_init(q);

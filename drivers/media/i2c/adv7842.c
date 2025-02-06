@@ -1431,14 +1431,15 @@ static int stdi2dv_timings(struct v4l2_subdev *sd,
 	}
 
 	if (v4l2_detect_cvt(stdi->lcf + 1, hfreq, stdi->lcvs, 0,
-			(stdi->hs_pol == '+' ? V4L2_DV_HSYNC_POS_POL : 0) |
-			(stdi->vs_pol == '+' ? V4L2_DV_VSYNC_POS_POL : 0),
-			false, timings))
+			    (stdi->hs_pol == '+' ? V4L2_DV_HSYNC_POS_POL : 0) |
+			    (stdi->vs_pol == '+' ? V4L2_DV_VSYNC_POS_POL : 0),
+			    false, adv7842_get_dv_timings_cap(sd), timings))
 		return 0;
 	if (v4l2_detect_gtf(stdi->lcf + 1, hfreq, stdi->lcvs,
-			(stdi->hs_pol == '+' ? V4L2_DV_HSYNC_POS_POL : 0) |
-			(stdi->vs_pol == '+' ? V4L2_DV_VSYNC_POS_POL : 0),
-			false, state->aspect_ratio, timings))
+			    (stdi->hs_pol == '+' ? V4L2_DV_HSYNC_POS_POL : 0) |
+			    (stdi->vs_pol == '+' ? V4L2_DV_VSYNC_POS_POL : 0),
+			    false, state->aspect_ratio,
+			    adv7842_get_dv_timings_cap(sd), timings))
 		return 0;
 
 	v4l2_dbg(2, debug, sd,
@@ -2087,7 +2088,7 @@ static int adv7842_get_format(struct v4l2_subdev *sd,
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
 		struct v4l2_mbus_framefmt *fmt;
 
-		fmt = v4l2_subdev_get_try_format(sd, sd_state, format->pad);
+		fmt = v4l2_subdev_state_get_format(sd_state, format->pad);
 		format->format.code = fmt->code;
 	} else {
 		format->format.code = state->format->code;
@@ -2119,7 +2120,7 @@ static int adv7842_set_format(struct v4l2_subdev *sd,
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
 		struct v4l2_mbus_framefmt *fmt;
 
-		fmt = v4l2_subdev_get_try_format(sd, sd_state, format->pad);
+		fmt = v4l2_subdev_state_get_format(sd_state, format->pad);
 		fmt->code = format->format.code;
 	} else {
 		state->format = info;

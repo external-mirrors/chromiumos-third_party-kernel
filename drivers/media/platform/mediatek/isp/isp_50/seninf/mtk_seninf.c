@@ -494,8 +494,8 @@ static void init_fmt(struct mtk_seninf *priv)
 		priv->fmt[i].format = mtk_seninf_default_fmt;
 }
 
-static int seninf_init_cfg(struct v4l2_subdev *sd,
-			   struct v4l2_subdev_state *sd_state)
+static int seninf_init_state(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *sd_state)
 {
 	struct v4l2_mbus_framefmt *mf;
 	unsigned int i;
@@ -579,7 +579,6 @@ static int seninf_s_stream(struct v4l2_subdev *sd, int on)
 };
 
 static const struct v4l2_subdev_pad_ops seninf_subdev_pad_ops = {
-	.init_cfg = seninf_init_cfg,
 	.set_fmt = seninf_set_fmt,
 	.get_fmt = seninf_get_fmt,
 	.enum_mbus_code = seninf_enum_mbus_code,
@@ -587,6 +586,10 @@ static const struct v4l2_subdev_pad_ops seninf_subdev_pad_ops = {
 
 static const struct v4l2_subdev_video_ops seninf_subdev_video_ops = {
 	.s_stream = seninf_s_stream,
+};
+
+static const struct v4l2_subdev_internal_ops seninf_internal_ops = {
+	.init_state = seninf_init_state,
 };
 
 static struct v4l2_subdev_core_ops seninf_subdev_core_ops = {
@@ -835,6 +838,7 @@ static int mtk_seninf_media_register(struct mtk_seninf *priv)
 	int ret;
 
 	v4l2_subdev_init(sd, &seninf_subdev_ops);
+	sd->internal_ops = &seninf_internal_ops;
 
 	init_fmt(priv);
 	ret = seninf_initialize_controls(priv);

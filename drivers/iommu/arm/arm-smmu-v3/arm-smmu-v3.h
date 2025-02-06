@@ -682,6 +682,8 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
+	const struct arm_smmu_v3_impl	*impl;
 };
 
 struct arm_smmu_stream {
@@ -754,6 +756,18 @@ void arm_smmu_tlb_inv_range_asid(unsigned long iova, size_t size, int asid,
 bool arm_smmu_free_asid(struct arm_smmu_ctx_desc *cd);
 int arm_smmu_atc_inv_domain(struct arm_smmu_domain *smmu_domain, int ssid,
 			    unsigned long iova, size_t size);
+
+/* Implementation details */
+struct arm_smmu_v3_impl {
+	int (*combined_irq_handle)(int irq, struct arm_smmu_device *smmu_dev);
+	int (*smmu_evt_handler)(int irq, struct arm_smmu_device *smmu_dev, u64 *evt, bool log_ratelimite);
+
+	int (*smmu_power_get)(struct arm_smmu_device *smmu);
+	int (*smmu_power_put)(struct arm_smmu_device *smmu);
+};
+
+struct arm_smmu_device *arm_smmu_v3_impl_init(struct arm_smmu_device *smmu);
+struct arm_smmu_device *arm_smmu_v3_impl_mtk_init(struct arm_smmu_device *smmu);
 
 #ifdef CONFIG_ARM_SMMU_V3_SVA
 bool arm_smmu_sva_supported(struct arm_smmu_device *smmu);

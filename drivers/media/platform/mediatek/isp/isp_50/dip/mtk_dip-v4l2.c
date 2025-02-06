@@ -931,7 +931,7 @@ static int mtk_dip_video_device_v4l2_register(struct mtk_dip_pipe *pipe,
 	vbq->supports_requests = true;
 	vbq->buf_struct_size = sizeof(struct mtk_dip_dev_buffer);
 	vbq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
-	vbq->min_buffers_needed = 0;
+	vbq->min_queued_buffers = 0;
 	vbq->drv_priv = pipe;
 	vbq->lock = &node->dev_q.lock;
 	if (node->desc->cached_mmap)

@@ -13,11 +13,18 @@
 
 #define MTK_DBG_VCODEC_STR "[MTK_VCODEC]"
 #define MTK_DBG_V4L2_STR "[MTK_V4L2]"
+#define MTK_DBG_VCP_STR "[MTK_VCP]"
 
 struct mtk_vcodec_mem {
 	size_t size;
-	void *va;
+	union {
+		void *va;
+		struct dma_buf *dma_buf;
+	};
 	dma_addr_t dma_addr;
+
+	struct dma_buf_attachment *attach;
+	struct sg_table *sgt;
 };
 
 struct mtk_vcodec_fb {
