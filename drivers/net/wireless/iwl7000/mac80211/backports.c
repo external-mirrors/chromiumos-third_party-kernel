@@ -526,11 +526,6 @@ bool ieee80211_operating_class_to_chandef(u8 operating_class,
 	}
 }
 
-static int cfg80211_chandef_get_width(const struct cfg80211_chan_def *c)
-{
-	return nl80211_chan_width_to_mhz(c->width);
-}
-
 int cfg80211_chandef_primary(const struct cfg80211_chan_def *c,
 			     enum nl80211_chan_width primary_chan_width,
 			     u16 *punctured)
