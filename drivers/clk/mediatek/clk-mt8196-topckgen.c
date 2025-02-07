@@ -1109,10 +1109,10 @@ static const struct mtk_mux ck_muxes[] = {
 		CLK_CFG_5_CLR, 24, 3,
 		CLK_CFG_UPDATE, TOP_MUX_DSP_SHIFT),
 	/* CLK_CFG_6 */
-	MUX_GATE_FENC_CLR_SET_UPD(CLK_CK_MFG_REF_SEL, "ck_mfg_ref_sel", ck_mfg_ref_parents,
+	MUX_GATE_FENC_CLR_SET_UPD_FLAGS(CLK_CK_MFG_REF_SEL, "ck_mfg_ref_sel", ck_mfg_ref_parents,
 		CLK_CFG_6, CLK_CFG_6_SET, CLK_CFG_6_CLR,
 		0, 1, 7, CLK_CFG_UPDATE, TOP_MUX_MFG_REF_SHIFT,
-		CLK_FENC_STATUS_MON_0, 7),
+		CLK_FENC_STATUS_MON_0, 7, CLK_IGNORE_UNUSED),
 	MUX_CLR_SET_UPD(CLK_CK_MFG_EB_SEL, "ck_mfg_eb_sel",
 		ck_mfg_eb_parents, CLK_CFG_6, CLK_CFG_6_SET,
 		CLK_CFG_6_CLR, 16, 2,
