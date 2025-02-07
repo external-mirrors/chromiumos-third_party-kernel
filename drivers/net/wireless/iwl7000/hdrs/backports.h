@@ -1170,3 +1170,8 @@ static inline int __printf(2, 3) debugfs_change_name(struct dentry *dentry, cons
 }
 
 #define NL80211_RRF_ALLOW_20MHZ_ACTIVITY    BIT(25)
+
+static inline int cfg80211_chandef_get_width(const struct cfg80211_chan_def *c)
+{
+	return nl80211_chan_width_to_mhz(c->width);
+}
