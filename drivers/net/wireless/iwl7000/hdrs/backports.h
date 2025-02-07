@@ -43,28 +43,6 @@ static inline int pcim_request_all_regions(struct pci_dev *pdev, const char *nam
 	return pci_request_selected_regions(pdev, mask, name);
 }
 
-
-struct cfg80211_mlo_reconf_done_data {
-	const u8 *buf;
-	size_t len;
-	u16 added_links;
-	struct {
-		struct cfg80211_bss *bss;
-		u8 *addr;
-	} links[IEEE80211_MLD_MAX_NUM_LINKS];
-};
-
-struct cfg80211_ml_reconf_req {
-	struct cfg80211_assoc_link add_links[IEEE80211_MLD_MAX_NUM_LINKS];
-	u16 rem_links;
-};
-
-static inline void
-cfg80211_mlo_reconf_add_done(struct net_device *dev,
-			     struct cfg80211_mlo_reconf_done_data *data)
-{
-}
-
 static inline void
 cfg80211_epcs_changed(struct net_device *netdev, bool enabled)
 {
