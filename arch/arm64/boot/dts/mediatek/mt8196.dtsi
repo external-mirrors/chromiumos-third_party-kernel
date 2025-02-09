@@ -3313,7 +3313,7 @@
 		mm_hwv: syscon@31b00000 {
 			/* TODO: Fix compatible in driver */
 			compatible = "mediatek,mt8196-mm-hwv", "mediatek,mt8196-mm_hwv", "syscon";
-			reg = <0 0x31b00000 0 0x3000>;
+			reg = <0 0x31b00000 0 0x6000>;
 		};
 
 		hfrpsys: power-controller@31b50000 {
