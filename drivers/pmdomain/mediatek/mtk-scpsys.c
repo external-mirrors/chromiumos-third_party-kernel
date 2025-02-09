@@ -198,6 +198,7 @@ struct scp_domain_data {
 	u32 hwv_en_ofs;
 	u32 hwv_set_sta_ofs;
 	u32 hwv_clr_sta_ofs;
+	u32 hwv_ack_ofs;
 	u8 hwv_shift;
 	u32 sram_pdn_bits;
 	u32 sram_pdn_ack_bits;
@@ -790,15 +791,22 @@ static int mtk_hwv_is_done(struct scp_domain *scpd)
 
 static int mtk_hwv_is_enable_done(struct scp_domain *scpd)
 {
-	u32 val = 0, val2 = 0, val3 = 0;
+	u32 done, en, set_sta, mask, ack;
 
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &val);
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_en_ofs, &val2);
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_set_sta_ofs, &val3);
+	regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &done);
+	regmap_read(scpd->hwv_regmap, scpd->data->hwv_en_ofs, &en);
+	regmap_read(scpd->hwv_regmap, scpd->data->hwv_set_sta_ofs, &set_sta);
+	mask = BIT(scpd->data->hwv_shift);
 
-	if ((val & BIT(scpd->data->hwv_shift)) && (val2 & BIT(scpd->data->hwv_shift))
-			&& ((val3 & BIT(scpd->data->hwv_shift)) == 0x0))
+	if ((done & mask) && (en & mask) && !(set_sta & mask)) {
+		if (scpd->data->hwv_ack_ofs) {
+			regmap_read(scpd->hwv_regmap, scpd->data->hwv_ack_ofs, &ack);
+			if (!(ack & mask))
+				return 0;
+		}
+
 		return 1;
+	}
 
 	return 0;
 }
@@ -1812,6 +1820,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_VDE0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1824,6 +1833,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_VDE1_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1836,6 +1846,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_VDE_VCORE0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1848,6 +1859,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_VEN0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1860,6 +1872,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_VEN1_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1872,6 +1885,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_VEN2_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1884,6 +1898,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_DISP_VCORE_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1896,6 +1911,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_DIS0_SHIFT,
 		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
@@ -1909,6 +1925,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_DIS1_SHIFT,
 		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
@@ -1922,6 +1939,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_OVL0_SHIFT,
 		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
@@ -1935,6 +1953,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_OVL1_SHIFT,
 		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
@@ -1948,6 +1967,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_DISP_EDPTX_SHIFT,
 		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
@@ -1961,6 +1981,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_DISP_DPTX_SHIFT,
 		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
 		.caps = MTK_SCPD_HWV_OPS,
@@ -1974,6 +1995,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
 		.hwv_shift = MT8196_MM_VOTE_MML0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1986,6 +2008,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_MML0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -1998,6 +2021,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_MM_INFRA0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS | MTK_SCPD_IRQ_SAVE,
 	},
@@ -2010,6 +2034,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_MM_INFRA1_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS | MTK_SCPD_IRQ_SAVE,
 	},
@@ -2022,6 +2047,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_MM_INFRA_AO_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS | MTK_SCPD_IRQ_SAVE,
 	},
@@ -2034,6 +2060,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_CSI_BS_RX_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -2046,6 +2073,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_CSI_LS_RX_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -2058,6 +2086,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_DSI_PHY0_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -2070,6 +2099,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_DSI_PHY1_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
@@ -2082,6 +2112,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
 		.hwv_shift = MT8196_MM_VOTE_DSI_PHY2_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
