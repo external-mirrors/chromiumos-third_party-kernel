@@ -1161,6 +1161,7 @@ err_dsp:
 	return ret;
 }
 
+#ifdef CONFIG_ACPI
 static int cs35l41_acpi_get_name(struct cs35l41_private *cs35l41)
 {
 	acpi_handle handle = ACPI_HANDLE(cs35l41->dev);
@@ -1184,6 +1185,12 @@ static int cs35l41_acpi_get_name(struct cs35l41_private *cs35l41)
 
 	return 0;
 }
+#else
+static int cs35l41_acpi_get_name(struct cs35l41_private *cs35l41)
+{
+	return 0;
+}
+#endif /* CONFIG_ACPI */
 
 int cs35l41_probe(struct cs35l41_private *cs35l41, const struct cs35l41_hw_cfg *hw_cfg)
 {
