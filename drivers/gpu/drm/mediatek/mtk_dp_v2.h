@@ -26,7 +26,7 @@ bool mtk_dp_parse_audio_cap_v2(struct mtk_dp *mtk_dp, struct mtk_dp_audio_cfg *c
 void mtk_dp_audio_info_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
 		       int *ch, int *fs, int *len);
 int mtk_dp_update_bits_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask);
-void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp, bool video_enable);
+void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_enable(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp);
