@@ -396,7 +396,7 @@ static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, true);
 	}
 
-	mtk_dp_audio_update_plugged_status_v2(mtk_dp, true);
+	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
 }
 
 static bool mtk_dp_mst_drv_first_stream_enable(struct mtk_dp *mtk_dp)
@@ -837,7 +837,7 @@ static void mtk_dp_mst_encoder_atomic_disable(struct drm_encoder *encoder, struc
 
 	mtk_con->video_enable = false;
 
-	mtk_dp_audio_update_plugged_status_v2(mtk_dp, false);
+	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
 
 	for (i = 0; i < DP_ENCODER_NUM; i++) {
 		con_id = encoder_id_to_con_id(mtk_dp, i, DRM_DP_MST);
