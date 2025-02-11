@@ -77,7 +77,7 @@ static inline int encoder_id_to_con_id(struct mtk_dp *mtk_dp,
 	int id = -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
-		if (mtk_dp->mtk_con[i] &&
+		if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i]->encoder &&
 		    mtk_dp->mtk_con[i]->encoder_id == encoder_id &&
 			mtk_dp->mtk_con[i]->dp_mode == dp_mode) {
 			id = i;
