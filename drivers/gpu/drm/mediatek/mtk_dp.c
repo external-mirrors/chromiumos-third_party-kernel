@@ -140,8 +140,6 @@ struct mtk_dp {
 	struct device *codec_dev;
 	/* protect the plugged_cb as it's used in both bridge ops and audio */
 	struct mutex update_plugged_status_lock;
-	bool suspend;
-	struct notifier_block nb;
 	/* For edp power control */
 	void __iomem *pwr_regs;
 };
@@ -2971,27 +2969,6 @@ static int mtk_dp_edp_link_panel(struct drm_dp_aux *mtk_aux)
 	return 0;
 }
 
-static int mtk_drm_dp_notifier(struct notifier_block *notifier,
-			       unsigned long pm_event, void *unused)
-{
-	struct mtk_dp *mtk_dp = container_of(notifier, struct mtk_dp, nb);
-	struct device *dev = mtk_dp->dev;
-
-	dev_dbg(mtk_dp->dev, "%s pm_event %lu dev %s usage_count %d\n",
-		 __func__, pm_event, dev_name(dev),
-		 atomic_read(&dev->power.usage_count));
-
-	switch (pm_event) {
-	case PM_SUSPEND_PREPARE:
-		mtk_dp_suspend(dev);
-		return NOTIFY_OK;
-	case PM_POST_SUSPEND:
-		mtk_dp_resume(dev);
-		return NOTIFY_OK;
-	}
-	return NOTIFY_DONE;
-}
-
 static int mtk_dp_probe(struct platform_device *pdev)
 {
 	struct mtk_dp *mtk_dp;
@@ -3126,11 +3103,6 @@ static int mtk_dp_probe(struct platform_device *pdev)
 		if (ret)
 			return dev_err_probe(dev, ret, "Failed to add bridge\n");
 	}
-	/* register pm notifier */
-	mtk_dp->nb.notifier_call = mtk_drm_dp_notifier;
-	ret = register_pm_notifier(&mtk_dp->nb);
-	if (ret)
-		dev_info(mtk_dp->dev, "register_pm_notifier failed %d", ret);
 
 	dev_dbg(dev, "%s power.usage_count %d\n",
 		__func__, atomic_read(&dev->power.usage_count));
@@ -3141,14 +3113,9 @@ static int mtk_dp_probe(struct platform_device *pdev)
 static void mtk_dp_remove(struct platform_device *pdev)
 {
 	struct mtk_dp *mtk_dp = platform_get_drvdata(pdev);
-	int ret = 0;
 
 	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-	/* unregister pm notifier */
-	ret = unregister_pm_notifier(&mtk_dp->nb);
-	if (ret)
-		dev_info(mtk_dp->dev, "unregister_pm_notifier failed %d", ret);
 
 	if (mtk_dp->data->bridge_type != DRM_MODE_CONNECTOR_eDP)
 		del_timer_sync(&mtk_dp->debounce_timer);
@@ -3161,10 +3128,7 @@ static void mtk_dp_remove(struct platform_device *pdev)
 static int mtk_dp_suspend(struct device *dev)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
-	if (mtk_dp->suspend) {
-		dev_info(mtk_dp->dev, "%s already suspend\n", __func__);
-		return 0;
-	}
+
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n",
 		__func__, atomic_read(&dev->power.usage_count));
 
@@ -3174,11 +3138,12 @@ static int mtk_dp_suspend(struct device *dev)
 
 	if (mtk_dp->power_clk)
 		clk_disable_unprepare(mtk_dp->power_clk);
+	/* TODO: clean up it after shutting down eDP power correctly. */
+	pm_runtime_put_sync(dev);
 	pm_runtime_put_sync(dev);
 	if (mtk_dp->pwr_regs)
 		mtk_edp_pm_ctl(mtk_dp, false);
 
-	mtk_dp->suspend = true;
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
 		 atomic_read(&dev->power.usage_count));
 
@@ -3188,16 +3153,15 @@ static int mtk_dp_suspend(struct device *dev)
 static int mtk_dp_resume(struct device *dev)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
-	if (!mtk_dp->suspend) {
-		dev_info(mtk_dp->dev, "%s already resume\n", __func__);
-		return 0;
-	}
+
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
 		 atomic_read(&dev->power.usage_count));
 
+	/* TODO: clean up it after shutting down eDP power correctly. */
+	pm_runtime_get_sync(dev);
+	pm_runtime_get_sync(dev);
 	if (mtk_dp->pwr_regs)
 		mtk_edp_pm_ctl(mtk_dp, true);
-	pm_runtime_get_sync(dev);
 
 	if (mtk_dp->power_clk)
 		clk_prepare_enable(mtk_dp->power_clk);
@@ -3207,7 +3171,6 @@ static int mtk_dp_resume(struct device *dev)
 		mtk_dp_hwirq_enable(mtk_dp, true);
 	mtk_dp_power_enable(mtk_dp);
 
-	mtk_dp->suspend = false;
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
 		 atomic_read(&dev->power.usage_count));
 
