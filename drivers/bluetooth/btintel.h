@@ -430,6 +430,7 @@ static inline void btintel_hw_error(struct hci_dev *hdev, u8 code)
 static inline void btintel_print_fseq_info(struct hci_dev *hdev)
 {
 }
+
 static inline bool btintel_is_quality_report_evt(struct sk_buff *skb)
 {
 	return false;

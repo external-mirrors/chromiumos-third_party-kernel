@@ -397,6 +397,9 @@ int ipu6_dma_map_sg(struct ipu6_bus_device *sys, struct scatterlist *sglist,
 	dev_dbg(dev, "dmamap trying to map %d ents %zu pages\n",
 		nents, npages);
 
+	dev_dbg(dev, "dmamap trying to map %d ents %zu pages\n",
+		nents, npages);
+
 	iova = alloc_iova(&mmu->dmap->iovad, npages,
 			  PHYS_PFN(dma_get_mask(dev)), 0);
 	if (!iova)
