@@ -5,7 +5,7 @@
  * Copyright 2008 Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright 2016	Intel Deutschland GmbH
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2025 Intel Corporation
  */
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -1892,7 +1892,7 @@ cfg80211_update_known_bss(struct cfg80211_registered_device *rdev,
 		known->pub.signal = new->pub.signal;
 	known->pub.capability = new->pub.capability;
 	known->ts = new->ts;
-	known->ts_boottime = new->ts_boottime;
+	known->pub.ts_boottime = new->pub.ts_boottime;
 	known->parent_tsf = new->parent_tsf;
 	known->pub.chains = new->pub.chains;
 	memcpy(known->pub.chain_signal, new->pub.chain_signal,
@@ -2188,7 +2188,7 @@ cfg80211_inform_single_bss_data(struct wiphy *wiphy,
 		tmp.pub.signal = 0;
 	tmp.pub.beacon_interval = data->beacon_interval;
 	tmp.pub.capability = data->capability;
-	tmp.ts_boottime = drv_data->boottime_ns;
+	tmp.pub.ts_boottime = drv_data->boottime_ns;
 	tmp.parent_tsf = drv_data->parent_tsf;
 	ether_addr_copy(tmp.parent_bssid, drv_data->parent_bssid);
 
@@ -3045,7 +3045,7 @@ cfg80211_inform_single_bss_frame_data(struct wiphy *wiphy,
 	tmp.pub.capability = capability;
 	tmp.pub.channel = channel;
 	tmp.pub.signal = data->signal;
-	tmp.ts_boottime = data->boottime_ns;
+	tmp.pub.ts_boottime = data->boottime_ns;
 	tmp.parent_tsf = data->parent_tsf;
 	tmp.pub.chains = data->chains;
 	memcpy(tmp.pub.chain_signal, data->chain_signal, IEEE80211_MAX_CHAINS);
