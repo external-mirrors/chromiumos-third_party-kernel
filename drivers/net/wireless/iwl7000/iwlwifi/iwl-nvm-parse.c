@@ -11,6 +11,7 @@
 #include <linux/pci.h>
 #include <linux/firmware.h>
 
+#include "fw/file.h"
 #include "iwl-drv.h"
 #include "iwl-modparams.h"
 #include "iwl-nvm-parse.h"
@@ -870,6 +871,9 @@ iwl_nvm_fixup_sband_iftd(struct iwl_trans *trans,
 
 	if (trans->reduced_cap_sku) {
 	}
+
+	if (fw_has_capa(&fw->ucode_capa, IWL_UCODE_TLV_CAPA_RESTRICTED_TWT_SUPPORT))
+		{}
 }
 
 static void iwl_init_he_hw_capab(struct iwl_trans *trans,
