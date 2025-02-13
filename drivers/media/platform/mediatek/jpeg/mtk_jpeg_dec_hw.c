@@ -599,11 +599,11 @@ static irqreturn_t mtk_jpegdec_hw_irq_handler(int irq, void *priv)
 
 	irq_status = mtk_jpeg_dec_get_int_status(jpeg->reg_base);
 	dec_irq_ret = mtk_jpeg_dec_enum_result(irq_status);
-	if (dec_irq_ret >= MTK_JPEG_DEC_RESULT_UNDERFLOW)
-		mtk_jpeg_dec_reset(jpeg->reg_base);
+	mtk_jpeg_dec_reset(jpeg->reg_base);
 
 	if (dec_irq_ret != MTK_JPEG_DEC_RESULT_EOF_DONE)
-		dev_warn(jpeg->dev, "Jpg Dec occurs unknown Err.");
+		dev_err(jpeg->dev, "Jpg Dec occurs unknown Err(%d).", dec_irq_ret);
+
 
 	jpeg_src_buf =
 		container_of(src_buf, struct mtk_jpeg_src_buf, b);
