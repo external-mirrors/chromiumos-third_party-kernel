@@ -2176,7 +2176,7 @@
 					<0 0>,
 					<0 0>;
 			/* for clock scaling bind vcore */
-
+			dvfsrc-vcore-supply = <&dvfsrc_vcore>;
 			/* 0.65V for clock scale up */
 			boost-crypt-vcore-min = <650000>;
 			vcc-supply = <&mt6363_vemc>;
