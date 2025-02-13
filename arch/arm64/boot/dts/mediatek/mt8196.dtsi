@@ -129,8 +129,7 @@
 			enable-method = "psci";
 			clock-frequency = <2100000000>;
 			capacity-dmips-mhz = <714>;
-			cpu-idle-states = <&cpuoff_l &clusteroff_l &mcusysoff_l
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_l &clusteroff_l &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -149,8 +148,7 @@
 			enable-method = "psci";
 			clock-frequency = <2100000000>;
 			capacity-dmips-mhz = <714>;
-			cpu-idle-states = <&cpuoff_l &clusteroff_l &mcusysoff_l
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_l &clusteroff_l &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -169,8 +167,7 @@
 			enable-method = "psci";
 			clock-frequency = <2100000000>;
 			capacity-dmips-mhz = <714>;
-			cpu-idle-states = <&cpuoff_l &clusteroff_l &mcusysoff_l
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_l &clusteroff_l &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -189,8 +186,7 @@
 			enable-method = "psci";
 			clock-frequency = <2100000000>;
 			capacity-dmips-mhz = <714>;
-			cpu-idle-states = <&cpuoff_l &clusteroff_l &mcusysoff_l
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_l &clusteroff_l &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -209,8 +205,7 @@
 			enable-method = "psci";
 			clock-frequency = <2800000000>;
 			capacity-dmips-mhz = <835>;
-			cpu-idle-states = <&cpuoff_m &clusteroff_m &mcusysoff_m
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_m &clusteroff_m &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -229,8 +224,7 @@
 			enable-method = "psci";
 			clock-frequency = <2800000000>;
 			capacity-dmips-mhz = <835>;
-			cpu-idle-states = <&cpuoff_m &clusteroff_m &mcusysoff_m
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_m &clusteroff_m &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -249,8 +243,7 @@
 			enable-method = "psci";
 			clock-frequency = <2800000000>;
 			capacity-dmips-mhz = <835>;
-			cpu-idle-states = <&cpuoff_m &clusteroff_m &mcusysoff_m
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_m &clusteroff_m &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
@@ -269,8 +262,7 @@
 			enable-method = "psci";
 			clock-frequency = <3600000000>;
 			capacity-dmips-mhz = <1024>;
-			cpu-idle-states = <&cpuoff_b &clusteroff_b &mcusysoff_b
-					   &system_vcore &s2idle>;
+			cpu-idle-states = <&cpuoff_b &clusteroff_b &s2idle>;
 			i-cache-size = <65536>;
 			i-cache-line-size = <64>;
 			i-cache-sets = <256>;
