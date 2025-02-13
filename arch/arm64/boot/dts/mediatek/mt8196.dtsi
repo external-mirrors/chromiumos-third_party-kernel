@@ -2886,6 +2886,8 @@
 					"mediatek,mt6589-wdt",
 					"syscon", "simple-mfd";
 			reg = <0 0x1c010000 0 0x1000>;
+			#reset-cells = <1>;
+			mediatek,disable-extrst;
 		};
 
 		dvfsrc: dvfsrc@1c013000 {
