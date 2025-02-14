@@ -82,6 +82,10 @@
 	spi-cs-hold-delay-ns = <43>;
 };
 
+&cros_ec_typec {
+	compatible = "google,cros-ec-ucsi";
+};
+
 &dsi0 {
 	status = "okay";
 

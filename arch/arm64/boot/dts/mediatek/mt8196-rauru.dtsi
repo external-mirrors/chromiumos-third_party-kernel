@@ -1295,7 +1295,7 @@
 			#size-cells = <0>;
 		};
 
-		typec {
+		cros_ec_typec: typec {
 			compatible = "google,cros-ec-typec";
 			#address-cells = <1>;
 			#size-cells = <0>;
