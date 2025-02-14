@@ -3,11 +3,10 @@
 curr := platform/$(MALI_PLATFORM_DIR)/mtk_platform_common
 
 mali_kbase-y += $(curr)/mtk_platform_common.o
-
 mali_kbase-y += $(curr)/mtk_platform_devfreq_governor.o
 mali_kbase-y += $(curr)/mtk_platform_devfreq_thermal.o
-
 mali_kbase-y += $(curr)/mtk_platform_dvfs.o
 
+ccflags-y += -I$(src)/backend/gpu/
 ccflags-y += -I$(srctree)/drivers/devfreq/
 ccflags-y += -Wno-unused-variable -Wno-unused-function
