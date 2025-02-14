@@ -4413,6 +4413,7 @@
 			reset-exception-mask = <0x0>;
 			iter-trace-enable = <1>;
 			gpu-frame-base-optimize = <1>;
+			dynamic-power-coefficient = <19259>;
 
 			pbha {
 				propagate-bits = /bits/ 8 <0xf>;
