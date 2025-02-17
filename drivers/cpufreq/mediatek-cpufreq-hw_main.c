@@ -260,7 +260,9 @@ static int mtk_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 
 	/* Let CPUs leave idle-off state for SVS CPU initializing */
 	cpu_latency_qos_add_request(qos_request, PM_QOS_DEFAULT_VALUE);
-	cpu_latency_qos_add_request(&cpufreq_lpm_qos_request, CPU_DMA_LATENCY);
+
+	if (policy->cpu == 0)
+		cpu_latency_qos_add_request(&cpufreq_lpm_qos_request, CPU_DMA_LATENCY);
 
 	/* HW should be in enabled state to proceed now */
 	writel_relaxed(0x1, c->reg_bases[REG_FREQ_ENABLE]);
