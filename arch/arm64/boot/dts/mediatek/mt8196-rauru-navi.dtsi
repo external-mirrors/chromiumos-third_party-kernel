@@ -64,18 +64,7 @@
 };
 
 &i2c3 {
-	quad_tas2563: audio-codec@4d {
-		compatible = "ti,tas2563";
-		reg = <0x4d>, /* Woffer Left */
-			<0x4f>,	/* Tweeter Left */
-			<0x4c>, /* Woffer Right */
-			<0x4e>; /* Tweeter Right */
-
-		#sound-dai-cells = <0>;
-		reset-gpios = <&pio 174 GPIO_ACTIVE_HIGH>;
-		interrupts-extended = <&pio 9 IRQ_TYPE_LEVEL_LOW>;
-		status = "okay";
-	};
+	/delete-node/ audio-codec@1a;
 
 	rt5682s: audio-codec@1a {
 		compatible = "realtek,rt5682s";
@@ -86,7 +75,18 @@
 		pinctrl-0 = <&nau8825_pins>;
 		realtek,jd-src = <1>;
 		#sound-dai-cells = <0>;
-		status = "okay";
+	};
+
+	quad_tas2563: speaker-codec@4d {
+		compatible = "ti,tas2563";
+		reg = <0x4d>, /* Woffer Left */
+		      <0x4f>, /* Tweeter Left */
+		      <0x4c>, /* Woffer Right */
+		      <0x4e>; /* Tweeter Right */
+
+		#sound-dai-cells = <0>;
+		reset-gpios = <&pio 174 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 9 IRQ_TYPE_LEVEL_LOW>;
 	};
 };
 
