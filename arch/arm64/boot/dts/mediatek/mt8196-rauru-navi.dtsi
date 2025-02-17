@@ -189,7 +189,7 @@
 		reg = <0x2c>;
 		interrupts-extended = <&pio 8 IRQ_TYPE_LEVEL_LOW>;
 		hid-descr-addr = <0x20>;
-		vcc-supply = <&mt6373_vcn33_2>;
+		vdd-supply = <&mt6373_vcn33_2>;
 		wakeup-source;
 	};
 
@@ -199,7 +199,7 @@
 		reg = <0x38>;
 		interrupts-extended = <&pio 8 IRQ_TYPE_LEVEL_LOW>;
 		hid-descr-addr = <0x0020>;
-		vcc-supply = <&mt6373_vcn33_2>;
+		vdd-supply = <&mt6373_vcn33_2>;
 		wakeup-source;
 	};
 };
