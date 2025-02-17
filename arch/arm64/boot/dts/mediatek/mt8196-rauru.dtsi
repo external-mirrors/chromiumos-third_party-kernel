@@ -466,6 +466,16 @@
 		vcc-supply = <&mt6373_vcn33_2>;
 		wakeup-source;
 	};
+
+	/* synaptics trackpad */
+	trackpad_synaptics: trackpad@2c  {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		interrupts-extended = <&pio 8 IRQ_TYPE_LEVEL_LOW>;
+		hid-descr-addr = <0x20>;
+		vdd-supply = <&mt6373_vcn33_2>;
+		wakeup-source;
+	};
 };
 
 /* tpm */
