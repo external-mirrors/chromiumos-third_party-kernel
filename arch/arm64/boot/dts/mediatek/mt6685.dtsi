@@ -5,9 +5,10 @@
 #include <dt-bindings/spmi/spmi.h>
 
 &spmi {
-	mt6685_mfd: mt6685_mfd {
+	mt6685_mfd: mfd@9 {
 		compatible = "mediatek,mt6685";
 		reg = <0x9 SPMI_USID>;
+
 		mt6685_clkbuf: mt6685-clkbuf {
 			compatible = "mediatek,mt6685-clkbuf";
 			XO-BBCK1 {

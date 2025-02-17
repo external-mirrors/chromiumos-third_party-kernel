@@ -6,15 +6,15 @@
 #include <dt-bindings/spmi/spmi.h>
 
 &spmi {
-	second_pmic@5 {
+	second_pmic: pmic@5 {
 		compatible = "mediatek,mt6373";
 		reg = <0x5 SPMI_USID>;
-		interrupts = <5>;
+		interrupts = <0x5 IRQ_TYPE_NONE>;
 		#address-cells = <0>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
-		mt6373_adc: mt6373-auxadc {
+		mt6373_adc: adc {
 			compatible = "mediatek,mt6373-auxadc";
 			#io-channel-cells = <1>;
 
@@ -65,20 +65,25 @@
 			};
 		};
 
-		mt6373_efuse: mt6373-efuse {
+		mt6373_efuse: efuse {
 			compatible = "mediatek,mt6373-efuse";
-			#address-cells = <1>;
-			#size-cells = <1>;
-			mt6373_thermal_efuse: mt6373_e_data {
-				reg = <0x5e 10>;
+
+			nvmem-layout {
+				compatible = "fixed-layout";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				mt6373_thermal_efuse: mt6373_e_data {
+					reg = <0x5e 10>;
+				};
 			};
 		};
 
-		mt6373_consys: mt6373-consys {
+		mt6373_consys: consys {
 			compatible = "mediatek,mt6373-consys";
 		};
 
-		mt6373_pio: mt6373-pinctrl {
+		mt6373_pio: pinctrl {
 			compatible = "mediatek,mt6373-pinctrl";
 			gpio-controller;
 			#gpio-cells = <2>;

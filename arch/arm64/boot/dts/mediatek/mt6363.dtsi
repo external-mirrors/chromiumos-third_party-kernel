@@ -9,12 +9,12 @@
 	main_pmic: pmic@4 {
 		compatible = "mediatek,mt6363";
 		reg = <0x4 SPMI_USID>;
-		interrupts = <4>;
+		interrupts = <0x4 IRQ_TYPE_NONE>;
 		#address-cells = <0>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
 
-		pmic_adc: mt6363-auxadc {
+		pmic_adc: adc {
 			compatible = "mediatek,mt6363-auxadc";
 			#io-channel-cells = <1>;
 
@@ -132,20 +132,25 @@
 			};
 		};
 
-		mt6363-efuse {
+		mt6363efuse: efuse {
 			compatible = "mediatek,mt6363-efuse";
-			#address-cells = <1>;
-			#size-cells = <1>;
-			mt6363_thermal_efuse: mt6363_e_data {
-				reg = <0x5e 8>;
+
+			nvmem-layout {
+				compatible = "fixed-layout";
+				#address-cells = <1>;
+				#size-cells = <1>;
+
+				mt6363_thermal_efuse: mt6363_e_data {
+					reg = <0x5e 8>;
+				};
 			};
 		};
 
-		mt6363-consys {
+		mt6363consys: consys {
 			compatible = "mediatek,mt6363-consys";
 		};
 
-		mt6363keys: mt6363keys {
+		mt6363keys: keys {
 			compatible = "mediatek,mt6363-keys";
 			mediatek,long-press-mode = <1>;
 			power-off-time-sec = <0>;
@@ -160,7 +165,7 @@
 			};
 		};
 
-		mt6363_pio: mt6363-pinctrl {
+		mt6363_pio: pinctrl {
 			compatible = "mediatek,mt6363-pinctrl";
 			gpio-controller;
 			#gpio-cells = <2>;
