@@ -947,11 +947,11 @@ static inline int pcim_request_all_regions(struct pci_dev *pdev, const char *nam
 	return pci_request_selected_regions(pdev, mask, name);
 }
 
+
 static inline void
 cfg80211_epcs_changed(struct net_device *netdev, bool enabled)
 {
 }
-
 
 DEFINE_GUARD(wiphy, struct wiphy *,
         mutex_lock(&_T->mtx),
