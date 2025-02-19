@@ -1552,8 +1552,8 @@ static const struct mtk_vcp_of_data mt8196_of_data = {
 };
 
 static const struct dev_pm_ops mtk_vcp_rproc_pm_ops = {
-	.suspend = mtk_vcp_suspend,
-	.resume = mtk_vcp_resume,
+	.suspend_noirq = mtk_vcp_suspend,
+	.resume_noirq = mtk_vcp_resume,
 };
 
 static const struct of_device_id vcp_of_ids[] = {
