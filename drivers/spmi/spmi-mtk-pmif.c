@@ -800,6 +800,19 @@ static void rcs_irq_disable(struct irq_data *data)
 	arb->rcs_enable_hwirq[hwirq] = false;
 }
 
+static int rcs_irq_set_wake(struct irq_data *data, unsigned int on)
+{
+	struct pmif *arb = irq_data_get_irq_chip_data(data);
+
+	return irq_set_irq_wake(arb->rcs_irq, on);
+}
+
+static int rcs_irq_p_set_wake(struct irq_data *data, unsigned int on)
+{
+	struct pmif *arb = irq_data_get_irq_chip_data(data);
+
+	return irq_set_irq_wake(arb->rcs_irq_p, on);
+}
 
 static const struct irq_chip rcs_irq_chip = {
 	.name			= "rcs_irq",
@@ -807,6 +820,7 @@ static const struct irq_chip rcs_irq_chip = {
 	.irq_bus_sync_unlock	= rcs_irq_sync_unlock,
 	.irq_enable		= rcs_irq_enable,
 	.irq_disable		= rcs_irq_disable,
+	.irq_set_wake 		= rcs_irq_set_wake,
 };
 
 static const struct irq_chip rcs_irq_chip_p = {
@@ -815,6 +829,7 @@ static const struct irq_chip rcs_irq_chip_p = {
 	.irq_bus_sync_unlock	= rcs_irq_sync_unlock,
 	.irq_enable		= rcs_irq_enable,
 	.irq_disable		= rcs_irq_disable,
+	.irq_set_wake 		= rcs_irq_p_set_wake,
 };
 
 static int rcs_irq_map(struct irq_domain *d, unsigned int virq,
