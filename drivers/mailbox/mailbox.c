@@ -395,7 +395,7 @@ static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 	if (chan->mbox->ops->power_get) {
 		ret = chan->mbox->ops->power_get(chan);
 		if (ret < 0)
-			return ERR_PTR(ret);
+			return ret;
 	}
 
 	if (chan->mbox->ops->startup) {
