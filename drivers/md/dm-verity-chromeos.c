@@ -511,7 +511,13 @@ static int error_handler(struct notifier_block *nb, unsigned long transient,
 {
 	struct dm_verity_error_state *err =
 		(struct dm_verity_error_state *) opaque_err;
-	err->behavior = DM_VERITY_ERROR_BEHAVIOR_PANIC;
+	if (transient && err->system_shutting_down) {
+		// An error is expected if the IO has been sent while
+		// the device is shutting down or rebooot.
+		err->behavior = DM_VERITY_ERROR_BEHAVIOR_NONE;
+	} else {
+		err->behavior = DM_VERITY_ERROR_BEHAVIOR_PANIC;
+	}
 	if (transient)
 		return 0;
 

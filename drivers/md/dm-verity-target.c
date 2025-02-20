@@ -114,7 +114,7 @@ void verity_integrity_error_panic(dev_t devt, blk_status_t status,
  * TODO make this call a registered handler.
  */
 static void verity_error(struct dm_verity *v, struct dm_verity_io *io,
-			 blk_status_t status)
+			 blk_status_t status, bool system_shutting_down)
 {
 	const char *message = v->hash_failed ? "integrity" : "block";
 	int error_behavior = DM_VERITY_ERROR_BEHAVIOR_PANIC;
@@ -143,6 +143,7 @@ static void verity_error(struct dm_verity *v, struct dm_verity_io *io,
 		error_state.hash_dev_start = v->hash_start;
 		error_state.hash_dev_len = v->hash_blocks;
 		error_state.hash_dev = v->hash_dev->bdev;
+		error_state.system_shutting_down = system_shutting_down;
 
 		/* Set default fallthrough behavior. */
 		error_state.behavior = DM_VERITY_ERROR_BEHAVIOR_PANIC;
@@ -818,13 +819,14 @@ static inline bool verity_is_system_shutting_down(void)
 /*
  * End one "io" structure with a given error.
  */
-static void verity_finish_io(struct dm_verity_io *io, blk_status_t status)
+static void verity_finish_io(struct dm_verity_io *io, blk_status_t status,
+			     bool system_shutting_down)
 {
 	struct dm_verity *v = io->v;
 	struct bio *bio = dm_bio_from_per_bio_data(io, v->ti->per_io_data_size);
 
 	if (status && !verity_fec_is_enabled(io->v))
-		verity_error(v, io, status);
+		verity_error(v, io, status, system_shutting_down);
 	bio->bi_end_io = io->orig_bi_end_io;
 	bio->bi_status = status;
 
@@ -840,18 +842,19 @@ static void verity_work(struct work_struct *w)
 
 	io->in_tasklet = false;
 
-	verity_finish_io(io, errno_to_blk_status(verity_verify_io(io)));
+	verity_finish_io(io, errno_to_blk_status(verity_verify_io(io)), false);
 }
 
 static void verity_end_io(struct bio *bio)
 {
 	struct dm_verity_io *io = bio->bi_private;
 
+	bool system_shutting_down = verity_is_system_shutting_down();
 	if (bio->bi_status &&
 	    (!verity_fec_is_enabled(io->v) ||
-	     verity_is_system_shutting_down() ||
+	     system_shutting_down ||
 	     (bio->bi_opf & REQ_RAHEAD))) {
-		verity_finish_io(io, bio->bi_status);
+		verity_finish_io(io, bio->bi_status, system_shutting_down);
 		return;
 	}
 
