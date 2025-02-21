@@ -97,6 +97,31 @@ static inline u32 cmdq_reg_revert_addr(u32 addr, const struct gce_plat *pdata)
 	return ((addr << pdata->shift) - pdata->mminfra_offset);
 }
 
+static void cmdq_vm_toggle(struct cmdq *cmdq, bool enable)
+{
+	u32 vm_cpr_gsize = 0, vm_map0 = 0, vm_map1 = 0, vm_map2 = 0, vm_map3 = 0;
+
+	if (!cmdq->pdata->gce_vm)
+		return;
+
+	if (enable) {
+		/* set all thread mapping to host vm currently */
+		vm_cpr_gsize = GCE_VM_CPR_GSIZE_HSOT;
+		vm_map0 = GCE_VM_MAP0_ALL_HOST;
+		vm_map1 = GCE_VM_MAP1_ALL_HOST;
+		vm_map2 = GCE_VM_MAP2_ALL_HOST;
+		vm_map3 = GCE_VM_MAP3_ALL_HOST;
+	}
+
+	/* config cpr size for vm */
+	writel(vm_cpr_gsize, cmdq->base + GCE_VM_CPR_GSIZE);
+	/* config CPR_GSIZE before setting VM_ID_MAP to avoid data leakage */
+	writel(vm_map0, cmdq->base + GCE_VM_ID_MAP0);
+	writel(vm_map1, cmdq->base + GCE_VM_ID_MAP1);
+	writel(vm_map2, cmdq->base + GCE_VM_ID_MAP2);
+	writel(vm_map3, cmdq->base + GCE_VM_ID_MAP3);
+}
+
 static void cmdq_gctl_value_toggle(struct cmdq *cmdq, bool ddr_enable)
 {
 	u32 val = (cmdq->pdata->control_by_sw) ? GCE_CTRL_BY_SW : 0;
@@ -173,16 +198,7 @@ static void cmdq_init(struct cmdq *cmdq)
 
 	WARN_ON(clk_bulk_enable(cmdq->pdata->gce_num, cmdq->clocks));
 
-	if (cmdq->pdata->gce_vm) {
-		/* config cpr size for host vm */
-		writel(GCE_VM_CPR_GSIZE_HSOT, cmdq->base + GCE_VM_CPR_GSIZE);
-		/* config CPR_GSIZE before setting VM_ID_MAP to avoid data leakage */
-		writel(GCE_VM_MAP0_ALL_HOST, cmdq->base + GCE_VM_ID_MAP0);
-		writel(GCE_VM_MAP1_ALL_HOST, cmdq->base + GCE_VM_ID_MAP1);
-		writel(GCE_VM_MAP2_ALL_HOST, cmdq->base + GCE_VM_ID_MAP2);
-		writel(GCE_VM_MAP3_ALL_HOST, cmdq->base + GCE_VM_ID_MAP3);
-	}
-
+	cmdq_vm_toggle(cmdq, true);
 	cmdq_gctl_value_toggle(cmdq, true);
 
 	writel(CMDQ_THR_ACTIVE_SLOT_CYCLES, cmdq->base + CMDQ_THR_SLOT_CYCLES);
@@ -366,6 +382,7 @@ static int cmdq_runtime_resume(struct device *dev)
 	if (ret)
 		return ret;
 
+	cmdq_vm_toggle(cmdq, true);
 	cmdq_gctl_value_toggle(cmdq, true);
 	return 0;
 }
@@ -375,6 +392,7 @@ static int cmdq_runtime_suspend(struct device *dev)
 	struct cmdq *cmdq = dev_get_drvdata(dev);
 
 	cmdq_gctl_value_toggle(cmdq, false);
+	cmdq_vm_toggle(cmdq, false);
 	clk_bulk_disable(cmdq->pdata->gce_num, cmdq->clocks);
 	return 0;
 }
