@@ -23,12 +23,6 @@
 #define DPTX_DPCD_TRANS_BYTES_MAX	16
 #define TOTAL_AVAVIL_SLOT		63
 
-static const u32 mt8196_output_fmts[] = {
-	MEDIA_BUS_FMT_RGB888_1X24,
-	MEDIA_BUS_FMT_YUV8_1X24,
-	MEDIA_BUS_FMT_YUYV8_1X16,
-};
-
 static void mtk_dp_mst_hal_enc_enable(struct mtk_dp *mtk_dp, const enum dp_encoder_id id,
 				const u8 enable)
 {
@@ -575,8 +569,8 @@ int mtk_dp_mst_drv_calculate_pbn(struct mtk_dp *mtk_dp,
 
 	need_pbn = drm_dp_calc_pbn_mode(pixel_clock, bpp << 4);
 
-	dev_dbg(mtk_dp->dev, "bpp %d, pixel_clock %d, need_pbn:%d\n",
-		bpp, pixel_clock, need_pbn);
+	dev_dbg(mtk_dp->dev, "bpp %d, pixel_clock %d, need_pbn:%d, dsc:%d\n",
+		bpp, pixel_clock, need_pbn, dsc);
 
 	return need_pbn;
 }
@@ -648,11 +642,17 @@ end:
 void mtk_dp_mst_drv_prepare(struct mtk_dp *mtk_dp)
 {
 	struct drm_dp_mst_topology_state *mst_state;
+	enum dp_encoder_id id;
 	int lane_count;
 	int link_rate;
 	u8 link_coding;
 
 	dev_dbg(mtk_dp->dev, "MST prepare\n");
+
+	for (id = 0; id < DP_ENCODER_NUM; id++) {
+		mtk_dp->info[id].format = DP_PIXELFORMAT_RGB;
+		mtk_dp->info[id].depth = DP_COLOR_DEPTH_8BIT;
+	}
 
 	mtk_dp_mst_drv_video_mute_all(mtk_dp);
 	mtk_dp_mst_drv_audio_mute_all(mtk_dp);
@@ -732,7 +732,9 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 		drm_dp_sink_supports_fec(mtk_con->fec_cap) &&
 		drm_dp_sink_supports_dsc(mtk_con->dsc_dpcd)
 		) {
-		need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, bpp, true);
+		/* DSC only support RGB 8bit now */
+		need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode,
+			mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT), true);
 		slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
 					dfixed_trunc(mst_state->pbn_div), need_pbn);
 		if (slots && (slots * dfixed_trunc(mst_state->pbn_div)) < valid_pbn &&
@@ -894,11 +896,7 @@ static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
 	struct drm_atomic_state *state = crtc_state->state;
 	struct drm_dp_mst_topology_state *mst_state;
 	struct mtk_dp_con *mtk_con;
-	struct drm_bridge_state *bridge_state;
-	struct drm_bridge *bridge = NULL;
 	struct mtk_dp *mtk_dp;
-	unsigned int out_bus_format;
-	enum dp_pixelformat format = DP_PIXELFORMAT_RGB;
 	int pbn_need;
 	int pbn_allocated;
 	int slot_need;
@@ -924,28 +922,25 @@ static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
 		return PTR_ERR(mst_state);
 	}
 
-	bridge = list_first_entry_or_null(&encoder->bridge_chain,
-				struct drm_bridge, chain_node);
-	if (bridge) {
-		bridge_state = drm_priv_to_bridge_state(bridge->base.state);
-		out_bus_format = bridge_state->output_bus_cfg.format;
-
-		if (out_bus_format == MEDIA_BUS_FMT_YUYV8_1X16)
-			format = DP_PIXELFORMAT_YUV422;
-		else
-			format = DP_PIXELFORMAT_RGB;
-	}
-
-	bpp = mtk_dp_color_get_bpp_v2(format, mtk_dp->info[id].depth);
+	bpp = mtk_dp_color_get_bpp_v2(mtk_dp->info[id].format, mtk_dp->info[id].depth);
 	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, &crtc_state->adjusted_mode, bpp, &dsc);
+
+	if (dsc)
+		bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
 
 	pbn_need = mtk_dp_mst_drv_calculate_pbn(mtk_dp, &crtc_state->adjusted_mode, bpp, dsc);
 	slot_need = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
 					dfixed_trunc(mst_state->pbn_div), pbn_need);
 	pbn_allocated = slot_need * dfixed_trunc(mst_state->pbn_div);
-
 	slot_allocated = drm_dp_atomic_find_time_slots(state,
 					&mtk_dp->mgr, mtk_con->port, pbn_allocated);
+
+	dev_dbg(mtk_dp->dev, "[%d] bpp:%d, dsc:%d, tt:%d %d, act:%d %d, fps:%d, clk:%d, pbn:%d %d, slot:%d %d\n",
+		id, bpp, dsc, crtc_state->adjusted_mode.htotal, crtc_state->adjusted_mode.vtotal,
+		crtc_state->adjusted_mode.hdisplay, crtc_state->adjusted_mode.vdisplay,
+		drm_mode_vrefresh(&crtc_state->adjusted_mode), crtc_state->adjusted_mode.clock,
+		pbn_need, pbn_allocated, slot_need, slot_allocated);
+
 	if (slot_allocated < 0) {
 		dev_err(mtk_dp->dev, "fail to find time slots:%d", slot_allocated);
 		ret = slot_allocated;
@@ -961,11 +956,10 @@ static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
 	return 0;
 
 fail:
-	dev_err(mtk_dp->dev, "encoder[%d] tt:%d %d, act:%d %d, fps:%d, clk:%d, pbn:%d %d, slots:%d %d\n",
-		id,
-		mtk_dp->mode[id].htotal, mtk_dp->mode[id].vtotal,
-		mtk_dp->mode[id].hdisplay, mtk_dp->mode[id].vdisplay,
-		drm_mode_vrefresh(&mtk_dp->mode[id]), mtk_dp->mode[id].clock,
+	dev_err(mtk_dp->dev, "[%d] bpp:%d, dsc:%d, tt:%d %d, act:%d %d, fps:%d, clk:%d, pbn:%d %d, slot:%d %d\n",
+		id, bpp, dsc, crtc_state->adjusted_mode.htotal, crtc_state->adjusted_mode.vtotal,
+		crtc_state->adjusted_mode.hdisplay, crtc_state->adjusted_mode.vdisplay,
+		drm_mode_vrefresh(&crtc_state->adjusted_mode), crtc_state->adjusted_mode.clock,
 		pbn_need, pbn_allocated, slot_need, slot_allocated);
 
 	return ret;
@@ -977,10 +971,7 @@ static void mtk_dp_mst_encoder_atomic_mode_set(struct drm_encoder *encoder,
 {
 	struct drm_dp_mst_topology_state *mst_state;
 	struct mtk_dp_con *mtk_con;
-	struct drm_bridge_state *bridge_state;
-	struct drm_bridge *bridge = NULL;
 	struct mtk_dp *mtk_dp;
-	unsigned int out_bus_format;
 	bool dsc = false;
 	u8 bpp;
 	int id;
@@ -1003,29 +994,13 @@ static void mtk_dp_mst_encoder_atomic_mode_set(struct drm_encoder *encoder,
 
 	drm_mode_copy(&mtk_dp->mode[id], &crtc_state->adjusted_mode);
 
-	bridge = list_first_entry_or_null(&encoder->bridge_chain,
-				struct drm_bridge, chain_node);
-	if (bridge) {
-		bridge_state = drm_priv_to_bridge_state(bridge->base.state);
-		out_bus_format = bridge_state->output_bus_cfg.format;
-
-		dev_dbg(mtk_dp->dev, "encoder[%d] mst mode set, format:0x%04x 0x%04x",
-			id,
-			bridge_state->input_bus_cfg.format,
-			bridge_state->output_bus_cfg.format);
-
-		if (out_bus_format == MEDIA_BUS_FMT_YUYV8_1X16)
-			mtk_dp->info[id].format = DP_PIXELFORMAT_YUV422;
-		else
-			mtk_dp->info[id].format = DP_PIXELFORMAT_RGB;
-	}
-
 	bpp = mtk_dp_color_get_bpp_v2(mtk_dp->info[id].format, mtk_dp->info[id].depth);
 	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, &mtk_dp->mode[id], bpp, &dsc);
 
 	mtk_dp->dsc_enable[id] = dsc;
 	if (mtk_dp->dsc_enable[id]) {
 		mtk_dp->info[id].format = DP_PIXELFORMAT_RGB;
+		mtk_dp->info[id].depth = DP_COLOR_DEPTH_8BIT;
 		mtk_dp_dsc_check_prepare_v2(mtk_dp, id);
 		mtk_dp->prop_dsc_enable[id]->values[0] = 1;
 	} else {
@@ -1137,23 +1112,22 @@ static enum drm_mode_status mtk_dp_mst_connector_mode_valid(struct drm_connector
 	u8 id;
 	enum drm_mode_status mode_status;
 	bool dsc = false;
-	u8 bpp = 24;
+	u8 bpp;
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
 	id = mtk_con->encoder_id;
 
-	dev_dbg(mtk_dp->dev, "[%d] mst Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d, YCBCR422:%d\n",
+	dev_dbg(mtk_dp->dev, "[%d] mst Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
 		id, mode->htotal, mode->vtotal,
 		mode->hdisplay, mode->vdisplay,
-		drm_mode_vrefresh(mode), mode->clock,
-		connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR422);
+		drm_mode_vrefresh(mode), mode->clock);
 
-	bpp = connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR422 ? 16 : 24;
-
+	/* MST only support RGB 8bit now */
+	bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
 	mode_status = mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, mode, bpp, &dsc);
 
-	dev_dbg(mtk_dp->dev, "[%d] mst statsu:%d, dsc:%d, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
+	dev_dbg(mtk_dp->dev, "[%d] mst status:%d, dsc:%d, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
 		id, mode_status, dsc,
 		mode->htotal, mode->vtotal,
 		mode->hdisplay, mode->vdisplay,
@@ -1327,10 +1301,6 @@ static struct drm_connector *mtk_dp_add_connector(struct drm_dp_mst_topology_mgr
 		dev_dbg(mtk_dp->dev, "create con, fail to register connector:%d\n", ret);
 		goto end;
 	}
-
-	drm_display_info_set_bus_formats(&mtk_con->connector.display_info,
-		mt8196_output_fmts,
-		ARRAY_SIZE(mt8196_output_fmts));
 
 	dev_dbg(mtk_dp->dev, "create con, create mtk connector[%d]\n", con_id);
 

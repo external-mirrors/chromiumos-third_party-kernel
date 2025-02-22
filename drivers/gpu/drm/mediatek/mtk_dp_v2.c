@@ -4405,6 +4405,7 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 {
 	u32 rate;
 	int pixel_clock;
+	u8 color_bpp;
 
 	enum drm_mode_status ret = MODE_CLOCK_HIGH;
 
@@ -4420,10 +4421,12 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 		goto end;
 	}
 
-	if (mtk_dp->data->dsc_support &&
+	if (mtk_dp->data->dsc_support && mtk_dp->mtk_con[DP_FIRST_CON] &&
+		drm_dp_sink_supports_dsc(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd) &&
 		drm_dp_sink_supports_fec(mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap)) {
 		pixel_clock = mtk_dp_dsc_cal_clock_v2(mode);
-		if ((pixel_clock * DP_DSC_BPP / 8) < rate) {
+		color_bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
+		if ((pixel_clock * color_bpp / 8) < rate) {
 			*dsc = true;
 			ret = MODE_OK;
 		}
@@ -4486,6 +4489,7 @@ static void mtk_dp_encoder_mode_set_v2(struct drm_encoder *encoder,
 
 	if (mtk_dp->dsc_enable[encoder_id]) {
 		mtk_dp->info[encoder_id].format = DP_PIXELFORMAT_RGB;
+		mtk_dp->info[encoder_id].depth = DP_COLOR_DEPTH_8BIT;
 		mtk_dp_dsc_check_prepare_v2(mtk_dp, encoder_id);
 		mtk_dp->prop_dsc_enable[encoder_id]->values[0] = 1;
 	} else {
@@ -4920,87 +4924,55 @@ static u32 *mtk_dp_bridge_atomic_get_input_bus_fmts_v2(struct drm_bridge *bridge
 						       unsigned int *num_input_fmts)
 {
 	u32 *input_fmts;
-	bool dsc = false;
-	int slots = 0;
-	int need_pbn = 0;
-	int valid_pbn = 0;
+	bool dsc = false, use_platform_format = false;
 	u8 bpp;
 	bool support_422 = false;
 	struct mtk_dp *mtk_dp = mtk_dp_from_bridge_v2(bridge);
 	struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 	u32 lane_count_min = mtk_dp->training_info.link_lane_count;
-	u32 rate = drm_dp_bw_code_to_link_rate(mtk_dp->training_info.link_rate) *
-			 lane_count_min;
-	struct drm_dp_mst_topology_state *state;
+	u32 rate = drm_dp_bw_code_to_link_rate(mtk_dp->training_info.link_rate) * lane_count_min;
+	int fmt = MEDIA_BUS_FMT_RGB888_1X24; /* default format: RGB888 */
 
-	state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-
-	*num_input_fmts = 0;
-
-	dev_dbg(mtk_dp->dev, "get input fmts, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d, YCBCR422:%d\n",
-		mode->htotal, mode->vtotal,
-		mode->hdisplay, mode->vdisplay,
-		drm_mode_vrefresh(mode), mode->clock,
-		conn_state->connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR422);
+	if (mtk_dp->mst_enable)
+		goto set_fmts;
 
 	support_422 = conn_state->connector->display_info.color_formats &
 		DRM_COLOR_FORMAT_YCBCR422 ? true : false;
-
 	bpp = support_422 ? 16 : 24;
 	mtk_dp_check_mode_v2(mtk_dp, mode, bpp, &dsc);
 	if (dsc)
-		goto fmts;
+		goto set_fmts;
 
-	if (!mtk_dp->mst_enable) {
-		if (rate > (mode->clock * 24 / 8))
-			goto fmts;
-		else if ((support_422) &&
-			 rate > (mode->clock * 16 / 8))
-			goto ycbcr422;
-
+	/* SSC + FEC would occupy 3% */
+	rate = rate * 97 / 100;
+	if (rate > (mode->clock * 24 / 8))
+		use_platform_format = true;
+	else if (support_422 && rate > (mode->clock * 16 / 8))
+		fmt = MEDIA_BUS_FMT_YUYV8_1X16;
+	else
 		goto end;
-	}
 
-	/* divide the total equally for one stream */
-	valid_pbn = (dfixed_trunc(state->pbn_div) * 63) / DP_ENCODER_NUM;
-	need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, 24, false);
-	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
-					       dfixed_trunc(state->pbn_div), need_pbn);
-	if (slots && (slots * dfixed_trunc(state->pbn_div)) < valid_pbn) {
-		goto fmts;
-	} else if (support_422) {
-		need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, 16, false);
-		slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
-						       dfixed_trunc(state->pbn_div), need_pbn);
-		if (slots && (slots * dfixed_trunc(state->pbn_div)) < valid_pbn)
-			goto ycbcr422;
-	}
-
-	goto end;
-
-fmts:
-	input_fmts = kcalloc(ARRAY_SIZE(mt8196_input_fmts),
-			     sizeof(*input_fmts),
-			     GFP_KERNEL);
+set_fmts:
+	*num_input_fmts = use_platform_format ? ARRAY_SIZE(mt8196_input_fmts) : 1;
+	input_fmts = kcalloc(*num_input_fmts, sizeof(*input_fmts), GFP_KERNEL);
 	if (!input_fmts)
 		return NULL;
 
-	*num_input_fmts = ARRAY_SIZE(mt8196_input_fmts);
-	memcpy(input_fmts, mt8196_input_fmts, sizeof(mt8196_input_fmts));
-	dev_dbg(mtk_dp->dev, "get_input_bus_fmts, mt8196_input_fmts");
-	return input_fmts;
+	if (use_platform_format)
+		memcpy(input_fmts, mt8196_input_fmts, sizeof(mt8196_input_fmts));
+	else
+		input_fmts[0] = fmt;
 
-ycbcr422:
-	input_fmts = kcalloc(1, sizeof(*input_fmts), GFP_KERNEL);
-	if (!input_fmts)
-		return NULL;
-
-	*num_input_fmts = 1;
-	input_fmts[0] = MEDIA_BUS_FMT_YUYV8_1X16;
-	dev_dbg(mtk_dp->dev, "get_input_bus_fmts, MEDIA_BUS_FMT_YUYV8_1X16");
+	dev_dbg(mtk_dp->dev, "get_input_bus_fmts, fmt:%s",
+		(!use_platform_format) ?
+		(input_fmts[0] == MEDIA_BUS_FMT_YUYV8_1X16) ?
+			"MEDIA_BUS_FMT_YUYV8_1X16" : "MEDIA_BUS_FMT_RGB888_1X24" :
+		"mt8196_input_fmts");
 	return input_fmts;
 
 end:
+	*num_input_fmts = 0;
+	dev_err(mtk_dp->dev, "get_input_bus_fmts, return NULL");
 	return NULL;
 }
 
