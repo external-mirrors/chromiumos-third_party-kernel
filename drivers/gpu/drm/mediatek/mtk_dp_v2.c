@@ -2057,7 +2057,10 @@ void mtk_dp_audio_mute_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 				AU_EN_DP_ENCODER0_P0_FLDMASK,
 				AU_EN_DP_ENCODER0_P0_FLDMASK);
 
-		WRITE_BYTE(mtk_dp, REG_30A4_DP_ENCODER0_P0 + reg_offset, 0x1);
+		WRITE_BYTE(mtk_dp, REG_30A4_DP_ENCODER0_P0 + reg_offset,
+			   (1 << AUDIO_TS_SEND_EN_DP_ENCODER0_P0_FLDMASK_POS) |
+			   (AUDIO_TS_SEND_FREQ_TYPE_ONE_IN_EVERY_N_PLUS_1_FRAMES
+			   << AUDIO_TS_SEND_FREQ_TYPE_DP_ENCODER0_P0_FLDMASK_POS));
 	}
 }
 
