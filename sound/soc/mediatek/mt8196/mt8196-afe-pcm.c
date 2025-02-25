@@ -4685,7 +4685,8 @@ static irqreturn_t mt8196_afe_irq_handler(int irq_id, void *dev)
 err_irq:
 	/* clear irq */
 	for (i = 0; i < MT8196_IRQ_NUM; ++i) {
-		if (status_mcu & (0x1 << i)) {
+		/* cus_status_mcu only bit0 is used for TDM */
+		if (status_mcu & (0x1 << i) || cus_status_mcu & 0x1) {
 			regmap_read(afe->regmap, irq_data[i].irq_clr_reg, &tmp_reg);
 			regmap_update_bits(afe->regmap, irq_data[i].irq_clr_reg,
 					AFE_IRQ_CLR_CFG_MASK_SFT | AFE_IRQ_MISS_FLAG_CLR_CFG_MASK_SFT,
