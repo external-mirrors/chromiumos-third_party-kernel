@@ -1769,8 +1769,7 @@ static const struct scp_domain_data scp_domain_mt8196_spm_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_VOTE_MTCMOS_SET_STATUS0,
 		.hwv_clr_sta_ofs = MT8196_VOTE_MTCMOS_CLR_STATUS0,
 		.hwv_shift = MT8196_VOTE_MM_PROC_SHIFT,
-		/* TODO: drop MTK_SCPD_ALWAYS_ON after fixing suspend issue. */
-		.caps = MTK_SCPD_HWV_OPS | MTK_SCPD_IRQ_SAVE | MTK_SCPD_ALWAYS_ON,
+		.caps = MTK_SCPD_HWV_OPS | MTK_SCPD_IRQ_SAVE,
 	},
 	[MT8196_POWER_DOMAIN_SSR] = {
 		.name = "ssrsys",
