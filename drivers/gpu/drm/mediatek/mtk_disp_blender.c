@@ -74,6 +74,7 @@
 #define OVL_BLD_L_ALPHA_EN					BIT(12)
 #define DISP_REG_OVL_BLD_L0_PITCH			0x208
 #define OVL_L0_CONST_BLD					BIT(24)
+#define DISP_REG_OVL_BLD_L0_CLR				0x20c
 
 struct mtk_disp_blender {
 	void __iomem		*regs;
@@ -159,8 +160,7 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 
 	if (!pending->enable) {
-		mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-				   DISP_REG_OVL_BLD_L_EN, OVL_BLD_L_EN);
+		mtk_ddp_write(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
 		return;
 	}
 
@@ -184,8 +184,7 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 	mtk_ddp_write_mask(cmdq_pkt, alpha, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_BLD_L_CON2, OVL_BLD_L_ALPHA_EN | OVL_BLD_L_ALPHA);
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_L_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_BLD_L_EN, OVL_BLD_L_EN);
+	mtk_ddp_write(cmdq_pkt, OVL_BLD_L_EN, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
 
 	if (blend_mode == DRM_MODE_BLEND_PIXEL_NONE)
 		mtk_ddp_write_mask(cmdq_pkt, OVL_L0_CONST_BLD, &priv->cmdq_reg, priv->regs,
@@ -213,6 +212,8 @@ void mtk_disp_blender_config(struct device *dev, unsigned int w,
 		      DISP_REG_OVL_BLD_ROI_SIZE);
 	mtk_ddp_write(cmdq_pkt, DISP_OVL_BLD_BGCLR_BALCK, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_OVL_BLD_BGCLR_CLR);
+	mtk_ddp_write(cmdq_pkt, DISP_OVL_BLD_BGCLR_BALCK, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_OVL_BLD_L0_CLR);
 
 	if (blender == FIRST_BLENDER)
 		mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER,
@@ -248,8 +249,7 @@ void mtk_disp_blender_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
 
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_BLD_L_EN, OVL_BLD_L_EN);
+	mtk_ddp_write(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
 	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_BLD_EN, OVL_BLD_EN);
 	mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_RST, &priv->cmdq_reg, priv->regs,
