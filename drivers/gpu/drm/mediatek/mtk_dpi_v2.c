@@ -849,6 +849,12 @@ static void mtk_dpi_bridge_pre_enable_v2(struct drm_bridge *bridge)
 
 	mtk_dpi_power_on_v2(dpi);
 	mtk_dpi_set_display_mode_v2(dpi, &dpi->mode);
+
+	/* TODO: Remove temporary solutions and follow API specifications */
+	mtk_dpi_enable_v2(dpi);
+	/* TODO: Use DPI IRQ to implement 3 vsync delays */
+	/* HW implementation requires 3 vsync delays to wait for dpi to stabilize */
+	mdelay(1000 / drm_mode_vrefresh(&dpi->mode) * 3);
 }
 
 static void mtk_dpi_bridge_enable_v2(struct drm_bridge *bridge)
@@ -856,7 +862,6 @@ static void mtk_dpi_bridge_enable_v2(struct drm_bridge *bridge)
 	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
 
 	dev_dbg(dpi->dev, "dpi enabled\n");
-	mtk_dpi_enable_v2(dpi);
 }
 
 static enum drm_mode_status
