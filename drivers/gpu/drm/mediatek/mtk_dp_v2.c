@@ -3717,6 +3717,8 @@ void mtk_dp_video_disable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id enc
 
 	mtk_dp_stop_sent_sdp_v2(mtk_dp, encoder_id);
 	mtk_dp_sdp_path_reset_v2(mtk_dp, encoder_id);
+
+	mtk_dp_dsc_disable_v2(mtk_dp, encoder_id);
 }
 
 static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
