@@ -2163,8 +2163,6 @@ static uint64_t kerbin_total_size;
 static ssize_t mvpu_img_show(struct kobject *kobj, struct kobj_attribute *attr,
 			 char *buf)
 {
-	int ret = 0;
-
 	if (ptn_total_size == 0)
 		ptn_total_size = mvpu25_get_ptn_total_size();
 	else
@@ -2175,17 +2173,7 @@ static ssize_t mvpu_img_show(struct kobject *kobj, struct kobj_attribute *attr,
 	else
 		pr_info("[MVPU] already get kerbin_total_size: 0x%llx\n", kerbin_total_size);
 
-	ret = sprintf(buf, "0x%llx", ptn_total_size + kerbin_total_size + 32);
-	if (ret < 0) {
-		pr_info("[MVPU] %s, sprintf error\n", __func__);
-		return ret;
-	}
-
-	pr_info("[MVPU] %s, ptn_size = 0x%x, kerbin_size = 0x%x, mvpu_img_sz = 0x%x\n",
-		__func__, (uint32_t)ptn_total_size, (uint32_t)kerbin_total_size,
-		(uint32_t)(ptn_total_size + kerbin_total_size + 32));
-
-	return ret;
+	return sysfs_emit(buf, "0x%llx\n", ptn_total_size + kerbin_total_size + 32);
 }
 
 static ssize_t mvpu_img_store(struct kobject *kobj, struct kobj_attribute *attr,

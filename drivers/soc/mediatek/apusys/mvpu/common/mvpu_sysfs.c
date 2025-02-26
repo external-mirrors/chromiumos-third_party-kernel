@@ -15,19 +15,11 @@ static ssize_t loglevel_show(struct kobject *kobj, struct kobj_attribute *attr,
 			 char *buf)
 {
 	uint64_t level = 0;
-	int ret = 0;
 
 	g_mvpu_platdata->ops->mvpu_ipi_send(MVPU_IPI_LOG_LEVEL, MVPU_IPI_READ, &level);
 
 	pr_info("[MVPU] %s, level= %llu\n", __func__, level);
-	ret = sprintf(buf, "mvpu log level= %llu\n", level);
-
-	if (ret < 0) {
-		pr_info("[MVPU] %s, sprintf fail(%d)\n", __func__, ret);
-		return 0;
-	}
-
-	return ret;
+	return sysfs_emit(buf, "mvpu log level= %llu\n", level);
 }
 
 static ssize_t loglevel_store(struct kobject *kobj, struct kobj_attribute *attr,
