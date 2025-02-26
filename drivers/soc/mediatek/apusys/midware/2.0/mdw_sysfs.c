@@ -17,23 +17,16 @@ static ssize_t reserv_time_remain_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct mdw_device *mdev = mdw_dev;
-	int ret = 0;
 	uint32_t num = 0;
 
 	if (!mdev) {
 		mdw_drv_err("no mdw device\n");
-		ret = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	/* get dma normal task num */
 	num = mdev->plat_funcs->get_info(mdev, MDW_INFO_RESERV_TIME_REMAIN);
-	ret = sprintf(buf, "%u\n", num);
-	if (ret < 0)
-		mdw_drv_warn("show reserv_time_remain fail(%d)\n", ret);
-
-out:
-	return ret;
+	return sysfs_emit(buf, "%u\n", num);
 }
 static DEVICE_ATTR_RO(reserv_time_remain);
 
@@ -41,23 +34,16 @@ static ssize_t dsp_task_num_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct mdw_device *mdev = mdw_dev;
-	int ret = 0;
 	uint32_t num = 0;
 
 	if (!mdev) {
 		mdw_drv_err("no mdw device\n");
-		ret = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	/* get dma normal task num */
 	num = mdev->plat_funcs->get_info(mdev, MDW_INFO_NORMAL_TASK_DSP);
-	ret = sprintf(buf, "%u\n", num);
-	if (ret < 0)
-		mdw_drv_warn("show dsp task num fail(%d)\n", ret);
-
-out:
-	return ret;
+	return sysfs_emit(buf, "%u\n", num);
 }
 static DEVICE_ATTR_RO(dsp_task_num);
 
@@ -65,23 +51,16 @@ static ssize_t dla_task_num_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct mdw_device *mdev = mdw_dev;
-	int ret = 0;
 	uint32_t num = 0;
 
 	if (!mdev) {
 		mdw_drv_err("no mdw device\n");
-		ret = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	/* get dla normal task num */
 	num = mdev->plat_funcs->get_info(mdev, MDW_INFO_NORMAL_TASK_DLA);
-	ret = sprintf(buf, "%u\n", num);
-	if (ret < 0)
-		mdw_drv_warn("show dla task num fail(%d)\n", ret);
-
-out:
-	return ret;
+	return sysfs_emit(buf, "%u\n", num);
 }
 static DEVICE_ATTR_RO(dla_task_num);
 
@@ -89,23 +68,16 @@ static ssize_t dma_task_num_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct mdw_device *mdev = mdw_dev;
-	int ret = 0;
 	uint32_t num = 0;
 
 	if (!mdev) {
 		mdw_drv_err("no mdw device\n");
-		ret = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	/* get dma normal task num */
 	num = mdev->plat_funcs->get_info(mdev, MDW_INFO_NORMAL_TASK_DMA);
-	ret = sprintf(buf, "%u\n", num);
-	if (ret < 0)
-		mdw_drv_warn("show dma task num fail(%d)\n", ret);
-
-out:
-	return ret;
+	return sysfs_emit(buf, "%u\n", num);
 }
 static DEVICE_ATTR_RO(dma_task_num);
 
@@ -175,22 +147,15 @@ static ssize_t ulog_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct mdw_device *mdev = mdw_dev;
-	int ret = 0;
 	uint32_t log_lv = 0;
 
 	if (!mdev) {
 		mdw_drv_err("no mdw device\n");
-		ret = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	log_lv = mdev->plat_funcs->get_info(mdev, MDW_INFO_ULOG);
-	ret = sprintf(buf, "%u\n", log_lv);
-	if (ret < 0)
-		mdw_drv_warn("show ulog fail(%d)\n", log_lv);
-
-out:
-	return ret;
+	return sysfs_emit(buf, "%u\n", log_lv);
 }
 
 static ssize_t ulog_store(struct device *dev,
@@ -218,22 +183,15 @@ static ssize_t klog_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct mdw_device *mdev = mdw_dev;
-	int ret = 0;
 	uint32_t log_lv = 0;
 
 	if (!mdev) {
 		mdw_drv_err("no mdw device\n");
-		ret = -ENODEV;
-		goto out;
+		return -ENODEV;
 	}
 
 	log_lv = mdev->plat_funcs->get_info(mdev, MDW_INFO_KLOG);
-	ret = sprintf(buf, "%u\n", log_lv);
-	if (ret < 0)
-		mdw_drv_warn("show klog fail(%d)\n", log_lv);
-
-out:
-	return ret;
+	return sysfs_emit(buf, "%u\n", log_lv);
 }
 
 static ssize_t klog_store(struct device *dev,
@@ -260,15 +218,10 @@ static DEVICE_ATTR_RW(klog);
 static ssize_t tlog_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	int ret = 0;
 	uint32_t log_lv = 0;
 
 	log_lv = cfg_apusys_trace;
-	ret = sprintf(buf, "%u\n", log_lv);
-	if (ret < 0)
-		mdw_drv_warn("show tlog fail(%d)\n", log_lv);
-
-	return ret;
+	return sysfs_emit(buf, "%u\n", log_lv);
 }
 
 static ssize_t tlog_store(struct device *dev,
