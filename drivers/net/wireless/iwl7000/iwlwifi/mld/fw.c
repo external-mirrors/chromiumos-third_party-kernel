@@ -372,6 +372,10 @@ void iwl_mld_stop_fw(struct iwl_mld *mld)
 
 	iwl_trans_stop_device(mld->trans);
 
+	wiphy_work_cancel(mld->wiphy, &mld->async_handlers_wk);
+
+	iwl_mld_purge_async_handlers_list(mld);
+
 	mld->fw_status.running = false;
 }
 
