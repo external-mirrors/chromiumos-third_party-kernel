@@ -82,7 +82,6 @@
 #define DP_TBC_BUF_READ_START_ADR_THRD	0x08
 #define ENABLE_DP_FIX_TPS2			0x0
 #define ENABLE_DP_SSC_FORCEON		0
-#define ENABLE_DP_SSC_OUTPUT		0
 #define ENCODER_1_IRQ_MSK			BIT(3)
 #define ENCODER_IRQ_MSK				BIT(0)
 #define IEC_CH_STATUS_LEN			5
@@ -3041,7 +3040,7 @@ static void mtk_dp_phy_reset_swing_pre_v2(struct mtk_dp *mtk_dp)
 			     DP_TX_FORCE_PRE_EMPH_VAL_FLDMASK);
 }
 
-static void mtk_dp_phy_ssc_enable_v2(struct mtk_dp *mtk_dp, const u8 enable)
+static void mtk_dp_phy_ssc_enable_v2(struct mtk_dp *mtk_dp, bool enable)
 {
 	if (enable)
 		PHY_WRITE_BYTE_MASK(mtk_dp, PHYD_DIG_GLB_OFFSET + DP_PHY_DIG_PLL_CTL_1,
@@ -3180,7 +3179,7 @@ static void mtk_dp_phy_setting_v2(struct mtk_dp *mtk_dp)
 }
 
 static void mtk_dp_phy_training_config_v2(struct mtk_dp *mtk_dp, const u8 link_rate,
-				const u8 lane_count, const u8 ssc_enable)
+				const u8 lane_count, bool ssc_enable)
 {
 	mtk_dp_phy_reset_swing_pre_v2(mtk_dp);
 	mtk_dp_phy_ssc_enable_v2(mtk_dp, ssc_enable);
@@ -3202,20 +3201,25 @@ static void mtk_dp_phy_set_idle_pattern_v2(struct mtk_dp *mtk_dp, bool enable)
 	WRITE_BYTE_MASK(mtk_dp, REG_3580_DP_TRANS_P0 + 1, enable ? 0x0f : 0x00, 0x0f);
 }
 
-static bool mtk_dp_ssc_check_v2(struct mtk_dp *mtk_dp, u8 *p_enable)
+static bool mtk_dp_ssc_check_v2(struct mtk_dp *mtk_dp, bool *p_enable)
 {
 	u8 status = 0;
 	u8 ret = 0;
 
-	*p_enable = false;
-	dev_dbg(mtk_dp->dev, "DP not support SSC, force off !\n");
+	*p_enable = mtk_dp->training_info.sink_ssc_en;
+	/* write DPCD_00107 = BIT4 when SSC enable */
 
+	status = *p_enable ? BIT(4) : 0;
 	ret = drm_dp_dpcd_write(&mtk_dp->aux, DPCD_00107, &status, 0x1);
 
 	if (ret < 0) {
+		*p_enable = false;
 		dev_err(mtk_dp->dev, "Write DPCD_00107 Fail!!!\n");
 		return false;
 	}
+
+	dev_dbg(mtk_dp->dev, "%s SSC via DPCD_00107\n",
+		(*p_enable) ? "Enable" : "Disable ");
 
 	return true;
 }
@@ -5146,7 +5150,7 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 	u8 loop = 0;
 	u8 cr_loop = 0;
 	u8 eq_loop = 0;
-	u8 ssc_enable = false;
+	bool ssc_enable = false;
 	enum dp_train_stage res = DP_LT_NONE;
 
 	memset(temp, 0x0, sizeof(temp));
