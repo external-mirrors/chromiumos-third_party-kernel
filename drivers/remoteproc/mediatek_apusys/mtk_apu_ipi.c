@@ -290,6 +290,7 @@ static void mtk_apu_ipi_bottom_handle(struct mbox_client *cl, void *mssg)
 	if (!handler) {
 		dev_err(dev, "IPI id=%d is not registered", id);
 		mutex_unlock(&apu->ipi_desc[id].lock);
+		return;
 	}
 
 	apu->current_ipi_handler_id = id;
