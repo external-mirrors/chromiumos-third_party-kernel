@@ -193,6 +193,7 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	struct mtk_ddp_comp *ddp_first_comp;
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct cmdq_pkt *cmdq_handle;
+	struct cmdq_sec_data *sec_data;
 
 	if (!mtk_crtc->sec_cmdq_client.chan) {
 		dev_err(crtc->dev->dev,
@@ -227,6 +228,9 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 		kfree(cmdq_handle);
 		return;
 	}
+	/* make sure this disable secure layer command won't be dropped */
+	sec_data = (struct cmdq_sec_data *)cmdq_handle->sec_data;
+	sec_data->needs_vblank = true;
 
 	/*
 	 * Secure path only support DL mode, so we just wait
