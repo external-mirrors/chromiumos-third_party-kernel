@@ -695,10 +695,12 @@ void iwl_mld_handle_tlc_notif(struct iwl_mld *mld,
 		enabled = 0;
 	}
 
-	if (IWL_FW_CHECK(mld, size > link_sta->agg.max_amsdu_len,
-			 "Invalid AMSDU len in TLC notif: %d (Max AMSDU len: %d)\n",
-			 size, link_sta->agg.max_amsdu_len))
+	if (size > link_sta->agg.max_amsdu_len) {
+		IWL_ERR(mld,
+			"Invalid AMSDU len in TLC notif: %d (Max AMSDU len: %d)\n",
+			size, link_sta->agg.max_amsdu_len);
 		return;
+	}
 
 	link_sta->agg.max_rc_amsdu_len = size;
 
