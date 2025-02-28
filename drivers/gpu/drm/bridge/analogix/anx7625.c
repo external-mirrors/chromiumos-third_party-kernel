@@ -923,6 +923,87 @@ static int anx7625_hdcp_key_probe(struct anx7625_data *ctx)
 	return 0;
 }
 
+static enum anx7625_hdcp_state anx7625_hdcp_get_state(struct anx7625_data *ctx)
+{
+	enum anx7625_hdcp_state state;
+
+	mutex_lock(&ctx->hdcp_state_lock);
+	state = ctx->hdcp_state;
+	mutex_unlock(&ctx->hdcp_state_lock);
+
+	return state;
+}
+static int anx7625_hdcp_set_state(struct anx7625_data *ctx,
+				  enum anx7625_hdcp_state hdcp_state)
+{
+	mutex_lock(&ctx->hdcp_state_lock);
+	ctx->hdcp_state = hdcp_state;
+	mutex_unlock(&ctx->hdcp_state_lock);
+
+	return 0;
+}
+
+static int anx7625_hdcp_key_load(struct anx7625_data *ctx, bool hdcp_1_4)
+{
+	int ret;
+	struct device *dev = ctx->dev;
+	u8 val;
+	u16 key_addr, key_size, sram_addr;
+
+	if (hdcp_1_4) {
+		val = HDCP14KEY_LOAD;
+		key_addr = HDCP14KEY_START_ADDR;
+		key_size = HDCP14KEY_SIZE;
+		sram_addr = HDCP14KEY_RAM_ADDR;
+	} else {
+		val = HDCP22KEY_LOAD;
+		key_addr = HDCP22KEY_START_ADDR;
+		key_size = HDCP22KEY_SIZE;
+		sram_addr = HDCP22KEY_RAM_ADDR;
+	}
+
+	/* Select HDCP KEY */
+	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				R_BOOT_RETRY, val);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 FLASH_ADDR_HIGH, (key_addr >> 8) & 0xFF);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 FLASH_ADDR_LOW, key_addr & 0xFF);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 R_RAM_LEN_H, (key_size >> 12) & 0xFF);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 R_RAM_LEN_L, (key_size >> 4) & 0xFF);
+
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 R_RAM_ADDR_H, (sram_addr >> 8) & 0xFF);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 R_RAM_ADDR_L, sram_addr & 0xFF);
+	/* Enable HDCP KEY load */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 R_RAM_CTRL, DECRYPT_EN | LOAD_START);
+	if (ret) {
+		dev_err(dev, "enable load flash key failed\n");
+		return ret;
+	}
+	usleep_range(10000, 11000);
+
+	ret = anx7625_reg_read(ctx, ctx->i2c.rx_p0_client, R_RAM_CTRL);
+	if (ret < 0) {
+		dev_err(dev, "load flash key failed\n");
+		return ret;
+	}
+
+	if ((ret & CRC_OK) && (ret & LOAD_DONE)) {
+		dev_dbg(dev, "load HDCP key done\n");
+		return 0;
+	}
+
+	dev_dbg(dev, "load HDCP key failed\n");
+
+	return -EIO;
+}
+
+
 static int anx7625_hdcp_disable(struct anx7625_data *ctx)
 {
 	int ret;
@@ -945,79 +1026,47 @@ static int anx7625_hdcp_disable(struct anx7625_data *ctx)
 
 static int anx7625_hdcp_enable(struct anx7625_data *ctx, int hct)
 {
-	u8 bcap, bcap_2_2;
+	u8 bcap;
 	int ret;
 	struct device *dev = ctx->dev;
 
 	if (!ctx->hdcp_key_exist) {
-		dev_dbg(dev, "no key found, not to do hdcp\n");
-		return 0;
+		dev_err(dev, "no key found, not to do hdcp\n");
+		return -EIO;
 	}
 
-	/* Read downstream HDCP 2.2 capability */
-	ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ,
-				DP_HDCP_2_2_REG_RX_CAPS_OFFSET, 1, &bcap_2_2);
-	if (ret < 0)
-		return ret;
+	if (hct == DRM_MODE_HDCP_CONTENT_TYPE1) {
+		dev_dbg(dev, "use HDCP Content type1");
 
-	if (!(bcap_2_2 & BIT(1))) {
-		dev_dbg(dev, "downstream not support HDCP 2.2, cap(%x)\n", bcap_2_2);
-
-		if (hct == DRM_MODE_HDCP_CONTENT_TYPE1) {
-			dev_dbg(dev, "Video source is HDCP 2.2, SINK device not support HDCP 2.2\n");
-			return 0;
-		}
-		dev_dbg(dev, "continue to detect HDCP 1.4\n");
-
-		/* Read downstream 1.4 capability */
-		ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ, DP_AUX_HDCP_BCAPS, 1, &bcap);
+		/* Read downstream HDCP 2.2 capability */
+		ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ,
+					DP_HDCP_2_2_REG_RX_CAPS_OFFSET, 1, &bcap);
 		if (ret < 0)
 			return ret;
 
-		if (!(bcap & DP_BCAPS_HDCP_CAPABLE)) {
-			dev_warn(dev, "downstream not support HDCP 1.4, cap(%x).\n", bcap);
-			return 0;
+		if (!(bcap & BIT(1))) {
+			dev_dbg(dev, "downstream not support HDCP 2.2\n");
+			return -EIO;
 		}
-		dev_dbg(dev, "enable HDCP 1.4\n");
-	} else {
+
 		dev_dbg(dev, "enable HDCP 2.2\n");
+		ctx->hdcp_1_4 = false;
+		return 0;
 	}
 
-	/* First clear HDCP state */
-	ret = anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				TX_HDCP_CTRL0,
-				KSVLIST_VLD | BKSV_SRM_PASS | RE_AUTHEN);
-	usleep_range(1000, 1100);
-	/* Second clear HDCP state */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				 TX_HDCP_CTRL0,
-				 KSVLIST_VLD | BKSV_SRM_PASS | RE_AUTHEN);
-
-	/* Set time for waiting KSVR */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				 SP_TX_WAIT_KSVR_TIME, 0xc8);
-	/* Set time for waiting R0 */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				 SP_TX_WAIT_R0_TIME, 0xb0);
-	if (ret) {
-		pr_warn("prepare HDCP key failed.\n");
-		return ret;
-	}
-
-	if (bcap_2_2 & BIT(1))
-		ret = anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xee, 0x40);
-	else
-		ret = anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xee, 0x20);
-
-	/* Try auth flag */
-	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xec, 0x10);
-	/* Interrupt for DRM */
-	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xff, 0x01);
+	dev_dbg(dev, "use HDCP Content type0\n");
+	ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ, DP_AUX_HDCP_BCAPS, 1, &bcap);
 	if (ret < 0)
-		dev_err(dev, "fail to enable HDCP\n");
+		return ret;
 
-	return anx7625_write_or(ctx, ctx->i2c.tx_p0_client,
-				TX_HDCP_CTRL0, HARD_AUTH_EN);
+	if (!(bcap & DP_BCAPS_HDCP_CAPABLE)) {
+		pr_warn("downstream not support HDCP 1.4, cap(%x).\n", bcap);
+		return -EIO;
+	}
+	dev_dbg(dev, "enable HDCP 1.4\n");
+	ctx->hdcp_1_4 = true;
+
+	return 0;
 }
 
 static void anx7625_dp_start(struct anx7625_data *ctx)
@@ -2218,13 +2267,20 @@ static int anx7625_attach_dsi(struct anx7625_data *ctx)
 	return 0;
 }
 
+static int anx7625_read_hdcp_status(struct anx7625_data *ctx)
+{
+	int ret;
+	ret = anx7625_reg_read(ctx, ctx->i2c.rx_p1_client, HDCP_STATUS);
+	return ret;
+}
+
 static void hdcp_check_work_func(struct work_struct *work)
 {
-	u8 status;
 	struct delayed_work *dwork;
 	struct anx7625_data *ctx;
 	struct device *dev;
 	struct drm_device *drm_dev;
+	int ret, val;
 
 	dwork = to_delayed_work(work);
 	ctx = container_of(dwork, struct anx7625_data, hdcp_work);
@@ -2235,20 +2291,90 @@ static void hdcp_check_work_func(struct work_struct *work)
 		return;
 	}
 
+	if (anx7625_hdcp_get_state(ctx) == HDCP_INIT) {
+		anx7625_hdcp_set_state(ctx, HDCP_START);
+		queue_delayed_work(ctx->hdcp_workqueue,
+				   &ctx->hdcp_work,
+				   msecs_to_jiffies(4000));
+		return;
+	}
+
+	if (anx7625_hdcp_get_state(ctx) == HDCP_START) {
+		if (ctx->hdcp_1_4)
+			anx7625_write_or(ctx, ctx->i2c.rx_p1_client,
+					 HDCP_VER_SEL, 0x20);
+		else
+			anx7625_write_or(ctx, ctx->i2c.rx_p1_client,
+					 HDCP_VER_SEL, 0x40);
+
+		if (ctx->hdcp_1_4)
+			anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+					  SP_TX_SYS_CTRL1_REG,
+					  HDCP2TX_FW_EN);
+		else
+			anx7625_write_and(ctx, ctx->i2c.tx_p0_client,
+					  SP_TX_SYS_CTRL1_REG,
+					  (u8)~HDCP2TX_FW_EN);
+
+		if (anx7625_hdcp_key_load(ctx, ctx->hdcp_1_4)) {
+			dev_err(dev, "HDCP key load error\n");
+			return;
+		}
+
+		ret = anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+					SP_TX_WAIT_KSVR_TIME, 0xc8);
+		/* Set time for waiting R0 */
+		ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+					 SP_TX_WAIT_R0_TIME, 0xb0);
+
+		if (ctx->hdcp_1_4) {
+			ret |= anx7625_write_or(ctx, ctx->i2c.tx_p0_client,
+						TX_HDCP_CTRL0, HARD_AUTH_EN);
+		} else {
+			ret |= anx7625_write_or(ctx, ctx->i2c.tx_p0_client,
+						0x86, 0);
+			ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+						 SP_TX_SYS_CTRL1_REG, HDCP2TX_SOFT_EN);
+		}
+		if (ret) {
+			dev_err(dev, "HDCP enable failed\n");
+			return;
+		}
+
+		/* Try auth flag */
+		ret = anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xec, 0x10);
+		/* Interrupt for DRM */
+		ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xff, 0x01);
+		if (ret < 0) {
+			dev_err(dev, "fail to notify secure OCM\n");
+			return;
+		}
+
+		anx7625_hdcp_set_state(ctx, HDCP_CHECK);
+		/* Check HDCP status after 5 seconds */
+		queue_delayed_work(ctx->hdcp_workqueue,
+				   &ctx->hdcp_work,
+				   msecs_to_jiffies(5000));
+		return;
+	}
+
 	drm_dev = ctx->connector->dev;
 	drm_modeset_lock(&drm_dev->mode_config.connection_mutex, NULL);
-	mutex_lock(&ctx->hdcp_wq_lock);
 
-	status = anx7625_reg_read(ctx, ctx->i2c.tx_p0_client, 0);
-	dev_dbg(dev, "sink HDCP status check: %.02x\n", status);
-	if (status & BIT(1)) {
+	ret = readx_poll_timeout(anx7625_read_hdcp_status,
+				 ctx, val,
+				 ((val & HDCP_PASS) || (val < 0)),
+				 1000,
+				 1000 * 10);
+	if (ret) {
+		dev_err(dev, "HDCP status check failed\n");
+	} else {
 		ctx->hdcp_cp = DRM_MODE_CONTENT_PROTECTION_ENABLED;
 		drm_hdcp_update_content_protection(ctx->connector,
 						   ctx->hdcp_cp);
 		dev_dbg(dev, "update CP to ENABLE\n");
 	}
 
-	mutex_unlock(&ctx->hdcp_wq_lock);
 	drm_modeset_unlock(&drm_dev->mode_config.connection_mutex);
 }
 
@@ -2551,6 +2677,42 @@ calculate_timing:
 	return true;
 }
 
+static int anx7625_bridge_hdcp_check(struct drm_bridge *bridge,
+				     struct drm_bridge_state *state)
+{
+	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
+	struct device *dev = ctx->dev;
+	struct drm_connector *connector;
+	struct drm_connector_state *conn_state;
+
+	connector = drm_atomic_get_new_connector_for_encoder(state->base.state,
+							     bridge->encoder);
+	if (!connector)
+		return 0;
+
+	ctx->connector = connector;
+	conn_state = drm_atomic_get_new_connector_state(state->base.state, connector);
+	if (WARN_ON(!conn_state))
+		return 0;
+
+	if (conn_state->content_protection == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
+		if (anx7625_hdcp_enable(ctx, conn_state->hdcp_content_type)) {
+			dev_err(dev, "enable HDCP failed\n");
+			return -EIO;
+		}
+
+		dev_dbg(dev, "enable HDCP\n");
+
+		anx7625_hdcp_set_state(ctx, HDCP_INIT);
+		queue_delayed_work(ctx->hdcp_workqueue,
+				   &ctx->hdcp_work,
+				   msecs_to_jiffies(1000));
+	}
+
+	return 0;
+
+}
+
 static int anx7625_bridge_atomic_check(struct drm_bridge *bridge,
 				       struct drm_bridge_state *bridge_state,
 				       struct drm_crtc_state *crtc_state,
@@ -2572,8 +2734,6 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 {
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
 	struct device *dev = ctx->dev;
-	struct drm_connector *connector;
-	struct drm_connector_state *conn_state;
 
 	dev_dbg(dev, "drm atomic enable\n");
 
@@ -2582,11 +2742,6 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 		return;
 	}
 
-	connector = drm_atomic_get_new_connector_for_encoder(state->base.state,
-							     bridge->encoder);
-	if (!connector)
-		return;
-
 	anx7625_hdcp_key_probe(ctx);
 
 	pm_runtime_get_sync(dev);
@@ -2594,21 +2749,7 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 
 	anx7625_dp_start(ctx);
 
-	conn_state = drm_atomic_get_new_connector_state(state->base.state, connector);
-
-	if (WARN_ON(!conn_state))
-		return;
-
-	if (conn_state->content_protection == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
-		if (ctx->dp_en) {
-			dev_dbg(dev, "enable HDCP\n");
-			anx7625_hdcp_enable(ctx, conn_state->hdcp_content_type);
-
-			queue_delayed_work(ctx->hdcp_workqueue,
-					   &ctx->hdcp_work,
-					   msecs_to_jiffies(2000));
-		}
-	}
+	anx7625_bridge_hdcp_check(bridge, state);
 }
 
 static void anx7625_bridge_atomic_disable(struct drm_bridge *bridge,
@@ -2989,7 +3130,7 @@ static int anx7625_i2c_probe(struct i2c_client *client)
 	anx7625_init_gpio(platform);
 
 	mutex_init(&platform->lock);
-	mutex_init(&platform->hdcp_wq_lock);
+	mutex_init(&platform->hdcp_state_lock);
 	mutex_init(&platform->aux_lock);
 
 	INIT_DELAYED_WORK(&platform->hdcp_work, hdcp_check_work_func);

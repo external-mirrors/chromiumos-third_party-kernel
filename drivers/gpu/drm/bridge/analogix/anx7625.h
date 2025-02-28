@@ -85,6 +85,7 @@
 #define SP_TX_WAIT_KSVR_TIME		0x42
 #define SP_TX_SYS_CTRL1_REG		0x80
 #define HDCP2TX_FW_EN			BIT(4)
+#define HDCP2TX_SOFT_EN			0x38
 
 #define SP_TX_LINK_BW_SET_REG		0xA0
 #define SP_TX_LANE_COUNT_SET_REG	0xA1
@@ -416,6 +417,10 @@
 #define  MIPI_SWAP_CLK    3
 /* Bit[2:0] are reserved */
 
+#define  HDCP_VER_SEL		0xEE
+#define  HDCP_STATUS		0x8A
+#define  HDCP_PASS		BIT(1)
+
 /******** END of I2C Address 0x84 *********/
 
 /* DPCD regs */
@@ -506,6 +511,12 @@ struct anx7625_port_data {
 	struct anx7625_data *ctx;
 };
 
+enum anx7625_hdcp_state {
+	HDCP_INIT = 1,
+	HDCP_START,
+	HDCP_CHECK
+};
+
 struct anx7625_data {
 	struct anx7625_platform_data pdata;
 	struct platform_device *audio_pdev;
@@ -514,6 +525,7 @@ struct anx7625_data {
 	int dp_en;
 	int hdcp_cp;
 	bool hdcp_key_exist;
+	bool hdcp_1_4;
 	bool dsc_en;
 	/* Lock for work queue */
 	struct mutex lock;
@@ -529,6 +541,8 @@ struct anx7625_data {
 	struct delayed_work hdcp_work;
 	struct workqueue_struct *hdcp_workqueue;
 	/* Lock for hdcp work queue */
+	struct mutex hdcp_state_lock;
+	enum anx7625_hdcp_state hdcp_state;
 	struct mutex hdcp_wq_lock;
 	/* Lock for aux transfer and disable */
 	struct mutex aux_lock;
