@@ -251,6 +251,8 @@ static int mtk_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	 * RTC_MIN_YEAR_OFFSET before write year data to register, and plus
 	 * RTC_MIN_YEAR_OFFSET back after read year from register
 	 */
+	/* TODO: work around year offset issue */
+	tm->tm_year += RTC_MIN_YEAR_OFFSET;
 
 	/* HW register start mon from one, but tm_mon start from zero. */
 	tm->tm_mon--;
@@ -273,6 +275,8 @@ static int mtk_rtc_set_time(struct device *dev, struct rtc_time *tm)
 
 	power_on_mclk(rtc);
 
+	/* TODO: work around year offset issue */
+	tm->tm_year -= RTC_MIN_YEAR_OFFSET;
 	tm->tm_mon++;
 
 	data[RTC_OFFSET_SEC] = tm->tm_sec;
@@ -329,6 +333,8 @@ static int mtk_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alm)
 	tm->tm_mon = data[RTC_OFFSET_MTH] & RTC_AL_MTH_MASK;
 	tm->tm_year = data[RTC_OFFSET_YEAR] & RTC_AL_YEA_MASK;
 
+	/* TODO: work around year offset issue */
+	tm->tm_year += RTC_MIN_YEAR_OFFSET;
 	tm->tm_mon--;
 
 	return 0;
@@ -343,7 +349,10 @@ static int mtk_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
 
 	power_on_mclk(rtc);
 
+	/* TODO: work around year offset issue */
+	tm->tm_year -= RTC_MIN_YEAR_OFFSET;
 	tm->tm_mon++;
+
 	guard(mutex)(&rtc->lock);
 	ret = regmap_bulk_read(rtc->regmap, rtc->addr_base + RTC_AL_SEC,
 			       data, RTC_OFFSET_COUNT * 2);
@@ -470,11 +479,6 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "register rtc device failed\n");
 		return ret;
 	};
-
-	rtc->rtc_dev->range_min = RTC_TIMESTAMP_BEGIN_1900;
-	rtc->rtc_dev->range_max = mktime64(2027, 12, 31, 23, 59, 59);
-	rtc->rtc_dev->start_secs = mktime64(1968, 1, 2, 0, 0, 0);
-	rtc->rtc_dev->set_start_time = true;
 
 	power_on_mclk(rtc);
 	power_down_mclk(rtc);

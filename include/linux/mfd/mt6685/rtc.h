@@ -12,6 +12,12 @@
 
 #define	HWID MT6685_HWCID_L
 
+/* We map HW YEAR 0 (2000) to 1968 not 1970 because 2000 is the leap year */
+#define RTC_MIN_YEAR		1968
+#define RTC_BASE_YEAR		1900
+#define RTC_NUM_YEARS		128
+#define RTC_MIN_YEAR_OFFSET	(RTC_MIN_YEAR - RTC_BASE_YEAR)
+
 #define RTC_TC_SEC		0x12
 #define RTC_TC_MIN		0x14
 #define RTC_TC_HOU		0x16
