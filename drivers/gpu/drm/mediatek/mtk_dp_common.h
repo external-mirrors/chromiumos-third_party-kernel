@@ -362,10 +362,12 @@ struct mtk_dp_con {
 	struct edid *edid;
 	enum drm_dp_mst_mode dp_mode;
 	bool video_enable;
+};
 
-	u8 vcpi;
-	s8 vc_start_slot;
-	int time_slots;
+struct mtk_dp_bridge {
+	struct mtk_dp *mtk_dp;
+	struct drm_bridge bridge;
+	enum dp_encoder_id encoder_id;
 };
 
 struct mtk_dp {
@@ -382,6 +384,7 @@ struct mtk_dp {
 	struct notifier_block notifier;
 	struct clk *pclk;
 	struct clk *pclk_src;
+	atomic_t refcount;
 
 	struct device *genpd_dp_tx;
 	struct device *genpd_dp_phy;
@@ -400,6 +403,8 @@ struct mtk_dp {
 	struct drm_connector_state con_state[DP_ENCODER_NUM];
 	/* This mutex is used to synchronize HDCP operations in the driver */
 	struct mutex hdcp_mutex;
+	/* This mutex is used to synchronize MST operations in the driver */
+	struct mutex mst_mutex;
 
 	void __iomem *regs;
 	void __iomem *phyd_regs;
@@ -425,6 +430,7 @@ struct mtk_dp {
 	u8 mst_enable_count;
 	struct drm_dp_mst_topology_mgr mgr;
 	struct mtk_dp_con *mtk_con[DP_CONNECTOR_NUM];
+	struct mtk_dp_bridge *mtk_bridge[DP_ENCODER_NUM];
 
 	/* For audio */
 	bool audio_enable;

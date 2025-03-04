@@ -759,7 +759,6 @@ static int mtk_dp_hdcp2x_authenticate(struct mtk_hdcp_info *hdcp_info)
 static void mtk_dp_hdcp2x_prepare_streams(struct mtk_hdcp_info *hdcp_info)
 {
 	struct mtk_dp *mtk_dp = container_of(hdcp_info, struct mtk_dp, hdcp_info);
-	int con_id;
 	u8 i = 0;
 	u8 j = 0;
 
@@ -770,12 +769,12 @@ static void mtk_dp_hdcp2x_prepare_streams(struct mtk_hdcp_info *hdcp_info)
 		hdcp_info->hdcp2_info.hdcp_tx.stream_manage.streams[0].stream_type =
 			mtk_dp->con_state[DP_SST_ENCODER_PORT].content_type;
 	} else {
-		for (i = 0; i < DP_ENCODER_NUM; i++) {
-			con_id = encoder_id_to_con_id(mtk_dp, i, DRM_DP_MST);
-			if (con_id >= 0 && mtk_dp->mtk_con[con_id]->video_enable) {
+		for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
+			if (mst_con_with_encoder(mtk_dp->mtk_con[i]) &&
+				mtk_dp->mtk_con[i]->video_enable) {
 				hdcp_info->hdcp2_info.hdcp_tx.stream_manage.streams[j].stream_id = j;
 				hdcp_info->hdcp2_info.hdcp_tx.stream_manage.streams[j].stream_type =
-					mtk_dp->con_state[i].content_type;
+					mtk_dp->con_state[mtk_dp->mtk_con[i]->encoder_id].content_type;
 				j++;
 			}
 		}

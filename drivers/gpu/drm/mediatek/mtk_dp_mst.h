@@ -16,5 +16,13 @@ int mtk_dp_mst_drv_calculate_pbn(struct mtk_dp *mtk_dp,
 				 struct drm_display_mode *mode, u8 bpp, bool dsc);
 int mtk_dp_mst_drv_find_vcpi_slots(struct mtk_dp *mtk_dp,
 				   int pbn_div, const int pbn_allocating);
+void mtk_dp_mst_atomic_disable(struct mtk_dp *mtk_dp,
+			       enum dp_encoder_id id, struct drm_atomic_state *state);
+void mtk_dp_mst_atomic_enable(struct mtk_dp *mtk_dp,
+			      enum dp_encoder_id id, struct drm_atomic_state *state);
+int mtk_dp_mst_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
+			    struct drm_bridge_state *bridge_state,
+			    struct drm_crtc_state *crtc_state,
+			    struct drm_connector_state *conn_state);
 #endif
 

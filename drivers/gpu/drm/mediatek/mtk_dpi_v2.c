@@ -76,8 +76,6 @@ struct mtk_dpi {
 	struct drm_encoder encoder;
 	struct drm_bridge bridge;
 	struct drm_bridge *next_bridge;
-	bool no_next_bridge;
-	u32 num;
 	void __iomem *regs;
 	struct device *dev;
 	struct device *mmsys_dev;
@@ -727,6 +725,40 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 	return 0;
 }
 
+static int mtk_dpi_bridge_atomic_check_v2(struct drm_bridge *bridge,
+					  struct drm_bridge_state *bridge_state,
+					  struct drm_crtc_state *crtc_state,
+					  struct drm_connector_state *conn_state)
+{
+	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
+	unsigned int out_bus_format;
+
+	out_bus_format = bridge_state->output_bus_cfg.format;
+
+	if (out_bus_format == MEDIA_BUS_FMT_FIXED)
+		if (dpi->conf->num_output_fmts)
+			out_bus_format = dpi->conf->output_fmts[0];
+
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] input format 0x%04x, output format 0x%04x\n",
+		    bridge_state->input_bus_cfg.format,
+		    bridge_state->output_bus_cfg.format);
+
+	dpi->output_fmt = out_bus_format;
+	dpi->bit_num = MTK_DPI_OUT_BIT_NUM_8BITS;
+	dpi->channel_swap = MTK_DPI_OUT_CHANNEL_SWAP_RGB;
+	dpi->yc_map = MTK_DPI_OUT_YC_MAP_RGB;
+	if (out_bus_format == MEDIA_BUS_FMT_YUYV8_1X16)
+		dpi->color_format = MTK_DPI_COLOR_FORMAT_YCBCR_422;
+	else
+		dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
+
+	dpi->dsc_enable = dpi->prop_dsc_enable->values[0];
+	memcpy(&dpi->dsc_config, dpi->prop_dsc_cfg->values, sizeof(struct drm_dsc_config));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dsc enable:%d, dsc version:%d\n", dpi->dsc_enable, dpi->dsc_config.dsc_version_minor);
+
+	return 0;
+}
+
 static u32 *mtk_dpi_bridge_atomic_get_output_bus_fmts_v2(struct drm_bridge *bridge,
 						      struct drm_bridge_state *bridge_state,
 						      struct drm_crtc_state *crtc_state,
@@ -783,52 +815,21 @@ static int mtk_dpi_bridge_attach_v2(struct drm_bridge *bridge,
 {
 	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
 
-	if (dpi->no_next_bridge)
-		return 0;
-
 	return drm_bridge_attach(bridge->encoder, dpi->next_bridge,
 				 &dpi->bridge, flags);
 }
 
 static void mtk_dpi_bridge_mode_set_v2(struct drm_bridge *bridge,
-				    const struct drm_display_mode *mode,
-					const struct drm_display_mode *adjusted_mode)
+				       const struct drm_display_mode *mode,
+				       const struct drm_display_mode *adjusted_mode)
 {
 	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
-	struct drm_bridge_state *bridge_state;
-	unsigned int out_bus_format;
 
 	drm_mode_copy(&dpi->mode, adjusted_mode);
+
 	drm_dbg_kms(dpi->bridge.dev, "[DPTX] mode set, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d\n",
 		    dpi->mode.htotal, dpi->mode.vtotal,
 		    dpi->mode.hdisplay, dpi->mode.vdisplay, drm_mode_vrefresh(mode));
-
-	dpi->bit_num = MTK_DPI_OUT_BIT_NUM_8BITS;
-	dpi->channel_swap = MTK_DPI_OUT_CHANNEL_SWAP_RGB;
-	dpi->yc_map = MTK_DPI_OUT_YC_MAP_RGB;
-
-	dpi->dsc_enable = dpi->prop_dsc_enable->values[0];
-	memcpy(&dpi->dsc_config, dpi->prop_dsc_cfg->values, sizeof(struct drm_dsc_config));
-	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dsc enable:%d\n", dpi->dsc_enable);
-	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dsc version:%d", dpi->dsc_config.dsc_version_minor);
-
-	bridge_state = drm_priv_to_bridge_state(bridge->base.state);
-
-	out_bus_format = bridge_state->output_bus_cfg.format;
-
-	if (out_bus_format == MEDIA_BUS_FMT_FIXED)
-		if (dpi->conf->num_output_fmts)
-			out_bus_format = dpi->conf->output_fmts[0];
-
-	drm_dbg_kms(dpi->bridge.dev, "[DPTX] input format 0x%04x, output format 0x%04x\n",
-		    bridge_state->input_bus_cfg.format,
-		    bridge_state->output_bus_cfg.format);
-
-	dpi->output_fmt = out_bus_format;
-	if (out_bus_format == MEDIA_BUS_FMT_YUYV8_1X16)
-		dpi->color_format = MTK_DPI_COLOR_FORMAT_YCBCR_422;
-	else
-		dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
 }
 
 static void mtk_dpi_bridge_disable_v2(struct drm_bridge *bridge)
@@ -841,9 +842,11 @@ static void mtk_dpi_bridge_disable_v2(struct drm_bridge *bridge)
 		pinctrl_select_state(dpi->pinctrl, dpi->pins_gpio);
 }
 
-static void mtk_dpi_bridge_pre_enable_v2(struct drm_bridge *bridge)
+static void mtk_dpi_bridge_enable_v2(struct drm_bridge *bridge)
 {
 	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
+
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dpi enabled\n");
 
 	if (dpi->pinctrl && dpi->pins_dpi)
 		pinctrl_select_state(dpi->pinctrl, dpi->pins_dpi);
@@ -861,13 +864,6 @@ static void mtk_dpi_bridge_pre_enable_v2(struct drm_bridge *bridge)
 	/* TODO: Use DPI IRQ to implement 3 vsync delays */
 	/* HW implementation requires 3 vsync delays to wait for dpi to stabilize */
 	mdelay(1000 / drm_mode_vrefresh(&dpi->mode) * 3);
-}
-
-static void mtk_dpi_bridge_enable_v2(struct drm_bridge *bridge)
-{
-	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
-
-	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dpi enabled\n");
 }
 
 static enum drm_mode_status
@@ -889,7 +885,7 @@ static const struct drm_bridge_funcs mtk_dpi_bridge_funcs = {
 	.mode_valid = mtk_dpi_bridge_mode_valid_v2,
 	.disable = mtk_dpi_bridge_disable_v2,
 	.enable = mtk_dpi_bridge_enable_v2,
-	.pre_enable = mtk_dpi_bridge_pre_enable_v2,
+	.atomic_check = mtk_dpi_bridge_atomic_check_v2,
 	.atomic_get_output_bus_fmts = mtk_dpi_bridge_atomic_get_output_bus_fmts_v2,
 	.atomic_get_input_bus_fmts = mtk_dpi_bridge_atomic_get_input_bus_fmts_v2,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
@@ -946,18 +942,24 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 	char dsc_enable[] = "dp_dsc_enable";
 	char dsc_cfg[] = "dp_dsc_cfg";
 	char result[20];
-	int ret;
+	int id, ret;
 
 	drm_dbg_kms(dpi->bridge.dev, "[DPTX] encoder init\n");
 	dpi->mmsys_dev = priv->mmsys_dev;
 	ret = drm_simple_encoder_init(drm_dev, &dpi->encoder,
 				      DRM_MODE_ENCODER_TMDS);
 	if (ret) {
-		dev_err(dev, "[DPTX] Failed to initialize decoder: %d\n", ret);
+		dev_err(dev, "[DPTX] Failed to initialize decoder:%d\n", ret);
 		return ret;
 	}
 
-	snprintf(result, sizeof(result), "%s%d", dsc_enable, dpi->num);
+	id = of_alias_get_id(dev->of_node, "dp-intf");
+	if (id < 0) {
+		dev_err(dev, "[DPTX] Failed to get id: %d\n", ret);
+		return ret;
+	}
+
+	snprintf(result, sizeof(result), "%s%d", dsc_enable, id);
 	prop = drm_property_create_bool(dpi->encoder.dev,
 					DRM_MODE_PROP_ATOMIC, result);
 	if (!prop) {
@@ -966,7 +968,7 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 	}
 	dpi->prop_dsc_enable = prop;
 
-	snprintf(result, sizeof(result), "%s%d", dsc_cfg, dpi->num);
+	snprintf(result, sizeof(result), "%s%d", dsc_cfg, id);
 	prop = drm_property_create(dpi->encoder.dev,
 				   DRM_MODE_PROP_BLOB | DRM_MODE_PROP_IMMUTABLE,
 				   result, sizeof(struct drm_dsc_config));
@@ -981,8 +983,7 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 		goto err_cleanup;
 	dpi->encoder.possible_crtcs = ret;
 
-	ret = drm_bridge_attach(&dpi->encoder, &dpi->bridge, NULL,
-				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
+	ret = drm_bridge_attach(&dpi->encoder, &dpi->bridge, NULL, 0);
 	if (ret)
 		goto err_cleanup;
 
@@ -1067,6 +1068,7 @@ static void mt8196_get_clk_v2(struct mtk_dpi *dp_intf)
 static int mtk_dpi_probe_v2(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct device_node *endpoint, *port;
 	struct mtk_dpi *dpi;
 	int ret;
 
@@ -1078,30 +1080,38 @@ static int mtk_dpi_probe_v2(struct platform_device *pdev)
 	dpi->conf = (struct mtk_dpi_conf *)of_device_get_match_data(dev);
 	dpi->output_fmt = MEDIA_BUS_FMT_RGB888_1X24;
 
-	dpi->no_next_bridge = device_property_read_bool(dev, "no-next-bridge");
-	device_property_read_u32(dev, "num", &dpi->num);
-	dev_dbg(dev, "no_next_bridge:%d, num:%u", dpi->no_next_bridge, dpi->num);
-
-	if (!dpi->no_next_bridge) {
-		dpi->next_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 0, 0);
-		if (IS_ERR(dpi->next_bridge)) {
-			dev_err(dev, "[DPTX] Can not find next_bridge");
-			return -EPROBE_DEFER;
-		}
-
-		dev_dbg(dev, "Found bridge node: %pOF\n", dpi->next_bridge->of_node);
+	/* To support MST, the DP bridge (dp-tx) driver registers one bridge per input port. */
+	endpoint = of_graph_get_endpoint_by_regs(dev->of_node, 0, 0);
+	if (!endpoint) {
+		dev_err(dev, "[DPTX] fail to find endpoint!\n");
+		return -ENODEV;
 	}
+
+	port = of_graph_get_remote_port(endpoint);
+	of_node_put(endpoint);
+	if (!port) {
+		dev_err(dev, "[DPTX] fail to find remote port!\n");
+		return -ENODEV;
+	}
+
+	dpi->next_bridge = of_drm_find_bridge(port);
+	of_node_put(port);
+	if (!dpi->next_bridge) {
+		dev_err(dev, "[DPTX] fail to find next bridge\n");
+		return -EPROBE_DEFER;
+	}
+	dev_dbg(dev, "[DPTX] find next_bridge:%pOF", dpi->next_bridge->of_node);
 
 	dpi->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(dpi->pinctrl)) {
 		dpi->pinctrl = NULL;
-		dev_err(&pdev->dev, "[DPTX] Cannot find pinctrl!\n");
+		dev_dbg(&pdev->dev, "[DPTX] Cannot find pinctrl!\n");
 	}
 	if (dpi->pinctrl) {
 		dpi->pins_gpio = pinctrl_lookup_state(dpi->pinctrl, "sleep");
 		if (IS_ERR(dpi->pins_gpio)) {
 			dpi->pins_gpio = NULL;
-			dev_err(&pdev->dev, "[DPTX] Cannot find pinctrl idle!\n");
+			dev_dbg(&pdev->dev, "[DPTX] Cannot find pinctrl idle!\n");
 		}
 		if (dpi->pins_gpio)
 			pinctrl_select_state(dpi->pinctrl, dpi->pins_gpio);
@@ -1109,7 +1119,7 @@ static int mtk_dpi_probe_v2(struct platform_device *pdev)
 		dpi->pins_dpi = pinctrl_lookup_state(dpi->pinctrl, "default");
 		if (IS_ERR(dpi->pins_dpi)) {
 			dpi->pins_dpi = NULL;
-			dev_err(&pdev->dev, "[DPTX] Cannot find pinctrl active!\n");
+			dev_dbg(&pdev->dev, "[DPTX] Cannot find pinctrl active!\n");
 		}
 	}
 	dpi->regs = devm_platform_ioremap_resource(pdev, 0);
