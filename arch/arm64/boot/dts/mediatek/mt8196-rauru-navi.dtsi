@@ -194,6 +194,16 @@
 	};
 };
 
+&mt6373_vfp {
+	compatible = "regulator-fixed";
+	regulator-name = "pp1800_vfp";
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+
+	/* TODO: b/394494941 fix after elan driver ready*/
+	regulator-always-on;
+};
+
 &backlight {
 	status = "disabled";
 };
