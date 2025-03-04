@@ -28,7 +28,7 @@ void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_enable(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp);
-void mtk_dp_hdcp_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id, struct drm_connector_state *state);
+bool mtk_dp_hdcp_need_hdcp(struct mtk_dp *mtk_dp);
 u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode);
 void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
 void mtk_dp_fec_enable_v2(struct mtk_dp *mtk_dp);
@@ -84,5 +84,10 @@ static inline int encoder_id_to_con_id(struct mtk_dp *mtk_dp,
 
 	dev_err(mtk_dp->dev, "[DPTX] fail to find the connector id by the encoder id\n");
 	return -ENODEV;
+}
+
+static inline bool mst_con_with_encoder(struct mtk_dp_con *mtk_con)
+{
+	return mtk_con && mtk_con->encoder && mtk_con->dp_mode == DRM_DP_MST;
 }
 #endif

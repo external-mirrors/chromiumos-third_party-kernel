@@ -406,8 +406,6 @@ static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 	} else {
 		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, true);
 	}
-
-	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
 }
 
 static bool mtk_dp_mst_drv_first_stream_enable(struct mtk_dp *mtk_dp)
@@ -454,10 +452,6 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 
 		start_slot = payload->vc_start_slot;
 		end_slot = start_slot + payload->time_slots;
-
-		mtk_dp->mtk_con[con_id]->vcpi = payload->vcpi;
-		mtk_dp->mtk_con[con_id]->vc_start_slot = payload->vc_start_slot;
-		mtk_dp->mtk_con[con_id]->time_slots = payload->time_slots;
 
 		mtk_dp_mst_hal_set_mtp_size(mtk_dp, encoder_id, payload->time_slots);
 
@@ -656,6 +650,8 @@ static void mtk_dp_mst_drv_start(struct mtk_dp *mtk_dp, struct mtk_dp_con *mtk_c
 
 	/* configure vcpi for DPTX HW*/
 	mtk_dp_mst_drv_configure_stream(mtk_dp, mtk_con->encoder_id);
+
+	mtk_con->video_enable = true;
 }
 
 static void mtk_dp_mst_drv_stop(struct mtk_dp *mtk_dp,
@@ -667,6 +663,7 @@ static void mtk_dp_mst_drv_stop(struct mtk_dp *mtk_dp,
 	struct drm_dp_mst_topology_state *new_mst_state;
 	const struct drm_dp_mst_atomic_payload *old_payload;
 	struct drm_dp_mst_atomic_payload *new_payload;
+	int ret;
 
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] MST stop\n");
 
@@ -703,12 +700,19 @@ static void mtk_dp_mst_drv_stop(struct mtk_dp *mtk_dp,
 		goto end;
 	}
 
+	mtk_dp_mst_hal_trigger_act(mtk_dp);
+	ret = drm_dp_check_act_status(&mtk_dp->mgr);
+	if (ret != 0)
+		dev_err(mtk_dp->dev, "[DPTX] fail to check act status!");
+
 	drm_dp_remove_payload_part2(&mtk_dp->mgr, new_mst_state, old_payload, new_payload);
 
 end:
 	drm_dp_send_power_updown_phy(&mtk_dp->mgr, mtk_con->port, false);
 
 	mtk_dp_video_disable_v2(mtk_dp, mtk_con->encoder_id);
+
+	mtk_con->video_enable = false;
 }
 
 void mtk_dp_mst_drv_prepare(struct mtk_dp *mtk_dp)
@@ -718,6 +722,11 @@ void mtk_dp_mst_drv_prepare(struct mtk_dp *mtk_dp)
 	int lane_count;
 	int link_rate;
 	u8 link_coding;
+
+	guard(mutex)(&mtk_dp->mst_mutex);
+
+	if (mtk_dp->mst_start)
+		return;
 
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] MST prepare\n");
 
@@ -759,6 +768,11 @@ void mtk_dp_mst_drv_prepare(struct mtk_dp *mtk_dp)
 
 void mtk_dp_mst_drv_unprepare(struct mtk_dp *mtk_dp)
 {
+	guard(mutex)(&mtk_dp->mst_mutex);
+
+	if (!mtk_dp->mst_start)
+		return;
+
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] MST unprepare\n");
 
 	mtk_dp_mst_drv_video_mute_all(mtk_dp);
@@ -930,142 +944,104 @@ static void mtk_dp_mst_drv_read_port_dsc_caps(struct mtk_dp *mtk_dp, struct mtk_
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC cap:0x%x\n", connector->fec_cap);
 }
 
-static void mtk_dp_mst_encoder_update_slots(struct mtk_dp *mtk_dp, struct drm_atomic_state *state)
+void mtk_dp_mst_atomic_disable(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
+			       struct drm_atomic_state *state)
 {
-	struct drm_dp_mst_atomic_payload *payload = NULL;
-	struct drm_dp_mst_topology_state *mst_state = NULL;
-	u8 encoder_id;
-	int con_id;
-
-	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-	if (IS_ERR_OR_NULL(mst_state)) {
-		dev_err(mtk_dp->dev, "[DPTX] Failed to get mst topology state!\n");
-		return;
-	}
-
-	for (encoder_id = 0; encoder_id < DP_ENCODER_NUM; encoder_id++) {
-		con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
-		if (con_id < 0)
-			continue;
-
-		if (mtk_dp->mtk_con[con_id]->video_enable) {
-			payload = drm_atomic_get_mst_payload_state(mst_state, mtk_dp->mtk_con[con_id]->port);
-			if (IS_ERR_OR_NULL(payload)) {
-				dev_err(mtk_dp->dev, "[DPTX] Failed to get payload!\n");
-				return;
-			}
-
-			if (mtk_dp->mtk_con[con_id]->vcpi != payload->vcpi ||
-				mtk_dp->mtk_con[con_id]->vc_start_slot != payload->vc_start_slot ||
-				mtk_dp->mtk_con[con_id]->time_slots != payload->time_slots) {
-				mtk_dp_mst_drv_stop(mtk_dp, state, mtk_dp->mtk_con[con_id]);
-				mtk_dp_mst_drv_start(mtk_dp, mtk_dp->mtk_con[con_id]);
-			}
-		}
-	}
-}
-
-static void mtk_dp_mst_encoder_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *state)
-{
-	struct mtk_dp_con *mtk_con;
-	struct mtk_dp *mtk_dp;
-	bool all_video_disable = true;
+	bool re_enable[DP_CONNECTOR_NUM] = {false};
+	bool need_hdcp = false;
 	int con_id;
 	u8 i;
 
-	mtk_con = encoder_to_mtk_con(encoder, DRM_DP_MST);
-	if (!mtk_con)
+	guard(mutex)(&mtk_dp->mst_mutex);
+
+	con_id = encoder_id_to_con_id(mtk_dp, id, DRM_DP_MST);
+	if (con_id < 0)
 		return;
 
-	mtk_dp = mtk_con->mtk_dp;
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bridge[%d] MST disable", id);
 
-	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] MST encoder[%d] disable", mtk_con->encoder_id);
-
-	mtk_dp_mst_drv_stop(mtk_dp, state, mtk_con);
-
-	mtk_con->video_enable = false;
-
-	if (mtk_dp->training_info.cable_plug_in)
-		mtk_dp_mst_encoder_update_slots(mtk_dp, state);
-
-	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
-
-	for (i = 0; i < DP_ENCODER_NUM; i++) {
-		con_id = encoder_id_to_con_id(mtk_dp, i, DRM_DP_MST);
-		if (con_id >= 0 && mtk_dp->mtk_con[con_id]->video_enable) {
-			all_video_disable = false;
-			break;
+	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
+		if (mst_con_with_encoder(mtk_dp->mtk_con[i]) && mtk_dp->mtk_con[i]->video_enable) {
+			if (i != con_id)
+				re_enable[i] = true;
+			mtk_dp_mst_drv_stop(mtk_dp, state, mtk_dp->mtk_con[i]);
 		}
 	}
 
-	mtk_dp_hdcp_disable(mtk_dp);
+	/*
+	 * In a multi-channel enabled scenario, if one of the
+	 * channels is disabled, the slot positions of the other
+	 * channels may change. At this point, a restart of
+	 * the other channels is required to make the necessary
+	 * adjustments to the hardware.
+	 */
+	if (mtk_dp->training_info.cable_plug_in)
+		for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++)
+			if (mst_con_with_encoder(mtk_dp->mtk_con[i]) && re_enable[i])
+				mtk_dp_mst_drv_start(mtk_dp, mtk_dp->mtk_con[i]);
 
-	if (!all_video_disable)
+	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
+
+	mtk_dp_hdcp_disable(mtk_dp);
+	need_hdcp = mtk_dp_hdcp_need_hdcp(mtk_dp);
+	if (need_hdcp)
 		mtk_dp_hdcp_enable(mtk_dp);
 }
 
-static void mtk_dp_mst_encoder_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *state)
+void mtk_dp_mst_atomic_enable(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
+			      struct drm_atomic_state *state)
 {
-	struct mtk_dp_con *mtk_con;
-	struct mtk_dp *mtk_dp;
+	int con_id;
 
-	mtk_con = encoder_to_mtk_con(encoder, DRM_DP_MST);
-	if (!mtk_con)
+	guard(mutex)(&mtk_dp->mst_mutex);
+
+	con_id = encoder_id_to_con_id(mtk_dp, id, DRM_DP_MST);
+	if (con_id < 0)
 		return;
 
-	mtk_dp = mtk_con->mtk_dp;
-
-	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] MST encoder[%d] enable", mtk_con->encoder_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bridge[%d] MST enable", id);
 
 	if (!mtk_dp->training_info.cable_plug_in || !mtk_dp->dp_ready) {
-		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder[%d] cable_plug_in:%d, dp_ready:%d",
-			    mtk_con->encoder_id,
-			    mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
+		dev_err(mtk_dp->dev, "[DPTX] bridge[%d] MST cable_plug_in:%d, dp_ready:%d",
+			id, mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
 		return;
 	}
 
-	mtk_dp_mst_drv_start(mtk_dp, mtk_con);
+	mtk_dp_mst_drv_start(mtk_dp, mtk_dp->mtk_con[con_id]);
 
-	mtk_con->video_enable = true;
+	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
 
-	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] content type:%d, content protection:%d",
-		    mtk_dp->con_state[mtk_con->encoder_id].hdcp_content_type,
-		    mtk_dp->con_state[mtk_con->encoder_id].content_protection);
-	if (mtk_dp->con_state[mtk_con->encoder_id].content_protection ==
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bridge[%d] MST content type:%d, content protection:%d",
+		    id, mtk_dp->con_state[id].hdcp_content_type,
+		    mtk_dp->con_state[id].content_protection);
+	if (mtk_dp->con_state[id].content_protection ==
 		DRM_MODE_CONTENT_PROTECTION_DESIRED) {
-		if (mtk_dp->hdcp_info.auth_status != AUTH_ZERO)
-			mtk_dp_hdcp_disable(mtk_dp);
-
+		mtk_dp_hdcp_disable(mtk_dp);
 		mtk_dp_hdcp_enable(mtk_dp);
 	}
 }
 
-static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
-			struct drm_crtc_state *crtc_state,
-			struct drm_connector_state *conn_state)
+int mtk_dp_mst_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
+			    struct drm_bridge_state *bridge_state,
+			    struct drm_crtc_state *crtc_state,
+			    struct drm_connector_state *conn_state)
 {
 	struct drm_atomic_state *state = crtc_state->state;
 	struct drm_dp_mst_topology_state *mst_state;
-	struct mtk_dp_con *mtk_con;
-	struct mtk_dp *mtk_dp;
+	int con_id;
 	int pbn_need;
 	int pbn_allocated;
 	int slot_need;
 	int slot_allocated;
 	bool dsc = false;
 	u8 bpp;
-	int id;
 	int ret;
 
-	mtk_con = encoder_to_mtk_con(encoder, DRM_DP_MST);
-	if (!mtk_con)
-		return 0;
+	guard(mutex)(&mtk_dp->mst_mutex);
 
-	mtk_dp = mtk_con->mtk_dp;
-	id = mtk_con->encoder_id;
-
-	if (!drm_atomic_crtc_needs_modeset(crtc_state))
-		return 0;
+	con_id = encoder_id_to_con_id(mtk_dp, id, DRM_DP_MST);
+	if (con_id < 0)
+		return con_id;
 
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
 	if (IS_ERR(mst_state)) {
@@ -1074,26 +1050,17 @@ static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
 	}
 
 	bpp = mtk_dp_color_get_bpp_v2(mtk_dp->info[id].format, mtk_dp->info[id].depth);
-	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, &crtc_state->adjusted_mode, bpp, &dsc);
+	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_dp->mtk_con[con_id], &crtc_state->adjusted_mode, bpp, &dsc);
 
 	if (dsc)
 		bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
 
 	pbn_need = mtk_dp_mst_drv_calculate_pbn(mtk_dp, &crtc_state->adjusted_mode, bpp, dsc);
 	slot_need = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
-					dfixed_trunc(mst_state->pbn_div), pbn_need);
+						   dfixed_trunc(mst_state->pbn_div), pbn_need);
 	pbn_allocated = slot_need * dfixed_trunc(mst_state->pbn_div);
 	slot_allocated = drm_dp_atomic_find_time_slots(state,
-					&mtk_dp->mgr, mtk_con->port, pbn_allocated);
-
-	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] [%d] bpp:%d, dsc:%d, tt:%d %d, "
-		    "act:%d %d, fps:%d, clk:%d, pbn:%d %d, slot:%d %d\n",
-		    id, bpp, dsc,
-		    crtc_state->adjusted_mode.htotal, crtc_state->adjusted_mode.vtotal,
-		    crtc_state->adjusted_mode.hdisplay, crtc_state->adjusted_mode.vdisplay,
-		    drm_mode_vrefresh(&crtc_state->adjusted_mode), crtc_state->adjusted_mode.clock,
-		    pbn_need, pbn_allocated, slot_need, slot_allocated);
+						       &mtk_dp->mgr, mtk_dp->mtk_con[con_id]->port, pbn_allocated);
 
 	if (slot_allocated < 0) {
 		dev_err(mtk_dp->dev, "[DPTX] fail to find time slots:%d", slot_allocated);
@@ -1107,54 +1074,10 @@ static int mtk_dp_mst_encoder_atomic_check(struct drm_encoder *encoder,
 		goto fail;
 	}
 
-	return 0;
-
-fail:
-	dev_err(mtk_dp->dev, "[DPTX] [%d] bpp:%d, dsc:%d, tt:%d %d, act:%d %d, fps:%d, clk:%d, pbn:%d %d, slot:%d %d\n",
-		id, bpp, dsc, crtc_state->adjusted_mode.htotal, crtc_state->adjusted_mode.vtotal,
-		crtc_state->adjusted_mode.hdisplay, crtc_state->adjusted_mode.vdisplay,
-		drm_mode_vrefresh(&crtc_state->adjusted_mode), crtc_state->adjusted_mode.clock,
-		pbn_need, pbn_allocated, slot_need, slot_allocated);
-
-	return ret;
-}
-
-static void mtk_dp_mst_encoder_atomic_mode_set(struct drm_encoder *encoder,
-				struct drm_crtc_state *crtc_state,
-				struct drm_connector_state *conn_state)
-{
-	struct drm_dp_mst_topology_state *mst_state;
-	struct mtk_dp_con *mtk_con;
-	struct mtk_dp *mtk_dp;
-	bool dsc = false;
-	u8 bpp;
-	int id;
-
-	if (!drm_atomic_crtc_needs_modeset(crtc_state))
-		return;
-
-	mtk_con = encoder_to_mtk_con(encoder, DRM_DP_MST);
-	if (!mtk_con)
-		return;
-
-	mtk_dp = mtk_con->mtk_dp;
-	id = mtk_con->encoder_id;
-
-	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-	if (IS_ERR(mst_state)) {
-		dev_err(mtk_dp->dev, "[DPTX] fail to get mst topology state!\n");
-		return;
-	}
-
 	drm_mode_copy(&mtk_dp->mode[id], &crtc_state->adjusted_mode);
-
-	bpp = mtk_dp_color_get_bpp_v2(mtk_dp->info[id].format, mtk_dp->info[id].depth);
-	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, &mtk_dp->mode[id], bpp, &dsc);
 
 	mtk_dp->dsc_enable[id] = dsc;
 	if (mtk_dp->dsc_enable[id]) {
-		mtk_dp->info[id].format = DP_PIXELFORMAT_RGB;
-		mtk_dp->info[id].depth = DP_COLOR_DEPTH_8BIT;
 		mtk_dp_dsc_check_prepare_v2(mtk_dp, id);
 		mtk_dp->prop_dsc_enable[id]->values[0] = 1;
 	} else {
@@ -1162,24 +1085,25 @@ static void mtk_dp_mst_encoder_atomic_mode_set(struct drm_encoder *encoder,
 	}
 
 	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] encoder[%d] MST dump timing info, clock:%d, "
-		    "hdisplay:%d, hsync_start:%d, hsync_end:%d, "
-		    "htotal:%d, hskew:%d, vdisplay:%d, "
-		    "vsync_start:%d, vsync_end:%d, vtotal:%d, "
-		    "vscan:%d, flags:%d\n",
-		    id, mtk_dp->mode[id].clock,
-		    mtk_dp->mode[id].hdisplay, mtk_dp->mode[id].hsync_start, mtk_dp->mode[id].hsync_end,
-		    mtk_dp->mode[id].htotal, mtk_dp->mode[id].hskew, mtk_dp->mode[id].vdisplay,
-		    mtk_dp->mode[id].vsync_start, mtk_dp->mode[id].vsync_end, mtk_dp->mode[id].vtotal,
-		    mtk_dp->mode[id].vscan, mtk_dp->mode[id].flags);
-}
+		    "[DPTX] bridge[%d] MST atomic check, color:in[0x%04x] out[0x%04x], bpp:%d, dsc:%d, tt:%d %d, act:%d %d, fps:%d, clk:%d, pbn:%d %d, slot:%d %d\n",
+		    id, bridge_state->input_bus_cfg.format, bridge_state->output_bus_cfg.format,
+		    bpp, dsc, crtc_state->adjusted_mode.htotal, crtc_state->adjusted_mode.vtotal,
+		    crtc_state->adjusted_mode.hdisplay, crtc_state->adjusted_mode.vdisplay,
+		    drm_mode_vrefresh(&crtc_state->adjusted_mode), crtc_state->adjusted_mode.clock,
+		    pbn_need, pbn_allocated, slot_need, slot_allocated);
 
-static const struct drm_encoder_helper_funcs mtk_dp_mst_encoder_helper_funcs = {
-	.atomic_disable = mtk_dp_mst_encoder_atomic_disable,
-	.atomic_enable = mtk_dp_mst_encoder_atomic_enable,
-	.atomic_check = mtk_dp_mst_encoder_atomic_check,
-	.atomic_mode_set = mtk_dp_mst_encoder_atomic_mode_set,
-};
+	return 0;
+
+fail:
+	dev_err(mtk_dp->dev,
+		"[DPTX] bridge[%d] MST atomic check fail! bpp:%d, dsc:%d, tt:%d %d, act:%d %d, fps:%d, clk:%d, pbn:%d %d, slot:%d %d\n",
+		id, bpp, dsc, crtc_state->adjusted_mode.htotal, crtc_state->adjusted_mode.vtotal,
+		crtc_state->adjusted_mode.hdisplay, crtc_state->adjusted_mode.vdisplay,
+		drm_mode_vrefresh(&crtc_state->adjusted_mode), crtc_state->adjusted_mode.clock,
+		pbn_need, pbn_allocated, slot_need, slot_allocated);
+
+	return ret;
+}
 
 static int mtk_dp_mst_connector_late_register(struct drm_connector *connector)
 {
@@ -1192,8 +1116,8 @@ static void mtk_dp_mst_connector_early_unregister(struct drm_connector *connecto
 {
 	struct mtk_dp_con *mtk_con = container_of(connector, struct mtk_dp_con, connector);
 
-	drm_dbg_kms(mtk_con->mtk_dp->drm_dev, "[DPTX] [%d]\n",
-		    mtk_dp_con_id(mtk_con->mtk_dp, mtk_con));
+	drm_dbg_kms(mtk_con->mtk_dp->drm_dev,
+		    "[DPTX] connector[%d] MST early unregister\n", mtk_dp_con_id(mtk_con->mtk_dp, mtk_con));
 
 	drm_dp_mst_connector_early_unregister(connector, mtk_con->port);
 }
@@ -1204,7 +1128,7 @@ static void mtk_dp_mst_connector_destroy(struct drm_connector *connector)
 	struct mtk_dp *mtk_dp = mtk_con->mtk_dp;
 	int id =  mtk_dp_con_id(mtk_dp, mtk_con);
 
-	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d]\n", id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] connector[%d] MST destroy\n", id);
 
 	if (id < 0)
 		return;
@@ -1213,9 +1137,6 @@ static void mtk_dp_mst_connector_destroy(struct drm_connector *connector)
 
 	if (mtk_con->port)
 		drm_dp_mst_put_port_malloc(mtk_con->port);
-
-	if (mtk_con->encoder && mtk_con->encoder_id == DP_SST_ENCODER_PORT)
-		drm_encoder_helper_add(mtk_con->encoder, &mtk_dp_encoder_helper_funcs);
 
 	kfree(mtk_con);
 	mtk_dp->mtk_con[id] = NULL;
@@ -1260,8 +1181,7 @@ static int mtk_dp_mst_connector_get_modes(struct drm_connector *connector)
 
 	drm_edid_free(drm_edid);
 
-	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] [%d] mst modes:%d\n", mtk_dp_con_id(mtk_dp, mtk_con), ret);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] connector[%d] MST modes:%d\n", mtk_dp_con_id(mtk_dp, mtk_con), ret);
 
 	return ret;
 }
@@ -1271,28 +1191,20 @@ static enum drm_mode_status mtk_dp_mst_connector_mode_valid(struct drm_connector
 {
 	struct mtk_dp_con *mtk_con;
 	struct mtk_dp *mtk_dp;
-	u8 id;
 	enum drm_mode_status mode_status;
 	bool dsc = false;
 	u8 bpp;
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
-	id = mtk_con->encoder_id;
-
-	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] [%d] mst Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
-		    id, mode->htotal, mode->vtotal,
-		    mode->hdisplay, mode->vdisplay,
-		    drm_mode_vrefresh(mode), mode->clock);
 
 	/* MST only support RGB 8bit now */
 	bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
 	mode_status = mtk_dp_mst_drv_check_mode(mtk_dp, mtk_con, mode, bpp, &dsc);
 
 	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] [%d] mst status:%d, dsc:%d, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
-		    id, mode_status, dsc,
+		    "[DPTX] connector[%d] MST mode valid, status:%d, dsc:%d, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
+		    mtk_dp_con_id(mtk_dp, mtk_con), mode_status, dsc,
 		    mode->htotal, mode->vtotal,
 		    mode->hdisplay, mode->vdisplay,
 		    drm_mode_vrefresh(mode), mode->clock);
@@ -1333,19 +1245,18 @@ static struct drm_encoder *mtk_dp_mst_connector_atomic_best_encoder(struct drm_c
 
 		for (j = 0; j < ARRAY_SIZE(mtk_dp->mtk_con); j++) {
 			if (mtk_dp->mtk_con[j] &&
-				mtk_dp->mtk_con[j]->dp_mode == DRM_DP_MST &&
-				mtk_dp->mtk_con[j]->encoder == bridge->encoder)
+			    mtk_dp->mtk_con[j]->dp_mode == DRM_DP_MST &&
+			    mtk_dp->mtk_con[j]->encoder == bridge->encoder)
 				break;
 		}
 
 		if (j == ARRAY_SIZE(mtk_dp->mtk_con)) {
-			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d] best encoder, found encoder with dp_intf[%d] node:%pOF\n",
-				mtk_dp_con_id(mtk_dp, mtk_con), i, bridge->of_node);
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] connector[%d] MST best encoder, found encoder with dp_intf[%d] node:%pOF\n",
+				    mtk_dp_con_id(mtk_dp, mtk_con), i, bridge->of_node);
 
 			mtk_con->encoder = bridge->encoder;
 			mtk_con->encoder_id = i;
-
-			drm_encoder_helper_add(bridge->encoder, &mtk_dp_mst_encoder_helper_funcs);
 
 			return bridge->encoder;
 		}
@@ -1360,15 +1271,9 @@ static int mtk_dp_mst_connector_atomic_check(struct drm_connector *connector,
 			struct drm_atomic_state *state)
 {
 	struct mtk_dp_con *mtk_con = container_of(connector, struct mtk_dp_con, connector);
-	struct drm_connector_state *conn_state;
-
-	if (mtk_con->encoder) {
-		conn_state = drm_atomic_get_connector_state(state, connector);
-		mtk_dp_hdcp_atomic_check(mtk_con->mtk_dp, mtk_con->encoder_id, conn_state);
-	}
 
 	drm_dbg_kms(mtk_con->mtk_dp->drm_dev,
-		    "[DPTX] MST connector[%d] atomic_check\n", mtk_dp_con_id(mtk_con->mtk_dp, mtk_con));
+		    "[DPTX] connector[%d] MST atomic check\n", mtk_dp_con_id(mtk_con->mtk_dp, mtk_con));
 
 	return drm_dp_atomic_release_time_slots(state, &mtk_con->mtk_dp->mgr, mtk_con->port);
 }
@@ -1384,7 +1289,7 @@ static int mtk_dp_mst_connector_detect(struct drm_connector *connector,
 			mtk_con->port);
 
 	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] MST connector[%d] detect:%d\n", mtk_dp_con_id(mtk_dp, mtk_con), ret);
+		    "[DPTX] connector[%d] MST detect:%d\n", mtk_dp_con_id(mtk_dp, mtk_con), ret);
 
 	return ret;
 }
@@ -1476,7 +1381,7 @@ static struct drm_connector *mtk_dp_add_connector(struct drm_dp_mst_topology_mgr
 		goto end;
 	}
 
-	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] create con, create mtk connector[%d]\n", con_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] create con, create MST connector[%d]\n", con_id);
 
 	return connector;
 
