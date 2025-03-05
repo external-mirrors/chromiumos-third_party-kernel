@@ -686,7 +686,6 @@ static irqreturn_t spmi_nack_irq_handler(int irq, void *data)
 	unsigned short mt6316INTSTA = 0x240, hwcidaddr_mt6316 = 0x209, VIO18_SWITCH_6363 = 0x53,
 		hwcidaddr_mt6363 = 0x9;
 
-	__pm_stay_awake(arb->pmif_m_Thread_lock);
 	mutex_lock(&arb->pmif_m_mutex);
 
 	mtk_spmi_readl_datas(arb, 0, &spmi_nack, &spmi_nack_data, &spmi_rcs_nack,
@@ -723,6 +722,12 @@ static irqreturn_t spmi_nack_irq_handler(int irq, void *data)
 		__func__, spmi_mst_nack, spmi_p_mst_nack);
 	}
 
+	if ((spmi_nack & 0x20) || (spmi_p_nack & 0x20)) {
+		dev_notice(&arb->spmic->dev, "%s spmi transaction fail (Read) irq triggered", __func__);
+		dev_notice(&arb->spmic->dev, "SPMI_REC0 m/p:0x%x/0x%x SPMI_REC1 m/p 0x%x/0x%x\n",
+			spmi_nack, spmi_p_nack, spmi_nack_data, spmi_p_nack_data);
+	}
+
 	/* clear irq*/
 	if ((spmi_nack & 0xF8) || (spmi_rcs_nack & 0xC0000) ||
 		(spmi_debug_nack & 0xF0000) || (spmi_mst_nack & 0xC0000)) {
@@ -749,7 +754,6 @@ static irqreturn_t spmi_nack_irq_handler(int irq, void *data)
 		pr_notice("%s IRQ not cleared\n", __func__);
 
 	mutex_unlock(&arb->pmif_m_mutex);
-	__pm_relax(arb->pmif_m_Thread_lock);
 
 	return IRQ_HANDLED;
 }
@@ -1273,7 +1277,6 @@ static irqreturn_t rcs_irq_handler(int irq, void *data)
 	unsigned int slv_irq_sta, slv_irq_sta_p;
 	int i;
 
-	pr_err("songdebug: %s\n", __func__);
 	for (i = 0; i < SPMI_MAX_SLAVE_ID; i++) {
 		slv_irq_sta = mtk_spmi_readl(arb->spmimst_base[0], arb, SPMI_SLV_3_0_EINT + (i / 4));
 		slv_irq_sta = (slv_irq_sta >> ((i % 4) * 8)) & 0xFF;
