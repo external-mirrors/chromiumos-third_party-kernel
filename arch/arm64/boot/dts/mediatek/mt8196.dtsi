@@ -2195,6 +2195,7 @@
 			mediatek,ufs-rtff-mtcmos;
 			mediatek,ufs-boost-crypt;
 			mediatek,ufs-pmc-via-fastauto;
+			mediatek,ufs-broken-vcc;
 		};
 
 		ufscfg_ao_sec_clk: syscon@16890000 {
