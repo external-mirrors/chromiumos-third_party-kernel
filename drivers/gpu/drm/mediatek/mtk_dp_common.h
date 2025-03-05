@@ -358,6 +358,10 @@ struct mtk_dp_con {
 	struct edid *edid;
 	enum drm_dp_mst_mode dp_mode;
 	bool video_enable;
+
+	u8 vcpi;
+	s8 vc_start_slot;
+	int time_slots;
 };
 
 struct mtk_dp {

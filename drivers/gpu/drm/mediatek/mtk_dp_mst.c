@@ -416,7 +416,7 @@ static bool mtk_dp_mst_drv_first_stream_enable(struct mtk_dp *mtk_dp)
 		if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i]->video_enable)
 			video_enable_count++;
 
-	return video_enable_count == 1;
+	return video_enable_count == 0;
 }
 
 static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_id)
@@ -451,6 +451,10 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 
 		start_slot = payload->vc_start_slot;
 		end_slot = start_slot + payload->time_slots;
+
+		mtk_dp->mtk_con[con_id]->vcpi = payload->vcpi;
+		mtk_dp->mtk_con[con_id]->vc_start_slot = payload->vc_start_slot;
+		mtk_dp->mtk_con[con_id]->time_slots = payload->time_slots;
 
 		mtk_dp_mst_hal_set_mtp_size(mtk_dp, encoder_id, payload->time_slots);
 
@@ -714,6 +718,8 @@ void mtk_dp_mst_drv_unprepare(struct mtk_dp *mtk_dp)
 	mtk_dp_mst_drv_video_mute_all(mtk_dp);
 	mtk_dp_mst_drv_audio_mute_all(mtk_dp);
 
+	mtk_dp_mst_hal_tx_enable(mtk_dp, false);
+
 	drm_dp_mst_topology_mgr_set_mst(&mtk_dp->mgr, false);
 
 	mtk_dp->mst_start = false;
@@ -843,6 +849,41 @@ static void mtk_dp_mst_drv_read_port_dsc_caps(struct mtk_dp *mtk_dp, struct mtk_
 	dev_dbg(mtk_dp->dev, "FEC cap:0x%x\n", connector->fec_cap);
 }
 
+static void mtk_dp_mst_encoder_update_slots(struct mtk_dp *mtk_dp, struct drm_atomic_state *state)
+{
+	struct drm_dp_mst_atomic_payload *payload = NULL;
+	struct drm_dp_mst_topology_state *mst_state = NULL;
+	u8 encoder_id;
+	int con_id;
+
+	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
+	if (IS_ERR_OR_NULL(mst_state)) {
+		dev_err(mtk_dp->dev, "Failed to get mst topology state!\n");
+		return;
+	}
+
+	for (encoder_id = 0; encoder_id < DP_ENCODER_NUM; encoder_id++) {
+		con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
+		if (con_id < 0)
+			continue;
+
+		if (mtk_dp->mtk_con[con_id]->video_enable) {
+			payload = drm_atomic_get_mst_payload_state(mst_state, mtk_dp->mtk_con[con_id]->port);
+			if (IS_ERR_OR_NULL(payload)) {
+				dev_err(mtk_dp->dev, "Failed to get payload!\n");
+				return;
+			}
+
+			if (mtk_dp->mtk_con[con_id]->vcpi != payload->vcpi ||
+				mtk_dp->mtk_con[con_id]->vc_start_slot != payload->vc_start_slot ||
+				mtk_dp->mtk_con[con_id]->time_slots != payload->time_slots) {
+				mtk_dp_mst_drv_stop(mtk_dp, state, mtk_dp->mtk_con[con_id]);
+				mtk_dp_mst_drv_start(mtk_dp, mtk_dp->mtk_con[con_id]);
+			}
+		}
+	}
+}
+
 static void mtk_dp_mst_encoder_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct mtk_dp_con *mtk_con;
@@ -862,6 +903,9 @@ static void mtk_dp_mst_encoder_atomic_disable(struct drm_encoder *encoder, struc
 	mtk_dp_mst_drv_stop(mtk_dp, state, mtk_con);
 
 	mtk_con->video_enable = false;
+
+	if (mtk_dp->training_info.cable_plug_in)
+		mtk_dp_mst_encoder_update_slots(mtk_dp, state);
 
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
 
@@ -899,9 +943,9 @@ static void mtk_dp_mst_encoder_atomic_enable(struct drm_encoder *encoder, struct
 		return;
 	}
 
-	mtk_con->video_enable = true;
-
 	mtk_dp_mst_drv_start(mtk_dp, mtk_con);
+
+	mtk_con->video_enable = true;
 
 	dev_dbg(mtk_dp->dev, "content type:%d, content protection:%d",
 		mtk_dp->con_state[mtk_con->encoder_id].hdcp_content_type,
