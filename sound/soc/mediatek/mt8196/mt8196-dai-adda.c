@@ -2032,29 +2032,8 @@ static int mtk_dai_adda_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static int mtk_dai_adda_trigger(struct snd_pcm_substream *substream,
-				int cmd, struct snd_soc_dai *dai)
-{
-	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
-	int id = dai->id;
-
-	switch (cmd) {
-	case SNDRV_PCM_TRIGGER_START:
-		if (id >= MT8196_DAI_AP_DMIC &&
-		    id <= MT8196_DAI_AP_DMIC_MULTICH) {
-			dev_dbg(afe->dev, "%s() id %d, stream %d sleep for 100ms\n",
-				__func__, id, substream->stream);
-			msleep(100);
-		}
-		break;
-	}
-
-	return 0;
-}
-
 static const struct snd_soc_dai_ops mtk_dai_adda_ops = {
 	.hw_params = mtk_dai_adda_hw_params,
-	.trigger = mtk_dai_adda_trigger,
 };
 
 /* dai driver */
