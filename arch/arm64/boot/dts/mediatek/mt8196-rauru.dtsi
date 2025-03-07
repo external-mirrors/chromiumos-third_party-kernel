@@ -30,10 +30,11 @@
 		default-brightness-level = <576>;
 	};
 
-	dmic-codec {
+	dmic_codec: dmic-codec {
 		compatible = "dmic-codec";
+		#sound-dai-cells = <0>;
 		num-channels = <2>;
-		wakeup-delay-ms = <50>;
+		wakeup-delay-ms = <100>;
 	};
 
 	/* system wide LDO 3.3V power rail */
