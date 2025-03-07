@@ -2578,7 +2578,7 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 		adj_hsync = DSC_HSYNC_LEN;
 		adj_hfp = DSC_HFP_LEN;
 		adj_hbp = DSC_HBP_LEN;
-		vref = (u32)div_u64(adj->clock * 1000 * 1000,
+		vref = (u32)div_u64((u64)adj->clock * 1000 * 1000,
 				    adj->htotal * adj->vtotal);
 		goto calculate_timing;
 	}
@@ -2668,7 +2668,7 @@ calculate_timing:
 	adj->hsync_end = adj->hsync_start + adj_hsync;
 	adj->htotal = adj->hsync_end + adj_hbp;
 	if (mode->clock > DSC_PIXEL_CLOCK)
-		adj->clock = (u32)div_u64(vref * adj->htotal * adj->vtotal,
+		adj->clock = (u32)div_u64((u64)vref * adj->htotal * adj->vtotal,
 					  1000 * 1000);
 
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync_start(%d), hsync_end(%d), htot(%d)\n",
