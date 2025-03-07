@@ -5,6 +5,7 @@
 
 #include <drm/drm_fourcc.h>
 #include <drm/drm_of.h>
+#include <drm/drm_print.h>
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/of_platform.h>
@@ -248,11 +249,10 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 	const struct drm_format_info *fmt_info = drm_format_info(pending->format);
 	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
 
-	dev_dbg(dev, "%s+ idx:%d, enable:%d, fmt:0x%x\n", __func__, idx,
-		pending->enable, pending->format);
-	dev_dbg(dev, "addr 0x%pad, fb w:%d, {%d,%d,%d,%d}\n",
-		&pending->addr, (pending->pitch / fmt_info->cpp[0]),
-		pending->x, pending->y, pending->width, pending->height);
+	DRM_DEV_DEBUG_DRIVER(dev, "idx:%d enable:%d fmt:0x%x addr:0x%pad fb_w:%d {%d,%d,%d,%d}\n",
+			     idx, pending->enable, pending->format,
+			     &pending->addr, (pending->pitch / fmt_info->cpp[0]),
+			     pending->x, pending->y, pending->width, pending->height);
 
 	exdma = get_comp_by_type_idx(dev, OVLSYS_ADAPTOR_TYPE_EXDMA, idx);
 	blender = get_comp_by_type_idx(dev, OVLSYS_ADAPTOR_TYPE_BLENDER, idx);

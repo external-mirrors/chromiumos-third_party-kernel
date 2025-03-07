@@ -202,7 +202,8 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	}
 
 	if (!mtk_crtc->sec_on) {
-		dev_dbg(crtc->dev->dev, "crtc-%d is already disabled!\n", drm_crtc_index(crtc));
+		DRM_DEV_DEBUG_DRIVER(crtc->dev->dev,
+				     "crtc-%d is already disabled!\n", drm_crtc_index(crtc));
 		return;
 	}
 
@@ -306,9 +307,9 @@ static void mtk_crtc_plane_switch_sec_state(struct drm_crtc *crtc,
 		plane_num++;
 	}
 
-	dev_dbg(crtc->dev->dev, "%s %d: plane_num=%d, sec_on=%d, cursor_only=%d, crtc-%d\n",
-		__func__, __LINE__, plane_num, sec_on,
-		(plane_num == 1 && cursor_update), drm_crtc_index(crtc));
+	DRM_DEV_DEBUG_DRIVER(crtc->dev->dev, "plane_num=%d, sec_on=%d, cursor_only=%d, crtc-%d\n",
+			     plane_num, sec_on, (plane_num == 1 && cursor_update),
+			     drm_crtc_index(crtc));
 
 	/* If no plane changed, not switching secure state */
 	if (plane_num == 0)
