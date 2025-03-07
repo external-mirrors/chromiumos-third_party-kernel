@@ -63,6 +63,10 @@
 	};
 };
 
+&dmic_codec {
+	num-channels = <3>;
+};
+
 &afe {
 	/* Only for ETDM in/out 4 */
 	etdm-out-ch = <2>;
@@ -626,6 +630,14 @@
 
 		codec {
 			sound-dai = <&anx_bridge>;
+		};
+	};
+
+	dai-link-4 {
+		link-name = "AP_DMIC_MULTICH_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
 		};
 	};
 };
