@@ -121,5 +121,6 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-hylia-sku2.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-navi-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-navi-sku1.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-navi-sku2.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8196-rauru-navi-sku5.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8365-evk.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8516-pumpkin.dtb
