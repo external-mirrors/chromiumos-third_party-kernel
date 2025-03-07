@@ -76,6 +76,22 @@
 			sound-dai = <&dp_tx>;
 		};
 	};
+
+	dai-link-4 {
+		link-name = "AP_DMIC_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
+		};
+	};
+
+	dai-link-5 {
+		link-name = "AP_DMIC_CH34_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
+		};
+	};
 };
 
 &trackpad_synaptics {
