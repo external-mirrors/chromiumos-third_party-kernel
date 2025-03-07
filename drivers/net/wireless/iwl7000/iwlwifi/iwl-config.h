@@ -459,8 +459,8 @@ struct iwl_cfg {
 struct iwl_dev_info {
 	u16 device;
 	u16 subdevice;
-	u16 mac_type;
 	u16 rf_type;
+	u8 mac_type;
 	u8 bw_limit;
 	u8 mac_step;
 	u8 rf_step;
