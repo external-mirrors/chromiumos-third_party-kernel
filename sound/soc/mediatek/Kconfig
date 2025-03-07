@@ -227,6 +227,7 @@ config SND_SOC_MT8196_MT6681
 	select SND_SOC_TAS2781_COMLIB
 	select SND_SOC_TAS2781_FMWLIB
 	select SND_SOC_TAS2781_I2C
+	select SND_SOC_DMIC
 	help
 	  This adds support for ASoC machine driver for MediaTek MT8196
 	  boards with the MT6681 and other I2S audio codecs.
