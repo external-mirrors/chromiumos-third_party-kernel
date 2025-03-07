@@ -2874,7 +2874,7 @@ static int ieee80211_get_tx_power(struct wiphy *wiphy,
 				  struct wireless_dev *wdev,
 				  int *dbm)
 {
-	int link_id = -1;
+	unsigned int link_id = 0;
 	struct ieee80211_local *local = wiphy_priv(wiphy);
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 	struct ieee80211_link_data *link_data;
