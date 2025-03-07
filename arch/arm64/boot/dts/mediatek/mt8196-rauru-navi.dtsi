@@ -278,6 +278,14 @@
 			sound-dai = <&anx_bridge>;
 		};
 	};
+
+	dai-link-5 {
+		link-name = "AP_DMIC_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
+		};
+	};
 };
 
 &therm_intf {
