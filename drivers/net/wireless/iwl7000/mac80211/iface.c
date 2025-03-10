@@ -464,7 +464,6 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 {
 	struct ieee80211_local *local = sdata->local;
 	unsigned long flags;
-	struct sk_buff_head freeq;
 	struct sk_buff *skb, *tmp;
 	u32 hw_reconf_flags = 0;
 	int i, flushed;
@@ -551,14 +550,15 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 
 	wiphy_work_cancel(local->hw.wiphy, &sdata->deflink.csa.finalize_work);
 	wiphy_delayed_work_cancel(local->hw.wiphy,
-				  &sdata->deflink.dfs_cac_timer_work);
+				  &sdata->dfs_cac_timer_work);
 
 	if (sdata->wdev.cac_started) {
 		chandef = sdata->vif.bss_conf.chanreq.oper;
 		WARN_ON(local->suspended);
 		ieee80211_link_release_channel(&sdata->deflink);
 		cfg80211_cac_event(sdata->dev, &chandef,
-				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
+				   NL80211_RADAR_CAC_ABORTED,
+				   GFP_KERNEL);
 	}
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP) {
@@ -637,31 +637,17 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 		skb_queue_purge(&sdata->status_queue);
 	}
 
-	/*
-	 * Since ieee80211_free_txskb() may issue __dev_queue_xmit()
-	 * which should be called with interrupts enabled, reclamation
-	 * is done in two phases:
-	 */
-	__skb_queue_head_init(&freeq);
-
-	/* unlink from local queues... */
 	spin_lock_irqsave(&local->queue_stop_reason_lock, flags);
 	for (i = 0; i < IEEE80211_MAX_QUEUES; i++) {
 		skb_queue_walk_safe(&local->pending[i], skb, tmp) {
 			struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 			if (info->control.vif == &sdata->vif) {
 				__skb_unlink(skb, &local->pending[i]);
-				__skb_queue_tail(&freeq, skb);
+				ieee80211_free_txskb(&local->hw, skb);
 			}
 		}
 	}
 	spin_unlock_irqrestore(&local->queue_stop_reason_lock, flags);
-
-	/* ... and perform actual reclamation with interrupts enabled. */
-	skb_queue_walk_safe(&freeq, skb, tmp) {
-		__skb_unlink(skb, &freeq);
-		ieee80211_free_txskb(&local->hw, skb);
-	}
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
 		ieee80211_txq_remove_vlan(local, sdata);
@@ -1789,6 +1775,8 @@ static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
 	wiphy_work_init(&sdata->work, ieee80211_iface_work);
 	wiphy_work_init(&sdata->activate_links_work,
 			ieee80211_activate_links_work);
+	wiphy_delayed_work_init(&sdata->dfs_cac_timer_work,
+				ieee80211_dfs_cac_timer_work);
 
 	switch (type) {
 	case NL80211_IFTYPE_P2P_GO:
@@ -2408,14 +2396,18 @@ void ieee80211_vif_block_queues_csa(struct ieee80211_sub_if_data *sdata)
 	if (ieee80211_hw_check(&local->hw, HANDLES_QUIET_CSA))
 		return;
 
-	ieee80211_stop_vif_queues_norefcount(local, sdata,
-					     IEEE80211_QUEUE_STOP_REASON_CSA);
+	ieee80211_stop_vif_queues(local, sdata,
+				  IEEE80211_QUEUE_STOP_REASON_CSA);
+	sdata->csa_blocked_queues = true;
 }
 
 void ieee80211_vif_unblock_queues_csa(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_local *local = sdata->local;
 
-	ieee80211_wake_vif_queues_norefcount(local, sdata,
-					     IEEE80211_QUEUE_STOP_REASON_CSA);
+	if (sdata->csa_blocked_queues) {
+		ieee80211_wake_vif_queues(local, sdata,
+					  IEEE80211_QUEUE_STOP_REASON_CSA);
+		sdata->csa_blocked_queues = false;
+	}
 }
