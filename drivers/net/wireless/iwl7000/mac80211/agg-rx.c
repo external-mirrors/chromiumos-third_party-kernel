@@ -72,7 +72,7 @@ void __ieee80211_stop_rx_ba_session(struct sta_info *sta, u16 tid,
 	lockdep_assert_wiphy(sta->local->hw.wiphy);
 
 	tid_rx = rcu_dereference_protected(sta->ampdu_mlme.tid_rx[tid],
-					lockdep_rtnl_is_held());
+					lockdep_is_held(&sta->local->hw.wiphy->mtx));
 
 	if (!test_bit(tid, sta->ampdu_mlme.agg_session_valid))
 		return;
@@ -207,7 +207,20 @@ static void ieee80211_send_addba_resp(struct sta_info *sta, u8 *da, u16 tid,
 		return;
 
 	skb_reserve(skb, local->hw.extra_tx_headroom);
-	mgmt = ieee80211_mgmt_ba(skb, da, sdata);
+	mgmt = skb_put_zero(skb, 24);
+	memcpy(mgmt->da, da, ETH_ALEN);
+	memcpy(mgmt->sa, sdata->vif.addr, ETH_ALEN);
+	if (sdata->vif.type == NL80211_IFTYPE_AP ||
+	    sdata->vif.type == NL80211_IFTYPE_AP_VLAN ||
+	    sdata->vif.type == NL80211_IFTYPE_MESH_POINT)
+		memcpy(mgmt->bssid, sdata->vif.addr, ETH_ALEN);
+	else if (sdata->vif.type == NL80211_IFTYPE_STATION)
+		memcpy(mgmt->bssid, sdata->vif.cfg.ap_addr, ETH_ALEN);
+	else if (sdata->vif.type == NL80211_IFTYPE_ADHOC)
+		memcpy(mgmt->bssid, sdata->u.ibss.bssid, ETH_ALEN);
+
+	mgmt->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
+					  IEEE80211_STYPE_ACTION);
 
 	skb_put(skb, 1 + sizeof(mgmt->u.action.u.addba_resp));
 	mgmt->u.action.category = WLAN_CATEGORY_BACK;
