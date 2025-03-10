@@ -7,8 +7,6 @@
 
 #include "mld.h"
 
-#define IWL_MLD_INVALID_QUEUE		0xFFFF
-
 /**
  * struct iwl_mld_txq - TX Queue data
  *
@@ -16,7 +14,6 @@
  * @list: list pointer, for &mld::txqs_to_add
  * @status: bitmap of the txq status
  * @status.allocated: Indicates that the queue was allocated.
- * @status.stop_full: Indicates that the queue is full and should stop TXing.
  * @tx_request: makes sure that if there are multiple threads that want to tx
  *	from this txq, only one of them will do all the TXing.
  *	This is needed to avoid spinning the trans txq lock, which is expensive
@@ -28,7 +25,6 @@ struct iwl_mld_txq {
 		struct list_head list;
 		struct {
 			u8 allocated:1;
-			u8 stop_full:1;
 		} status;
 		atomic_t tx_request;
 	);
@@ -49,23 +45,8 @@ iwl_mld_txq_from_mac80211(struct ieee80211_txq *txq)
 
 void iwl_mld_add_txqs_wk(struct wiphy *wiphy, struct wiphy_work *wk);
 void iwl_mld_remove_txq(struct iwl_mld *mld, struct ieee80211_txq *txq);
-void
-iwl_mld_free_txq(struct iwl_mld *mld, u32 fw_sta_mask, u32 tid, u32 queue_id);
 void iwl_mld_tx_from_txq(struct iwl_mld *mld, struct ieee80211_txq *txq);
 void iwl_mld_handle_tx_resp_notif(struct iwl_mld *mld,
 				 struct iwl_rx_packet *pkt);
 int iwl_mld_flush_link_sta_txqs(struct iwl_mld *mld, u32 fw_sta_id);
-int iwl_mld_ensure_queue(struct iwl_mld *mld, struct ieee80211_txq *txq);
-
-void iwl_mld_handle_compressed_ba_notif(struct iwl_mld *mld,
-					struct iwl_rx_packet *pkt);
-void iwl_mld_toggle_tx_ant(struct iwl_mld *mld, u8 *ant);
-
-u8 iwl_mld_get_lowest_rate(struct iwl_mld *mld,
-			   struct ieee80211_tx_info *info,
-			   struct ieee80211_vif *vif);
-
-void iwl_mld_tx_skb(struct iwl_mld *mld, struct sk_buff *skb,
-		    struct ieee80211_txq *txq);
-
 #endif /* __iwl_mld_tx_h__ */

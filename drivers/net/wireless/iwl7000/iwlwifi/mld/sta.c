@@ -8,24 +8,27 @@
 #include "sta.h"
 #include "hcmd.h"
 #include "iface.h"
-#include "key.h"
 #include "fw/api/sta.h"
 #include "fw/api/mac.h"
-#include "fw/api/rx.h"
 
-int iwl_mld_fw_sta_id_from_link_sta(struct ieee80211_link_sta *link_sta)
+static int
+iwl_mld_fw_sta_id_from_link_sta(struct iwl_mld *mld,
+				struct ieee80211_link_sta *link_sta)
 {
-	struct iwl_mld_link_sta *mld_link_sta;
-
 	/* This is not meant to be called with a NULL pointer */
 	if (WARN_ON(!link_sta))
 		return -ENOENT;
 
-	mld_link_sta = iwl_mld_link_sta_from_mac80211(link_sta);
-	if (WARN_ON(!mld_link_sta))
-		return -ENOENT;
+	for (int fw_id = 0; fw_id < mld->fw->ucode_capa.num_stations;
+	     fw_id++) {
+		struct ieee80211_link_sta *l_sta;
 
-	return mld_link_sta->fw_id;
+		l_sta = rcu_access_pointer(mld->fw_id_to_link_sta[fw_id]);
+
+		if (l_sta == link_sta)
+			return fw_id;
+	}
+	return -ENOENT;
 }
 
 static void
@@ -165,7 +168,7 @@ iwl_mld_add_modify_sta_cmd(struct iwl_mld *mld,
 	struct ieee80211_bss_conf *link;
 	struct iwl_mld_link *mld_link;
 	struct iwl_sta_cfg_cmd cmd = {};
-	int fw_id = iwl_mld_fw_sta_id_from_link_sta(link_sta);
+	int fw_id = iwl_mld_fw_sta_id_from_link_sta(mld, link_sta);
 
 	lockdep_assert_wiphy(mld->wiphy);
 
@@ -250,43 +253,19 @@ IWL_MLD_ALLOC_FN(link_sta, link_sta)
 static int
 iwl_mld_add_link_sta(struct iwl_mld *mld, struct ieee80211_link_sta *link_sta)
 {
-	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(link_sta->sta);
-	struct iwl_mld_link_sta *mld_link_sta;
 	int ret;
 	u8 fw_id;
-
-	lockdep_assert_wiphy(mld->wiphy);
-
-	/* We will fail to add it to the FW anyway */
-	if (iwl_mld_error_before_recovery(mld))
-		return -ENODEV;
 
 	/* We need to preserve the fw sta ids during a restart, since the fw
 	 * will recover SN/PN for them
 	 */
-	if (mld->fw_status.in_hw_restart) {
-		fw_id = iwl_mld_fw_sta_id_from_link_sta(link_sta);
-		goto add_to_fw;
+	if (!mld->fw_status.in_hw_restart) {
+		/* Allocate a fw id and map it to the link_sta */
+		ret = iwl_mld_allocate_link_sta_fw_id(mld, &fw_id, link_sta);
+		if (ret)
+			return ret;
 	}
 
-	/* Allocate a fw id and map it to the link_sta */
-	ret = iwl_mld_allocate_link_sta_fw_id(mld, &fw_id, link_sta);
-	if (ret)
-		return ret;
-
-	if (link_sta == &link_sta->sta->deflink) {
-		mld_link_sta = &mld_sta->deflink;
-	} else {
-		mld_link_sta = kzalloc(sizeof(*mld_link_sta), GFP_KERNEL);
-		if (!mld_link_sta)
-			return -ENOMEM;
-	}
-
-	mld_link_sta->fw_id = fw_id;
-	mld_link_sta->mld = mld;
-	rcu_assign_pointer(mld_sta->link[link_sta->link_id], mld_link_sta);
-
-add_to_fw:
 	ret = iwl_mld_add_modify_sta_cmd(mld, link_sta);
 	if (ret)
 		RCU_INIT_POINTER(mld->fw_id_to_link_sta[fw_id], NULL);
@@ -311,25 +290,20 @@ static int iwl_mld_rm_sta_from_fw(struct iwl_mld *mld, u8 fw_sta_id)
 }
 
 static void
-iwl_mld_remove_link_sta(struct iwl_mld *mld,
+iwl_mvm_remove_link_sta(struct iwl_mld *mld,
 			struct ieee80211_link_sta *link_sta)
 {
-	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(link_sta->sta);
-	struct iwl_mld_link_sta *mld_link_sta =
-		iwl_mld_link_sta_from_mac80211(link_sta);
+	int fw_id = iwl_mld_fw_sta_id_from_link_sta(mld, link_sta);
 
-	if (WARN_ON(!mld_link_sta))
+	if (WARN_ON(fw_id < 0))
 		return;
 
-	iwl_mld_rm_sta_from_fw(mld, mld_link_sta->fw_id);
+	iwl_mld_rm_sta_from_fw(mld, fw_id);
 
-	/* This will not be done upon reconfig, so do it also when
+	/* This will not be set to NULL upon reconfig, so set it also when
 	 * failed to remove from fw
 	 */
-	RCU_INIT_POINTER(mld->fw_id_to_link_sta[mld_link_sta->fw_id], NULL);
-	RCU_INIT_POINTER(mld_sta->link[link_sta->link_id], NULL);
-	if (mld_link_sta != &mld_sta->deflink)
-		kfree_rcu(mld_link_sta, rcu_head);
+	RCU_INIT_POINTER(mld->fw_id_to_link_sta[fw_id], NULL);
 }
 
 int iwl_mld_update_all_link_stations(struct iwl_mld *mld,
@@ -341,50 +315,13 @@ int iwl_mld_update_all_link_stations(struct iwl_mld *mld,
 
 	for_each_sta_active_link(mld_sta->vif, sta, link_sta, link_id) {
 		int ret = iwl_mld_add_modify_sta_cmd(mld, link_sta);
-
-		if (ret)
-			return ret;
+			if (ret)
+				return ret;
 	}
 	return 0;
 }
 
-static void iwl_mld_destroy_sta(struct ieee80211_sta *sta)
-{
-	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(sta);
-
-	kfree(mld_sta->dup_data);
-}
-
-static int
-iwl_mld_alloc_dup_data(struct iwl_mld *mld, struct iwl_mld_sta *mld_sta)
-{
-	struct iwl_mld_rxq_dup_data *dup_data;
-
-	if (mld->fw_status.in_hw_restart)
-		return 0;
-
-	dup_data = kcalloc(mld->trans->num_rx_queues, sizeof(*dup_data),
-			   GFP_KERNEL);
-	if (!dup_data)
-		return -ENOMEM;
-
-	/* Initialize all the last_seq values to 0xffff which can never
-	 * compare equal to the frame's seq_ctrl in the check in
-	 * iwl_mld_is_dup() since the lower 4 bits are the fragment
-	 * number and fragmented packets don't reach that function.
-	 *
-	 * This thus allows receiving a packet with seqno 0 and the
-	 * retry bit set as the very first packet on a new TID.
-	 */
-	for (int q = 0; q < mld->trans->num_rx_queues; q++)
-		memset(dup_data[q].last_seq, 0xff,
-		       sizeof(dup_data[q].last_seq));
-	mld_sta->dup_data = dup_data;
-
-	return 0;
-}
-
-static int
+static void
 iwl_mld_init_sta(struct iwl_mld *mld, struct ieee80211_sta *sta,
 		 struct ieee80211_vif *vif, enum iwl_fw_sta_type type)
 {
@@ -392,14 +329,9 @@ iwl_mld_init_sta(struct iwl_mld *mld, struct ieee80211_sta *sta,
 
 	mld_sta->vif = vif;
 	mld_sta->sta_type = type;
-	mld_sta->mld = mld;
 
 	for (int i = 0; i < ARRAY_SIZE(sta->txq); i++)
 		iwl_mld_init_txq(iwl_mld_txq_from_mac80211(sta->txq[i]));
-
-	iwl_mld_toggle_tx_ant(mld, &mld_sta->data_tx_ant);
-
-	return iwl_mld_alloc_dup_data(mld, mld_sta);
 }
 
 int iwl_mld_add_sta(struct iwl_mld *mld, struct ieee80211_sta *sta,
@@ -408,28 +340,19 @@ int iwl_mld_add_sta(struct iwl_mld *mld, struct ieee80211_sta *sta,
 	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(sta);
 	struct ieee80211_link_sta *link_sta;
 	int link_id;
-	int ret;
 
-	ret = iwl_mld_init_sta(mld, sta, vif, type);
-	if (ret)
-		return ret;
+	iwl_mld_init_sta(mld, sta, vif, type);
 
 	/* We could have add only the deflink link_sta, but it will not work
 	 * in the restart case if the single link that is active during
 	 * reconfig is not the deflink one.
 	 */
 	for_each_sta_active_link(mld_sta->vif, sta, link_sta, link_id) {
-		ret = iwl_mld_add_link_sta(mld, link_sta);
-		if (ret)
-			goto destroy_sta;
+		int ret = iwl_mld_add_link_sta(mld, link_sta);
+			if (ret)
+				return ret;
 	}
-
 	return 0;
-
-destroy_sta:
-	iwl_mld_destroy_sta(sta);
-
-	return ret;
 }
 
 void iwl_mld_flush_sta_txqs(struct iwl_mld *mld, struct ieee80211_sta *sta)
@@ -439,7 +362,7 @@ void iwl_mld_flush_sta_txqs(struct iwl_mld *mld, struct ieee80211_sta *sta)
 	int link_id;
 
 	for_each_sta_active_link(mld_sta->vif, sta, link_sta, link_id) {
-		u32 fw_sta_id = iwl_mld_fw_sta_id_from_link_sta(link_sta);
+		u32 fw_sta_id = iwl_mld_fw_sta_id_from_link_sta(mld, link_sta);
 
 		iwl_mld_flush_link_sta_txqs(mld, fw_sta_id);
 	}
@@ -467,7 +390,6 @@ void iwl_mld_wait_sta_txqs_empty(struct iwl_mld *mld, struct ieee80211_sta *sta)
 void iwl_mld_remove_sta(struct iwl_mld *mld, struct ieee80211_sta *sta)
 {
 	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(sta);
-	struct ieee80211_vif *vif = mld_sta->vif;
 	struct ieee80211_link_sta *link_sta;
 	u8 link_id;
 
@@ -483,19 +405,9 @@ void iwl_mld_remove_sta(struct iwl_mld *mld, struct ieee80211_sta *sta)
 	for (int i = 0; i < ARRAY_SIZE(sta->txq); i++)
 		iwl_mld_remove_txq(mld, sta->txq[i]);
 
-	for_each_sta_active_link(vif, sta, link_sta, link_id) {
-		/* Mac8011 will remove the groupwise keys after the sta is
-		 * removed, but FW expects all the keys to be removed before
-		 * the STA is, so remove them all here.
-		 */
-		if (vif->type == NL80211_IFTYPE_STATION)
-			iwl_mld_remove_ap_keys(mld, vif, link_id);
-
-		/* Remove the link_sta */
-		iwl_mld_remove_link_sta(mld, link_sta);
-	}
-
-	iwl_mld_destroy_sta(sta);
+	/* Remove all link_sta's*/
+	for_each_sta_active_link(mld_sta->vif, sta, link_sta, link_id)
+		iwl_mvm_remove_link_sta(mld, link_sta);
 }
 
 u32 iwl_mld_fw_sta_id_mask(struct iwl_mld *mld, struct ieee80211_sta *sta)
@@ -504,203 +416,19 @@ u32 iwl_mld_fw_sta_id_mask(struct iwl_mld *mld, struct ieee80211_sta *sta)
 	struct ieee80211_link_sta *link_sta;
 	unsigned int link_id;
 	u32 result = 0;
+	u8 fw_id;
 
-	KUNIT_STATIC_STUB_REDIRECT(iwl_mld_fw_sta_id_mask, mld, sta);
+	/* it's easy when the STA is not an MLD */
+	if (!sta->valid_links) {
+		fw_id = iwl_mld_fw_sta_id_from_link_sta(mld, &sta->deflink);
+		return BIT(fw_id);
+	}
 
+	/* but if it is an MLD, get the mask of all the FW STAs it has ... */
 	for_each_sta_active_link(vif, sta, link_sta, link_id) {
-		int fw_id = iwl_mld_fw_sta_id_from_link_sta(link_sta);
-
-		if (!WARN_ON(fw_id < 0))
-			result |= BIT(fw_id);
+		fw_id = iwl_mld_fw_sta_id_from_link_sta(mld, link_sta);
+		result |= BIT(fw_id);
 	}
 
 	return result;
-}
-EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_fw_sta_id_mask);
-
-static int iwl_mld_allocate_internal_txq(struct iwl_mld *mld,
-					 struct iwl_mld_int_sta *internal_sta,
-					 u8 tid)
-{
-	u32 sta_mask = BIT(internal_sta->sta_id);
-	int queue, size;
-
-	size = max_t(u32, IWL_MGMT_QUEUE_SIZE,
-		     mld->trans->cfg->min_txq_size);
-
-	queue = iwl_trans_txq_alloc(mld->trans, 0, sta_mask, tid, size,
-				    IWL_WATCHDOG_DISABLED);
-
-	if (queue >= 0)
-		IWL_DEBUG_TX_QUEUES(mld,
-				    "Enabling TXQ #%d for sta mask 0x%x tid %d\n",
-				    queue, sta_mask, tid);
-	return queue;
-}
-
-static int iwl_mld_send_aux_sta_cmd(void)
-{
-	/* TODO: send aux cmd. (task=p2p) */
-	return -EOPNOTSUPP;
-}
-
-static int
-iwl_mld_add_internal_sta_to_fw(struct iwl_mld *mld,
-			       const struct iwl_mld_int_sta *internal_sta,
-			       u8 fw_link_id,
-			       const u8 *addr)
-{
-	struct iwl_sta_cfg_cmd cmd = {};
-
-	if (internal_sta->sta_type == STATION_TYPE_AUX)
-		return iwl_mld_send_aux_sta_cmd();
-
-	cmd.sta_id = cpu_to_le32((u8)internal_sta->sta_id);
-	cmd.link_id = cpu_to_le32(fw_link_id);
-	cmd.station_type = cpu_to_le32(internal_sta->sta_type);
-
-	/* FW doesn't allow to add a IGTK/BIGTK if the sta isn't marked as MFP.
-	 * On the other hand, FW will never check this flag during RX since
-	 * an AP/GO doesn't receive protected broadcast management frames.
-	 * So, we can set it unconditionally.
-	 */
-	if (internal_sta->sta_type == STATION_TYPE_BCAST_MGMT)
-		cmd.mfp = cpu_to_le32(1);
-
-	if (addr) {
-		memcpy(cmd.peer_mld_address, addr, ETH_ALEN);
-		memcpy(cmd.peer_link_address, addr, ETH_ALEN);
-	}
-
-	return iwl_mld_send_sta_cmd(mld, &cmd);
-}
-
-static int iwl_mld_add_internal_sta(struct iwl_mld *mld,
-				    struct iwl_mld_int_sta *internal_sta,
-				    enum iwl_fw_sta_type sta_type,
-				    u8 fw_link_id, const u8 *addr, u8 tid)
-{
-	int ret, queue_id;
-
-	ret = iwl_mld_allocate_link_sta_fw_id(mld,
-					      &internal_sta->sta_id,
-					      ERR_PTR(-EINVAL));
-	if (ret)
-		return ret;
-
-	internal_sta->sta_type = sta_type;
-
-	ret = iwl_mld_add_internal_sta_to_fw(mld, internal_sta, fw_link_id,
-					     addr);
-	if (ret)
-		goto err;
-
-	queue_id = iwl_mld_allocate_internal_txq(mld, internal_sta, tid);
-	if (queue_id < 0) {
-		iwl_mld_rm_sta_from_fw(mld, internal_sta->sta_id);
-		ret = queue_id;
-		goto err;
-	}
-
-	internal_sta->queue_id = queue_id;
-
-	return 0;
-err:
-	iwl_mld_free_internal_sta(mld, internal_sta);
-	return ret;
-}
-
-int iwl_mld_add_bcast_sta(struct iwl_mld *mld,
-			  struct ieee80211_vif *vif,
-			  struct ieee80211_bss_conf *link)
-{
-	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
-	const u8 bcast_addr[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	const u8 *addr;
-
-	if (WARN_ON(!mld_link))
-		return -EINVAL;
-
-	if (WARN_ON(vif->type != NL80211_IFTYPE_AP &&
-		    vif->type != NL80211_IFTYPE_ADHOC))
-		return -EINVAL;
-
-	addr = vif->type == NL80211_IFTYPE_ADHOC ?
-		link->bssid : bcast_addr;
-
-	return iwl_mld_add_internal_sta(mld, &mld_link->bcast_sta,
-					STATION_TYPE_BCAST_MGMT,
-					mld_link->fw_id, addr,
-					IWL_MGMT_TID);
-}
-
-int iwl_mld_add_mcast_sta(struct iwl_mld *mld,
-			  struct ieee80211_vif *vif,
-			  struct ieee80211_bss_conf *link)
-{
-	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
-	const u8 mcast_addr[] = {0x03, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-	if (WARN_ON(!mld_link))
-		return -EINVAL;
-
-	if (WARN_ON(vif->type != NL80211_IFTYPE_AP &&
-		    vif->type != NL80211_IFTYPE_ADHOC))
-		return -EINVAL;
-
-	return iwl_mld_add_internal_sta(mld, &mld_link->mcast_sta,
-					STATION_TYPE_MCAST,
-					mld_link->fw_id, mcast_addr, 0);
-}
-
-static void iwl_mld_remove_internal_sta(struct iwl_mld *mld,
-					struct iwl_mld_int_sta *internal_sta,
-					bool flush, u8 tid)
-{
-	if (WARN_ON_ONCE(internal_sta->sta_id == IWL_INVALID_STA ||
-			 internal_sta->queue_id == IWL_MLD_INVALID_QUEUE))
-		return;
-
-	if (flush)
-		iwl_mld_flush_link_sta_txqs(mld, internal_sta->sta_id);
-
-	iwl_mld_free_txq(mld, BIT(internal_sta->sta_id),
-			 tid, internal_sta->queue_id);
-
-	iwl_mld_rm_sta_from_fw(mld, internal_sta->sta_id);
-
-	iwl_mld_free_internal_sta(mld, internal_sta);
-}
-
-void iwl_mld_remove_bcast_sta(struct iwl_mld *mld,
-			      struct ieee80211_vif *vif,
-			      struct ieee80211_bss_conf *link)
-{
-	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
-
-	if (WARN_ON(!mld_link))
-		return;
-
-	if (WARN_ON(vif->type != NL80211_IFTYPE_AP &&
-		    vif->type != NL80211_IFTYPE_ADHOC))
-		return;
-
-	iwl_mld_remove_internal_sta(mld, &mld_link->bcast_sta, true,
-				    IWL_MGMT_TID);
-}
-
-void iwl_mld_remove_mcast_sta(struct iwl_mld *mld,
-			      struct ieee80211_vif *vif,
-			      struct ieee80211_bss_conf *link)
-{
-	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
-
-	if (WARN_ON(!mld_link))
-		return;
-
-	if (WARN_ON(vif->type != NL80211_IFTYPE_AP &&
-		    vif->type != NL80211_IFTYPE_ADHOC))
-		return;
-
-	iwl_mld_remove_internal_sta(mld, &mld_link->mcast_sta, true, 0);
 }
