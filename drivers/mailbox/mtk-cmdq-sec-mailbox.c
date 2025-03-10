@@ -109,7 +109,7 @@ dma_addr_t cmdq_sec_get_exec_cnt_addr(struct mbox_chan *chan)
 			(unsigned long)cmdq->base_pa);
 
 	return cmdq->base_pa + CMDQ_THR_BASE +
-		CMDQ_THR_SIZE * sec_thread->idx + CMDQ_THR_EXEC_CNT_PA;
+		(u64)sec_thread->idx * CMDQ_THR_SIZE + CMDQ_THR_EXEC_CNT_PA;
 }
 EXPORT_SYMBOL_GPL(cmdq_sec_get_exec_cnt_addr);
 
@@ -124,7 +124,7 @@ dma_addr_t cmdq_sec_get_cookie_addr(struct mbox_chan *chan)
 		return 0;
 	}
 
-	return cmdq->cookie_buf_base + sec_thread->idx * sizeof(u32);
+	return cmdq->cookie_buf_base + (u64)sec_thread->idx * sizeof(u32);
 }
 EXPORT_SYMBOL_GPL(cmdq_sec_get_cookie_addr);
 
@@ -180,7 +180,7 @@ static int cmdq_sec_session_send(struct cmdq_sec *cmdq,
 {
 	int err;
 	u64 cost;
-	s32 thrd_idx = (sec_thread) ? sec_thread->idx : CMDQ_INVALID_THREAD;
+	u32 thrd_idx = (sec_thread) ? sec_thread->idx : CMDQ_INVALID_THREAD;
 	bool reset_cookie = (sec_thread) ? !sec_thread->task_cnt : false;
 	struct iwc_cmdq_message_t *iwc_msg = (struct iwc_cmdq_message_t *)cmdq->context->iwc_msg;
 	struct cmdq_sec_data *sec_data;
@@ -233,44 +233,10 @@ static int cmdq_sec_session_send(struct cmdq_sec *cmdq,
 	return err;
 }
 
-static int cmdq_sec_session_reply(const u32 iwc_cmd, struct iwc_cmdq_message_t *iwc_msg,
-				  struct cmdq_sec_task *sec_task)
-{
-	if (iwc_msg->rsp == 0)
-		return iwc_msg->rsp;
-
-	if (iwc_cmd == CMD_CMDQ_IWC_SUBMIT_TASK) {
-		struct iwc_cmdq_sec_status_t *sec_status = &iwc_msg->sec_status;
-		int i;
-
-		/* print submit fail case status */
-		pr_err("last sec status: step:%u status:%d args:%#x %#x %#x %#x dispatch:%s\n",
-		       sec_status->step, sec_status->status, sec_status->args[0],
-			   sec_status->args[1], sec_status->args[2], sec_status->args[3],
-			   sec_status->dispatch);
-
-		for (i = 0; i < sec_status->inst_index; i += 2)
-			pr_err("instr %d: %08x %08x\n", i / 2,
-			       sec_status->sec_inst[i], sec_status->sec_inst[i + 1]);
-	} else if (iwc_cmd == CMD_CMDQ_IWC_CANCEL_TASK) {
-		struct iwc_cmdq_cancel_task_t *cancel = &iwc_msg->cancel_task;
-
-		/* print cancel task fail case status */
-		if ((cancel->err_instr[1] >> 24) == CMDQ_CODE_WFE)
-			pr_err("secure error inst event:%u value:%d\n",
-			       cancel->err_instr[1], cancel->reg_value);
-
-		pr_err("cancel_task inst:%08x %08x aee:%d reset:%d pc:0x%08x\n",
-		       cancel->err_instr[1], cancel->err_instr[0],
-			   cancel->throw_aee, cancel->has_reset, cancel->pc);
-	}
-
-	return iwc_msg->rsp;
-}
-
 static int cmdq_sec_task_submit(struct cmdq_sec *cmdq, struct cmdq_sec_thread *sec_thread,
 				struct cmdq_sec_task *sec_task, const u32 iwc_cmd)
 {
+	struct iwc_cmdq_message_t *iwc_msg;
 	int err;
 
 	err = cmdq_sec_session_send(cmdq, sec_thread, sec_task, iwc_cmd);
@@ -282,11 +248,20 @@ static int cmdq_sec_task_submit(struct cmdq_sec *cmdq, struct cmdq_sec_thread *s
 		return err;
 	}
 
-	err = cmdq_sec_session_reply(iwc_cmd, cmdq->context->iwc_msg, sec_task);
-	if (err) {
-		dev_err(&cmdq->dev, "%s %d: cmdq_sec_session_reply() err: %d",
-			__func__, __LINE__, err);
-		return err;
+	iwc_msg = (struct iwc_cmdq_message_t *)cmdq->context->iwc_msg;
+	if (iwc_msg->rsp != 0  && iwc_cmd == CMD_CMDQ_IWC_CANCEL_TASK) {
+		struct iwc_cmdq_cancel_task_t *cancel = &iwc_msg->cancel_task;
+
+		/* print cancel task fail case status */
+		if ((cancel->err_instr[1] >> 24) == CMDQ_CODE_WFE)
+			dev_err(&cmdq->dev, "secure error inst event:%u value:%d\n",
+			       cancel->err_instr[1], cancel->reg_value);
+
+		dev_err(&cmdq->dev, "cancel_task inst:%08x %08x aee:%d reset:%d pc:0x%08x\n",
+		       cancel->err_instr[1], cancel->err_instr[0],
+			   cancel->throw_aee, cancel->has_reset, cancel->pc);
+
+		return iwc_msg->rsp;
 	}
 
 	return 0;
@@ -375,9 +350,7 @@ static bool cmdq_sec_irq_handler(struct cmdq_sec_thread *sec_thread,
 
 		task = list_first_entry_or_null(&sec_thread->thread.task_busy_list,
 						struct cmdq_task, list_entry);
-		if (cur_task == task)
-			cmdq_sec_task_done(sec_task, err);
-		else
+		if (cur_task != task)
 			dev_err(&cmdq->dev, "task list changed");
 
 		/*
@@ -452,7 +425,7 @@ static void cmdq_sec_irq_notify_callback(struct mbox_client *cl, void *mssg)
 static void cmdq_sec_irq_notify_stop(struct cmdq_sec *cmdq)
 {
 	dma_unmap_single(cmdq->pdata->mbox->dev, cmdq->clt_pkt.pa_base,
-				cmdq->clt_pkt.buf_size, DMA_TO_DEVICE);
+			 cmdq->clt_pkt.buf_size, DMA_TO_DEVICE);
 	kfree(cmdq->clt_pkt.va_base);
 	memset(&cmdq->clt_pkt, 0, sizeof (cmdq->clt_pkt));
 	mbox_free_channel(cmdq->notify_chan);
@@ -514,12 +487,12 @@ static int cmdq_sec_irq_notify_start(struct cmdq_sec *cmdq)
 				   cmdq->clt_pkt.cmd_buf_size,
 				   DMA_TO_DEVICE);
 	err = mbox_send_message(cmdq->notify_chan, &cmdq->clt_pkt);
-	mbox_client_txdone(cmdq->notify_chan, 0);
 	if (err < 0) {
 		dev_err(&cmdq->dev, "%s failed:%d", __func__, err);
 		cmdq_sec_irq_notify_stop(cmdq);
 		return err;
 	}
+	mbox_client_txdone(cmdq->notify_chan, 0);
 
 	dev_dbg(&cmdq->dev, "%s success!", __func__);
 
@@ -573,7 +546,7 @@ static void cmdq_sec_task_exec_work(struct work_struct *work_item)
 	struct cmdq_sec_task *sec_task = container_of(work_item,
 						      struct cmdq_sec_task, exec_work);
 	struct cmdq_sec_thread *sec_thread = container_of(sec_task->task.thread,
-							 struct cmdq_sec_thread, thread);
+							  struct cmdq_sec_thread, thread);
 	struct cmdq_sec *cmdq = container_of(sec_thread->dev, struct cmdq_sec, dev);
 	unsigned long flags;
 	int err;
@@ -584,19 +557,6 @@ static void cmdq_sec_task_exec_work(struct work_struct *work_item)
 
 	if (!sec_task->task.pkt->sec_data) {
 		dev_err(&cmdq->dev, "pkt:%p without sec_data", sec_task->task.pkt);
-		return;
-	}
-
-	if (sec_thread->task_cnt >= CMDQ_MAX_TASK_IN_SECURE_THREAD) {
-		struct cmdq_cb_data cb_data;
-
-		dev_dbg(&cmdq->dev, "task_cnt:%u cannot more than %u sec_task:%p thread:%u",
-			sec_thread->task_cnt, CMDQ_MAX_TASK_IN_SECURE_THREAD,
-			sec_task, sec_thread->idx);
-		cb_data.sta = -EMSGSIZE;
-		cb_data.pkt = sec_task->task.pkt;
-		mbox_chan_received_data(sec_thread->thread.chan, &cb_data);
-		kfree(sec_task);
 		return;
 	}
 
@@ -738,8 +698,12 @@ static int cmdq_sec_mbox_startup(struct mbox_chan *chan)
 	struct cmdq_sec_thread *sec_thread = container_of(thread,
 							  struct cmdq_sec_thread, thread);
 	char name[20];
+	int ret;
 
-	snprintf(name, sizeof(name), "task_exec_wq_%u", sec_thread->idx);
+	ret = snprintf(name, sizeof(name), "task_exec_wq_%u", sec_thread->idx);
+	if (ret < 0 || ret >= sizeof(name))
+		return -EINVAL;
+
 	sec_thread->task_exec_wq = create_singlethread_workqueue(name);
 
 	return 0;
@@ -811,21 +775,16 @@ static int cmdq_sec_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto probe_err;
 	}
+	cmdq->base = cmdq->pdata->base;
 
 	res = platform_get_resource(to_platform_device(cmdq->pdata->mbox->dev),
 				    IORESOURCE_MEM, 0);
-	if (!res) {
+	if (!res || res->start == 0) {
 		dev_err(dev, "platform_get_resource() failed!\n");
 		ret = -EINVAL;
 		goto probe_err;
 	}
-
-	cmdq->base = cmdq->pdata->base;
 	cmdq->base_pa = res->start;
-	if (!cmdq->base || cmdq->base_pa == 0) {
-		ret = -EINVAL;
-		goto probe_err;
-	}
 
 	ret = cmdq_sec_irq_notify_start(cmdq);
 	if (ret) {
@@ -865,7 +824,10 @@ static int cmdq_sec_probe(struct platform_device *pdev)
 		cmdq->pdata->mbox->chans[idx].con_priv = (void *)&cmdq->sec_thread[i].thread;
 		cmdq->sec_thread[i].thread.chan = &cmdq->pdata->mbox->chans[idx];
 
-		snprintf(name, sizeof(name), "task_exec_wq_%u", idx);
+		ret = snprintf(name, sizeof(name), "task_exec_wq_%u", idx);
+		if (ret < 0 || ret >= sizeof(name))
+			goto probe_err;
+
 		cmdq->sec_thread[i].task_exec_wq = create_singlethread_workqueue(name);
 		timer_setup(&cmdq->sec_thread[i].timeout, cmdq_sec_thread_timeout, 0);
 		INIT_WORK(&cmdq->sec_thread[i].timeout_work, cmdq_sec_task_timeout_work);
@@ -880,7 +842,7 @@ static int cmdq_sec_probe(struct platform_device *pdev)
 
 probe_err:
 
-	if (cmdq) {
+	if (cmdq && cmdq->pdata) {
 		if (cmdq->notify_chan)
 			cmdq_sec_irq_notify_stop(cmdq);
 
@@ -930,18 +892,8 @@ static struct platform_driver cmdq_sec_drv = {
 		.name = "mtk-cmdq-sec",
 	},
 };
+module_platform_driver(cmdq_sec_drv);
 
-static int __init cmdq_sec_init(void)
-{
-	return platform_driver_register(&cmdq_sec_drv);
-}
-
-static void __exit cmdq_sec_exit(void)
-{
-	platform_driver_unregister(&cmdq_sec_drv);
-}
-
-module_init(cmdq_sec_init);
-module_exit(cmdq_sec_exit);
-
+MODULE_AUTHOR("Jason-JH Lin <jason-jh.lin@mediatek.com>");
+MODULE_DESCRIPTION("MediaTek Secure CMDQ Mailbox driver");
 MODULE_LICENSE("GPL");

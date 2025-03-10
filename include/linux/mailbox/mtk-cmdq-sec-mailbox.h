@@ -12,7 +12,7 @@
 #include <linux/mailbox/mtk-cmdq-sec-iwc-common.h>
 #include <linux/mailbox/mtk-cmdq-sec-tee.h>
 
-#define CMDQ_INVALID_THREAD		(-1)
+#define CMDQ_INVALID_THREAD		(99)
 #define CMDQ_MAX_TASK_IN_SECURE_THREAD	(16)
 
 /**

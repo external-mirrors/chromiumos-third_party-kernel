@@ -199,25 +199,6 @@ struct iwc_cmdq_debug_config_t {
 };
 
 /**
- * struct iwc_cmdq_sec_status_t - secure status from secure world.
- *
- * @step: the step in secure cmdq TA.
- * @status: the status in secure cmdq TA.
- * @args: the status arguments in secure cmdq TA.
- * @sec_inst: current instruction in secure cmdq TA.
- * @inst_index: current instruction index in secure cmdq TA.
- * @dispatch: current HW engine configuring in secure cmdq TA.
- */
-struct iwc_cmdq_sec_status_t {
-	u32 step;
-	s32 status;
-	u32 args[4];
-	u32 sec_inst[CMDQ_SEC_MESSAGE_INST_LEN];
-	u32 inst_index;
-	char dispatch[CMDQ_SEC_DISPATCH_LEN];
-};
-
-/**
  * struct iwc_cmdq_message_t - Inter-World Communication message structure.
  * @cmd: [IN] iwc command id.
  * @rsp: [OUT] respond from secureworld, 0 for success, < 0 for error.
@@ -249,8 +230,6 @@ struct iwc_cmdq_message_t {
 	};
 
 	struct iwc_cmdq_debug_config_t debug;
-	struct iwc_cmdq_sec_status_t sec_status;
-
 	u8 cmdq_id;
 };
 #endif /* __CMDQ_SEC_IWC_COMMON_H__ */
