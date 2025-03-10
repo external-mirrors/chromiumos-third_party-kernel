@@ -12,6 +12,7 @@
 #include "fw/api/phy.h"
 #include "fw/api/config.h"
 #include "fw/api/nvm-reg.h"
+#include "fw/img.h"
 #include "iwl-trans.h"
 
 #define BIOS_SAR_MAX_PROFILE_NUM	4
@@ -42,7 +43,6 @@
 #define IWL_WTAS_ENABLED_MSK		0x1
 #define IWL_WTAS_OVERRIDE_IEC_MSK	0x2
 #define IWL_WTAS_ENABLE_IEC_MSK	0x4
-#define IWL_WTAS_CANADA_UHB_MSK		BIT(15)
 #define IWL_WTAS_USA_UHB_MSK		BIT(16)
 
 #define BIOS_MCC_CHINA 0x434e
@@ -99,10 +99,9 @@ struct iwl_ppag_chain {
 struct iwl_tas_data {
 	__le32 block_list_size;
 	__le32 block_list_array[IWL_WTAS_BLACK_LIST_MAX];
-	u8 override_tas_iec:1,
-	   enable_tas_iec:1,
-	   usa_tas_uhb_allowed:1,
-	   canada_tas_uhb_allowed:1;
+	u8 override_tas_iec;
+	u8 enable_tas_iec;
+	u8 usa_tas_uhb_allowed;
 };
 
 /* For DSM revision 0 and 4 */
@@ -190,7 +189,7 @@ bool iwl_is_tas_approved(void);
 
 int iwl_parse_tas_selection(struct iwl_fw_runtime *fwrt,
 			    struct iwl_tas_data *tas_data,
-			    const u32 tas_selection, u8 tbl_rev);
+			    const u32 tas_selection);
 
 int iwl_bios_get_wrds_table(struct iwl_fw_runtime *fwrt);
 
@@ -210,7 +209,6 @@ int iwl_bios_get_mcc(struct iwl_fw_runtime *fwrt, char *mcc);
 int iwl_bios_get_eckv(struct iwl_fw_runtime *fwrt, u32 *ext_clk);
 int iwl_bios_get_wbem(struct iwl_fw_runtime *fwrt, u32 *value);
 
-__le32 iwl_get_lari_config_bitmap(struct iwl_fw_runtime *fwrt);
 int iwl_fill_lari_config(struct iwl_fw_runtime *fwrt,
 			 struct iwl_lari_config_change_cmd *cmd,
 			 size_t *cmd_size);
@@ -226,27 +224,4 @@ static inline u32 iwl_bios_get_ppag_flags(const u32 ppag_modes,
 }
 
 bool iwl_puncturing_is_allowed_in_bios(u32 puncturing, u16 mcc);
-
-#define IWL_DSBR_FW_MODIFIED_URM_MASK	BIT(8)
-#define IWL_DSBR_PERMANENT_URM_MASK	BIT(9)
-
-int iwl_bios_get_dsbr(struct iwl_fw_runtime *fwrt, u32 *value);
-
-static inline void iwl_bios_setup_step(struct iwl_trans *trans,
-				       struct iwl_fw_runtime *fwrt)
-{
-	u32 dsbr;
-
-	if (!trans->trans_cfg->integrated)
-		return;
-
-	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_BZ)
-		return;
-
-	if (iwl_bios_get_dsbr(fwrt, &dsbr))
-		dsbr = 0;
-
-	trans->dsbr_urm_fw_dependent = !!(dsbr & IWL_DSBR_FW_MODIFIED_URM_MASK);
-	trans->dsbr_urm_permanent = !!(dsbr & IWL_DSBR_PERMANENT_URM_MASK);
-}
 #endif /* __fw_regulatory_h__ */
