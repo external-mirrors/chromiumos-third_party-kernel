@@ -14,17 +14,10 @@
 #include "session-protect.h"
 #include "fw/api/time-event.h"
 #include "fw/api/tx.h"
-#include "fw/api/rs.h"
-#include "fw/api/offload.h"
 
 #include "mcc.h"
 #include "link.h"
 #include "tx.h"
-#include "rx.h"
-#include "tlc.h"
-#include "agg.h"
-#include "mac80211.h"
-#include "thermal.h"
 
 /**
  * enum iwl_rx_handler_context: context for Rx handler
@@ -111,95 +104,6 @@ static void iwl_mld_handle_mfuart_notif(struct iwl_mld *mld,
 		       le32_to_cpu(mfuart_notif->image_size));
 }
 
-static void iwl_mld_mu_mimo_iface_iterator(void *_data, u8 *mac,
-					   struct ieee80211_vif *vif)
-{
-	struct ieee80211_bss_conf *bss_conf = &vif->bss_conf;
-	unsigned int link_id = 0;
-
-	if (WARN(hweight16(vif->active_links) > 1,
-		 "no support for this notif while in EMLSR 0x%x\n",
-		 vif->active_links))
-		return;
-
-	if (ieee80211_vif_is_mld(vif)) {
-		link_id = __ffs(vif->active_links);
-		bss_conf = link_conf_dereference_check(vif, link_id);
-	}
-
-	if (!WARN_ON(!bss_conf) && bss_conf->mu_mimo_owner) {
-		const struct iwl_mu_group_mgmt_notif *notif = _data;
-
-		BUILD_BUG_ON(sizeof(notif->membership_status) !=
-			     WLAN_MEMBERSHIP_LEN);
-		BUILD_BUG_ON(sizeof(notif->user_position) !=
-			     WLAN_USER_POSITION_LEN);
-
-		/* MU-MIMO Group Id action frame is little endian. We treat
-		 * the data received from firmware as if it came from the
-		 * action frame, so no conversion is needed.
-		 */
-		ieee80211_update_mu_groups(vif, link_id,
-					   (u8 *)&notif->membership_status,
-					   (u8 *)&notif->user_position);
-	}
-}
-
-/* This handler is called in SYNC mode because it needs to be serialized with
- * Rx as specified in ieee80211_update_mu_groups()'s documentation.
- */
-static void iwl_mld_handle_mu_mimo_grp_notif(struct iwl_mld *mld,
-					     struct iwl_rx_packet *pkt)
-{
-	struct iwl_mu_group_mgmt_notif *notif = (void *)pkt->data;
-
-	ieee80211_iterate_active_interfaces_atomic(mld->hw,
-						   IEEE80211_IFACE_ITER_NORMAL,
-						   iwl_mld_mu_mimo_iface_iterator,
-						   notif);
-}
-
-static void
-iwl_mld_handle_stored_beacon_notif(struct iwl_mld *mld,
-				   struct iwl_rx_packet *pkt)
-{
-	unsigned int pkt_len = iwl_rx_packet_payload_len(pkt);
-	struct iwl_stored_beacon_notif *sb = (void *)pkt->data;
-	struct ieee80211_rx_status rx_status = {};
-	struct sk_buff *skb;
-	u32 size = le32_to_cpu(sb->common.byte_count);
-
-	if (size == 0)
-		return;
-
-	if (pkt_len < struct_size(sb, data, size))
-		return;
-
-	skb = alloc_skb(size, GFP_ATOMIC);
-	if (!skb) {
-		IWL_ERR(mld, "alloc_skb failed\n");
-		return;
-	}
-
-	/* update rx_status according to the notification's metadata */
-	rx_status.mactime = le64_to_cpu(sb->common.tsf);
-	/* TSF as indicated by the firmware  is at INA time */
-	rx_status.flag |= RX_FLAG_MACTIME_PLCP_START;
-	rx_status.device_timestamp = le32_to_cpu(sb->common.system_time);
-	rx_status.band =
-		iwl_mld_phy_band_to_nl80211(le16_to_cpu(sb->common.band));
-	rx_status.freq =
-		ieee80211_channel_to_frequency(le16_to_cpu(sb->common.channel),
-					       rx_status.band);
-
-	/* copy the data */
-	skb_put_data(skb, sb->data, size);
-	memcpy(IEEE80211_SKB_RXCB(skb), &rx_status, sizeof(rx_status));
-
-	/* pass it as regular rx to mac80211 */
-	ieee80211_rx_napi(mld->hw, NULL, skb, NULL);
-}
-
 CMD_VERSIONS(scan_complete_notif,
 	     CMD_VER_ENTRY(1, iwl_umac_scan_complete))
 CMD_VERSIONS(scan_iter_complete_notif,
@@ -213,19 +117,7 @@ CMD_VERSIONS(session_prot_notif,
 CMD_VERSIONS(missed_beacon_notif,
 	     CMD_VER_ENTRY(5, iwl_missed_beacons_notif))
 CMD_VERSIONS(tx_resp_notif,
-	     CMD_VER_ENTRY(8, iwl_tx_resp))
-CMD_VERSIONS(compressed_ba_notif,
-	     CMD_VER_ENTRY(5, iwl_compressed_ba_notif))
-CMD_VERSIONS(tlc_notif,
-	     CMD_VER_ENTRY(3, iwl_tlc_update_notif))
-CMD_VERSIONS(mu_mimo_grp_notif,
-	     CMD_VER_ENTRY(1, iwl_mu_group_mgmt_notif))
-CMD_VERSIONS(ct_kill_notif,
-	     CMD_VER_ENTRY(2, ct_kill_notif))
-CMD_VERSIONS(temp_notif,
-	     CMD_VER_ENTRY(2, iwl_dts_measurement_notif))
-CMD_VERSIONS(stored_beacon_notif,
-	     CMD_VER_ENTRY(4, iwl_stored_beacon_notif))
+	     CMD_VER_ENTRY(7, iwl_tx_resp))
 
 /*
  * Handlers for fw notifications
@@ -236,8 +128,6 @@ CMD_VERSIONS(stored_beacon_notif,
  */
 static const struct iwl_rx_handler iwl_mld_rx_handlers[] = {
 	RX_HANDLER_SIZES(LEGACY_GROUP, TX_CMD, tx_resp_notif,
-			 RX_HANDLER_SYNC)
-	RX_HANDLER_SIZES(LEGACY_GROUP, BA_NOTIF, compressed_ba_notif,
 			 RX_HANDLER_SYNC)
 	RX_HANDLER_SIZES(LEGACY_GROUP, MCC_CHUB_UPDATE_CMD, update_mcc,
 			 RX_HANDLER_ASYNC)
@@ -251,20 +141,10 @@ static const struct iwl_rx_handler iwl_mld_rx_handlers[] = {
 	RX_HANDLER_SIZES(LEGACY_GROUP, MFUART_LOAD_NOTIFICATION, mfuart_notif,
 			 RX_HANDLER_SYNC)
 
-	RX_HANDLER_SIZES(PHY_OPS_GROUP, DTS_MEASUREMENT_NOTIF_WIDE,
-			 temp_notif, RX_HANDLER_ASYNC)
 	RX_HANDLER_SIZES(MAC_CONF_GROUP, SESSION_PROTECTION_NOTIF,
 			 session_prot_notif, RX_HANDLER_ASYNC)
 	RX_HANDLER_SIZES(MAC_CONF_GROUP, MISSED_BEACONS_NOTIF,
 			 missed_beacon_notif, RX_HANDLER_ASYNC)
-	RX_HANDLER_SIZES(DATA_PATH_GROUP, TLC_MNG_UPDATE_NOTIF,
-			 tlc_notif, RX_HANDLER_ASYNC)
-	RX_HANDLER_SIZES(DATA_PATH_GROUP, MU_GROUP_MGMT_NOTIF,
-			 mu_mimo_grp_notif, RX_HANDLER_SYNC)
-	RX_HANDLER_SIZES(PROT_OFFLOAD_GROUP, STORED_BEACON_NTF,
-			 stored_beacon_notif, RX_HANDLER_SYNC)
-	RX_HANDLER_SIZES(PHY_OPS_GROUP, CT_KILL_NOTIFICATION,
-			 ct_kill_notif, RX_HANDLER_ASYNC)
 };
 
 static bool
@@ -273,6 +153,7 @@ iwl_mld_notif_is_valid(struct iwl_mld *mld, struct iwl_rx_packet *pkt,
 {
 	unsigned int size = iwl_rx_packet_payload_len(pkt);
 	size_t notif_ver;
+	u8 grp;
 
 	/* If n_sizes == 0, it indicates that a validation function may be used
 	 * or that no validation is required.
@@ -283,8 +164,14 @@ iwl_mld_notif_is_valid(struct iwl_mld *mld, struct iwl_rx_packet *pkt,
 		return true;
 	}
 
+	/* Erroneously, FW publishes the TLV of this using LONG_GROUP instead
+	 * of LEGACY_GROUP. WA this until FW is fixed.
+	 */
+	grp = iwl_cmd_opcode(handler->cmd_id) == TX_CMD ? LONG_GROUP :
+		iwl_cmd_groupid(handler->cmd_id);
+
 	notif_ver = iwl_fw_lookup_notif_ver(mld->fw,
-					    iwl_cmd_groupid(handler->cmd_id),
+					    grp,
 					    iwl_cmd_opcode(handler->cmd_id),
 					    IWL_FW_CMD_VER_UNKNOWN);
 
@@ -373,34 +260,8 @@ void iwl_mld_rx(struct iwl_op_mode *op_mode, struct napi_struct *napi,
 
 	if (likely(cmd_id == WIDE_ID(LEGACY_GROUP, REPLY_RX_MPDU_CMD)))
 		iwl_mld_rx_mpdu(mld, napi, rxb, 0);
-	else if (cmd_id == WIDE_ID(LEGACY_GROUP, FRAME_RELEASE))
-		iwl_mld_handle_frame_release_notif(mld, napi, pkt, 0);
-	else if (cmd_id == WIDE_ID(LEGACY_GROUP, BAR_FRAME_RELEASE))
-		iwl_mld_handle_bar_frame_release_notif(mld, napi, pkt, 0);
-	else if (unlikely(cmd_id == WIDE_ID(DATA_PATH_GROUP,
-					    RX_QUEUES_NOTIFICATION)))
-		iwl_mld_handle_rx_queues_sync_notif(mld, napi, pkt, 0);
 	else
 		iwl_mld_rx_notif(mld, rxb, pkt);
-}
-
-void iwl_mld_rx_rss(struct iwl_op_mode *op_mode, struct napi_struct *napi,
-		    struct iwl_rx_cmd_buffer *rxb, unsigned int queue)
-{
-	struct iwl_rx_packet *pkt = rxb_addr(rxb);
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-	u16 cmd_id = WIDE_ID(pkt->hdr.group_id, pkt->hdr.cmd);
-
-	if (unlikely(queue >= mld->trans->num_rx_queues))
-		return;
-
-	if (likely(cmd_id == WIDE_ID(LEGACY_GROUP, REPLY_RX_MPDU_CMD)))
-		iwl_mld_rx_mpdu(mld, napi, rxb, queue);
-	else if (unlikely(cmd_id == WIDE_ID(DATA_PATH_GROUP,
-					    RX_QUEUES_NOTIFICATION)))
-		iwl_mld_handle_rx_queues_sync_notif(mld, napi, pkt, queue);
-	else if (unlikely(cmd_id == WIDE_ID(LEGACY_GROUP, FRAME_RELEASE)))
-		iwl_mld_handle_frame_release_notif(mld, napi, pkt, queue);
 }
 
 static void

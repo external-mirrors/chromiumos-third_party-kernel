@@ -8,7 +8,6 @@
 #include "mld.h"
 #include "link.h"
 #include "session-protect.h"
-#include "d3.h"
 
 /**
  * struct iwl_mld_vif - virtual interface (MAC context) configuration parameters
@@ -17,15 +16,10 @@
  * @ap_sta: pointer to AP sta, for easier access to it.
  *	Relevant only for STA vifs.
  * @authorized: indicates the AP station was set to authorized
- * @bigtks: BIGTKs of the AP, for beacon protection.
- *	Only valid for STA. (FIXME: needs to be per link)
- * @num_associated_stas: number of associated STAs. Relevant only for AP mode.
  * @mld: pointer to the mld structure.
  * @deflink: default link data, for use in non-MLO,
  * @link: reference to link data for each valid link, for use in MLO.
  * @session_protect: session protection parameters
- * @wowlan_data: data used by the wowlan suspend flow
- * @use_ps_poll: use ps_poll frames
  */
 struct iwl_mld_vif {
 	/* Add here fields that need clean up on restart */
@@ -34,19 +28,11 @@ struct iwl_mld_vif {
 		struct iwl_mld_session_protect session_protect;
 		struct ieee80211_sta *ap_sta;
 		bool authorized;
-		struct ieee80211_key_conf __rcu *bigtks[2];
-		u8 num_associated_stas;
 	);
 	/* And here fields that survive a fw restart */
 	struct iwl_mld *mld;
 	struct iwl_mld_link deflink;
 	struct iwl_mld_link __rcu *link[IEEE80211_MLD_MAX_NUM_LINKS];
-#if CONFIG_PM_SLEEP
-	struct iwl_mld_wowlan_data wowlan_data;
-#endif
-#ifdef CPTCFG_IWLWIFI_DEBUGFS
-	bool use_ps_poll;
-#endif
 };
 
 static inline struct iwl_mld_vif *
@@ -59,10 +45,10 @@ iwl_mld_vif_from_mac80211(struct ieee80211_vif *vif)
 	rcu_dereference_check((mld_vif)->link[link_id],			\
 			      lockdep_is_held(&mld_vif->mld->wiphy->mtx))
 
-#define for_each_mld_vif_valid_link(mld_vif, mld_link)			\
+#define for_each_mld_vif_valid_link(mld_vif, link)			\
 	for (int link_id = 0; link_id < ARRAY_SIZE((mld_vif)->link);	\
 	     link_id++)							\
-		if ((mld_link = iwl_mld_link_dereference_check(mld_vif, link_id)))
+		if ((link = iwl_mld_link_dereference_check(mld_vif, link_id)))
 
 /* Retrieve pointer to mld link from mac80211 structures */
 static inline struct iwl_mld_link *
@@ -83,6 +69,4 @@ int iwl_mld_add_vif(struct iwl_mld *mld, struct ieee80211_vif *vif);
 int iwl_mld_rm_vif(struct iwl_mld *mld, struct ieee80211_vif *vif);
 void iwl_mld_set_vif_associated(struct iwl_mld *mld,
 				struct ieee80211_vif *vif);
-u8 iwl_mld_get_fw_bss_vifs_ids(struct iwl_mld *mld);
-
 #endif /* __iwl_mld_iface_h__ */

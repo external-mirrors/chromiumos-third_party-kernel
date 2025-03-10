@@ -9,16 +9,12 @@
 #include "fw/api/datapath.h"
 #include "fw/api/commands.h"
 #include "fw/dbg.h"
-#include "fw/uefi.h"
 
 #include "mld.h"
 #include "mac80211.h"
 #include "led.h"
 #include "scan.h"
 #include "tx.h"
-#include "sta.h"
-#include "regulatory.h"
-#include "thermal.h"
 
 #define DRV_DESCRIPTION "Intel(R) MLD wireless driver for Linux"
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
@@ -94,9 +90,6 @@ void iwl_construct_mld(struct iwl_mld *mld, struct iwl_trans *trans,
 	INIT_LIST_HEAD(&mld->txqs_to_add);
 	wiphy_work_init(&mld->add_txqs_wk, iwl_mld_add_txqs_wk);
 
-	/* Setup RX queues sync wait queue */
-	init_waitqueue_head(&mld->rxq_sync.waitq);
-
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	iwl_mld_debug_setup_random_nmi(mld);
 #endif
@@ -144,8 +137,6 @@ static const struct iwl_hcmd_names iwl_mld_legacy_names[] = {
 	HCMD_NAME(TX_CMD),
 	HCMD_NAME(LEDS_CMD),
 	HCMD_NAME(SCAN_OFFLOAD_UPDATE_PROFILES_CMD),
-	HCMD_NAME(BEACON_TEMPLATE_CMD),
-	HCMD_NAME(MAC_PM_POWER_TABLE),
 	HCMD_NAME(MFUART_LOAD_NOTIFICATION),
 	HCMD_NAME(REPLY_RX_MPDU_CMD),
 	HCMD_NAME(MCC_UPDATE_CMD),
@@ -162,15 +153,8 @@ static const struct iwl_hcmd_names iwl_mld_long_names[] = {
 	HCMD_NAME(TXPATH_FLUSH),
 	HCMD_NAME(POWER_TABLE_CMD),
 	HCMD_NAME(TX_ANT_CONFIGURATION_CMD),
-	HCMD_NAME(REDUCE_TX_POWER_CMD),
 	HCMD_NAME(RSS_CONFIG_CMD),
-	HCMD_NAME(MCAST_FILTER_CMD),
 	HCMD_NAME(REPLY_BEACON_FILTERING_CMD),
-	HCMD_NAME(PROT_OFFLOAD_CONFIG_CMD),
-	HCMD_NAME(WOWLAN_PATTERNS),
-	HCMD_NAME(WOWLAN_CONFIGURATION),
-	HCMD_NAME(WOWLAN_TSC_RSC_PARAM),
-	HCMD_NAME(WOWLAN_KEK_KCK_MATERIAL),
 	HCMD_NAME(LDBG_CONFIG_CMD),
 };
 
@@ -181,17 +165,13 @@ static const struct iwl_hcmd_names iwl_mld_system_names[] = {
 	HCMD_NAME(SHARED_MEM_CFG_CMD),
 	HCMD_NAME(SOC_CONFIGURATION_CMD),
 	HCMD_NAME(INIT_EXTENDED_CFG_CMD),
-	HCMD_NAME(FW_ERROR_RECOVERY_CMD),
 };
 
 /* Please keep this array *SORTED* by hex value.
  * Access is done through binary search
  */
 static const struct iwl_hcmd_names iwl_mld_reg_and_nvm_names[] = {
-	HCMD_NAME(LARI_CONFIG_CHANGE),
 	HCMD_NAME(NVM_GET_INFO),
-	HCMD_NAME(SAR_OFFSET_MAPPING_TABLE_CMD),
-	HCMD_NAME(MCC_ALLOWED_AP_TYPE_CMD),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -206,7 +186,6 @@ static const struct iwl_hcmd_names iwl_mld_debug_names[] = {
  * Access is done through binary search
  */
 static const struct iwl_hcmd_names iwl_mld_mac_conf_names[] = {
-	HCMD_NAME(LOW_LATENCY_CMD),
 	HCMD_NAME(SESSION_PROTECTION_CMD),
 	HCMD_NAME(MAC_CONFIG_CMD),
 	HCMD_NAME(LINK_CONFIG_CMD),
@@ -220,23 +199,9 @@ static const struct iwl_hcmd_names iwl_mld_mac_conf_names[] = {
  * Access is done through binary search
  */
 static const struct iwl_hcmd_names iwl_mld_data_path_names[] = {
-	HCMD_NAME(TRIGGER_RX_QUEUES_NOTIF_CMD),
+	HCMD_NAME(RLC_CONFIG_CMD),
 	HCMD_NAME(RFH_QUEUE_CONFIG_CMD),
-	HCMD_NAME(TLC_MNG_CONFIG_CMD),
-	HCMD_NAME(RX_BAID_ALLOCATION_CONFIG_CMD),
 	HCMD_NAME(SCD_QUEUE_CONFIG_CMD),
-};
-
-/* Please keep this array *SORTED* by hex value.
- * Access is done through binary search
- */
-static const struct iwl_hcmd_names iwl_mld_phy_names[] = {
-	HCMD_NAME(CMD_DTS_MEASUREMENT_TRIGGER_WIDE),
-	HCMD_NAME(CTDP_CONFIG_CMD),
-	HCMD_NAME(TEMP_REPORTING_THRESHOLDS_CMD),
-	HCMD_NAME(PER_CHAIN_LIMIT_OFFSET_CMD),
-	HCMD_NAME(CT_KILL_NOTIFICATION),
-	HCMD_NAME(DTS_MEASUREMENT_NOTIF_WIDE),
 };
 
 VISIBLE_IF_IWLWIFI_KUNIT
@@ -248,7 +213,6 @@ const struct iwl_hcmd_arr iwl_mld_groups[] = {
 	[DATA_PATH_GROUP] = HCMD_ARR(iwl_mld_data_path_names),
 	[REGULATORY_AND_NVM_GROUP] = HCMD_ARR(iwl_mld_reg_and_nvm_names),
 	[DEBUG_GROUP] = HCMD_ARR(iwl_mld_debug_names),
-	[PHY_OPS_GROUP] = HCMD_ARR(iwl_mld_phy_names),
 };
 EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_groups);
 
@@ -303,14 +267,14 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	int ret;
 
 	if (WARN_ON(!iwl_is_mld_op_mode_supported(trans)))
-		return ERR_PTR(-EINVAL);
+		return NULL;
 
 	/* Allocate and initialize a new hardware device */
 	hw = ieee80211_alloc_hw(sizeof(struct iwl_op_mode) +
 				sizeof(struct iwl_mld),
 				&iwl_mld_hw_ops);
 	if (!hw)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	op_mode = hw->priv;
 
@@ -320,13 +284,9 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 
 	iwl_construct_mld(mld, trans, cfg, fw, hw);
 
-	iwl_mld_construct_fw_runtime(mld, trans, fw, dbgfs_dir);
+	iwl_mld_add_debugfs_files(mld, dbgfs_dir);
 
-	iwl_mld_get_bios_tables(mld);
-	iwl_uefi_get_sgom_table(trans, &mld->fwrt);
-	iwl_uefi_get_step_table(trans);
-	iwl_bios_setup_step(trans, &mld->fwrt);
-	mld->bios_enable_puncturing = iwl_uefi_get_puncturing(&mld->fwrt);
+	iwl_mld_construct_fw_runtime(mld, trans, fw, dbgfs_dir);
 
 	/* Configure transport layer with the opmode specific params */
 	iwl_mld_configure_trans(op_mode);
@@ -351,18 +311,11 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	if (ret)
 		goto free_hw;
 
-	ret = iwl_mld_alloc_scan_cmd(mld);
-	if (ret)
+	if (iwl_mld_alloc_scan_cmd(mld))
 		goto leds_exit;
 
-	ret = iwl_mld_register_hw(mld);
-	if (ret)
+	if (iwl_mld_register_hw(mld))
 		goto free_scan_cmd;
-
-	iwl_mld_toggle_tx_ant(mld, &mld->mgmt_tx_ant);
-
-	iwl_mld_add_debugfs_files(mld, dbgfs_dir);
-	iwl_mld_thermal_initialize(mld);
 
 	return op_mode;
 
@@ -372,7 +325,7 @@ leds_exit:
 	iwl_mld_leds_exit(mld);
 free_hw:
 	ieee80211_free_hw(mld->hw);
-	return ERR_PTR(ret);
+	return NULL;
 }
 
 static void
@@ -381,9 +334,6 @@ iwl_op_mode_mld_stop(struct iwl_op_mode *op_mode)
 	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
 
 	iwl_mld_leds_exit(mld);
-	wiphy_lock(mld->wiphy);
-	iwl_mld_thermal_exit(mld);
-	wiphy_unlock(mld->wiphy);
 
 	ieee80211_unregister_hw(mld->hw);
 
@@ -393,125 +343,76 @@ iwl_op_mode_mld_stop(struct iwl_op_mode *op_mode)
 
 	kfree(mld->nvm_data);
 	kfree(mld->scan.cmd);
-	kfree(mld->error_recovery_buf);
-	kfree(mld->mcast_filter_cmd);
 
 	ieee80211_free_hw(mld->hw);
 }
 
-static void iwl_mld_queue_state_change(struct iwl_op_mode *op_mode,
-				       int hw_queue, bool queue_full)
+static void
+iwl_mld_rx_rss(struct iwl_op_mode *op_mode, struct napi_struct *napi,
+	       struct iwl_rx_cmd_buffer *rxb, unsigned int queue)
 {
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-	struct ieee80211_txq *txq;
-	struct iwl_mld_sta *mld_sta;
-	struct iwl_mld_txq *mld_txq;
-
-	rcu_read_lock();
-
-	txq = rcu_dereference(mld->fw_id_to_txq[hw_queue]);
-	if (!txq)
-		goto out;
-
-	mld_txq = iwl_mld_txq_from_mac80211(txq);
-	mld_sta = txq->sta ? iwl_mld_sta_from_mac80211(txq->sta) : NULL;
-
-	/* TODO: static queues (task=DP_TX) */
-
-	mld_txq->status.stop_full = queue_full;
-
-	if (!queue_full && mld_sta &&
-	    mld_sta->sta_state != IEEE80211_STA_NOTEXIST) {
-		local_bh_disable();
-		iwl_mld_tx_from_txq(mld, txq);
-		local_bh_enable();
-	}
-
-out:
-	rcu_read_unlock();
+	/* TODO: add RX path :-) */
+	WARN_ONCE(1, "RX is not supported yet\n");
 }
 
 static void
 iwl_mld_queue_full(struct iwl_op_mode *op_mode, int hw_queue)
 {
-	iwl_mld_queue_state_change(op_mode, hw_queue, true);
+	/* TODO */
+	WARN_ONCE(1, "Not supported yet\n");
 }
 
 static void
 iwl_mld_queue_not_full(struct iwl_op_mode *op_mode, int hw_queue)
 {
-	iwl_mld_queue_state_change(op_mode, hw_queue, false);
+	/* TODO */
+	WARN_ONCE(1, "Not supported yet\n");
 }
 
 static bool
 iwl_mld_set_hw_rfkill_state(struct iwl_op_mode *op_mode, bool state)
 {
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-
-	iwl_mld_set_hwkill(mld, state);
-
+	/* TODO */
+	WARN_ONCE(1, "Not supported yet\n");
 	return false;
 }
 
 static void
 iwl_mld_free_skb(struct iwl_op_mode *op_mode, struct sk_buff *skb)
 {
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-
-	iwl_trans_free_tx_cmd(mld->trans, info->driver_data[1]);
-	ieee80211_free_txskb(mld->hw, skb);
-}
-
-static void iwl_mld_read_error_recovery_buffer(struct iwl_mld *mld)
-{
-	u32 src_size = mld->fw->ucode_capa.error_log_size;
-	u32 src_addr = mld->fw->ucode_capa.error_log_addr;
-	u8 *recovery_buf;
-	int ret;
-
-	/* no recovery buffer size defined in a TLV */
-	if (!src_size)
-		return;
-
-	recovery_buf = kzalloc(src_size, GFP_ATOMIC);
-	if (!recovery_buf)
-		return;
-
-	ret = iwl_trans_read_mem_bytes(mld->trans, src_addr,
-				       recovery_buf, src_size);
-	if (ret) {
-		IWL_ERR(mld, "Failed to read error recovery buffer (%d)\n",
-			ret);
-		kfree(recovery_buf);
-		return;
-	}
-
-	mld->error_recovery_buf = recovery_buf;
+	/* TODO */
+	WARN_ONCE(1, "Not supported yet\n");
 }
 
 static void iwl_mld_restart_nic(struct iwl_mld *mld)
 {
-	iwl_mld_read_error_recovery_buffer(mld);
+	if (mld->fw_status.in_hw_restart) {
+		/* TODO nested restarts */
+		IWL_ERR(mld, "Nested restart. Not implemented\n");
+		return;
+	}
 
+	/* TODO: get error recovery buffer (task=DP) */
+
+	mld->fw_status.in_hw_restart = true;
 	mld->fwrt.trans->dbg.restart_required = false;
 
 	ieee80211_restart_hw(mld->hw);
 }
 
 static void
-iwl_mld_nic_error(struct iwl_op_mode *op_mode,
-		  enum iwl_fw_error_type type)
+iwl_mld_nic_error(struct iwl_op_mode *op_mode, bool sync)
 {
 	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
 	bool trans_dead = test_bit(STATUS_TRANS_DEAD, &mld->trans->status);
 
-	if (type == IWL_ERR_TYPE_CMD_QUEUE_FULL)
-		IWL_ERR(mld, "Command queue full!\n");
-	else if (!trans_dead && !mld->fw_status.do_not_dump_once)
+	if (!trans_dead && !mld->fw_status.do_not_dump_once)
 		iwl_fwrt_dump_error_logs(&mld->fwrt);
 
 	mld->fw_status.do_not_dump_once = false;
+
+	/* WRT */
+	iwl_fw_error_collect(&mld->fwrt, sync);
 
 	/* It is necessary to abort any os scan here because mac80211 requires
 	 * having the scan cleared before restarting.
@@ -521,49 +422,22 @@ iwl_mld_nic_error(struct iwl_op_mode *op_mode,
 	 */
 	iwl_mld_report_scan_aborted(mld);
 
-	/*
-	 * This should be first thing before trying to collect any
-	 * data to avoid endless loops if any HW error happens while
-	 * collecting debug data.
-	 * It might not actually be true that we'll restart, but the
-	 * setting doesn't matter if we're going to be unbound either.
-	 */
-	if (type != IWL_ERR_TYPE_RESET_HS_TIMEOUT)
-		mld->fw_status.in_hw_restart = true;
-}
-
-static void iwl_mld_dump_error(struct iwl_op_mode *op_mode,
-			       struct iwl_fw_error_dump_mode *mode)
-{
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-
-	/* if we come in from opmode we have the mutex held */
-	if (mode->context == IWL_ERR_CONTEXT_FROM_OPMODE) {
-		lockdep_assert_wiphy(mld->wiphy);
-		iwl_fw_error_collect(&mld->fwrt);
-	} else {
-		wiphy_lock(mld->wiphy);
-		if (mode->context != IWL_ERR_CONTEXT_ABORT)
-			iwl_fw_error_collect(&mld->fwrt);
-		wiphy_unlock(mld->wiphy);
-	}
-}
-
-static bool iwl_mld_sw_reset(struct iwl_op_mode *op_mode,
-			     enum iwl_fw_error_type type)
-{
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-
 	/* Do restart only in the following conditions are met:
-	 * - we consider the FW as running
-	 * - The trigger that brought us here is defined as one that requires
-	 *   a restart (in the debug TLVs)
+	 * 1. sync=false
+	 *    (true means that the device is going to be shut down now)
+	 * 2. trans is not dead
+	 * 3. we consider the FW as running
+	 *    (if 2 or 3 is not true -  there is nothing we can do anyway)
+	 * 4. fw restart is allowed by module parameter
+	 * 5. The trigger that brough us here is defined as one that requires
+	 *    a restart (in the debug TLVs)
 	 */
-	if (!mld->fw_status.running || !mld->fwrt.trans->dbg.restart_required)
-		return false;
+	if (sync || trans_dead || !mld->fw_status.running ||
+	    !iwlwifi_mod_params.fw_restart ||
+	    !mld->fwrt.trans->dbg.restart_required)
+		return;
 
 	iwl_mld_restart_nic(mld);
-	return true;
 }
 
 static void
@@ -576,22 +450,6 @@ iwl_mld_time_point(struct iwl_op_mode *op_mode,
 	iwl_dbg_tlv_time_point(&mld->fwrt, tp_id, tp_data);
 }
 
-#ifdef CONFIG_PM_SLEEP
-static void iwl_mld_device_powered_off(struct iwl_op_mode *op_mode)
-{
-	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
-
-	wiphy_lock(mld->wiphy);
-	mld->trans->system_pm_mode = IWL_PLAT_PM_MODE_DISABLED;
-	iwl_mld_stop_fw(mld);
-	mld->fw_status.in_d3 = false;
-	wiphy_unlock(mld->wiphy);
-}
-#else
-static void iwl_mld_device_powered_off(struct iwl_op_mode *op_mode)
-{}
-#endif
-
 static const struct iwl_op_mode_ops iwl_mld_ops = {
 	.start = iwl_op_mode_mld_start,
 	.stop = iwl_op_mode_mld_stop,
@@ -602,10 +460,7 @@ static const struct iwl_op_mode_ops iwl_mld_ops = {
 	.hw_rf_kill = iwl_mld_set_hw_rfkill_state,
 	.free_skb = iwl_mld_free_skb,
 	.nic_error = iwl_mld_nic_error,
-	.dump_error = iwl_mld_dump_error,
-	.sw_reset = iwl_mld_sw_reset,
 	.time_point = iwl_mld_time_point,
-	.device_powered_off = pm_sleep_ptr(iwl_mld_device_powered_off),
 };
 
 struct iwl_mld_mod_params iwlmld_mod_params = {

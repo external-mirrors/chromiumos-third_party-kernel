@@ -8,7 +8,6 @@
 #include <net/mac80211.h>
 
 #include "mld.h"
-#include "sta.h"
 
 /**
  * struct iwl_mld_link - link configuration parameters
@@ -21,11 +20,6 @@
  * @chan_ctx: pointer to the channel context assigned to the link. If a link
  *	has an assigned channel context it means that it is active.
  * @he_ru_2mhz_block: 26-tone RU OFDMA transmissions should be blocked.
- * @igtk: fw can only have one IGTK at a time, whereas mac80211 can have two.
- *	This tracks the one IGTK that currently exists in FW.
- * @bcast_sta: tation used for broadcast packets. Used in AP, GO and IBSS.
- * @mcast_sta: station used for multicast packets. Used in AP, GO and IBSS.
- * @mld: points to the mld object
  */
 struct iwl_mld_link {
 	/* Add here fields that need clean up on restart */
@@ -35,23 +29,15 @@ struct iwl_mld_link {
 		struct ieee80211_tx_queue_params queue_params[IEEE80211_NUM_ACS];
 		struct ieee80211_chanctx_conf __rcu *chan_ctx;
 		bool he_ru_2mhz_block;
-		struct ieee80211_key_conf *igtk;
 	);
 	/* And here fields that survive a fw restart */
-	struct iwl_mld_int_sta bcast_sta;
-	struct iwl_mld_int_sta mcast_sta;
-	struct iwl_mld *mld;
 };
 
 /* Cleanup function for struct iwl_mld_phy, will be called in restart */
 static inline void
-iwl_mld_cleanup_link(struct iwl_mld *mld, struct iwl_mld_link *link)
+iwl_mld_cleanup_link(struct iwl_mld_link *link)
 {
 	CLEANUP_STRUCT(link);
-	if (link->bcast_sta.sta_id != IWL_INVALID_STA)
-		iwl_mld_free_internal_sta(mld, &link->bcast_sta);
-	if (link->mcast_sta.sta_id != IWL_INVALID_STA)
-		iwl_mld_free_internal_sta(mld, &link->mcast_sta);
 }
 
 int iwl_mld_add_link(struct iwl_mld *mld,
@@ -60,8 +46,8 @@ int iwl_mld_remove_link(struct iwl_mld *mld,
 			struct ieee80211_bss_conf *bss_conf);
 int iwl_mld_activate_link(struct iwl_mld *mld,
 			  struct ieee80211_bss_conf *link);
-void iwl_mld_deactivate_link(struct iwl_mld *mld,
-			     struct ieee80211_bss_conf *link);
+int iwl_mld_deactivate_link(struct iwl_mld *mld,
+			    struct ieee80211_bss_conf *link);
 int iwl_mld_change_link_in_fw(struct iwl_mld *mld,
 			      struct ieee80211_bss_conf *link, u32 changes);
 void iwl_mld_handle_missed_beacon_notif(struct iwl_mld *mld,

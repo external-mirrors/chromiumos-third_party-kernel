@@ -19,17 +19,10 @@
 #include "fw/api/mac-cfg.h"
 #include "fw/api/mac.h"
 #include "fw/api/phy-ctxt.h"
-#include "fw/api/datapath.h"
-#include "fw/api/rx.h"
-#include "fw/api/rs.h"
-#include "fw/api/context.h"
-
 #include "fw/dbg.h"
 
 #include "notif.h"
 #include "scan.h"
-#include "rx.h"
-#include "thermal.h"
 
 #define IWL_MLD_MAX_ADDRESSES		5
 
@@ -44,20 +37,9 @@
  *	ieee80211_txq.
  * @used_phy_ids: a bitmap of the phy IDs used. If a bit is set, it means
  *	that the index of this bit is already used as a PHY id.
- * @num_igtks: the number if iGTKs that were sent to the FW.
- * @monitor: monitor related data
- * @monitor.on: does a monitor vif exist (singleton hence bool)
- * @monitor.ampdu_ref: the id of the A-MPDU for sniffer
- * @monitor.ampdu_toggle: the state of the previous packet to track A-MPDU
- * @monitor.cur_aid: current association id tracked by the sniffer
- * @monitor.cur_bssid: current bssid tracked by the sniffer
  * @fw_id_to_link_sta: maps a fw id of a sta to the corresponding
  *	ieee80211_link_sta. This is not cleaned up on restart since we want to
  *	preserve the fw sta ids during a restart (for SN/PN restoring).
- *	FW ids of internal stations will be mapped to ERR_PTR, and will be
- *	re-allocated during a restart, so make sure to free it in restart
- *	cleanup using iwl_mld_free_internal_sta
- * @netdetect: indicates the FW is in suspend mode with netdetect configured
  * @dev: pointer to device struct. For printing purposes
  * @trans: pointer to the transport layer
  * @cfg: pointer to the device configuration
@@ -75,35 +57,15 @@
  *	&async_handlers_wk and RX notifcation path.
  * @async_handlers_wk: A work to run all async RX handlers from
  *	&async_handlers_list.
- * @ct_kill_exit_wk: worker to exit thermal kill
  * @fw_status: bitmap of fw status bits
  * @fw_status.in_hw_restart: indicates that we are currently in restart flow.
- * @fw_status.in_d3: indicates FW is in suspend mode and should be resumed
- *	rather than restarted. Should be unset upon restart.
- * @radio_kill: bitmap of radio kill status
- * @radio_kill.hw: radio is killed by hw switch
- * @radio_kill.ct: radio is killed because the device it too hot
  * @addresses: device MAC addresses.
  * @wowlan: WoWLAN support data.
  * @led: the led device
  * @mcc_src: the source id of the MCC, comes from the firmware
- * @bios_enable_puncturing: is puncturing enabled by bios
- * @fw_id_to_ba: maps a fw (BA) id to a corresponding Block Ack session data.
- * @num_rx_ba_sessions: tracks the number of active Rx Block Ack (BA) sessions.
- *	the driver ensures that new BA sessions are blocked once the maximum
- *	supported by the firmware is reached, preventing firmware asserts.
- * @rxq_sync: manages RX queue sync state
  * @txqs_to_add: a list of &ieee80211_txq's to allocate in &add_txqs_wk
  * @add_txqs_wk: a worker to allocate txqs.
  * @add_txqs_lock: to lock the &txqs_to_add list.
- * @error_recovery_buf: pointer to the recovery buffer that will be read
- *	from firmware upon fw/hw error and sent back to the firmware in
- *	reconfig flow (after NIC reset).
- * @mcast_filter_cmd: pointer to the multicast filter command.
- * @mgmt_tx_ant: stores the last TX antenna index; used for setting
- *	TX rate_n_flags for non-STA mgmt frames (toggles on every TX failure).
- * @tzone: thermal zone device's data
- * @cooling_dev: cooling device's related data
  */
 struct iwl_mld {
 	/* Add here fields that need clean up on restart */
@@ -112,19 +74,6 @@ struct iwl_mld {
 		struct ieee80211_vif __rcu *fw_id_to_vif[NUM_MAC_INDEX_DRIVER];
 		struct ieee80211_txq __rcu *fw_id_to_txq[IWL_MAX_TVQM_QUEUES];
 		u8 used_phy_ids: NUM_PHY_CTX;
-		u8 num_igtks;
-		struct {
-			bool on;
-			u32 ampdu_ref;
-			bool ampdu_toggle;
-#ifdef CPTCFG_IWLWIFI_DEBUGFS
-			__le16 cur_aid;
-			u8 cur_bssid[ETH_ALEN];
-#endif
-		} monitor;
-#ifdef CONFIG_PM_SLEEP
-		bool netdetect;
-#endif /* CONFIG_PM_SLEEP */
 	);
 	struct ieee80211_link_sta __rcu *fw_id_to_link_sta[IWL_STATION_COUNT_MAX];
 	/* And here fields that survive a fw restart */
@@ -141,23 +90,12 @@ struct iwl_mld {
 	struct list_head async_handlers_list;
 	spinlock_t async_handlers_lock;
 	struct wiphy_work async_handlers_wk;
-	struct wiphy_delayed_work ct_kill_exit_wk;
 
 	struct {
 		u32 running:1,
 		    do_not_dump_once:1,
-#ifdef CONFIG_PM_SLEEP
-		    in_d3:1,
-#endif
 		    in_hw_restart:1;
-
 	} fw_status;
-
-	struct {
-		u32 hw:1,
-		    ct:1;
-	} radio_kill;
-
 	struct mac_address addresses[IWL_MLD_MAX_ADDRESSES];
 	struct iwl_mld_scan scan;
 #ifdef CONFIG_PM_SLEEP
@@ -167,25 +105,11 @@ struct iwl_mld {
 	struct led_classdev led;
 #endif
 	enum iwl_mcc_source mcc_src;
-	bool bios_enable_puncturing;
-
-	struct iwl_mld_baid_data __rcu *fw_id_to_ba[IWL_MAX_BAID];
-	u8 num_rx_ba_sessions;
-
-	struct iwl_mld_rx_queues_sync rxq_sync;
 
 	struct list_head txqs_to_add;
 	struct wiphy_work add_txqs_wk;
 	spinlock_t add_txqs_lock;
 
-	u8 *error_recovery_buf;
-	struct iwl_mcast_filter_cmd *mcast_filter_cmd;
-
-	u8 mgmt_tx_ant;
-#ifdef CONFIG_THERMAL
-	struct thermal_zone_device *tzone;
-	struct iwl_mld_cooling_device cooling_dev;
-#endif
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	/* the hcmd number on which nmi will be triggered */
 	u8 nmi_thresh;
@@ -206,7 +130,6 @@ iwl_cleanup_mld(struct iwl_mld *mld)
 	CLEANUP_STRUCT(mld);
 	CLEANUP_STRUCT(&mld->scan);
 
-	mld->fw_status.in_d3 = false;
 	/* Empty the list of async notification handlers so we won't process
 	 * notifications from the dead fw after the reconfig flow.
 	 */
@@ -235,36 +158,16 @@ extern struct iwl_mld_mod_params iwlmld_mod_params;
 #define IWL_MAC80211_GET_MLD(_hw)			\
 	IWL_OP_MODE_GET_MLD((struct iwl_op_mode *)((_hw)->priv))
 
-#ifdef CPTCFG_IWLWIFI_DEBUGFS
 void
 iwl_mld_add_debugfs_files(struct iwl_mld *mld, struct dentry *debugfs_dir);
-#else
-static inline void
-iwl_mld_add_debugfs_files(struct iwl_mld *mld, struct dentry *debugfs_dir)
-{}
-#endif
-
 int iwl_mld_run_fw_init_sequence(struct iwl_mld *mld);
 int iwl_mld_load_fw(struct iwl_mld *mld);
 void iwl_mld_stop_fw(struct iwl_mld *mld);
 int iwl_mld_start_fw(struct iwl_mld *mld);
-void iwl_mld_send_recovery_cmd(struct iwl_mld *mld, u32 flags);
 
-static inline void iwl_mld_set_ctkill(struct iwl_mld *mld, bool state)
-{
-	mld->radio_kill.ct = state;
-
-	wiphy_rfkill_set_hw_state(mld->wiphy,
-				  mld->radio_kill.hw || mld->radio_kill.ct);
-}
-
-static inline void iwl_mld_set_hwkill(struct iwl_mld *mld, bool state)
-{
-	mld->radio_kill.hw = state;
-
-	wiphy_rfkill_set_hw_state(mld->wiphy,
-				  mld->radio_kill.hw || mld->radio_kill.ct);
-}
+/* Rx */
+void iwl_mld_rx_mpdu(struct iwl_mld *mld, struct napi_struct *napi,
+		     struct iwl_rx_cmd_buffer *rxb, int queue);
 
 static inline u8 iwl_mld_get_valid_tx_ant(const struct iwl_mld *mld)
 {
@@ -316,21 +219,6 @@ static inline u8 iwl_mld_phy_band_to_nl80211(u8 phy_band)
 	}
 }
 
-static inline int
-iwl_mld_legacy_hw_idx_to_mac80211_idx(u32 rate_n_flags,
-				      enum nl80211_band band)
-{
-	int format = rate_n_flags & RATE_MCS_MOD_TYPE_MSK;
-	int rate = rate_n_flags & RATE_LEGACY_RATE_MSK;
-	bool is_lb = band == NL80211_BAND_2GHZ;
-
-	if (format == RATE_MCS_LEGACY_OFDM_MSK)
-		return is_lb ? rate + IWL_FIRST_OFDM_RATE : rate;
-
-	/* CCK is not allowed in 5 GHz */
-	return is_lb ? rate : -1;
-}
-
 extern const struct ieee80211_ops iwl_mld_hw_ops;
 
 #define IWL_MLD_INVALID_FW_ID 0xff
@@ -370,10 +258,6 @@ void iwl_mld_add_link_debugfs(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      struct ieee80211_bss_conf *link_conf,
 			      struct dentry *dir);
-void iwl_mld_add_link_sta_debugfs(struct ieee80211_hw *hw,
-				  struct ieee80211_vif *vif,
-				  struct ieee80211_link_sta *link_sta,
-				  struct dentry *dir);
 
 /* Utilities */
 
@@ -390,16 +274,6 @@ static inline u8 iwl_mld_mac80211_ac_to_fw_tx_fifo(enum ieee80211_ac_numbers ac)
 		IWL_BZ_TRIG_TX_FIFO_BK,
 	};
 	return mac80211_ac_to_fw_tx_fifo[ac];
-}
-
-static inline u32
-iwl_mld_get_lmac_id(struct iwl_mld *mld, enum nl80211_band band)
-{
-	if (!fw_has_capa(&mld->fw->ucode_capa,
-			 IWL_UCODE_TLV_CAPA_CDB_SUPPORT) ||
-	    band == NL80211_BAND_2GHZ)
-		return IWL_LMAC_24G_INDEX;
-	return IWL_LMAC_5G_INDEX;
 }
 
 /* Check if we had an error, but reconfig flow didn't start yet */
