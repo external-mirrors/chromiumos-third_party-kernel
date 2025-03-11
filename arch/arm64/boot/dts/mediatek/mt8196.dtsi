@@ -539,6 +539,7 @@
 			scmi_tinysys: protocol@80 {
 				reg = <0x80>;
 				scmi-cm = <9>;
+				scmi-slbc = <10>;
 			};
 		};
 	};
