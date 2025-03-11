@@ -178,6 +178,7 @@ struct mtk_dpi_conf {
 	bool edge_cfg_in_mmsys;
 	bool dsc_support;
 	bool use_version_2;
+	bool pol_positive_default;
 };
 
 bool mtk_dpi_v2;
@@ -265,12 +266,13 @@ static void mtk_dpi_config_vsync_reven_v2(struct mtk_dpi *dpi,
 static void mtk_dpi_config_pol_v2(struct mtk_dpi *dpi,
 			       struct mtk_dpi_polarities *dpi_pol)
 {
-	unsigned int pol;
+	unsigned int pol = 0;
 	unsigned int mask;
 
 	mask = HSYNC_POL | VSYNC_POL;
-	pol = (dpi_pol->hsync_pol == MTK_DPI_POLARITY_RISING ? 0 : HSYNC_POL) |
-	      (dpi_pol->vsync_pol == MTK_DPI_POLARITY_RISING ? 0 : VSYNC_POL);
+	if (!dpi->conf->pol_positive_default)
+		pol = (dpi_pol->hsync_pol == MTK_DPI_POLARITY_RISING ? 0 : HSYNC_POL) |
+		      (dpi_pol->vsync_pol == MTK_DPI_POLARITY_RISING ? 0 : VSYNC_POL);
 	if (dpi->conf->is_ck_de_pol) {
 		mask |= CK_POL | DE_POL;
 		pol |= (dpi_pol->ck_pol == MTK_DPI_POLARITY_RISING ?
@@ -1028,6 +1030,7 @@ static const struct mtk_dpi_conf mt8196_dpintf_conf = {
 	.csc_enable_bit = DPINTF_CSC_ENABLE,
 	.dsc_support = true,
 	.use_version_2 = true,
+	.pol_positive_default = true,
 };
 
 static void mt8196_get_clk_v2(struct mtk_dpi *dp_intf)
