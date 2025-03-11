@@ -578,8 +578,8 @@ static void CalculateBytePerPixelAndBlockSizes(
 {
 	*BytePerPixelDETY = 0;
 	*BytePerPixelDETC = 0;
-	*BytePerPixelY = 0;
-	*BytePerPixelC = 0;
+	*BytePerPixelY = 1;
+	*BytePerPixelC = 1;
 
 	if (SourcePixelFormat == dml2_444_64) {
 		*BytePerPixelDETY = 8;
@@ -2765,7 +2765,7 @@ static double dml_get_return_bandwidth_available(
 	return return_bw_mbps;
 }
 
-static void calculate_bandwidth_available(
+static noinline_for_stack void calculate_bandwidth_available(
 	double avg_bandwidth_available_min[dml2_core_internal_soc_state_max],
 	double avg_bandwidth_available[dml2_core_internal_soc_state_max][dml2_core_internal_bw_max],
 	double urg_bandwidth_available_min[dml2_core_internal_soc_state_max], // min between SDP and DRAM
@@ -3518,7 +3518,7 @@ static void CalculateUrgentBurstFactor(
 
 }
 
-static void CalculateDCFCLKDeepSleep(
+static noinline_for_stack void CalculateDCFCLKDeepSleep(
 	const struct dml2_display_cfg *display_cfg,
 	unsigned int NumberOfActiveSurfaces,
 	unsigned int BytePerPixelY[],
@@ -4058,7 +4058,7 @@ static bool ValidateODMMode(enum dml2_odm_mode ODMMode,
 	return true;
 }
 
-static void CalculateODMMode(
+static noinline_for_stack void CalculateODMMode(
 	unsigned int MaximumPixelsPerLinePerDSCUnit,
 	unsigned int HActive,
 	enum dml2_output_format_class OutFormat,
@@ -4155,7 +4155,7 @@ static void CalculateODMMode(
 #endif
 }
 
-static void CalculateOutputLink(
+static noinline_for_stack void CalculateOutputLink(
 	struct dml2_core_internal_scratch *s,
 	double PHYCLK,
 	double PHYCLKD18,
@@ -6719,7 +6719,7 @@ static void calculate_bytes_to_fetch_required_to_hide_latency(
 	}
 }
 
-static void calculate_vactive_det_fill_latency(
+static noinline_for_stack void calculate_vactive_det_fill_latency(
 		const struct dml2_display_cfg *display_cfg,
 		unsigned int num_active_planes,
 		unsigned int bytes_required_l[],
