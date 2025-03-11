@@ -3696,13 +3696,13 @@ static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	dp_timing->htt = mtk_dp->mode[encoder_id].htotal;
 	dp_timing->hbp = vm.hback_porch;
 	dp_timing->hsw = vm.hsync_len;
-	dp_timing->hsp = mtk_dp->mode[encoder_id].flags & DRM_MODE_FLAG_PHSYNC;
+	dp_timing->hsp = mtk_dp->mode[encoder_id].flags & DRM_MODE_FLAG_PHSYNC ? 0 : 1;
 	dp_timing->hfp = vm.hfront_porch;
 	dp_timing->hde = vm.hactive;
 	dp_timing->vtt = mtk_dp->mode[encoder_id].vtotal;
 	dp_timing->vbp = vm.vback_porch;
 	dp_timing->vsw = vm.vsync_len;
-	dp_timing->vsp = mtk_dp->mode[encoder_id].flags & DRM_MODE_FLAG_PVSYNC;
+	dp_timing->vsp = mtk_dp->mode[encoder_id].flags & DRM_MODE_FLAG_PVSYNC ? 0 : 1;
 	dp_timing->vfp = vm.vfront_porch;
 	dp_timing->vde = vm.vactive;
 
