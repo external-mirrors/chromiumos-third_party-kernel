@@ -444,6 +444,7 @@ struct mtk_dp {
 	struct platform_device *audio_pdev;
 
 	struct device *codec_dev;
+	struct device *vdisp_ao_dev;
 	/* protect the plugged_cb as it's used in both bridge ops and audio */
 	struct mutex update_plugged_status_lock;
 };
