@@ -56,22 +56,30 @@ static struct socinfo_data socinfo_data_table[] = {
 	MTK_SOCINFO_ENTRY("MT8195", "MT8195GV/EHZA", "Kompanio 1200", 0x81950304, CELL_NOT_USED),
 	MTK_SOCINFO_ENTRY("MT8195", "MT8195TV/EZA", "Kompanio 1380", 0x81950400, CELL_NOT_USED),
 	MTK_SOCINFO_ENTRY("MT8195", "MT8195TV/EHZA", "Kompanio 1380", 0x81950404, CELL_NOT_USED),
+	MTK_SOCINFO_ENTRY("MT8196", "MT8196GZ/NZB", "", 0x30000000, 0x00001E00),
 };
 
 static int mtk_socinfo_create_socinfo_node(struct mtk_socinfo *mtk_socinfop)
 {
 	struct soc_device_attribute *attrs;
-	static char machine[30] = {0};
+	struct socinfo_data *data = mtk_socinfop->socinfo_data;
 	static const char *soc_manufacturer = "MediaTek";
 
 	attrs = devm_kzalloc(mtk_socinfop->dev, sizeof(*attrs), GFP_KERNEL);
 	if (!attrs)
 		return -ENOMEM;
 
-	snprintf(machine, sizeof(machine), "%s (%s)", mtk_socinfop->socinfo_data->marketing_name,
-		mtk_socinfop->socinfo_data->soc_name);
-	attrs->family = soc_manufacturer;
-	attrs->machine = machine;
+	if (data->marketing_name != NULL && data->marketing_name[0] != '\0')
+		attrs->family = devm_kasprintf(mtk_socinfop->dev, GFP_KERNEL, "MediaTek %s",
+					       data->marketing_name);
+	else
+		attrs->family = soc_manufacturer;
+
+	attrs->soc_id = data->soc_name;
+	/*
+	 * The "machine" field will be populated automatically with the model
+	 * name from board DTS (if available).
+	 **/
 
 	mtk_socinfop->soc_dev = soc_device_register(attrs);
 	if (IS_ERR(mtk_socinfop->soc_dev))

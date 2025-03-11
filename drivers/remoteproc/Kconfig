@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 menu "Remoteproc drivers"
 
+source "drivers/remoteproc/mcupm/Kconfig"
+
 config REMOTEPROC
 	bool "Support for Remote Processor subsystem"
 	depends on HAS_DMA
@@ -54,12 +56,36 @@ config INGENIC_VPU_RPROC
 	  This can be either built-in or a loadable module.
 	  If unsure say N.
 
+config MTK_APU_RPROC
+	tristate "MediaTek APU remoteproc support"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARM || ARM64
+	select MAILBOX
+	select MTK_APU_MBOX
+	select MTK_APUSYS_SUPPORT
+	help
+	  Say y here to support MediaTek AI Processing Unit Subsystem
+	  via the remote processor framework.
+
+	  It's safe to say N here.
+
 config MTK_SCP
 	tristate "Mediatek SCP support"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
 	select RPMSG_MTK_SCP
 	help
 	  Say y here to support Mediatek's System Companion Processor (SCP) via
+	  the remote processor framework.
+
+	  It's safe to say N here.
+
+config MTK_VCP_RPROC
+	tristate "Mediatek VCP support"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on ARCH_DMA_ADDR_T_64BIT
+	select RPMSG_MTK_VCP
+	help
+	  Say y here to support Mediatek's Video Companion Processor (VCP) via
 	  the remote processor framework.
 
 	  It's safe to say N here.

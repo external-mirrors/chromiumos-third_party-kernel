@@ -85,6 +85,7 @@
 #define SP_TX_WAIT_KSVR_TIME		0x42
 #define SP_TX_SYS_CTRL1_REG		0x80
 #define HDCP2TX_FW_EN			BIT(4)
+#define HDCP2TX_SOFT_EN			0x38
 
 #define SP_TX_LINK_BW_SET_REG		0xA0
 #define SP_TX_LANE_COUNT_SET_REG	0xA1
@@ -97,10 +98,16 @@
 #define N_VID_2 0xC5
 
 #define KEY_START_ADDR			0x9000
-#define KEY_RESERVED			416
 
-#define HDCP14KEY_START_ADDR		(KEY_START_ADDR + KEY_RESERVED)
+#define HDCP22KEY_START_ADDR		KEY_START_ADDR
+#define HDCP22KEY_SIZE			416
+#define HDCP22KEY_LOAD			0x62
+#define HDCP22KEY_RAM_ADDR		0x600
+
+#define HDCP14KEY_START_ADDR		(KEY_START_ADDR + HDCP22KEY_SIZE)
 #define HDCP14KEY_SIZE			624
+#define HDCP14KEY_LOAD			0x12
+#define HDCP14KEY_RAM_ADDR		0x00
 
 /***************************************************************/
 /* Register definition of device address 0x72 */
@@ -161,6 +168,8 @@
 #define HFP_HBP_DEF		((HBLANKING_MIN - SYNC_LEN_DEF) / 2)
 #define VIDEO_CONTROL_0	0x08
 
+#define  TOTAL_LINES_L          0x12
+#define  TOTAL_LINES_H          0x13
 #define  ACTIVE_LINES_L         0x14
 #define  ACTIVE_LINES_H         0x15  /* Bit[7:6] are reserved */
 #define  VERTICAL_FRONT_PORCH   0x16
@@ -177,6 +186,32 @@
 #define  HORIZONTAL_SYNC_WIDTH_H      0x20  /* Bit[7:4] are reserved */
 #define  HORIZONTAL_BACK_PORCH_L      0x21
 #define  HORIZONTAL_BACK_PORCH_H      0x22  /* Bit[7:4] are reserved */
+
+#define  H_BLANK_L                    0x3E
+#define  H_BLANK_H                    0x3F
+#define  DSC_COMPRESS_RATIO           3
+#define  dsc_div(X)                   ((X) / DSC_COMPRESS_RATIO)
+#define  DSC_SLICE_NUM                2
+#define  DSC_PIXEL_CLOCK              250000
+#define  DSC_HSYNC_LEN                90
+#define  DSC_HFP_LEN                  177
+#define  DSC_HBP_LEN                  297
+
+#define  TOTAL_PIXEL_L_7E             0x50
+#define  TOTAL_PIXEL_H_7E             0x51  /* bit[7:6] are reserved */
+#define  ACTIVE_PIXEL_L_7E            0x52
+#define  ACTIVE_PIXEL_H_7E            0x53  /* bit[7:6] are reserved */
+#define  HORIZON_FRONT_PORCH_L_7E     0x54
+#define  HORIZON_FRONT_PORCH_H_7E     0x55
+#define  HORIZON_SYNC_WIDTH_L_7E      0x56
+#define  HORIZON_SYNC_WIDTH_H_7E      0x57
+#define  HORIZON_BACK_PORCH_L_7E      0x58
+#define  HORIZON_BACK_PORCH_H_7E      0x59
+
+#define  PPS_SIZE                     128
+#define  PPS_BLOCK_SIZE               32
+#define  R_PPS_REG_0                  0x80
+#define  R_I2C_1                      0x81
 
 /******** END of I2C Address 0x72 *********/
 
@@ -382,6 +417,10 @@
 #define  MIPI_SWAP_CLK    3
 /* Bit[2:0] are reserved */
 
+#define  HDCP_VER_SEL		0xEE
+#define  HDCP_STATUS		0x8A
+#define  HDCP_PASS		BIT(1)
+
 /******** END of I2C Address 0x84 *********/
 
 /* DPCD regs */
@@ -428,6 +467,7 @@ enum audio_wd_len {
 #define MAX_EDID_BLOCK	3
 #define EDID_TRY_CNT	3
 #define SUPPORT_PIXEL_CLOCK	300000
+#define SUPPORT_MIN_PIXEL_CLOCK	50000
 
 struct s_edid_data {
 	int edid_block_num;
@@ -471,6 +511,12 @@ struct anx7625_port_data {
 	struct anx7625_data *ctx;
 };
 
+enum anx7625_hdcp_state {
+	HDCP_INIT = 1,
+	HDCP_START,
+	HDCP_CHECK
+};
+
 struct anx7625_data {
 	struct anx7625_platform_data pdata;
 	struct platform_device *audio_pdev;
@@ -478,6 +524,9 @@ struct anx7625_data {
 	int hpd_high_cnt;
 	int dp_en;
 	int hdcp_cp;
+	bool hdcp_key_exist;
+	bool hdcp_1_4;
+	bool dsc_en;
 	/* Lock for work queue */
 	struct mutex lock;
 	struct device *dev;
@@ -492,6 +541,8 @@ struct anx7625_data {
 	struct delayed_work hdcp_work;
 	struct workqueue_struct *hdcp_workqueue;
 	/* Lock for hdcp work queue */
+	struct mutex hdcp_state_lock;
+	enum anx7625_hdcp_state hdcp_state;
 	struct mutex hdcp_wq_lock;
 	/* Lock for aux transfer and disable */
 	struct mutex aux_lock;
@@ -504,6 +555,8 @@ struct anx7625_data {
 	struct mipi_dsi_device *dsi;
 	struct drm_dp_aux aux;
 	int num_typec_switches;
+	struct drm_dsc_config dsc;
+	char pps_table[PPS_SIZE];
 	struct anx7625_port_data *typec_ports;
 };
 

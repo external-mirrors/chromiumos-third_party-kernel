@@ -8,12 +8,16 @@
 
 #include "../../vpu/mtk_vpu.h"
 
+#define VCODEC_VSI_LEN (0x2000)
+#define VCODEC_AV1_TABLE_START (0x2000 + 0x1000)
+
 struct mtk_vcodec_dec_dev;
 struct mtk_vcodec_enc_dev;
 
 enum mtk_vcodec_fw_type {
 	VPU,
 	SCP,
+	VCP,
 };
 
 enum mtk_vcodec_fw_use {
@@ -40,5 +44,7 @@ int mtk_vcodec_fw_ipi_register(struct mtk_vcodec_fw *fw, int id,
 int mtk_vcodec_fw_ipi_send(struct mtk_vcodec_fw *fw, int id,
 			   void *buf, unsigned int len, unsigned int wait);
 int mtk_vcodec_fw_get_type(struct mtk_vcodec_fw *fw);
+int mtk_vcodec_fw_get_ipi_id(enum mtk_vcodec_fw_type type, int hw_id, bool is_secure);
+struct device *mtk_vcodec_fw_get_io_dev(struct mtk_vcodec_fw *fw);
 
 #endif /* _MTK_VCODEC_FW_H_ */

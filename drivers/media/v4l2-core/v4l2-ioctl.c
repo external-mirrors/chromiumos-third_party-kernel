@@ -343,8 +343,9 @@ static void v4l_print_format(const void *arg, bool write_only)
 	case V4L2_BUF_TYPE_META_OUTPUT:
 		meta = &p->fmt.meta;
 		pixelformat = meta->dataformat;
-		pr_cont(", dataformat=%p4cc, buffersize=%u\n",
-			&pixelformat, meta->buffersize);
+		pr_cont(", dataformat=%p4cc, buffersize=%u, width=%u, height=%u, bytesperline=%u\n",
+			&pixelformat, meta->buffersize, meta->width,
+			meta->height, meta->bytesperline);
 		break;
 	}
 }
@@ -1491,6 +1492,13 @@ static void v4l_fill_fmtdesc(struct v4l2_fmtdesc *fmt)
 	case V4L2_META_FMT_MTISP_LCS:	descr = "Local Contrast Enhancement Stat"; break;
 	case V4L2_META_FMT_MTISP_LMV:	descr = "Local Motion Vector Histogram"; break;
 	case V4L2_META_FMT_MTISP_PARAMS: descr = "MTK ISP Tuning Metadata"; break;
+	case V4L2_META_FMT_GENERIC_8:	descr = "8-bit Generic Metadata"; break;
+	case V4L2_META_FMT_GENERIC_CSI2_10:	descr = "8-bit Generic Meta, 10b CSI-2"; break;
+	case V4L2_META_FMT_GENERIC_CSI2_12:	descr = "8-bit Generic Meta, 12b CSI-2"; break;
+	case V4L2_META_FMT_GENERIC_CSI2_14:	descr = "8-bit Generic Meta, 14b CSI-2"; break;
+	case V4L2_META_FMT_GENERIC_CSI2_16:	descr = "8-bit Generic Meta, 16b CSI-2"; break;
+	case V4L2_META_FMT_GENERIC_CSI2_20:	descr = "8-bit Generic Meta, 20b CSI-2"; break;
+	case V4L2_META_FMT_GENERIC_CSI2_24:	descr = "8-bit Generic Meta, 24b CSI-2"; break;
 
 	default:
 		/* Compressed formats */
@@ -1549,6 +1557,7 @@ static void v4l_fill_fmtdesc(struct v4l2_fmtdesc *fmt)
 		case V4L2_PIX_FMT_AV1_FRAME:	descr = "AV1 Frame"; break;
 		case V4L2_PIX_FMT_MT2110T:	descr = "Mediatek 10bit Tile Mode"; break;
 		case V4L2_PIX_FMT_MT2110R:	descr = "Mediatek 10bit Raster Mode"; break;
+		case V4L2_PIX_FMT_MS21:		descr = "MediaTek One Plane Format"; break;
 		default:
 			if (fmt->description[0])
 				return;
@@ -1557,6 +1566,22 @@ static void v4l_fill_fmtdesc(struct v4l2_fmtdesc *fmt)
 			snprintf(fmt->description, sz, "%p4cc",
 				 &fmt->pixelformat);
 			break;
+		}
+	}
+
+	if (fmt->type == V4L2_BUF_TYPE_META_CAPTURE) {
+		switch (fmt->pixelformat) {
+		case V4L2_META_FMT_GENERIC_8:
+		case V4L2_META_FMT_GENERIC_CSI2_10:
+		case V4L2_META_FMT_GENERIC_CSI2_12:
+		case V4L2_META_FMT_GENERIC_CSI2_14:
+		case V4L2_META_FMT_GENERIC_CSI2_16:
+		case V4L2_META_FMT_GENERIC_CSI2_20:
+		case V4L2_META_FMT_GENERIC_CSI2_24:
+			fmt->flags |= V4L2_FMT_FLAG_META_LINE_BASED;
+			break;
+		default:
+			fmt->flags &= ~V4L2_FMT_FLAG_META_LINE_BASED;
 		}
 	}
 

@@ -259,15 +259,15 @@
 			mediatek,clk-provider = "cpu";
 			/* RT1019P and IT6505 connected to the same I2S line */
 			codec {
-				sound-dai = <&it6505dptx>, <&rt1019p>;
+				sound-dai = <&it6505dptx>, <&speaker_codec>;
 			};
 		};
 	};
 
-	rt1019p: speaker-codec {
+	speaker_codec: speaker-codec {
 		compatible = "realtek,rt1019p";
 		pinctrl-names = "default";
-		pinctrl-0 = <&rt1019p_pins_default>;
+		pinctrl-0 = <&speaker_codec_pins_default>;
 		#sound-dai-cells = <0>;
 		sdb-gpios = <&pio 150 GPIO_ACTIVE_HIGH>;
 	};
@@ -441,7 +441,7 @@
 		#sound-dai-cells = <0>;
 		ovdd-supply = <&mt6366_vsim2_reg>;
 		pwr18-supply = <&pp1800_dpbrdg_dx>;
-		reset-gpios = <&pio 177 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 177 GPIO_ACTIVE_LOW>;
 
 		ports {
 			#address-cells = <1>;
@@ -1228,7 +1228,7 @@
 		};
 	};
 
-	rt1019p_pins_default: rt1019p-default-pins {
+	speaker_codec_pins_default: speaker-codec-default-pins {
 		pins-sdb {
 			pinmux = <PINMUX_GPIO150__FUNC_GPIO150>;
 			output-low;
@@ -1752,11 +1752,11 @@
 };
 
 &ssusb0 {
-	status = "disabled";
+	status = "okay";
 };
 
 &ssusb1 {
-	status = "disabled";
+	status = "okay";
 };
 
 &u3phy0 {
@@ -1773,26 +1773,12 @@
 
 &usb_host0 {
 	vbus-supply = <&pp3300_s3>;
-	status = "disabled";
+	status = "okay";
 };
 
 &usb_host1 {
 	vbus-supply = <&usb_p1_vbus>;
-	status = "disabled";
-};
-
-&xhci0 {
 	status = "okay";
-
-	vbus-supply = <&pp3300_s3>;
-};
-
-&xhci1 {
-	status = "okay";
-
-	#address-cells = <2>;
-	#size-cells = <2>;
-	vbus-supply = <&usb_p1_vbus>;
 };
 
 &watchdog {

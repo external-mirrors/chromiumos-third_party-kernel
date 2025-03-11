@@ -14,6 +14,10 @@ ifneq ($(CONFIG_VIDEO_MEDIATEK_VCODEC_SCP),)
 mtk-vcodec-common-y += mtk_vcodec_fw_scp.o
 endif
 
+ifneq ($(CONFIG_VIDEO_MEDIATEK_VCODEC_VCP),)
+mtk-vcodec-common-y += mtk_vcodec_fw_vcp.o
+endif
+
 ifneq ($(CONFIG_DEBUG_FS),)
 obj-$(CONFIG_VIDEO_MEDIATEK_VCODEC) += mtk-vcodec-dbgfs.o
 

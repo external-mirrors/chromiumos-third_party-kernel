@@ -1186,6 +1186,8 @@ static void mtk_venc_worker(struct work_struct *work)
 				(size_t)src_buf->vb2_buf.planes[i].length -
 			src_buf->planes[i].data_offset;
 	}
+	frm_buf.num_planes = src_buf->vb2_buf.num_planes;
+
 	bs_buf.va = vb2_plane_vaddr(&dst_buf->vb2_buf, 0);
 	bs_buf.dma_addr = vb2_dma_contig_plane_dma_addr(&dst_buf->vb2_buf, 0);
 	bs_buf.size = (size_t)dst_buf->vb2_buf.planes[0].length;

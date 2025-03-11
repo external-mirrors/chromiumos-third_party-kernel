@@ -1476,8 +1476,8 @@ static int gc5035_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int gc5035_entity_init_cfg(struct v4l2_subdev *subdev,
-				struct v4l2_subdev_state *state)
+static int gc5035_init_state(struct v4l2_subdev *subdev,
+			     struct v4l2_subdev_state *state)
 {
 	struct v4l2_subdev_format fmt = {
 		.which = V4L2_SUBDEV_FORMAT_TRY,
@@ -1504,7 +1504,6 @@ static const struct v4l2_subdev_video_ops gc5035_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops gc5035_pad_ops = {
-	.init_cfg = gc5035_entity_init_cfg,
 	.enum_mbus_code = gc5035_enum_mbus_code,
 	.enum_frame_size = gc5035_enum_frame_sizes,
 	.get_fmt = gc5035_get_fmt,
@@ -1514,6 +1513,10 @@ static const struct v4l2_subdev_pad_ops gc5035_pad_ops = {
 static const struct v4l2_subdev_ops gc5035_subdev_ops = {
 	.video	= &gc5035_video_ops,
 	.pad	= &gc5035_pad_ops,
+};
+
+static const struct v4l2_subdev_internal_ops gc5035_internal_ops = {
+	.init_state = gc5035_init_state,
 };
 
 static const struct media_entity_operations gc5035_subdev_entity_ops = {

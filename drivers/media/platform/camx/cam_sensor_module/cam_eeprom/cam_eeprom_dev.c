@@ -156,7 +156,7 @@ static int cam_eeprom_cache_content(struct cam_eeprom_ctrl_t *e_ctrl)
 		if (ret) {
 			kfree(e_ctrl->eeprom_content);
 			e_ctrl->eeprom_content = NULL;
-			return ERR_PTR(ret);
+			return ret;
 		}
 	}
 

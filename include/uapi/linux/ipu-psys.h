@@ -43,7 +43,7 @@ struct ipu_psys_buffer {
 	uint64_t len;
 	union {
 		int fd;
-		void __user *userptr;
+		uint64_t userptr;
 		uint64_t reserved;
 	} base;
 	uint32_t data_offset;

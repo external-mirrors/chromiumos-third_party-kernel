@@ -1411,7 +1411,7 @@ mtk_cam_video_register_device(struct mtk_cam_dev *cam,
 	else
 		vbq->timestamp_flags |= V4L2_BUF_FLAG_TSTAMP_SRC_SOE;
 	/* No minimum buffers limitation */
-	vbq->min_buffers_needed = 0;
+	vbq->min_queued_buffers = 0;
 	vbq->drv_priv = cam;
 	vbq->lock = &node->vdev_lock;
 	vbq->supports_requests = true;

@@ -44,3 +44,10 @@ config DRM_ANALOGIX_ANX7625
 	  ANX7625 is an ultra-low power 4K mobile HD transmitter
 	  designed for portable devices. It converts MIPI/DPI to
 	  DisplayPort1.3 4K.
+
+config DRM_ANALOGIX_DEBUG
+	bool "Enable debug build"
+	depends on DRM_ANALOGIX_DP
+	help
+	  Enables debug logs for the Analogix ANX7625 driver. Use
+	  only for debugging due to potential performance impact.

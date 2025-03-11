@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
@@ -24,6 +25,7 @@
 
 #include <drm/display/drm_dp_aux_bus.h>
 #include <drm/display/drm_dp_helper.h>
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/display/drm_hdcp_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
@@ -476,11 +478,146 @@ static int anx7625_set_k_value(struct anx7625_data *ctx)
 				 MIPI_DIGITAL_ADJ_1, 0x3D);
 }
 
+static inline int anx7625_h_timing_reg_write(struct anx7625_data *ctx,
+					     struct i2c_client *client,
+					     u8 reg_addr, u16 val,
+					     bool dsc_check)
+{
+	int ret;
+
+	if (dsc_check && ctx->dsc_en)
+		val = dsc_div(val);
+
+	ret = anx7625_reg_write(ctx, client, reg_addr, val);
+	ret |= anx7625_reg_write(ctx, client, reg_addr + 1, val >> 8);
+
+	return ret;
+}
+
+static int anx7625_h_timing_write(struct anx7625_data *ctx,
+				  struct i2c_client *client,
+				  bool rx_h_timing)
+{
+	u16 htotal;
+	int ret;
+
+	htotal = ctx->dt.hactive.min + ctx->dt.hfront_porch.min +
+			 ctx->dt.hback_porch.min + ctx->dt.hsync_len.min;
+	/* Htotal */
+	ret = anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_TOTAL_PIXELS_L,
+					 htotal, rx_h_timing);
+	/* Hactive */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_ACTIVE_PIXELS_L,
+					  ctx->dt.hactive.min, rx_h_timing);
+	/* HFP */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_FRONT_PORCH_L,
+					  ctx->dt.hfront_porch.min, rx_h_timing);
+	/* HWS */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_SYNC_WIDTH_L,
+					  ctx->dt.hsync_len.min, rx_h_timing);
+	/* HBP */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_BACK_PORCH_L,
+					  ctx->dt.hback_porch.min, rx_h_timing);
+
+	return ret;
+}
+
+static int anx7625_v_timing_write(struct anx7625_data *ctx,
+				  struct i2c_client *client)
+{
+	int ret;
+
+	/* Vactive */
+	ret = anx7625_reg_write(ctx, client, ACTIVE_LINES_L,
+				ctx->dt.vactive.min);
+	ret |= anx7625_reg_write(ctx, client, ACTIVE_LINES_H,
+				 ctx->dt.vactive.min >> 8);
+	/* VFP */
+	ret |= anx7625_reg_write(ctx, client, VERTICAL_FRONT_PORCH,
+				 ctx->dt.vfront_porch.min);
+	/* VWS */
+	ret |= anx7625_reg_write(ctx, client, VERTICAL_SYNC_WIDTH,
+				 ctx->dt.vsync_len.min);
+	/* VBP */
+	ret |= anx7625_reg_write(ctx, client, VERTICAL_BACK_PORCH,
+				 ctx->dt.vback_porch.min);
+
+	return ret;
+}
+
+static int anx7625_set_dsc_params(struct anx7625_data *ctx)
+{
+	int ret, i;
+	u16 htotal, vtotal;
+
+	if (!ctx->dsc_en)
+		return 0;
+
+	/* Video Horizontal timing */
+	ret = anx7625_h_timing_write(ctx, ctx->i2c.tx_p2_client, false);
+
+	/* Video Vertical timing */
+	ret |= anx7625_v_timing_write(ctx, ctx->i2c.tx_p2_client);
+
+	/* Vtotal */
+	vtotal = ctx->dt.vactive.min + ctx->dt.vfront_porch.min +
+		 ctx->dt.vback_porch.min + ctx->dt.vsync_len.min;
+	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p2_client, TOTAL_LINES_L,
+				 vtotal);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p2_client, TOTAL_LINES_H,
+				 vtotal >> 8);
+	/* Htotal */
+	htotal = ctx->dt.hactive.min + ctx->dt.hfront_porch.min +
+			 ctx->dt.hback_porch.min + ctx->dt.hsync_len.min;
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client, TOTAL_PIXEL_L_7E,
+				 htotal);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client, TOTAL_PIXEL_H_7E,
+				 htotal >> 8);
+	/* Hactive */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			ACTIVE_PIXEL_L_7E, ctx->dt.hactive.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			ACTIVE_PIXEL_H_7E, ctx->dt.hactive.min >> 8);
+	/* HFP */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			HORIZON_FRONT_PORCH_L_7E, ctx->dt.hfront_porch.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			HORIZON_FRONT_PORCH_H_7E,
+			ctx->dt.hfront_porch.min >> 8);
+	/* HWS */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			HORIZON_SYNC_WIDTH_L_7E, ctx->dt.hsync_len.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			HORIZON_SYNC_WIDTH_H_7E, ctx->dt.hsync_len.min >> 8);
+	/* HBP */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			HORIZON_BACK_PORCH_L_7E, ctx->dt.hback_porch.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+			HORIZON_BACK_PORCH_H_7E, ctx->dt.hback_porch.min >> 8);
+
+	/* Config DSC decoder internal blank timing for decoder to start */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p1_client,
+			H_BLANK_L, dsc_div(htotal - ctx->dt.hactive.min));
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p1_client,
+			H_BLANK_H, dsc_div(htotal - ctx->dt.hactive.min) >> 8);
+
+	/* Compress ratio  RATIO bit[7:6] */
+	ret |= anx7625_write_and(ctx, ctx->i2c.rx_p0_client, R_I2C_1, 0x3F);
+	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p0_client, R_I2C_1,
+		        (5 - DSC_COMPRESS_RATIO) << 6);
+	/*PPS table*/
+	for (i = 0; i < PPS_SIZE; i += PPS_BLOCK_SIZE)
+		ret |= anx7625_reg_block_write(ctx, ctx->i2c.rx_p2_client,
+				R_PPS_REG_0 + i, PPS_BLOCK_SIZE,
+				&ctx->pps_table[i]);
+
+	return ret;
+}
+
 static int anx7625_dsi_video_timing_config(struct anx7625_data *ctx)
 {
 	struct device *dev = ctx->dev;
 	unsigned long m, n;
-	u16 htotal;
 	int ret;
 	u8 post_divider = 0;
 
@@ -506,48 +643,12 @@ static int anx7625_dsi_video_timing_config(struct anx7625_data *ctx)
 	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client,
 				MIPI_LANE_CTRL_0, ctx->pdata.mipi_lanes - 1);
 
-	/* Htotal */
-	htotal = ctx->dt.hactive.min + ctx->dt.hfront_porch.min +
-		ctx->dt.hback_porch.min + ctx->dt.hsync_len.min;
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_TOTAL_PIXELS_L, htotal & 0xFF);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_TOTAL_PIXELS_H, htotal >> 8);
-	/* Hactive */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_ACTIVE_PIXELS_L, ctx->dt.hactive.min & 0xFF);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_ACTIVE_PIXELS_H, ctx->dt.hactive.min >> 8);
-	/* HFP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_FRONT_PORCH_L, ctx->dt.hfront_porch.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_FRONT_PORCH_H,
-			ctx->dt.hfront_porch.min >> 8);
-	/* HWS */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_SYNC_WIDTH_L, ctx->dt.hsync_len.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_SYNC_WIDTH_H, ctx->dt.hsync_len.min >> 8);
-	/* HBP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_BACK_PORCH_L, ctx->dt.hback_porch.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_BACK_PORCH_H, ctx->dt.hback_porch.min >> 8);
-	/* Vactive */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client, ACTIVE_LINES_L,
-			ctx->dt.vactive.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client, ACTIVE_LINES_H,
-			ctx->dt.vactive.min >> 8);
-	/* VFP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			VERTICAL_FRONT_PORCH, ctx->dt.vfront_porch.min);
-	/* VWS */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			VERTICAL_SYNC_WIDTH, ctx->dt.vsync_len.min);
-	/* VBP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			VERTICAL_BACK_PORCH, ctx->dt.vback_porch.min);
+	/* Video Horizontal timing */
+	ret |= anx7625_h_timing_write(ctx, ctx->i2c.rx_p2_client, true);
+
+	/* Video Vertical timing */
+	ret |= anx7625_v_timing_write(ctx, ctx->i2c.rx_p2_client);
+
 	/* M value */
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p1_client,
 			MIPI_PLL_M_NUM_23_16, (m >> 16) & 0xff);
@@ -663,9 +764,15 @@ static int anx7625_dsi_config(struct anx7625_data *ctx)
 
 	DRM_DEV_DEBUG_DRIVER(dev, "config dsi.\n");
 
-	/* DSC disable */
-	ret = anx7625_write_and(ctx, ctx->i2c.rx_p0_client,
-				R_DSC_CTRL_0, ~DSC_EN);
+	ret = anx7625_set_dsc_params(ctx);
+	if (ctx->dsc_en)
+		/* DSC enable */
+		ret |= anx7625_write_or(ctx, ctx->i2c.rx_p0_client,
+					R_DSC_CTRL_0, DSC_EN);
+	else
+		/* DSC disable */
+		ret |= anx7625_write_and(ctx, ctx->i2c.rx_p0_client,
+					 R_DSC_CTRL_0, ~DSC_EN);
 
 	ret |= anx7625_api_dsi_config(ctx);
 
@@ -769,6 +876,8 @@ static int anx7625_hdcp_key_probe(struct anx7625_data *ctx)
 	struct device *dev = ctx->dev;
 	u8 ident[FLASH_BUF_LEN];
 
+	ctx->hdcp_key_exist = false;
+
 	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
 				FLASH_ADDR_HIGH, 0x91);
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
@@ -793,7 +902,7 @@ static int anx7625_hdcp_key_probe(struct anx7625_data *ctx)
 				  ctx, val,
 				  ((val & FLASH_DONE) || (val < 0)),
 				  2000,
-				  2000 * 150);
+				  2000 * 15);
 	if (ret) {
 		dev_err(dev, "flash read access fail!\n");
 		return -EIO;
@@ -810,36 +919,90 @@ static int anx7625_hdcp_key_probe(struct anx7625_data *ctx)
 	if (ident[29] == 0xFF && ident[30] == 0xFF && ident[31] == 0xFF)
 		return -EINVAL;
 
+	ctx->hdcp_key_exist = true;
 	return 0;
 }
 
-static int anx7625_hdcp_key_load(struct anx7625_data *ctx)
+static enum anx7625_hdcp_state anx7625_hdcp_get_state(struct anx7625_data *ctx)
+{
+	enum anx7625_hdcp_state state;
+
+	mutex_lock(&ctx->hdcp_state_lock);
+	state = ctx->hdcp_state;
+	mutex_unlock(&ctx->hdcp_state_lock);
+
+	return state;
+}
+static int anx7625_hdcp_set_state(struct anx7625_data *ctx,
+				  enum anx7625_hdcp_state hdcp_state)
+{
+	mutex_lock(&ctx->hdcp_state_lock);
+	ctx->hdcp_state = hdcp_state;
+	mutex_unlock(&ctx->hdcp_state_lock);
+
+	return 0;
+}
+
+static int anx7625_hdcp_key_load(struct anx7625_data *ctx, bool hdcp_1_4)
 {
 	int ret;
 	struct device *dev = ctx->dev;
+	u8 val;
+	u16 key_addr, key_size, sram_addr;
 
-	/* Select HDCP 1.4 KEY */
+	if (hdcp_1_4) {
+		val = HDCP14KEY_LOAD;
+		key_addr = HDCP14KEY_START_ADDR;
+		key_size = HDCP14KEY_SIZE;
+		sram_addr = HDCP14KEY_RAM_ADDR;
+	} else {
+		val = HDCP22KEY_LOAD;
+		key_addr = HDCP22KEY_START_ADDR;
+		key_size = HDCP22KEY_SIZE;
+		sram_addr = HDCP22KEY_RAM_ADDR;
+	}
+
+	/* Select HDCP KEY */
 	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				R_BOOT_RETRY, 0x12);
+				R_BOOT_RETRY, val);
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 FLASH_ADDR_HIGH, HDCP14KEY_START_ADDR >> 8);
+				 FLASH_ADDR_HIGH, (key_addr >> 8) & 0xFF);
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 FLASH_ADDR_LOW, HDCP14KEY_START_ADDR & 0xFF);
+				 FLASH_ADDR_LOW, key_addr & 0xFF);
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 R_RAM_LEN_H, HDCP14KEY_SIZE >> 12);
+				 R_RAM_LEN_H, (key_size >> 12) & 0xFF);
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 R_RAM_LEN_L, HDCP14KEY_SIZE >> 4);
+				 R_RAM_LEN_L, (key_size >> 4) & 0xFF);
 
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 R_RAM_ADDR_H, 0);
+				 R_RAM_ADDR_H, (sram_addr >> 8) & 0xFF);
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 R_RAM_ADDR_L, 0);
-	/* Enable HDCP 1.4 KEY load */
+				 R_RAM_ADDR_L, sram_addr & 0xFF);
+	/* Enable HDCP KEY load */
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
 				 R_RAM_CTRL, DECRYPT_EN | LOAD_START);
-	dev_dbg(dev, "load HDCP 1.4 key done\n");
-	return ret;
+	if (ret) {
+		dev_err(dev, "enable load flash key failed\n");
+		return ret;
+	}
+	usleep_range(10000, 11000);
+
+	ret = anx7625_reg_read(ctx, ctx->i2c.rx_p0_client, R_RAM_CTRL);
+	if (ret < 0) {
+		dev_err(dev, "load flash key failed\n");
+		return ret;
+	}
+
+	if ((ret & CRC_OK) && (ret & LOAD_DONE)) {
+		dev_dbg(dev, "load HDCP key done\n");
+		return 0;
+	}
+
+	dev_dbg(dev, "load HDCP key failed\n");
+
+	return -EIO;
 }
+
 
 static int anx7625_hdcp_disable(struct anx7625_data *ctx)
 {
@@ -861,63 +1024,49 @@ static int anx7625_hdcp_disable(struct anx7625_data *ctx)
 				 TX_HDCP_CTRL0, ~HARD_AUTH_EN & 0xFF);
 }
 
-static int anx7625_hdcp_enable(struct anx7625_data *ctx)
+static int anx7625_hdcp_enable(struct anx7625_data *ctx, int hct)
 {
 	u8 bcap;
 	int ret;
 	struct device *dev = ctx->dev;
 
-	ret = anx7625_hdcp_key_probe(ctx);
-	if (ret) {
-		dev_dbg(dev, "no key found, not to do hdcp\n");
-		return ret;
+	if (!ctx->hdcp_key_exist) {
+		dev_err(dev, "no key found, not to do hdcp\n");
+		return -EIO;
 	}
 
-	/* Read downstream capability */
+	if (hct == DRM_MODE_HDCP_CONTENT_TYPE1) {
+		dev_dbg(dev, "use HDCP Content type1");
+
+		/* Read downstream HDCP 2.2 capability */
+		ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ,
+					DP_HDCP_2_2_REG_RX_CAPS_OFFSET, 1, &bcap);
+		if (ret < 0)
+			return ret;
+
+		if (!(bcap & BIT(1))) {
+			dev_dbg(dev, "downstream not support HDCP 2.2\n");
+			return -EIO;
+		}
+
+		dev_dbg(dev, "enable HDCP 2.2\n");
+		ctx->hdcp_1_4 = false;
+		return 0;
+	}
+
+	dev_dbg(dev, "use HDCP Content type0\n");
 	ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ, DP_AUX_HDCP_BCAPS, 1, &bcap);
 	if (ret < 0)
 		return ret;
 
 	if (!(bcap & DP_BCAPS_HDCP_CAPABLE)) {
 		pr_warn("downstream not support HDCP 1.4, cap(%x).\n", bcap);
-		return 0;
+		return -EIO;
 	}
-
 	dev_dbg(dev, "enable HDCP 1.4\n");
+	ctx->hdcp_1_4 = true;
 
-	/* First clear HDCP state */
-	ret = anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				TX_HDCP_CTRL0,
-				KSVLIST_VLD | BKSV_SRM_PASS | RE_AUTHEN);
-	usleep_range(1000, 1100);
-	/* Second clear HDCP state */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				 TX_HDCP_CTRL0,
-				 KSVLIST_VLD | BKSV_SRM_PASS | RE_AUTHEN);
-
-	/* Set time for waiting KSVR */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				 SP_TX_WAIT_KSVR_TIME, 0xc8);
-	/* Set time for waiting R0 */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
-				 SP_TX_WAIT_R0_TIME, 0xb0);
-	ret |= anx7625_hdcp_key_load(ctx);
-	if (ret) {
-		pr_warn("prepare HDCP key failed.\n");
-		return ret;
-	}
-
-	ret = anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xee, 0x20);
-
-	/* Try auth flag */
-	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xec, 0x10);
-	/* Interrupt for DRM */
-	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xff, 0x01);
-	if (ret < 0)
-		dev_err(dev, "fail to enable HDCP\n");
-
-	return anx7625_write_or(ctx, ctx->i2c.tx_p0_client,
-				TX_HDCP_CTRL0, HARD_AUTH_EN);
+	return 0;
 }
 
 static void anx7625_dp_start(struct anx7625_data *ctx)
@@ -2094,6 +2243,7 @@ static int anx7625_setup_dsi_device(struct anx7625_data *ctx)
 		MIPI_DSI_MODE_VIDEO_HSE	|
 		MIPI_DSI_HS_PKT_END_ALIGNED;
 
+	dsi->dsc = &ctx->dsc;
 	ctx->dsi = dsi;
 
 	return 0;
@@ -2117,13 +2267,20 @@ static int anx7625_attach_dsi(struct anx7625_data *ctx)
 	return 0;
 }
 
+static int anx7625_read_hdcp_status(struct anx7625_data *ctx)
+{
+	int ret;
+	ret = anx7625_reg_read(ctx, ctx->i2c.rx_p1_client, HDCP_STATUS);
+	return ret;
+}
+
 static void hdcp_check_work_func(struct work_struct *work)
 {
-	u8 status;
 	struct delayed_work *dwork;
 	struct anx7625_data *ctx;
 	struct device *dev;
 	struct drm_device *drm_dev;
+	int ret, val;
 
 	dwork = to_delayed_work(work);
 	ctx = container_of(dwork, struct anx7625_data, hdcp_work);
@@ -2134,64 +2291,91 @@ static void hdcp_check_work_func(struct work_struct *work)
 		return;
 	}
 
+	if (anx7625_hdcp_get_state(ctx) == HDCP_INIT) {
+		anx7625_hdcp_set_state(ctx, HDCP_START);
+		queue_delayed_work(ctx->hdcp_workqueue,
+				   &ctx->hdcp_work,
+				   msecs_to_jiffies(4000));
+		return;
+	}
+
+	if (anx7625_hdcp_get_state(ctx) == HDCP_START) {
+		if (ctx->hdcp_1_4)
+			anx7625_write_or(ctx, ctx->i2c.rx_p1_client,
+					 HDCP_VER_SEL, 0x20);
+		else
+			anx7625_write_or(ctx, ctx->i2c.rx_p1_client,
+					 HDCP_VER_SEL, 0x40);
+
+		if (ctx->hdcp_1_4)
+			anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+					  SP_TX_SYS_CTRL1_REG,
+					  HDCP2TX_FW_EN);
+		else
+			anx7625_write_and(ctx, ctx->i2c.tx_p0_client,
+					  SP_TX_SYS_CTRL1_REG,
+					  (u8)~HDCP2TX_FW_EN);
+
+		if (anx7625_hdcp_key_load(ctx, ctx->hdcp_1_4)) {
+			dev_err(dev, "HDCP key load error\n");
+			return;
+		}
+
+		ret = anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+					SP_TX_WAIT_KSVR_TIME, 0xc8);
+		/* Set time for waiting R0 */
+		ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+					 SP_TX_WAIT_R0_TIME, 0xb0);
+
+		if (ctx->hdcp_1_4) {
+			ret |= anx7625_write_or(ctx, ctx->i2c.tx_p0_client,
+						TX_HDCP_CTRL0, HARD_AUTH_EN);
+		} else {
+			ret |= anx7625_write_or(ctx, ctx->i2c.tx_p0_client,
+						0x86, 0);
+			ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p0_client,
+						 SP_TX_SYS_CTRL1_REG, HDCP2TX_SOFT_EN);
+		}
+		if (ret) {
+			dev_err(dev, "HDCP enable failed\n");
+			return;
+		}
+
+		/* Try auth flag */
+		ret = anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xec, 0x10);
+		/* Interrupt for DRM */
+		ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client, 0xff, 0x01);
+		if (ret < 0) {
+			dev_err(dev, "fail to notify secure OCM\n");
+			return;
+		}
+
+		anx7625_hdcp_set_state(ctx, HDCP_CHECK);
+		/* Check HDCP status after 5 seconds */
+		queue_delayed_work(ctx->hdcp_workqueue,
+				   &ctx->hdcp_work,
+				   msecs_to_jiffies(5000));
+		return;
+	}
+
 	drm_dev = ctx->connector->dev;
 	drm_modeset_lock(&drm_dev->mode_config.connection_mutex, NULL);
-	mutex_lock(&ctx->hdcp_wq_lock);
 
-	status = anx7625_reg_read(ctx, ctx->i2c.tx_p0_client, 0);
-	dev_dbg(dev, "sink HDCP status check: %.02x\n", status);
-	if (status & BIT(1)) {
+	ret = readx_poll_timeout(anx7625_read_hdcp_status,
+				 ctx, val,
+				 ((val & HDCP_PASS) || (val < 0)),
+				 1000,
+				 1000 * 10);
+	if (ret) {
+		dev_err(dev, "HDCP status check failed\n");
+	} else {
 		ctx->hdcp_cp = DRM_MODE_CONTENT_PROTECTION_ENABLED;
 		drm_hdcp_update_content_protection(ctx->connector,
 						   ctx->hdcp_cp);
 		dev_dbg(dev, "update CP to ENABLE\n");
 	}
 
-	mutex_unlock(&ctx->hdcp_wq_lock);
 	drm_modeset_unlock(&drm_dev->mode_config.connection_mutex);
-}
-
-static int anx7625_connector_atomic_check(struct anx7625_data *ctx,
-					  struct drm_connector_state *state)
-{
-	struct device *dev = ctx->dev;
-	int cp;
-
-	dev_dbg(dev, "hdcp state check\n");
-	cp = state->content_protection;
-
-	if (cp == ctx->hdcp_cp)
-		return 0;
-
-	if (cp == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
-		if (ctx->dp_en) {
-			dev_dbg(dev, "enable HDCP\n");
-			anx7625_hdcp_enable(ctx);
-
-			queue_delayed_work(ctx->hdcp_workqueue,
-					   &ctx->hdcp_work,
-					   msecs_to_jiffies(2000));
-		}
-	}
-
-	if (cp == DRM_MODE_CONTENT_PROTECTION_UNDESIRED) {
-		if (ctx->hdcp_cp != DRM_MODE_CONTENT_PROTECTION_ENABLED) {
-			dev_err(dev, "current CP is not ENABLED\n");
-			return -EINVAL;
-		}
-		anx7625_hdcp_disable(ctx);
-		ctx->hdcp_cp = DRM_MODE_CONTENT_PROTECTION_UNDESIRED;
-		drm_hdcp_update_content_protection(ctx->connector,
-						   ctx->hdcp_cp);
-		dev_dbg(dev, "update CP to UNDESIRE\n");
-	}
-
-	if (cp == DRM_MODE_CONTENT_PROTECTION_ENABLED) {
-		dev_err(dev, "Userspace illegal set to PROTECTION ENABLE\n");
-		return -EINVAL;
-	}
-
-	return 0;
 }
 
 static int anx7625_bridge_attach(struct drm_bridge *bridge,
@@ -2245,18 +2429,71 @@ anx7625_bridge_mode_valid(struct drm_bridge *bridge,
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
 	struct device *dev = ctx->dev;
 
-	DRM_DEV_DEBUG_DRIVER(dev, "drm mode checking\n");
-
-	/* Max 1200p at 5.4 Ghz, one lane, pixel clock 300M */
-	if (mode->clock > SUPPORT_PIXEL_CLOCK) {
-		DRM_DEV_DEBUG_DRIVER(dev,
-				     "drm mode invalid, pixelclock too high.\n");
+	dev_dbg(dev, "drm mode checking\n");
+	if (mode->clock > SUPPORT_PIXEL_CLOCK)
 		return MODE_CLOCK_HIGH;
-	}
 
-	DRM_DEV_DEBUG_DRIVER(dev, "drm mode valid.\n");
+	if (mode->clock < SUPPORT_MIN_PIXEL_CLOCK)
+		return MODE_CLOCK_LOW;
+
+	/*
+	 * If hdisplay cannot be divided by DSC compress ratio, then display
+	 * will have overlap/shift issue
+	 */
+	if (mode->clock > DSC_PIXEL_CLOCK &&
+	    (mode->hdisplay % DSC_COMPRESS_RATIO != 0))
+		return MODE_CLOCK_HIGH;
+
+	dev_dbg(dev, "drm mode valid.\n");
 
 	return MODE_OK;
+}
+
+static void anx7625_dsc_enable(struct anx7625_data *ctx, bool en)
+{
+	int ret;
+	struct device *dev = ctx->dev;
+
+	ctx->dsc_en = en;
+
+	if (en) {
+		ctx->dsc.dsc_version_major = 1;
+		ctx->dsc.dsc_version_minor = 1;
+		ctx->dsc.slice_height = 8;
+		ctx->dsc.slice_width = ctx->dt.hactive.min / DSC_SLICE_NUM;
+		ctx->dsc.slice_count = DSC_SLICE_NUM;
+		ctx->dsc.bits_per_component = 8;
+		ctx->dsc.bits_per_pixel = 8 << 4; /* 4 fractional bits */
+		ctx->dsc.block_pred_enable = true;
+		ctx->dsc.native_420 = false;
+		ctx->dsc.native_422 = false;
+		ctx->dsc.simple_422 = false;
+		ctx->dsc.vbr_enable = false;
+		ctx->dsc.rc_model_size = DSC_RC_MODEL_SIZE_CONST;
+		ctx->dsc.pic_width = ctx->dt.hactive.min;
+		ctx->dsc.pic_height = ctx->dt.vactive.min;
+		ctx->dsc.convert_rgb = 1;
+		ctx->dsc.vbr_enable = 0;
+
+		drm_dsc_set_rc_buf_thresh(&ctx->dsc);
+		drm_dsc_set_const_params(&ctx->dsc);
+
+		ctx->dsc.initial_scale_value = drm_dsc_initial_scale_value(&ctx->dsc);
+		ctx->dsc.line_buf_depth = ctx->dsc.bits_per_component + 1;
+		ret = drm_dsc_setup_rc_params(&ctx->dsc, DRM_DSC_1_2_444);
+		if (ret < 0)
+			dev_warn(dev, "drm_dsc_setup_rc_params ret %d\n", ret);
+
+		drm_dsc_compute_rc_parameters(&ctx->dsc);
+
+		drm_dsc_pps_payload_pack((struct drm_dsc_picture_parameter_set *)&ctx->pps_table,
+					 &ctx->dsc);
+		dev_dbg(dev, "anx7625 enable dsc\n");
+	} else {
+		ctx->dsc.dsc_version_major = 0;
+		ctx->dsc.dsc_version_minor = 0;
+		dev_dbg(dev, "anx7625 disable dsc\n");
+	}
 }
 
 static void anx7625_bridge_mode_set(struct drm_bridge *bridge,
@@ -2303,6 +2540,11 @@ static void anx7625_bridge_mode_set(struct drm_bridge *bridge,
 	DRM_DEV_DEBUG_DRIVER(dev, "vsync_end(%d),vtotal(%d).\n",
 			     mode->vsync_end,
 			     mode->vtotal);
+
+	if (mode->clock > DSC_PIXEL_CLOCK)
+		anx7625_dsc_enable(ctx, true);
+	else
+		anx7625_dsc_enable(ctx, false);
 }
 
 static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
@@ -2317,10 +2559,6 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 
 	DRM_DEV_DEBUG_DRIVER(dev, "drm mode fixup set\n");
 
-	/* No need fixup for external monitor */
-	if (!ctx->pdata.panel_bridge)
-		return true;
-
 	hsync = mode->hsync_end - mode->hsync_start;
 	hfp = mode->hsync_start - mode->hdisplay;
 	hbp = mode->htotal - mode->hsync_end;
@@ -2331,11 +2569,22 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 			     hsync, hfp, hbp, adj->clock);
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync_start(%d), hsync_end(%d), htot(%d)\n",
 			     adj->hsync_start, adj->hsync_end, adj->htotal);
-
 	adj_hfp = hfp;
 	adj_hsync = hsync;
 	adj_hbp = hbp;
 	adj_hblanking = hblanking;
+
+	if (mode->clock > DSC_PIXEL_CLOCK) {
+		adj_hsync = DSC_HSYNC_LEN;
+		adj_hfp = DSC_HFP_LEN;
+		adj_hbp = DSC_HBP_LEN;
+		vref = (u32)div_u64((u64)adj->clock * 1000 * 1000,
+				    adj->htotal * adj->vtotal);
+		goto calculate_timing;
+	}
+	/* No need fixup for external monitor */
+	if (!ctx->pdata.panel_bridge)
+		return true;
 
 	/* HFP needs to be even */
 	if (hfp & 0x1) {
@@ -2408,6 +2657,8 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 			adj_hfp -= delta_adj;
 	}
 
+calculate_timing:
+
 	DRM_DEV_DEBUG_DRIVER(dev, "after mode fixup\n");
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync(%d), hfp(%d), hbp(%d), clock(%d)\n",
 			     adj_hsync, adj_hfp, adj_hbp, adj->clock);
@@ -2416,10 +2667,50 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 	adj->hsync_start = adj->hdisplay + adj_hfp;
 	adj->hsync_end = adj->hsync_start + adj_hsync;
 	adj->htotal = adj->hsync_end + adj_hbp;
+	if (mode->clock > DSC_PIXEL_CLOCK)
+		adj->clock = (u32)div_u64((u64)vref * adj->htotal * adj->vtotal,
+					  1000 * 1000);
+
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync_start(%d), hsync_end(%d), htot(%d)\n",
 			     adj->hsync_start, adj->hsync_end, adj->htotal);
 
 	return true;
+}
+
+static int anx7625_bridge_hdcp_check(struct drm_bridge *bridge,
+				     struct drm_bridge_state *state)
+{
+	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
+	struct device *dev = ctx->dev;
+	struct drm_connector *connector;
+	struct drm_connector_state *conn_state;
+
+	connector = drm_atomic_get_new_connector_for_encoder(state->base.state,
+							     bridge->encoder);
+	if (!connector)
+		return 0;
+
+	ctx->connector = connector;
+	conn_state = drm_atomic_get_new_connector_state(state->base.state, connector);
+	if (WARN_ON(!conn_state))
+		return 0;
+
+	if (conn_state->content_protection == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
+		if (anx7625_hdcp_enable(ctx, conn_state->hdcp_content_type)) {
+			dev_err(dev, "enable HDCP failed\n");
+			return -EIO;
+		}
+
+		dev_dbg(dev, "enable HDCP\n");
+
+		anx7625_hdcp_set_state(ctx, HDCP_INIT);
+		queue_delayed_work(ctx->hdcp_workqueue,
+				   &ctx->hdcp_work,
+				   msecs_to_jiffies(1000));
+	}
+
+	return 0;
+
 }
 
 static int anx7625_bridge_atomic_check(struct drm_bridge *bridge,
@@ -2435,7 +2726,7 @@ static int anx7625_bridge_atomic_check(struct drm_bridge *bridge,
 	anx7625_bridge_mode_fixup(bridge, &crtc_state->mode,
 				  &crtc_state->adjusted_mode);
 
-	return anx7625_connector_atomic_check(ctx, conn_state);
+	return 0;
 }
 
 static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
@@ -2443,7 +2734,6 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 {
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
 	struct device *dev = ctx->dev;
-	struct drm_connector *connector;
 
 	dev_dbg(dev, "drm atomic enable\n");
 
@@ -2452,17 +2742,14 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 		return;
 	}
 
-	connector = drm_atomic_get_new_connector_for_encoder(state->base.state,
-							     bridge->encoder);
-	if (!connector)
-		return;
-
-	ctx->connector = connector;
+	anx7625_hdcp_key_probe(ctx);
 
 	pm_runtime_get_sync(dev);
 	_anx7625_hpd_polling(ctx, 5000 * 100);
 
 	anx7625_dp_start(ctx);
+
+	anx7625_bridge_hdcp_check(bridge, state);
 }
 
 static void anx7625_bridge_atomic_disable(struct drm_bridge *bridge,
@@ -2472,6 +2759,17 @@ static void anx7625_bridge_atomic_disable(struct drm_bridge *bridge,
 	struct device *dev = ctx->dev;
 
 	dev_dbg(dev, "drm atomic disable\n");
+
+	flush_workqueue(ctx->hdcp_workqueue);
+
+	if (ctx->connector &&
+	    ctx->hdcp_cp == DRM_MODE_CONTENT_PROTECTION_ENABLED) {
+		anx7625_hdcp_disable(ctx);
+		ctx->hdcp_cp = DRM_MODE_CONTENT_PROTECTION_DESIRED;
+		drm_hdcp_update_content_protection(ctx->connector,
+						   ctx->hdcp_cp);
+		dev_dbg(dev, "update CP to DESIRE\n");
+	}
 
 	ctx->connector = NULL;
 	anx7625_dp_stop(ctx);
@@ -2575,6 +2873,8 @@ static int __maybe_unused anx7625_runtime_pm_suspend(struct device *dev)
 	mutex_lock(&ctx->lock);
 
 	anx7625_stop_dp_work(ctx);
+	if (!ctx->pdata.panel_bridge)
+		anx7625_remove_edid(ctx);
 	anx7625_power_standby(ctx);
 
 	mutex_unlock(&ctx->lock);
@@ -2830,7 +3130,7 @@ static int anx7625_i2c_probe(struct i2c_client *client)
 	anx7625_init_gpio(platform);
 
 	mutex_init(&platform->lock);
-	mutex_init(&platform->hdcp_wq_lock);
+	mutex_init(&platform->hdcp_state_lock);
 	mutex_init(&platform->aux_lock);
 
 	INIT_DELAYED_WORK(&platform->hdcp_work, hdcp_check_work_func);

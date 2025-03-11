@@ -110,6 +110,7 @@ struct venc_frame_info {
  */
 struct venc_frm_buf {
 	struct mtk_vcodec_fb fb_addr[MTK_VCODEC_MAX_PLANES];
+	unsigned int num_planes;
 };
 
 /*
@@ -124,6 +125,7 @@ struct venc_done_result {
 
 extern const struct venc_common_if venc_h264_if;
 extern const struct venc_common_if venc_vp8_if;
+extern const struct venc_common_if venc_if;
 
 /*
  * venc_if_init - Create the driver handle

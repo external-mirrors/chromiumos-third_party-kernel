@@ -7,8 +7,10 @@
 
 #include <linux/container_of.h>
 #include <linux/dev_printk.h>
+#include <linux/jiffies.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_usbpd_notify.h>
 #include <linux/platform_data/cros_ec_proto.h>
@@ -28,6 +30,9 @@
  */
 #define WRITE_TMO_MS	5000
 
+/* Number of times to attempt recovery from a write timeout before giving up. */
+#define WRITE_TMO_CTR_MAX	5
+
 struct cros_ucsi_data {
 	struct device *dev;
 	struct ucsi *ucsi;
@@ -35,6 +40,8 @@ struct cros_ucsi_data {
 	struct cros_ec_device *ec;
 	struct notifier_block nb;
 	struct work_struct work;
+	struct delayed_work write_tmo;
+	int tmo_counter;
 
 	struct completion complete;
 	unsigned long flags;
@@ -110,13 +117,31 @@ static int cros_ucsi_sync_write(struct ucsi *ucsi, unsigned int offset,
 	if (ret)
 		goto err;
 
-	if (!wait_for_completion_timeout(&udata->complete, WRITE_TMO_MS)) {
+	if (!wait_for_completion_timeout(&udata->complete,
+					 msecs_to_jiffies(WRITE_TMO_MS))) {
 		ret = -ETIMEDOUT;
 		goto err;
 	}
 
-		return 0;
+	/* Successful write. Cancel any pending recovery work. */
+	cancel_delayed_work_sync(&udata->write_tmo);
+
+	return 0;
 err:
+	/* EC may return -EBUSY if CCI.busy is set. Convert this to a timeout.
+	 */
+	if (ret == -EBUSY)
+		ret = -ETIMEDOUT;
+
+	/* Schedule recovery attempt when we timeout or tried to send a command
+	 * while still busy.
+	 */
+	if (ret == -ETIMEDOUT) {
+		cancel_delayed_work_sync(&udata->write_tmo);
+		schedule_delayed_work(&udata->write_tmo,
+				      msecs_to_jiffies(WRITE_TMO_MS));
+	}
+
 	if (ack)
 		clear_bit(ACK_PENDING, &udata->flags);
 	else
@@ -149,17 +174,73 @@ static void cros_ucsi_work(struct work_struct *work)
 		complete(&udata->complete);
 }
 
+static void cros_ucsi_write_timeout(struct work_struct *work)
+{
+	struct cros_ucsi_data *udata =
+		container_of(work, struct cros_ucsi_data, write_tmo.work);
+	u32 cci;
+	u64 cmd;
+
+	if (cros_ucsi_read(udata->ucsi, UCSI_CCI, &cci, sizeof(cci))) {
+		dev_err(udata->dev,
+			"Reading CCI failed; no write timeout recovery possible.");
+		return;
+	}
+
+	if (cci & UCSI_CCI_BUSY) {
+		udata->tmo_counter++;
+
+		if (udata->tmo_counter <= WRITE_TMO_CTR_MAX)
+			schedule_delayed_work(&udata->write_tmo,
+					      msecs_to_jiffies(WRITE_TMO_MS));
+		else
+			dev_err(udata->dev,
+				"PPM unresponsive - too many write timeouts.");
+
+		return;
+	}
+
+	/* No longer busy means we can reset our timeout counter. */
+	udata->tmo_counter = 0;
+
+	/* Need to ack previous command which may have timed out. */
+	if (cci & UCSI_CCI_COMMAND_COMPLETE) {
+		cmd = UCSI_ACK_CC_CI | UCSI_ACK_COMMAND_COMPLETE;
+		cros_ucsi_async_write(udata->ucsi, UCSI_CONTROL, &cmd,
+				      sizeof(cmd));
+
+		/* Check again after a few seconds that the system has
+		 * recovered to make sure our async write above was successful.
+		 */
+		schedule_delayed_work(&udata->write_tmo,
+				      msecs_to_jiffies(WRITE_TMO_MS));
+		return;
+	}
+
+	/* We recovered from a previous timeout. Treat this as a recovery from
+	 * suspend and call resume.
+	 */
+	ucsi_resume(udata->ucsi);
+}
+
 static int cros_ucsi_event(struct notifier_block *nb,
 			   unsigned long host_event, void *_notify)
 {
 	struct cros_ucsi_data *udata = container_of(nb, struct cros_ucsi_data, nb);
 
-	if (!(host_event & PD_EVENT_PPM))
-		return NOTIFY_OK;
+	if (host_event & PD_EVENT_INIT) {
+		/* Late init event received from ChromeOS EC. Treat this as a
+		 * system resume to re-enable communication with the PPM.
+		 */
+		dev_dbg(udata->dev, "Late PD init received");
+		ucsi_resume(udata->ucsi);
+	}
 
-	dev_dbg(udata->dev, "UCSI notification received");
-	flush_work(&udata->work);
-	schedule_work(&udata->work);
+	if (host_event & PD_EVENT_PPM) {
+		dev_dbg(udata->dev, "UCSI notification received");
+		flush_work(&udata->work);
+		schedule_work(&udata->work);
+	}
 
 	return NOTIFY_OK;
 }
@@ -167,6 +248,7 @@ static int cros_ucsi_event(struct notifier_block *nb,
 static void cros_ucsi_destroy(struct cros_ucsi_data *udata)
 {
 	cros_usbpd_unregister_notify(&udata->nb);
+	cancel_delayed_work_sync(&udata->write_tmo);
 	cancel_work_sync(&udata->work);
 	ucsi_destroy(udata->ucsi);
 }
@@ -174,7 +256,6 @@ static void cros_ucsi_destroy(struct cros_ucsi_data *udata)
 static int cros_ucsi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct cros_ec_dev *ec_data = dev_get_drvdata(dev->parent);
 	struct cros_ucsi_data *udata;
 	int ret;
 
@@ -184,7 +265,14 @@ static int cros_ucsi_probe(struct platform_device *pdev)
 
 	udata->dev = dev;
 
-	udata->ec = ec_data->ec_dev;
+	if (is_of_node(dev->fwnode)) {
+		udata->ec = dev_get_drvdata(pdev->dev.parent);
+	} else {
+		struct cros_ec_dev *ec_data = dev_get_drvdata(dev->parent);
+
+		udata->ec = ec_data->ec_dev;
+	}
+
 	if (!udata->ec) {
 		dev_err(dev, "couldn't find parent EC device");
 		return -ENODEV;
@@ -193,6 +281,7 @@ static int cros_ucsi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, udata);
 
 	INIT_WORK(&udata->work, cros_ucsi_work);
+	INIT_DELAYED_WORK(&udata->write_tmo, cros_ucsi_write_timeout);
 	init_completion(&udata->complete);
 
 	udata->ucsi = ucsi_create(dev, &cros_ucsi_ops);
@@ -234,6 +323,7 @@ static int __maybe_unused cros_ucsi_suspend(struct device *dev)
 {
 	struct cros_ucsi_data *udata = dev_get_drvdata(dev);
 
+	cancel_delayed_work_sync(&udata->write_tmo);
 	cancel_work_sync(&udata->work);
 
 	return 0;
@@ -258,10 +348,17 @@ static const struct platform_device_id cros_ucsi_id[] = {
 };
 MODULE_DEVICE_TABLE(platform, cros_ucsi_id);
 
+static const struct of_device_id cros_ucsi_of_match[] = {
+	{ .compatible = "google,cros-ec-ucsi", },
+	{}
+};
+MODULE_DEVICE_TABLE(of, cros_ucsi_of_match);
+
 static struct platform_driver cros_ucsi_driver = {
 	.driver = {
 		.name = KBUILD_MODNAME,
 		.pm = &cros_ucsi_pm_ops,
+		.of_match_table = cros_ucsi_of_match,
 	},
 	.id_table = cros_ucsi_id,
 	.probe = cros_ucsi_probe,
