@@ -17,7 +17,6 @@
 #define MTK_V4L2_BATCH_MODE_SUPPORT	1
 
 #define IMG_MAX_HW_DMAS		72
-#define IMG_MODULE_SET 5
 
 #define IMG_IPI_INIT    1
 #define IMG_IPI_DEINIT  2
@@ -26,6 +25,15 @@
 
 #define IMG_MAX_HW	12
 #define WPE_ENG_NUM	3
+
+enum img_module_id {
+  IMG_MODULE_WPE = 0,
+  IMG_MODULE_ADL = 1,
+  IMG_MODULE_TRAW = 2,
+  IMG_MODULE_DIP = 3,
+  IMG_MODULE_PQDIP = 4,
+  IMG_MODULE_MAX = 5,
+};
 
 struct module_init_info {
 	u64	c_wbuf;
@@ -55,7 +63,7 @@ struct img_init_info {
 	u32	cq_size;
 	u64	drv_data;
 	/*new add, need refine*/
-	struct module_init_info module_info[IMG_MODULE_SET];
+	struct module_init_info module_info[IMG_MODULE_MAX];
 	u32    g_wbuf_fd;
 	u64	g_wbuf;
 	u32	g_wbuf_sz;
@@ -95,12 +103,12 @@ struct img_sw_addr {
 #endif
 } __packed;
 
-#define TIME_MAX (12)
+#define TMAX (16)
 struct img_ipi_frameparam {
-	u8		dmas_enable[IMG_MAX_HW_DMAS][TIME_MAX];
-	struct header_desc	dmas[IMG_MAX_HW_DMAS];
-	struct header_desc	tuning_meta;
-	struct header_desc	ctrl_meta;
+	u8		dmas_enable[IMG_MAX_HW_DMAS][TMAX];
+	struct header_desc_norm	dmas[IMG_MAX_HW_DMAS];
+	struct header_desc_norm	tuning_meta;
+	struct header_desc_norm	ctrl_meta;
 };
 
 struct img_sw_buffer {

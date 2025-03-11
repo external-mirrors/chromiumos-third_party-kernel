@@ -146,7 +146,7 @@ static ssize_t current_uuid_show(struct device *dev,
 	struct int3400_thermal_priv *priv = dev_get_drvdata(dev);
 	int i, length = 0;
 
-	if (priv->current_uuid_index > 0)
+	if (priv->current_uuid_index >= 0)
 		return sprintf(buf, "%s\n",
 			       int3400_thermal_uuids[priv->current_uuid_index]);
 
@@ -503,7 +503,7 @@ static int int3400_thermal_get_temp(struct thermal_zone_device *thermal,
 static int int3400_thermal_change_mode(struct thermal_zone_device *thermal,
 				       enum thermal_device_mode mode)
 {
-	struct int3400_thermal_priv *priv = thermal->devdata;
+	struct int3400_thermal_priv *priv = thermal_zone_device_priv(thermal);
 	int result = 0;
 
 	if (!priv)

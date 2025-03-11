@@ -14,8 +14,7 @@
 #include "linux/mtkisp_imgsys.h"
 #include <linux/pm_runtime.h>
 #include <linux/remoteproc.h>
-#include <linux/suspend.h>
-#include <linux/rtc.h>
+#include <linux/remoteproc/mtk_scp.h>
 #include <linux/videodev2.h>
 
 #include <media/videobuf2-dma-contig.h>
@@ -28,22 +27,19 @@
 #include "modules/mtk_imgsys-pqdip.h"
 #include "modules/mtk_imgsys-wpe.h"
 #include "modules/mtk_imgsys-adl.h"
+#include "modules/mtk_imgsys-me.h"
 
-#include "mtk-hcp.h"
 #include "mtk_imgsys-cmdq.h"
 #include "mtk_imgsys-dev.h"
 #include "mtk_imgsys-hw.h"
 #include "mtk_imgsys-vnode_id.h"
 #include "mtk_imgsys-of.h"
 #include "mtk_imgsys-module.h"
-#include "mtk-ipesys-me.h"
 #include "mtk_imgsys-debug.h"
 #include "mtk_imgsys_v4l2_vnode.h"
 #include "mtk_imgsys-debug.h"
 
 #define IMGSYS_MAX_BUFFERS	256
-
-static struct device *imgsys_pm_dev;
 
 struct mtk_imgsys_larb_device {
 	struct device	*dev;
@@ -1208,14 +1204,33 @@ err_mutex_destroy:
 	return ret;
 }
 
+/******************************************************************************
+ * @array img_resize_ratio_menu
+ * @brief IMGSYS hardware supports multiple resizers.
+ *        - Any Ratio: Allows for any resize ratio, including
+ *          down 2, down 4, and down 42.
+ *        - Down 4: Specifically for downscaling by a factor of 4.
+ *        - Down 2: Specifically for downscaling by a factor of 2.
+ *        - Down42: Used for downscaling by a factor of 4 on the
+ *          first use, and by a factor of 2 on subsequent uses.
+ *        - NULL: Indicates the end of the menu options
+ ******************************************************************************/
+static const char *img_resize_ratio_menu[] = {
+	"Any Ratio",
+	"Down 4",
+	"Down 2",
+	"Down 42",
+	NULL,
+};
+
 static const struct v4l2_ctrl_config cfg_mtk_resize_ratio = {
 	.ops = &mtk_imgsys_video_device_ctrl_ops,
 	.id = V4L2_CID_MTK_IMG_RESIZE_RATIO,
-	.name = "MTK resize ratio",
-	.type = V4L2_CTRL_TYPE_INTEGER,
+	.name = "Image resize ratio",
+	.type = V4L2_CTRL_TYPE_MENU,
 	.max = 3,
-	.min = 0,
-	.step = 1,
+	.def = 0,
+	.qmenu = img_resize_ratio_menu,
 };
 
 static int mtk_imgsys_pipe_v4l2_ctrl_init(struct mtk_imgsys_pipe *imgsys_pipe)
@@ -1550,26 +1565,25 @@ static int __maybe_unused mtk_imgsys_pm_suspend(struct device *dev)
 
 		return -EBUSY;
 	}
-#ifdef NEED_PM
+
 	if (pm_runtime_suspended(dev)) {
 		dev_info(dev, "%s: pm_runtime_suspended is true, no action\n",
 			 __func__);
 		return 0;
 	}
 
-	ret = pm_runtime_put_sync(dev);
+	ret = pm_runtime_force_suspend(dev);
 	if (ret) {
-		dev_info(dev, "%s: pm_runtime_put_sync failed:(%d)\n",
+		dev_info(dev, "%s: pm_runtime_force_suspend failed:(%d)\n",
 			 __func__, ret);
 		return ret;
 	}
-#endif
+
 	return 0;
 }
 
 static int __maybe_unused mtk_imgsys_pm_resume(struct device *dev)
 {
-#ifdef NEED_PM
 	int ret;
 
 	if (pm_runtime_suspended(dev)) {
@@ -1578,49 +1592,15 @@ static int __maybe_unused mtk_imgsys_pm_resume(struct device *dev)
 		return 0;
 	}
 
-	ret = pm_runtime_get_sync(dev);
+	ret = pm_runtime_force_resume(dev);
 	if (ret) {
-		dev_info(dev, "%s: pm_runtime_get_sync failed:(%d)\n",
+		dev_info(dev, "%s: pm_runtime_force_resume failed:(%d)\n",
 			 __func__, ret);
 		return ret;
 	}
-#endif
+
 	return 0;
 }
-
-#if IS_ENABLED(CONFIG_PM)
-static int imgsys_pm_event(struct notifier_block *notifier,
-			   unsigned long pm_event, void *unused)
-{
-	struct timespec64 ts;
-	struct rtc_time tm;
-
-	ktime_get_ts64(&ts);
-	rtc_time64_to_tm(ts.tv_sec, &tm);
-
-	switch (pm_event) {
-	case PM_HIBERNATION_PREPARE:
-		return NOTIFY_DONE;
-	case PM_RESTORE_PREPARE:
-		return NOTIFY_DONE;
-	case PM_POST_HIBERNATION:
-		return NOTIFY_DONE;
-	case PM_SUSPEND_PREPARE: /*enter suspend*/
-		mtk_imgsys_pm_suspend(imgsys_pm_dev);
-		return NOTIFY_DONE;
-	case PM_POST_SUSPEND:    /*after resume*/
-		mtk_imgsys_pm_resume(imgsys_pm_dev);
-		return NOTIFY_DONE;
-	}
-
-	return NOTIFY_OK;
-}
-
-static struct notifier_block imgsys_notifier_block = {
-	.notifier_call = imgsys_pm_event,
-	.priority = 0,
-};
-#endif
 
 static int mtk_imgsys_of_rproc(struct mtk_imgsys_dev *imgsys,
 			       struct platform_device *pdev)
@@ -1689,14 +1669,6 @@ static int mtk_imgsys_probe(struct platform_device *pdev)
 
 	if (mtk_imgsys_of_rproc(imgsys_dev, pdev)) {
 		ret = -EFAULT;
-		goto err_free_dev_alloc;
-	}
-
-	imgsys_dev->scp_pdev = mtk_hcp_get_plat_device(pdev);
-	if (!imgsys_dev->scp_pdev) {
-		dev_info(imgsys_dev->dev,
-			 "failed to get hcp device\n");
-		ret = -EINVAL;
 		goto err_free_dev_alloc;
 	}
 
@@ -1769,18 +1741,9 @@ static int mtk_imgsys_probe(struct platform_device *pdev)
 
 	imgsys_cmdq_init(imgsys_dev, 1);
 
-	//pm_runtime_set_autosuspend_delay(&pdev->dev, 3000);
-	//pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, 3000);
+	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);
-
-	imgsys_pm_dev = &pdev->dev;
-#if IS_ENABLED(CONFIG_PM)
-	ret = register_pm_notifier(&imgsys_notifier_block);
-	if (ret) {
-		dev_info(imgsys_dev->dev, "failed to register notifier block.\n");
-		goto err_release_deinit_v4l2;
-	}
-#endif
 
 	ret = platform_driver_register(&mtk_imgsys_larb_driver);
 	if (ret) {
@@ -1844,6 +1807,7 @@ static int __maybe_unused mtk_imgsys_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops mtk_imgsys_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mtk_imgsys_pm_suspend, mtk_imgsys_pm_resume)
 	SET_RUNTIME_PM_OPS(mtk_imgsys_runtime_suspend,
 			   mtk_imgsys_runtime_resume, NULL)
 };
@@ -1898,7 +1862,16 @@ static struct clk_bulk_data imgsys_isp7_clks[] = {
 		.id = "WPE3_CG_DIP1_WPE",
 	},
 	{
-		.id = "ME_CG_IPE"
+		.id = "ME_CG_IPE",
+	},
+	{
+		.id = "ME_CG_IPE_TOP",
+	},
+	{
+		.id = "ME_CG",
+	},
+	{
+		.id = "ME_CG_LARB12"
 	}
 };
 
@@ -1929,11 +1902,11 @@ static const struct module_ops imgsys_isp7_modules[] = {
 	},
 	[IMGSYS_MOD_ME] = {
 		.module_id = IMGSYS_MOD_ME,
-		.init = ipesys_me_set_initial_value,
+		.init = imgsys_me_set_initial_value,
 		.set = NULL,
-		.dump = ipesys_me_debug_dump,
-		.ndddump = ipesys_me_ndd_dump,
-		.uninit = ipesys_me_uninit,
+		.dump = imgsys_me_debug_dump,
+		.ndddump = imgsys_me_ndd_dump,
+		.uninit = imgsys_me_uninit,
 	},
 	[IMGSYS_MOD_WPE] = {
 		.module_id = IMGSYS_MOD_WPE,

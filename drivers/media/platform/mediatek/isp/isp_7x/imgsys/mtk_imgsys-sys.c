@@ -13,14 +13,13 @@
 #include <linux/device.h>
 #include <linux/freezer.h>
 #include <linux/pm_runtime.h>
-#include <linux/remoteproc.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/hashtable.h>
 #include "media/videobuf2-dma-contig.h"
 #include <media/v4l2-event.h>
-#include "mtk-hcp.h"
+#include "mtk_imgsys-scp.h"
 #include "mtk_header_desc.h"
 #include "mtk_imgsys-dev.h"
 #include "mtk_imgsys-hw.h"
@@ -32,19 +31,6 @@
 static int imgsys_quick_onoff_en;
 module_param(imgsys_quick_onoff_en, int, 0644);
 
-static int imgsys_send(struct platform_device *pdev, enum hcp_id id,
-		       void *buf, unsigned int  len, int req_fd,
-		       unsigned int wait)
-{
-	int ret;
-
-	if (wait)
-		ret = mtk_hcp_send(pdev, id, buf, len, req_fd);
-	else
-		ret = mtk_hcp_send_async(pdev, id, buf, len, req_fd);
-
-	return ret;
-}
 
 int mtk_imgsys_hw_working_buf_pool_init(struct mtk_imgsys_dev *imgsys_dev)
 {
@@ -168,9 +154,9 @@ static void mtk_imgsys_notify(struct mtk_imgsys_request *req, uint64_t frm_owner
 
 	mtk_imgsys_hw_working_buf_free(imgsys_dev, req->working_buf);
 	req->working_buf = NULL;
+	mtk_imgsys_pipe_remove_job(req);
 	if (vbf_state == VB2_BUF_STATE_DONE)
 		mtk_imgsys_pipe_job_finish(req, vbf_state);
-	mtk_imgsys_pipe_remove_job(req);
 
 	wake_up(&imgsys_dev->flushing_waitq);
 	dev_dbg(imgsys_dev->dev,
@@ -199,9 +185,9 @@ static void cmdq_cb_done_worker(struct work_struct *work)
 	if (gwfrm_info->user_info[0].ndd_fp[0] != '\0')
 		wait_for_completion(gwfrm_info->ndd_user_complete);
 
-	/* send to HCP after frame done & del node from list */
+	/* send to SCP after frame done & del node from list */
 	swbuf_data.offset = gwfrm_info->req_sbuf_goft;
-	imgsys_send(pipe->imgsys_dev->scp_pdev, HCP_IMGSYS_DEQUE_DONE_ID,
+	imgsys_scp_send(pipe->imgsys_dev, IPI_IMGSYS_DEQUE_DONE_ID,
 		    &swbuf_data, sizeof(struct img_sw_buffer),
 		    gwork->reqfd, 1);
 
@@ -276,6 +262,7 @@ static void imgsys_runner_func(struct work_struct *work)
 
 static void imgsys_scp_handler(void *data, unsigned int len, void *priv)
 {
+	struct share_buf *scp_msg = (struct share_buf *)data;
 	int job_id;
 	struct mtk_imgsys_pipe *pipe;
 	int pipe_id;
@@ -292,12 +279,17 @@ static void imgsys_scp_handler(void *data, unsigned int len, void *priv)
 		return;
 	}
 
-	if (WARN_ONCE(len != sizeof(struct img_sw_buffer),
+	// this function just handles id IPI_IMGSYS_FRAME_ID
+	if (scp_msg->id != IPI_IMGSYS_FRAME_ID) {
+		return;
+	}
+
+	if (WARN_ONCE(scp_msg->len != sizeof(struct img_sw_buffer),
 		      "%s: len(%d) not match img_sw_buffer\n", __func__, len))
 		return;
 
-	swbuf_data = (struct img_sw_buffer *)data;
-	gce_virt = mtk_hcp_get_gce_mem_virt(imgsys_dev->scp_pdev);
+	swbuf_data = (struct img_sw_buffer *)scp_msg->share_data;
+	gce_virt = imgsys_scp_get_reserve_mem_virt(IMG_MEM_G_ID);
 	if (!gce_virt) {
 		pr_info("%s: invalid gce_virt(%p)\n",
 			__func__, gce_virt);
@@ -306,10 +298,10 @@ static void imgsys_scp_handler(void *data, unsigned int len, void *priv)
 
 	swfrm_info = (struct swfrm_info_t *)(gce_virt + (swbuf_data->offset));
 	if ((int)swbuf_data->offset < 0 ||
-	    swbuf_data->offset > mtk_hcp_get_gce_mem_size(imgsys_dev->scp_pdev)) {
+	    swbuf_data->offset > imgsys_scp_get_reserve_mem_size(IMG_MEM_G_ID)) {
 		pr_info("%s: invalid swbuf_data->offset(%d), max(%llu)\n",
 			__func__, swbuf_data->offset,
-			(u64)mtk_hcp_get_gce_mem_size(imgsys_dev->scp_pdev));
+			(u64)imgsys_scp_get_reserve_mem_size(IMG_MEM_G_ID));
 		return;
 	}
 
@@ -347,13 +339,13 @@ static void imgsys_scp_handler(void *data, unsigned int len, void *priv)
 	swfrm_info->hw_hang = -1;
 	total_framenum = swfrm_info->total_frmnum;
 
-	if (total_framenum < 0 || total_framenum > TIME_MAX) {
+	if (total_framenum < 0 || total_framenum > TMAX) {
 		dev_info(imgsys_dev->dev,
 			 "%s:unexpected total_framenum (%d -> %d), batchnum(%d) MAX (%d/%d)\n",
 			 __func__, swfrm_info->total_frmnum,
 			 total_framenum,
 			 swfrm_info->batchnum,
-			 TMAX, TIME_MAX);
+			 TMAX, TMAX);
 		return;
 	}
 
@@ -465,9 +457,9 @@ static int mtk_imgsys_hw_connect(struct mtk_imgsys_dev *imgsys_dev)
 				imgsys_dev->modules[i].set(imgsys_dev);
 	}
 
-	ret = mtk_hcp_allocate_working_buffer(imgsys_dev->scp_pdev, 0);
+	ret = imgsys_scp_alloc_reserve_mem(imgsys_dev);
 	if (ret) {
-		dev_err(imgsys_dev->dev, "%s: mtk_hcp_allocate_working_buffer failed %d\n",
+		dev_err(imgsys_dev->dev, "%s: imgsys_scp_alloc_reserve_mem failed %d\n",
 			__func__, ret);
 		return -EBUSY;
 	}
@@ -480,13 +472,15 @@ static int mtk_imgsys_hw_connect(struct mtk_imgsys_dev *imgsys_dev)
 	info.reg_phys_addr = imgsys_dev->imgsys_resource->start;
 	info.reg_range = resource_size(imgsys_dev->imgsys_resource);
 
-	mtk_hcp_get_init_info(imgsys_dev->scp_pdev, &info);
+	imgsys_scp_get_reserve_mem_info(&info);
 	info.sec_tag = imgsys_dev->imgsys_pipe[0].init_info.sec_tag;
 	info.full_wd = imgsys_dev->imgsys_pipe[0].init_info.sensor.full_wd;
 	info.full_ht = imgsys_dev->imgsys_pipe[0].init_info.sensor.full_ht;
 	info.smvr_mode = 0;
 
-	ret = imgsys_send(imgsys_dev->scp_pdev, HCP_IMGSYS_INIT_ID,
+	imgsys_scp_init(imgsys_dev, imgsys_scp_handler);
+
+	ret = imgsys_scp_send(imgsys_dev, IPI_IMGSYS_INIT_ID,
 			  (void *)&info, sizeof(info), 0, 1);
 
 	if (ret) {
@@ -498,8 +492,6 @@ static int mtk_imgsys_hw_connect(struct mtk_imgsys_dev *imgsys_dev)
 	/* calling cmdq stream on */
 	imgsys_cmdq_streamon(imgsys_dev);
 
-	mtk_hcp_register(imgsys_dev->scp_pdev, HCP_IMGSYS_FRAME_ID,
-			 imgsys_scp_handler, "imgsys_scp_handler", imgsys_dev);
 
 	return 0;
 }
@@ -510,20 +502,19 @@ static void mtk_imgsys_hw_disconnect(struct mtk_imgsys_dev *imgsys_dev)
 	struct img_init_info info = {0};
 	u32 user_cnt = 0;
 
-	imgsys_send(imgsys_dev->scp_pdev, HCP_IMGSYS_DEINIT_ID,
+	imgsys_scp_send(imgsys_dev, IPI_IMGSYS_DEINIT_ID,
 		    (void *)&info, sizeof(info), 0, 1);
 
-	mtk_hcp_unregister(imgsys_dev->scp_pdev, HCP_DIP_INIT_ID);
-	mtk_hcp_unregister(imgsys_dev->scp_pdev, HCP_DIP_FRAME_ID);
+	imgsys_scp_deinit(imgsys_dev);
 
 	/* calling cmdq stream off */
 	imgsys_cmdq_streamoff(imgsys_dev);
 
 	/* RELEASE IMGSYS WORKING BUFFER FIRST */
-	ret = mtk_hcp_release_working_buffer(imgsys_dev->scp_pdev);
+	ret = imgsys_scp_free_reserve_mem(imgsys_dev);
 	if (ret) {
 		dev_info(imgsys_dev->dev,
-			 "%s: mtk_hcp_release_working_buffer failed(%d)\n",
+			 "%s: imgsys_scp_free_reserve_mem failed(%d)\n",
 			 __func__, ret);
 	}
 
@@ -600,15 +591,15 @@ static void imgsys_fill_img_buf(struct mtk_imgsys_dev_buffer *dev_buf,
 				struct header_desc_norm *desc_norm,
 				struct mtk_imgsys_request *req)
 {
-	struct buf_info *buf_info = &desc_norm->fparams[0][0].bufs[0];
+	struct frameparams *buf_info = &desc_norm->fparams[0];
 	int i;
 
 	desc_norm->fparams_tnum = 1;
 
 	buf_info->buf.num_planes = dev_buf->fmt.fmt.pix_mp.num_planes;
-	buf_info->fmt.fmt.pix_mp.width = dev_buf->fmt.fmt.pix_mp.width;
-	buf_info->fmt.fmt.pix_mp.height = dev_buf->fmt.fmt.pix_mp.height;
-	buf_info->fmt.fmt.pix_mp.pixelformat = dev_buf->fmt.fmt.pix_mp.pixelformat;
+	buf_info->fmt.width = dev_buf->fmt.fmt.pix_mp.width;
+	buf_info->fmt.height = dev_buf->fmt.fmt.pix_mp.height;
+	buf_info->fmt.pixelformat = dev_buf->fmt.fmt.pix_mp.pixelformat;
 	buf_info->crop = dev_buf->crop;
 	buf_info->rotation = dev_buf->rotation;
 	buf_info->hflip = dev_buf->hflip;
@@ -617,11 +608,11 @@ static void imgsys_fill_img_buf(struct mtk_imgsys_dev_buffer *dev_buf,
 
 	for (i = 0; i < buf_info->buf.num_planes; i++) {
 		buf_info->buf.planes[i].m.dma_buf.offset = dev_buf->vbb.planes[i].data_offset;
-		buf_info->buf.planes[i].reserved[0] = dev_buf->isp_daddr[i];
-		buf_info->buf.planes[i].reserved[1] = dev_buf->vbb.vb2_buf.planes[i].length;
-		buf_info->fmt.fmt.pix_mp.plane_fmt[i].sizeimage =
+		buf_info->buf.planes[i].isp_addr = dev_buf->isp_daddr[i];
+		buf_info->buf.planes[i].size = dev_buf->vbb.vb2_buf.planes[i].length;
+		buf_info->fmt.plane_fmt[i].sizeimage =
 			dev_buf->vbb.vb2_buf.planes[i].min_length;
-		buf_info->fmt.fmt.pix_mp.plane_fmt[i].bytesperline =
+		buf_info->fmt.plane_fmt[i].bytesperline =
 			dev_buf->fmt.fmt.pix_mp.plane_fmt[i].bytesperline;
 	}
 }
@@ -630,7 +621,7 @@ static void imgsys_fill_meta_buf(struct mtk_imgsys_dev_buffer *dev_buf,
 				 struct header_desc_norm *desc_norm,
 				 struct mtk_imgsys_request *req)
 {
-	struct buf_info *buf_info = &desc_norm->fparams[0][0].bufs[0];
+	struct frameparams *buf_info = &desc_norm->fparams[0];
 
 	memset(&buf_info->buf, 0, sizeof(buf_info->buf));
 
@@ -638,13 +629,13 @@ static void imgsys_fill_meta_buf(struct mtk_imgsys_dev_buffer *dev_buf,
 
 	buf_info->buf.num_planes = 1;
 
-	buf_info->fmt.fmt.pix_mp.width = dev_buf->fmt.fmt.meta.buffersize;
-	buf_info->fmt.fmt.pix_mp.height = 1;
-	buf_info->fmt.fmt.pix_mp.pixelformat = dev_buf->fmt.fmt.meta.dataformat;
-	buf_info->fmt.fmt.pix_mp.plane_fmt[0].sizeimage = dev_buf->fmt.fmt.meta.buffersize;
-	buf_info->fmt.fmt.pix_mp.plane_fmt[0].bytesperline = dev_buf->fmt.fmt.meta.buffersize;
-	buf_info->buf.planes[0].reserved[0] = dev_buf->isp_daddr[0];
-	buf_info->buf.planes[0].reserved[1] = dev_buf->vbb.vb2_buf.planes[0].length;
+	buf_info->fmt.width = dev_buf->fmt.fmt.meta.buffersize;
+	buf_info->fmt.height = 1;
+	buf_info->fmt.pixelformat = dev_buf->fmt.fmt.meta.dataformat;
+	buf_info->fmt.plane_fmt[0].sizeimage = dev_buf->fmt.fmt.meta.buffersize;
+	buf_info->fmt.plane_fmt[0].bytesperline = dev_buf->fmt.fmt.meta.buffersize;
+	buf_info->buf.planes[0].isp_addr = dev_buf->isp_daddr[0];
+	buf_info->buf.planes[0].size = dev_buf->vbb.vb2_buf.planes[0].length;
 	buf_info->buf.planes[0].m.dma_buf.phyaddr = dev_buf->scp_daddr[0];
 }
 
@@ -719,7 +710,7 @@ static void imgsys_composer_workfunc(struct work_struct *work)
 	mutex_lock(&imgsys_dev->hw_op_lock);
 	atomic_inc(&imgsys_dev->num_composing);
 
-	ret = imgsys_send(imgsys_dev->scp_pdev, HCP_DIP_FRAME_ID,
+	ret = imgsys_scp_send(imgsys_dev, IPI_IMGSYS_FRAME_ID,
 			  &ipi_param, sizeof(ipi_param),
 			  req->request_fd, 0);
 

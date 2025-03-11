@@ -10,14 +10,6 @@
 
 #include <linux/v4l2-controls.h>
 
-enum img_resize_ratio {
-	img_resize_anyratio,
-	img_resize_down4,
-	img_resize_down2,
-	img_resize_down42,
-	img_resiz_max
-};
-
 /* The base for the mediatek imgsys driver controls */
 /* We reserve 48 controls for this driver. */
 #define V4L2_CID_USER_MTK_IMG_BASE		(V4L2_CID_USER_BASE + 0x1100)
