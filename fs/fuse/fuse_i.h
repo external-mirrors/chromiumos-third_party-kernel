@@ -377,6 +377,9 @@ struct fuse_req {
 	/** virtio-fs's physically contiguous buffer for in and out args */
 	void *argbuf;
 #endif
+
+	/** When (in jiffies) the request was created */
+	unsigned long create_time;
 };
 
 struct fuse_iqueue;
@@ -785,6 +788,8 @@ struct fuse_conn {
 	/* Dax specific conn data, non-NULL if DAX is enabled */
 	struct fuse_conn_dax *dax;
 #endif
+
+	struct task_struct *watchdog;
 };
 
 static inline struct fuse_conn *get_fuse_conn_super(struct super_block *sb)
@@ -969,6 +974,8 @@ void fuse_request_end(struct fuse_conn *fc, struct fuse_req *req);
 /* Abort all requests */
 void fuse_abort_conn(struct fuse_conn *fc);
 void fuse_wait_aborted(struct fuse_conn *fc);
+void init_fuse_watchdog(struct fuse_conn *fc);
+void terminate_fuse_watchdog(struct fuse_conn *fc);
 
 /**
  * Invalidate inode attributes

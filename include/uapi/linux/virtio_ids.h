@@ -47,8 +47,6 @@
 #define VIRTIO_ID_SOUND                 25 /* virtio sound */
 #define VIRTIO_ID_FS           26 /* virtio filesystem */
 #define VIRTIO_ID_PMEM         27 /* virtio pmem */
-#define VIRTIO_ID_VIDEO_ENC    30 /* virtio video encoder */
-#define VIRTIO_ID_VIDEO_DEC    31 /* virtio video decoder */
 
 /* Chrome OS-specific devices */
 #define VIRTIO_ID_WL           63 /* virtio wayland */
