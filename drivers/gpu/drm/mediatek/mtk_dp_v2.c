@@ -54,6 +54,7 @@
 #include <linux/set_memory.h>
 #include <linux/skbuff.h>
 #include <linux/sockptr.h>
+#include <linux/soc/mediatek/mtk-mmsys.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
@@ -5981,6 +5982,8 @@ static int mtk_dp_dt_parse_pdata_v2(struct mtk_dp *mtk_dp,
 {
 	struct resource regs;
 	struct device *dev = &pdev->dev;
+	struct platform_device *vdisp_ao_pdev;
+	struct device_node *vdisp_ao_node;
 	int ret = 0;
 	u32 phy_params_int[DP_PHY_REG_COUNT] = {
 		0x20181410, 0x20241e18, 0x00003028,
@@ -6011,6 +6014,21 @@ static int mtk_dp_dt_parse_pdata_v2(struct mtk_dp *mtk_dp,
 		mtk_dp_phy_param_init_v2(mtk_dp,
 					 phy_params_dts, ARRAY_SIZE(phy_params_dts));
 	}
+
+	vdisp_ao_node = of_parse_phandle(dev->of_node, "mediatek,vdisp-ao", 0);
+	if (!vdisp_ao_node) {
+		dev_dbg(dev, "mediatek,vdisp-ao property not found\n");
+		return 0;
+	}
+
+	vdisp_ao_pdev = of_find_device_by_node(vdisp_ao_node);
+	of_node_put(vdisp_ao_node);
+	if (WARN_ON(!vdisp_ao_pdev)) {
+		dev_err(dev, "vdisp-ao find pdev failed\n");
+		return -ENODEV;
+	}
+	mtk_dp->vdisp_ao_dev =  &vdisp_ao_pdev->dev;
+	dev_dbg(dev, "vdiso-ao get dev success\n");
 
 	return 0;
 }
@@ -6090,6 +6108,11 @@ static int mtk_dp_resume_v2(struct device *dev)
 	mtk_dp_enable_mac_power_v2(mtk_dp);
 
 	mtk_dp_init_port_v2(mtk_dp);
+
+	/* Set vdisp_ao default config to get merge irq normally */
+	if (mtk_dp->vdisp_ao_dev)
+		mtk_mmsys_default_config(mtk_dp->vdisp_ao_dev);
+
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, true);
 
 	dev_dbg(mtk_dp->dev, "[DP] resume done\n");
