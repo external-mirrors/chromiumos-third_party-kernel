@@ -4363,6 +4363,7 @@
 				 <&cksys_clk CLK_CK_TCK_26M_MX9>;
 			clock-names = "mux_dp",
 				      "ck_26m";
+			mediatek,vdisp-ao = <&disp_vdisp_ao_config_clk>;
 		};
 
 		edp_tx: edp-tx@3ec40000 {
