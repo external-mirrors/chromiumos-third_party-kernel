@@ -54,6 +54,7 @@
 #define MTK_DP_TRAIN_DOWNSCALE_RETRY 10
 #define MTK_DP_VERSION 0x11
 #define MTK_DP_SDP_AUI 0x4
+#define EDP_REINIT_TIMES 4
 
 enum {
 	MTK_DP_CAL_GLB_BIAS_TRIM = 0,
@@ -142,6 +143,7 @@ struct mtk_dp {
 	struct mutex update_plugged_status_lock;
 	/* For edp power control */
 	void __iomem *pwr_regs;
+	u32 retry_times;
 };
 
 struct mtk_dp_data {
@@ -420,6 +422,7 @@ static const struct regmap_config mtk_edp_phy_regmap_config = {
 };
 static int mtk_dp_suspend(struct device *dev);
 static int mtk_dp_resume(struct device *dev);
+static int mtk_dp_poweron(struct mtk_dp *mtk_dp);
 
 static struct mtk_dp *mtk_dp_from_bridge(struct drm_bridge *b)
 {
@@ -480,16 +483,22 @@ static void mtk_dp_bulk_16bit_write(struct mtk_dp *mtk_dp, u32 offset, u8 *buf,
 
 static void mtk_edp_pm_ctl(struct mtk_dp *mtk_dp, bool enable)
 {
-	/* DISP_EDPTX_PWR_CON */
+	/* DISP_EDPTX_PWR_CON udelay 10us to ensure that the power state is stable */
+	udelay(10);
 	if (enable) {
-		/* Subsys power-on reset */
-		writel(readl(mtk_dp->pwr_regs) | DISP_EDPTX_PWR_RST_B, mtk_dp->pwr_regs);
-		/* Enable subsys clock */
+		/* Enable subsys clock, just set bit4 to 0 */
 		writel(readl(mtk_dp->pwr_regs) & ~DISP_EDPTX_PWR_CLK_DIS, mtk_dp->pwr_regs);
+		udelay(1);
+		/* Subsys power-on reset, firstly set bit0 to 0 and then set bit0 to 1 */
+		writel(readl(mtk_dp->pwr_regs) & ~DISP_EDPTX_PWR_RST_B, mtk_dp->pwr_regs);
+		udelay(1);
+		writel(readl(mtk_dp->pwr_regs) | DISP_EDPTX_PWR_RST_B, mtk_dp->pwr_regs);
 	} else {
 		writel(readl(mtk_dp->pwr_regs) & ~DISP_EDPTX_PWR_RST_B, mtk_dp->pwr_regs);
+		udelay(1);
 		writel(readl(mtk_dp->pwr_regs) | DISP_EDPTX_PWR_CLK_DIS, mtk_dp->pwr_regs);
 	}
+	udelay(10);
 }
 
 static void mtk_dp_msa_bypass_enable(struct mtk_dp *mtk_dp, bool enable)
@@ -1198,6 +1207,33 @@ static void mtk_dp_initialize_hpd_detect_settings(struct mtk_dp *mtk_dp)
 	}
 }
 
+static void mtk_edp_phyd_wait_aux_ldo_ready(struct mtk_dp *mtk_dp,
+					    unsigned long wait_us)
+{
+	int ret = 0;
+	u32 val = 0x0;
+	u32 mask = RGS_BG_CORE_EN_READY | RGS_AUX_LDO_EN_READY;
+
+	struct regmap* regs = mtk_dp->phy_regs ? mtk_dp->phy_regs : mtk_dp->regs;
+	ret = regmap_read_poll_timeout(regs,
+				       DP_PHY_DIG_GLB_STATUS_0,
+				       val, !!(val & mask),
+				       wait_us/100, wait_us);
+	if (ret) {
+		dev_err(mtk_dp->dev, "%s AUX not ready\n", __func__);
+		/* Reinitialize eDP power control to make eDP happy for mt8196 */
+		if(mtk_dp->retry_times == EDP_REINIT_TIMES) {
+			dev_err(mtk_dp->dev, "eDP status is somthing wrong!!!\n");
+			mtk_dp->retry_times = 0;
+			return;
+		}
+		mtk_dp->retry_times++;
+		if (mtk_dp->pwr_regs)
+			mtk_edp_pm_ctl(mtk_dp, true);
+		mtk_dp_poweron(mtk_dp);
+	}
+}
+
 static void mtk_dp_initialize_aux_settings(struct mtk_dp *mtk_dp)
 {
 	/* modify timeout threshold = 0x1595 */
@@ -1276,6 +1312,16 @@ static void mtk_dp_initialize_digital_settings(struct mtk_dp *mtk_dp)
 		mtk_dp_update_bits(mtk_dp, REG_3F80_DP_ENC_P0_3,
 				   0, PSR_PATGEN_AVT_EN_FLDMASK);
 		/* phy D enable */
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   PHY_PWR_STATE_OW_EN_DP_ENC_P0_3,
+				   PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK);
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   ALL_POWER_ON,
+				   PHY_PWR_STATE_OW_VALUE_DP_ENC_P0_3_MASK);
+		mtk_edp_phyd_wait_aux_ldo_ready(mtk_dp, 100000);
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   0, PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK);
+
 		mtk_dp_update_bits(mtk_dp, REG_3FF8_DP_ENC_P0_3,
 				   PHY_STATE_W_1_DP_ENC_P0_3,
 				   PHY_STATE_W_1_DP_ENC_P0_3_MASK);
@@ -1313,30 +1359,6 @@ static void mtk_dp_digital_sw_reset(struct mtk_dp *mtk_dp)
 	mtk_dp_update_bits(mtk_dp, MTK_DP_TRANS_P0_340C,
 			   0, DP_TX_TRANSMITTER_4P_RESET_SW_DP_TRANS_P0);
 }
-
-static void mtk_edp_phyd_wait_aux_ldo_ready(struct mtk_dp *mtk_dp,
-					    unsigned long wait_us)
-{
-	int ret = 0;
-	u32 val = 0x0;
-	u32 mask = RGS_BG_CORE_EN_READY | RGS_AUX_LDO_EN_READY;
-
-	if (mtk_dp->phy_regs) {
-		ret = regmap_read_poll_timeout(mtk_dp->phy_regs,
-					       DP_PHY_DIG_GLB_STATUS_0,
-					       val, !!(val & mask),
-					       wait_us/100, wait_us);
-	} else {
-		ret = regmap_read_poll_timeout(mtk_dp->regs,
-					       DP_PHY_DIG_GLB_STATUS_0,
-					       val, !!(val & mask),
-					       wait_us/100, wait_us);
-	}
-
-	if (ret)
-		dev_err(mtk_dp->dev, "%s AUX not ready\n", __func__);
-}
-
 
 static void mtk_dp_set_lanes(struct mtk_dp *mtk_dp, int lanes)
 {
@@ -1620,6 +1642,17 @@ static void mtk_dp_power_enable(struct mtk_dp *mtk_dp)
 static void mtk_dp_power_disable(struct mtk_dp *mtk_dp)
 {
 	mtk_dp_write(mtk_dp, MTK_DP_TOP_PWR_STATE, 0);
+	if (mtk_dp->data->edp_ver) {
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   PHY_PWR_STATE_OW_EN_DP_ENC_P0_3,
+				   PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK);
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   ALL_POWER_OFF,
+				   PHY_PWR_STATE_OW_VALUE_DP_ENC_P0_3_MASK);
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   0, PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK);
+	}
+
 
 	mtk_dp_update_bits(mtk_dp, MTK_DP_0034,
 			   DA_CKM_CKTX0_EN_FORCE_EN, DA_CKM_CKTX0_EN_FORCE_EN);
@@ -3146,14 +3179,15 @@ static int mtk_dp_suspend(struct device *dev)
 
 	if (mtk_dp->power_clk)
 		clk_disable_unprepare(mtk_dp->power_clk);
+
+	if (mtk_dp->pwr_regs)
+		mtk_edp_pm_ctl(mtk_dp, false);
 	/* TODO: clean up it after shutting down eDP power correctly. */
 	pm_runtime_put_sync(dev);
 	pm_runtime_put_sync(dev);
-	if (mtk_dp->pwr_regs)
-		mtk_edp_pm_ctl(mtk_dp, false);
 
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
-		 atomic_read(&dev->power.usage_count));
+		atomic_read(&dev->power.usage_count));
 
 	return 0;
 }
@@ -3161,26 +3195,31 @@ static int mtk_dp_suspend(struct device *dev)
 static int mtk_dp_resume(struct device *dev)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
+	int ret;
 
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
-		 atomic_read(&dev->power.usage_count));
+		atomic_read(&dev->power.usage_count));
 
 	/* TODO: clean up it after shutting down eDP power correctly. */
 	pm_runtime_get_sync(dev);
 	pm_runtime_get_sync(dev);
+	if (mtk_dp->power_clk)
+		clk_prepare_enable(mtk_dp->power_clk);
 	if (mtk_dp->pwr_regs)
 		mtk_edp_pm_ctl(mtk_dp, true);
 
-	if (mtk_dp->power_clk)
-		clk_prepare_enable(mtk_dp->power_clk);
-
+	ret = phy_init(mtk_dp->phy);
+	if (ret) {
+		dev_err(mtk_dp->dev, "Failed to initialize phy: %d\n", ret);
+		return ret;
+	}
 	mtk_dp_init_port(mtk_dp);
 	if (mtk_dp->bridge.type != DRM_MODE_CONNECTOR_eDP)
 		mtk_dp_hwirq_enable(mtk_dp, true);
 	mtk_dp_power_enable(mtk_dp);
 
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
-		 atomic_read(&dev->power.usage_count));
+		atomic_read(&dev->power.usage_count));
 
 	return 0;
 }
