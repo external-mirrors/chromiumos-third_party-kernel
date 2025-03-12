@@ -452,13 +452,14 @@
 #define REG_3F28_DP_ENC_P0_3			0x3f28
 #define DP_TX_SDP_PSR_AS_TESTBUS_MASK			GENMASK(5, 2)
 #define DP_TX_SDP_PSR_AS_TESTBUS			(0xa << 2)
+#define REG_3F40_DP_ENC_P0_3			0x3f40
 #define REG_3F44_DP_ENC_P0_3			0x3f44
 #define PHY_PWR_STATE_OW_EN_DP_ENC_P0_3			BIT(2)
 #define PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK		BIT(2)
-#define ALL_POWER_OFF					(0x00 << 3)
-#define BIAS_POWER_ON					(0x01 << 3)
-#define BIAS_AND_PLL_POWER_ON				(0x10 << 3)
-#define ALL_POWER_ON					(0x11 << 3)
+#define ALL_POWER_OFF					(0x0 << 3)
+#define BIAS_POWER_ON					(0x1 << 3)
+#define BIAS_AND_PLL_POWER_ON				(0x2 << 3)
+#define ALL_POWER_ON					(0x3 << 3)
 #define PHY_PWR_STATE_OW_VALUE_DP_ENC_P0_3_MASK		GENMASK(4, 3)
 
 #define REG_3F80_DP_ENC_P0_3			0x3f80
