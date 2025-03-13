@@ -1237,7 +1237,7 @@ static bool is_dsc_need_re_compute(
 			continue;
 
 		aconnector = (struct amdgpu_dm_connector *) stream->dm_stream_context;
-		if (!aconnector)
+		if (!aconnector || !aconnector->dsc_aux)
 			continue;
 
 		/*
