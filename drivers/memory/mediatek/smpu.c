@@ -591,6 +591,9 @@ static int smpu_probe(struct platform_device *pdev)
 	size = of_property_count_elems_of_size(smpu_node, "vio-info",
 					       sizeof(char));
 
+	if (size <= 0)
+		return -ENXIO;
+
 	mpu->vio_dump_cnt = size / sizeof(struct smpu_vio_dump_info_t);
 	mpu->vio_reg_info = devm_kmalloc(&pdev->dev, size, GFP_KERNEL);
 	if (!(mpu->vio_reg_info))
@@ -659,6 +662,9 @@ static int smpu_probe(struct platform_device *pdev)
 		/* bypass_axi */
 		size = of_property_count_elems_of_size(smpu_node, "bypass-axi",
 						       sizeof(char));
+		if (size <= 0)
+			return -ENXIO;
+
 		miumpu_bypass_list = devm_kmalloc(&pdev->dev, size, GFP_KERNEL);
 		if (!miumpu_bypass_list)
 			return -ENOMEM;
@@ -693,6 +699,9 @@ static int smpu_probe(struct platform_device *pdev)
 		 */
 		size = of_property_count_elems_of_size(smpu_node, "bypass",
 						       sizeof(char));
+
+		if (size <= 0)
+			return -ENXIO;
 
 		miumpu_bypass_list = devm_kmalloc(&pdev->dev, size, GFP_KERNEL);
 		if (!miumpu_bypass_list)
