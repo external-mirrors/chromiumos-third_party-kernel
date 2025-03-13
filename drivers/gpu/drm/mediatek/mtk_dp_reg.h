@@ -477,4 +477,12 @@
 #define DISP_EDPTX_PWR_RST_B				(1 << 0)
 #define DISP_EDPTX_PWR_CLK_DIS				(1 << 4)
 
+/* offset: PHYD_OFFSET (0x1000) */
+#define PHYD_DIG_DRV_FORCE_LANE(lane)		(0x1030 + 0x100 * (lane))
+#define EDP_TX_LN_VOLT_SWING_VAL_FLDMASK	0x6
+#define EDP_TX_LN_PRE_EMPH_VAL_FLDMASK		0x18
+
+#define RG_DSI_DEM_EN			0x500
+#define DSI_DE_EMPHASIS_ENABLE	BIT(1)
+
 #endif /*_MTK_DP_REG_H_*/

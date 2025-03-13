@@ -106,6 +106,7 @@ struct mtk_dp {
 	bool enabled;
 	bool need_debounce;
 	int irq;
+	int swing_value;
 	u8 max_lanes;
 	u8 max_linkrate;
 	u8 rx_cap[DP_RECEIVER_CAP_SIZE];
@@ -1025,8 +1026,8 @@ static void mtk_dp_set_swing_pre_emphasis(struct mtk_dp *mtk_dp, int lane_num,
 	u32 lane_shift = lane_num * DP_TX1_VOLT_SWING_SHIFT;
 
 	dev_dbg(mtk_dp->dev,
-		"link training: swing_val = 0x%x, pre-emphasis = 0x%x\n",
-		swing_val, preemphasis);
+		"link training: swing_val = 0x%x, pre-emphasis = 0x%x lane_num = %d\n",
+		swing_val, preemphasis, lane_num);
 
 	mtk_dp_update_bits(mtk_dp, MTK_DP_TOP_SWING_EMP,
 			   swing_val << (DP_TX0_VOLT_SWING_SHIFT + lane_shift),
@@ -1034,6 +1035,28 @@ static void mtk_dp_set_swing_pre_emphasis(struct mtk_dp *mtk_dp, int lane_num,
 	mtk_dp_update_bits(mtk_dp, MTK_DP_TOP_SWING_EMP,
 			   preemphasis << (DP_TX0_PRE_EMPH_SHIFT + lane_shift),
 			   DP_TX0_PRE_EMPH_MASK << lane_shift);
+	if (mtk_dp->data->edp_ver && mtk_dp->phy_regs) {
+		/* set swing and pre */
+		switch (lane_num) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+			regmap_update_bits(mtk_dp->phy_regs,
+					   PHYD_DIG_DRV_FORCE_LANE(lane_num),
+					   EDP_TX_LN_VOLT_SWING_VAL_FLDMASK |
+					   EDP_TX_LN_PRE_EMPH_VAL_FLDMASK,
+					   swing_val << 1 |
+					   preemphasis << 3);
+			break;
+		default:
+			break;
+		}
+		if (preemphasis != 0)
+			mtk_dp_update_bits(mtk_dp, RG_DSI_DEM_EN,
+					   DSI_DE_EMPHASIS_ENABLE,
+					   DSI_DE_EMPHASIS_ENABLE);
+	}
 }
 
 static void mtk_dp_reset_swing_pre_emphasis(struct mtk_dp *mtk_dp)
@@ -1786,8 +1809,12 @@ static void mtk_dp_train_update_swing_pre(struct mtk_dp *mtk_dp, int lanes,
 		int index = lane / 2;
 		int shift = lane % 2 ? DP_ADJUST_VOLTAGE_SWING_LANE1_SHIFT : 0;
 
-		swing = (dpcd_adjust_req[index] >> shift) &
-			DP_ADJUST_VOLTAGE_SWING_LANE0_MASK;
+		if (mtk_dp->swing_value != 0){
+			swing = mtk_dp->swing_value;
+		} else {
+		        swing = (dpcd_adjust_req[index] >> shift) &
+                        DP_ADJUST_VOLTAGE_SWING_LANE0_MASK;
+		}
 		preemphasis = ((dpcd_adjust_req[index] >> shift) &
 			       DP_ADJUST_PRE_EMPHASIS_LANE0_MASK) >>
 			      DP_ADJUST_PRE_EMPHASIS_LANE0_SHIFT;
@@ -2341,6 +2368,7 @@ static int mtk_dp_dt_parse(struct mtk_dp *mtk_dp,
 	struct device_node *endpoint;
 	struct device *dev = &pdev->dev;
 	int ret;
+	int level;
 	struct resource *regs;
 	void __iomem *base;
 	void __iomem *phy_base;
@@ -2388,6 +2416,11 @@ static int mtk_dp_dt_parse(struct mtk_dp *mtk_dp,
 	}
 
 	mtk_dp->max_linkrate = drm_dp_link_rate_to_bw_code(linkrate * 100);
+
+	if (of_get_property(dev->of_node, "swing-level", &level)) {
+		of_property_read_u32(dev->of_node,
+				     "swing-level", &mtk_dp->swing_value);
+	}
 
 	return 0;
 }
