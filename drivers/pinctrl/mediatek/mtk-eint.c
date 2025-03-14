@@ -175,15 +175,6 @@ static unsigned int mtk_eint_get_status(struct mtk_eint *eint,
 	return !!(readl(reg) & bit);
 }
 
-static int mtk_eint_get_pin_instance(struct mtk_eint *eint,
-					      unsigned int eint_num)
-{
-    if (eint->pins[eint_num].instance >= eint->nbase)
-        return -EINVAL;
-
-    return eint->pins[eint_num].instance;
-}
-
 static void mtk_eint_ack(struct irq_data *d)
 {
 	struct mtk_eint *eint = irq_data_get_irq_chip_data(d);
@@ -377,8 +368,8 @@ static void mtk_eint_irq_handler(struct irq_desc *desc)
 
 	chained_irq_enter(chip, desc);
 	for (index = 0; index < eint->hw->ap_num; index++) {
-		inst = mtk_eint_get_pin_instance(eint, index);
-		if(inst < 0)
+		inst = eint->pins[index].instance;
+		if (inst >= eint->nbase)
 			continue;
 		if (mtk_eint_get_status(eint, index)) {
 			idx = eint->pins[index].index;
@@ -550,8 +541,8 @@ int mtk_eint_do_init(struct mtk_eint *eint)
 	} else {
 		eint->pins = hw->soc->eint_pin;
 		for (i = 0; i < eint->hw->ap_num; i++) {
-			inst = mtk_eint_get_pin_instance(eint, i);
-			if (inst < 0)
+			inst = eint->pins[i].instance;
+			if (inst >= eint->nbase)
 				continue;
 			eint->base_pin_num[inst]++;
 		}
@@ -588,7 +579,7 @@ int mtk_eint_do_init(struct mtk_eint *eint)
 
 	mtk_eint_hw_init(eint);
 	for (i = 0; i < eint->hw->ap_num; i++) {
-		if (mtk_eint_get_pin_instance(eint, i) < 0)
+		if (eint->pins[i].instance >= eint->nbase)
 			continue;
 		int virq = irq_create_mapping(eint->domain, i);
 		irq_set_chip_and_handler(virq, &mtk_eint_irq_chip,
