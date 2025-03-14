@@ -295,10 +295,11 @@ static void mtk_crtc_plane_switch_sec_state(struct drm_crtc *crtc,
 
 	/* check updating plane state */
 	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
-		if (!plane->state->crtc || !new_plane_state->crtc)
+		if (!plane || !plane->state || !plane->state->crtc ||
+		    !new_plane_state || !new_plane_state->crtc)
 			continue;
 
-		if(plane && plane->type == DRM_PLANE_TYPE_CURSOR)
+		if(plane->type == DRM_PLANE_TYPE_CURSOR)
 			cursor_update = true;
 
 		if (new_plane_state->fb && mtk_plane_fb_is_secure(new_plane_state->fb))
@@ -871,7 +872,7 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 	struct drm_crtc *crtc = &mtk_crtc->base;
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
 	unsigned int pending_planes = 0, pending_async_planes = 0;
-	int i, ret = 0;
+	int i;
 	unsigned long flags;
 
 	mutex_lock(&mtk_crtc->hw_lock);
@@ -922,21 +923,18 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		if (!cmdq_handle) {
 			DRM_ERROR("mtk_crtc %d failed to kzalloc secure cmdq packet\n",
 				  drm_crtc_index(&mtk_crtc->base));
-			ret = -ENOMEM;
-			goto update_config_out;
+			goto update_config_err;
 		}
 		if (mtk_drm_cmdq_pkt_create(&mtk_crtc->sec_cmdq_client,
 					    cmdq_handle, PAGE_SIZE) < 0) {
 			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet\n",
 				  drm_crtc_index(&mtk_crtc->base));
-			ret = -ENOMEM;
-			goto update_config_out;
+			goto update_config_err;
 		}
 		if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
 			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet data\n",
 				  drm_crtc_index(&mtk_crtc->base));
-			ret = -ENOMEM;
-			goto update_config_out;
+			goto update_config_err;
 		}
 		sec_data = (struct cmdq_sec_data *)cmdq_handle->sec_data;
 		sec_data->needs_vblank = needs_vblank;
@@ -948,9 +946,12 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 
 		cmdq_client =  mtk_crtc->cmdq_client;
 		cmdq_handle = &mtk_crtc->cmdq_handle;
+	} else {
+		cmdq_client.chan = NULL;
+		cmdq_handle = NULL;
 	}
 
-	if (cmdq_client.chan) {
+	if (cmdq_client.chan && cmdq_handle) {
 		cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
 		cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
 		mtk_crtc_ddp_config(crtc, cmdq_handle);
@@ -976,20 +977,18 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 
 		mbox_send_message(cmdq_client.chan, cmdq_handle);
 		mbox_client_txdone(cmdq_client.chan, 0);
+		goto update_config_out;
 	}
-#else
+
+update_config_err:
+#endif
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 	mtk_crtc->config_updating = false;
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
-#endif
 
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
 update_config_out:
-
-	if (ret) {
-		spin_lock_irqsave(&mtk_crtc->config_lock, flags);
-		mtk_crtc->config_updating = false;
-		spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
-	}
+#endif
 
 	mutex_unlock(&mtk_crtc->hw_lock);
 }
@@ -1079,8 +1078,12 @@ static void mtk_crtc_crc_work(struct kthread_work *base)
 	struct mtk_ddp_comp *comp = mtk_crtc->crc_provider;
 	u64 vblank = drm_crtc_vblank_count(&mtk_crtc->base);
 
-	if (!mtk_crtc->base.crc.opened)
+	spin_lock_irq(&mtk_crtc->base.crc.lock);
+	if (!mtk_crtc->base.crc.opened) {
+		spin_unlock_irq(&mtk_crtc->base.crc.lock);
 		return;
+	}
+	spin_unlock_irq(&mtk_crtc->base.crc.lock);
 
 	comp->funcs->crc_read(comp->dev);
 
@@ -1482,7 +1485,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 	for (j = 0; j < priv->data->mmsys_dev_num; j++) {
 		for (k = 0; k < MAX_MMSYS; k++) {
 			const unsigned int *subsys_path;
-			unsigned int subsys_path_len;
+			unsigned int subsys_path_len = 0;
 			unsigned int order = 0;
 
 			subsys_priv = priv->all_drm_private[k];
@@ -1581,7 +1584,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 
 	mtk_crtc->ddp_comp_sys = devm_kmalloc_array(dev, mtk_crtc->ddp_comp_nr +
 						    (conn_routes ? 1 : 0),
-						    sizeof(mtk_crtc->ddp_comp_sys), GFP_KERNEL);
+						    sizeof(*mtk_crtc->ddp_comp_sys), GFP_KERNEL);
 	if (!mtk_crtc->ddp_comp_sys)
 		return -ENOMEM;
 

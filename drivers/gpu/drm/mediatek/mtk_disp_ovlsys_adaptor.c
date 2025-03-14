@@ -255,7 +255,15 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 			     pending->x, pending->y, pending->width, pending->height);
 
 	exdma = get_comp_by_type_idx(dev, OVLSYS_ADAPTOR_TYPE_EXDMA, idx);
+	if (!exdma) {
+		dev_err(dev, "%s: exdma%d comp not found\n", __func__, idx);
+		return;
+	}
 	blender = get_comp_by_type_idx(dev, OVLSYS_ADAPTOR_TYPE_BLENDER, idx);
+	if (!blender) {
+		dev_err(dev, "%s: blender%d comp not found\n", __func__, idx);
+		return;
+	}
 
 	/* OVLSYS is in 1T2P domain, width needs to be 2 pixels align */
 	align_width = ALIGN_DOWN(pending->width, 2);
@@ -389,7 +397,7 @@ int mtk_ovlsys_adaptor_clk_enable(struct device *dev)
 {
 	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
 	struct device *comp;
-	int ret;
+	int ret = 0;
 	int i;
 
 	for (i = 0; i < OVLSYS_ADAPTOR_ID_MAX; i++) {

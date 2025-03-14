@@ -49,7 +49,7 @@ mtk_drm_mode_fb_create(struct drm_device *dev,
 {
 	const struct drm_format_info *info = drm_get_format_info(dev, cmd);
 
-	if (info->num_planes != 1)
+	if (!info || info->num_planes != 1)
 		return ERR_PTR(-EINVAL);
 
 	return drm_gem_fb_create(dev, file, cmd);

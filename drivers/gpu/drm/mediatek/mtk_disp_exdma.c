@@ -262,7 +262,7 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 	struct mtk_plane_pending_state *pending = &state->pending;
 	const struct drm_format_info *fmt_info = drm_format_info(pending->format);
 	unsigned int align_width = 0;
-	bool csc_enable = fmt_info->is_yuv ? true : false;
+	bool csc_enable = (fmt_info) ? fmt_info->is_yuv : false;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 	unsigned int clrfmt = 0;
 	unsigned int clrfmt_mask = OVL_CON_RGB_SWAP |
