@@ -3174,9 +3174,8 @@ static int mtk_dp_suspend(struct device *dev)
 
 	if (mtk_dp->pwr_regs)
 		mtk_edp_pm_ctl(mtk_dp, false);
-	/* TODO: clean up it after shutting down eDP power correctly. */
-	pm_runtime_put_sync(dev);
-	pm_runtime_put_sync(dev);
+
+	pm_runtime_force_suspend(dev);
 
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
 		atomic_read(&dev->power.usage_count));
@@ -3192,9 +3191,8 @@ static int mtk_dp_resume(struct device *dev)
 	dev_dbg(mtk_dp->dev, "%s usage_count %d\n", __func__,
 		atomic_read(&dev->power.usage_count));
 
-	/* TODO: clean up it after shutting down eDP power correctly. */
-	pm_runtime_get_sync(dev);
-	pm_runtime_get_sync(dev);
+	pm_runtime_force_resume(dev);
+
 	if (mtk_dp->power_clk)
 		clk_prepare_enable(mtk_dp->power_clk);
 	if (mtk_dp->pwr_regs)
