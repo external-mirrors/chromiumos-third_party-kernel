@@ -16,15 +16,13 @@ void mtk_dp_mask_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask);
 void mtk_dp_write_byte_v2(struct mtk_dp *mtk_dp, u32 addr, u8 val, u32 mask);
 void mtk_dp_video_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
 void mtk_dp_video_disable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
-void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id, u8 channel,
-			    u8 fs, u8 enable);
+void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
+			       int channel, int fs, u8 enable);
 void mtk_dp_audio_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
 void mtk_dp_audio_mute_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id, bool enable);
 void mtk_dp_video_mute_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id, bool enable);
 u8 mtk_dp_color_get_bpp_v2(u8 color_format, u8 color_depth);
 bool mtk_dp_parse_audio_cap_v2(struct mtk_dp *mtk_dp, struct mtk_dp_audio_cfg *cfg);
-void mtk_dp_audio_info_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
-		       int *ch, int *fs, int *len);
 int mtk_dp_update_bits_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask);
 void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp);
 void mtk_dp_hdcp_update_value(struct mtk_dp *mtk_dp);

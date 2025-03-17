@@ -78,26 +78,6 @@
 #define WRITE_4BYTE_MASK(mtk_dp, addr, val, mask) \
 	mtk_dp_mask_v2(mtk_dp, addr, val, mask)
 
-enum audio_fs {
-	FS_22K,
-	FS_32K,
-	FS_44K,
-	FS_48K,
-	FS_88K,
-	FS_96K,
-	FS_176K,
-	FS_192K,
-	FS_MAX,
-};
-
-enum audio_len {
-	WL_NONE,
-	WL_16BIT,
-	WL_20BIT,
-	WL_24BIT,
-	WL_MAX,
-};
-
 enum audio_m_div {
 	DP_AUDIO_M_DIV_M,
 	DP_AUDIO_M_DIV_M2,

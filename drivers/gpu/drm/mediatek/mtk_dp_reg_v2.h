@@ -176,6 +176,7 @@
 #define REG_3374_DP_ENCODER1_P0								(0x3374)
 #define REG_33C8_DP_ENCODER1_P0								(0x33c8)
 #define REG_33D0_DP_ENCODER1_P0								(0x33d0)
+#define REG_33F0_DP_ENCODER1_P0								(0x33f0)
 #define REG_33F4_DP_ENCODER1_P0								(0x33f4)
 
 #define REG_3400_DP_TRANS_P0								(0x3400)

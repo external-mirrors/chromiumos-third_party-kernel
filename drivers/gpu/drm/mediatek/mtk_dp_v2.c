@@ -2048,8 +2048,8 @@ void mtk_dp_audio_mute_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 				0x0, AU_EN_DP_ENCODER0_P0_FLDMASK);
 		WRITE_BYTE(mtk_dp, REG_30A4_DP_ENCODER0_P0 + reg_offset, 0x00);
 
-		WRITE_2BYTE_MASK(mtk_dp, REG_33F4_DP_ENCODER1_P0 + reg_offset, BIT(9), BIT(9));
-		WRITE_2BYTE_MASK(mtk_dp, REG_33F4_DP_ENCODER1_P0 + reg_offset, 0x0, BIT(9));
+		WRITE_2BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + reg_offset, BIT(9), BIT(9));
+		WRITE_2BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + reg_offset, 0x0, BIT(9));
 	} else {
 		WRITE_2BYTE_MASK(mtk_dp, REG_3030_DP_ENCODER0_P0 + reg_offset, (0x00),
 				 VBID_AUDIO_MUTE_FLAG_SEL_DP_ENCODER0_P0_FLDMASK);
@@ -2114,7 +2114,7 @@ static void mtk_dp_audio_set_mdiv_v2(struct mtk_dp *mtk_dp, const enum dp_encode
 }
 
 void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
-			    u8 channel, u8 fs, u8 enable)
+			       int channel, int fs, u8 enable)
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
@@ -2151,7 +2151,7 @@ void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 
 	dev_dbg(mtk_dp->dev, "encoder_id = %d, fs = %d, ch = %d\n", encoder_id, fs, channel);
 
-	WRITE_BYTE_MASK(mtk_dp, (REG_33F4_DP_ENCODER1_P0 + 1 + reg_offset), BIT(1), BIT(1));
+	WRITE_BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + 1 + reg_offset, BIT(1), BIT(1));
 
 	WRITE_2BYTE_MASK(mtk_dp, REG_3304_DP_ENCODER1_P0 + reg_offset,
 			 AU_PRTY_REGEN_DP_ENCODER1_P0_FLDMASK,
@@ -2183,27 +2183,22 @@ void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			 AUDIO_32CH_SEL_DP_ENCODER0_P0_FLDMASK);
 
 	switch (fs) {
-	case FS_44K:
+	case 44100:
+	default:
 		WRITE_2BYTE_MASK(mtk_dp, REG_3324_DP_ENCODER1_P0 + reg_offset,
 				 (0x0 << AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK_POS),
 				 AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK);
 		break;
 
-	case FS_48K:
+	case 48000:
 		WRITE_2BYTE_MASK(mtk_dp, REG_3324_DP_ENCODER1_P0 + reg_offset,
 				 (0x1 << AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK_POS),
 				 AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK);
 		break;
 
-	case FS_192K:
+	case 192000:
 		WRITE_2BYTE_MASK(mtk_dp, REG_3324_DP_ENCODER1_P0 + reg_offset,
 				 (0x2 << AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK_POS),
-				 AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK);
-		break;
-
-	default:
-		WRITE_2BYTE_MASK(mtk_dp, REG_3324_DP_ENCODER1_P0 + reg_offset,
-				 (0x0 << AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK_POS),
 				 AUDIO_PATTERN_GEN_FS_SEL_DP_ENCODER1_P0_FLDMASK);
 		break;
 	}
@@ -2219,6 +2214,7 @@ void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 
 	switch (channel) {
 	case 2:
+	default:
 		WRITE_2BYTE_MASK(mtk_dp, REG_3324_DP_ENCODER1_P0 + reg_offset,
 				 (0x0 << AUDIO_PATTERN_GEN_CH_NUM_DP_ENCODER1_P0_FLDMASK_POS),
 				 AUDIO_PATTERN_GEN_CH_NUM_DP_ENCODER1_P0_FLDMASK);
@@ -2263,39 +2259,21 @@ void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 				 (0x1 << AUDIO_32CH_EN_DP_ENCODER0_P0_FLDMASK_POS),
 				 AUDIO_32CH_EN_DP_ENCODER0_P0_FLDMASK);
 		break;
-
-	default:
-		WRITE_2BYTE_MASK(mtk_dp, REG_3324_DP_ENCODER1_P0 + reg_offset,
-				 (0x0 << AUDIO_PATTERN_GEN_CH_NUM_DP_ENCODER1_P0_FLDMASK_POS),
-				 AUDIO_PATTERN_GEN_CH_NUM_DP_ENCODER1_P0_FLDMASK);
-		WRITE_2BYTE_MASK(mtk_dp, REG_3088_DP_ENCODER0_P0 + reg_offset,
-				 (0x1 << AUDIO_2CH_EN_DP_ENCODER0_P0_FLDMASK_POS),
-				 AUDIO_2CH_EN_DP_ENCODER0_P0_FLDMASK);
-
-		WRITE_2BYTE_MASK(mtk_dp, REG_331C_DP_ENCODER1_P0 + reg_offset,
-				 (0x1 << TDM_AUDIO_DATA_CH_NUM_DP_ENCODER1_P0_FLDMASK_POS),
-				 TDM_AUDIO_DATA_CH_NUM_DP_ENCODER1_P0_FLDMASK);
-		mtk_dp_spkg_asp_hb32_v2(mtk_dp, encoder_id, TRUE, DP_SDP_ASP_HB3_AU02CH, 0x0);
-		break;
 	}
 
-	WRITE_2BYTE_MASK(mtk_dp, REG_331C_DP_ENCODER1_P0 + reg_offset,
-			 (0x1 << TDM_AUDIO_DATA_CH_NUM_DP_ENCODER1_P0_FLDMASK_POS),
-			 TDM_AUDIO_DATA_CH_NUM_DP_ENCODER1_P0_FLDMASK);
-
-	WRITE_BYTE_MASK(mtk_dp, (REG_331C_DP_ENCODER1_P0 + reg_offset),
+	/* TDM to DPTX reset [1] */
+	WRITE_BYTE_MASK(mtk_dp, REG_331C_DP_ENCODER1_P0 + reg_offset,
 			TDM_AUDIO_RST_DP_ENCODER1_P0_FLDMASK,
-				TDM_AUDIO_RST_DP_ENCODER1_P0_FLDMASK);
-
+			TDM_AUDIO_RST_DP_ENCODER1_P0_FLDMASK);
 	udelay(5);
-	WRITE_BYTE_MASK(mtk_dp, (REG_331C_DP_ENCODER1_P0 + reg_offset),
+	WRITE_BYTE_MASK(mtk_dp, REG_331C_DP_ENCODER1_P0 + reg_offset,
 			0x0, TDM_AUDIO_RST_DP_ENCODER1_P0_FLDMASK);
-
-	WRITE_BYTE_MASK(mtk_dp, (REG_33F4_DP_ENCODER1_P0 + 1 + reg_offset), 0, BIT(1));
+	/* audio channel count change reset */
+	WRITE_BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + 1 + reg_offset, 0, BIT(1));
 }
 
 static void mtk_dp_audio_ch_status_set_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
-				u8 channel, u8 fs, u8 wordlength)
+					  int channel, int fs, int wordlength)
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 	union dp_rx_audio_chsts dp_audio;
@@ -2304,65 +2282,59 @@ static void mtk_dp_audio_ch_status_set_v2(struct mtk_dp *mtk_dp, const enum dp_e
 
 	switch (channel) {
 	case 2:
+	default:
 		dp_audio.audio_chsts.channel_number = 2;
 		break;
 
 	case 8:
 		dp_audio.audio_chsts.channel_number = 8;
 		break;
-
-	default:
-		dp_audio.audio_chsts.channel_number = 2;
-		break;
 	}
 
 	switch (fs) {
-	case FS_32K:
+	case 32000:
 		dp_audio.audio_chsts.sampling_freq = 3;
 		dp_audio.audio_chsts.original_sampling_freq = 0xc;
 		break;
 
-	case FS_44K:
+	case 44100:
 		dp_audio.audio_chsts.sampling_freq = 0;
 		dp_audio.audio_chsts.original_sampling_freq = 0xf;
 		break;
 
-	case FS_48K:
-		dp_audio.audio_chsts.sampling_freq = 2;
-		dp_audio.audio_chsts.original_sampling_freq = 0xd;
-		break;
-
-	case FS_88K:
-		dp_audio.audio_chsts.sampling_freq = 8;
-		dp_audio.audio_chsts.original_sampling_freq = 7;
-		break;
-
-	case FS_96K:
-		dp_audio.audio_chsts.sampling_freq = 0xa;
-		dp_audio.audio_chsts.original_sampling_freq = 5;
-		break;
-
-	case FS_192K:
-		dp_audio.audio_chsts.sampling_freq = 0xe;
-		dp_audio.audio_chsts.original_sampling_freq = 1;
-		break;
-
+	case 48000:
 	default:
 		dp_audio.audio_chsts.sampling_freq = 2;
 		dp_audio.audio_chsts.original_sampling_freq = 0xd;
 		break;
+
+	case 88200:
+		dp_audio.audio_chsts.sampling_freq = 8;
+		dp_audio.audio_chsts.original_sampling_freq = 7;
+		break;
+
+	case 96000:
+		dp_audio.audio_chsts.sampling_freq = 0xa;
+		dp_audio.audio_chsts.original_sampling_freq = 5;
+		break;
+
+	case 192000:
+		dp_audio.audio_chsts.sampling_freq = 0xe;
+		dp_audio.audio_chsts.original_sampling_freq = 1;
+		break;
 	}
 
 	switch (wordlength) {
-	case WL_16BIT:
+	case DP_BITWIDTH_16:
 		dp_audio.audio_chsts.word_len = 0b0010;
 		break;
 
-	case WL_20BIT:
+	case DP_BITWIDTH_20:
 		dp_audio.audio_chsts.word_len = 0b0011;
 		break;
 
-	case WL_24BIT:
+	case DP_BITWIDTH_24:
+	default:
 		dp_audio.audio_chsts.word_len = 0b1011;
 		break;
 	}
@@ -2377,17 +2349,55 @@ static void mtk_dp_audio_ch_status_set_v2(struct mtk_dp *mtk_dp, const enum dp_e
 }
 
 static void mtk_dp_audio_sdp_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
-			     u8 ch, u8 fs, u8 len)
+				       int ch, int fs, int len)
 {
 	u8 SDP_DB[32] = {0};
-	u8 SDP_HB[4] = {0};
-
-	SDP_HB[1] = DP_SDP_HB1_PKG_AINFO;
-	SDP_HB[2] = 0x1B;
-	SDP_HB[3] = 0x48;
+	u8 SDP_HB[4] = {0, DP_SDP_HB1_PKG_AINFO, 0x1b, 0x48};
 
 	SDP_DB[0x0] = 0x10 | (ch - 1);
-	SDP_DB[0x1] = fs << 2 | (len + 1);
+
+	switch (fs) {
+	case 32000:
+		SDP_DB[0x1] = 0x1 << 2 ;
+		break;
+
+	case 44100:
+		SDP_DB[0x1] = 0x2 << 2 ;
+		break;
+
+	case 48000:
+	default:
+		SDP_DB[0x1] = 0x3 << 2 ;
+		break;
+
+	case 88200:
+		SDP_DB[0x1] = 0x4 << 2 ;
+		break;
+
+	case 96000:
+		SDP_DB[0x1] = 0x5 << 2 ;
+		break;
+
+	case 192000:
+		SDP_DB[0x1] = 0x6 << 2 ;
+		break;
+	}
+
+	switch (len) {
+	case DP_BITWIDTH_16:
+		SDP_DB[0x1] |= 0x1;
+		break;
+
+	case DP_BITWIDTH_20:
+		SDP_DB[0x1] |= 0x2;
+		break;
+
+	case DP_BITWIDTH_24:
+	default:
+		SDP_DB[0x1] |= 0x3;
+		break;
+	}
+
 	SDP_DB[0x2] = 0x0;
 
 	if (ch == 8)
@@ -2400,85 +2410,15 @@ static void mtk_dp_audio_sdp_config_v2(struct mtk_dp *mtk_dp, const enum dp_enco
 	mtk_dp_spkg_sdp_v2(mtk_dp, encoder_id, true, DP_SDP_PKG_AUI, SDP_HB, SDP_DB);
 }
 
-void mtk_dp_audio_info_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
-		       int *ch, int *fs, int *len)
-{
-	*ch = mtk_dp->info[encoder_id].audio_cur_cfg.channels;
-	*fs = mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate;
-	*len = mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits;
-
-	dev_dbg(mtk_dp->dev, "[%d] ch:%d, fs:%d, len:%d\n", encoder_id, *ch, *fs, *len);
-
-	switch (*ch) {
-	case 2:
-		*ch = 2;
-		break;
-
-	case 8:
-		*ch = 8;
-		break;
-
-	default:
-		*ch = 2;
-		break;
-	}
-
-	switch (*fs) {
-	case 32000:
-		*fs = FS_32K;
-		break;
-
-	case 44100:
-		*fs = FS_44K;
-		break;
-
-	case 48000:
-		*fs = FS_48K;
-		break;
-
-	case 88200:
-		*fs = FS_88K;
-		break;
-
-	case 96000:
-		*fs = FS_96K;
-		break;
-
-	case 192000:
-		*fs = FS_192K;
-		break;
-
-	default:
-		*fs = FS_48K;
-		break;
-	}
-
-	switch (*len) {
-	case DP_BITWIDTH_16:
-		*len = WL_16BIT;
-		break;
-
-	case DP_BITWIDTH_20:
-		*len = WL_20BIT;
-		break;
-
-	case DP_BITWIDTH_24:
-		*len = WL_24BIT;
-		break;
-
-	default:
-		*len = WL_24BIT;
-		break;
-	}
-}
-
 void mtk_dp_audio_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
 {
 	int ch, fs, len;
 	u8 table[8][5] = {"X1", "X2", "X4", "X8",
 			  "/2", "/4", "X1", "/8"};
 
-	mtk_dp_audio_info_v2(mtk_dp, encoder_id, &ch, &fs, &len);
+	ch = mtk_dp->info[encoder_id].audio_cur_cfg.channels;
+	fs = mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate;
+	len = mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits;
 
 	dev_dbg(mtk_dp->dev, "[%d] ch:%d, fs:%d, len:%d\n", encoder_id, ch, fs, len);
 

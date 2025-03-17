@@ -367,6 +367,10 @@ static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 	struct drm_dp_mst_topology_state *mst_state;
 	int ch, fs, len;
 
+	ch = mtk_dp->info[encoder_id].audio_cur_cfg.channels;
+	fs = mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate;
+	len = mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits;
+
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
 	if (IS_ERR(mst_state)) {
 		dev_err(mtk_dp->dev, "fail to get mst topology state!\n");
@@ -380,7 +384,6 @@ static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 	mtk_dp_video_enable_v2(mtk_dp, encoder_id);
 	mtk_dp_video_mute_v2(mtk_dp, encoder_id, false);
 
-	mtk_dp_audio_info_v2(mtk_dp, encoder_id, &ch, &fs, &len);
 	dev_dbg(mtk_dp->dev, "[%d] ch:%d, fs:%d, len:%d\n", encoder_id, ch, fs, len);
 
 	mtk_dp->audio_enable = mtk_dp_parse_audio_cap_v2(mtk_dp,
