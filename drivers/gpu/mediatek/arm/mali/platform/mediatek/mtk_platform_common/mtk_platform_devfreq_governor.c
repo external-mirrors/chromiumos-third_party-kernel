@@ -91,7 +91,6 @@ static int mtk_devfreq_governor_target(struct device *dev, unsigned long *freq, 
 
 	*freq = KHZ_TO_HZ(gpufreq_get_freq_by_idx(TARGET_STACK, opp_idx));
 	kbdev->current_nominal_freq = *freq;
-	kbdev->csf.ipa_control.cur_gpu_rate = *freq;
 
 	dev_dbg(kbdev->dev, "@%s: governor=%s, freq=%lu, current_nominal_freq=%lu, opp_idx=%d\n",
 		__func__, devfreq->governor->name, *freq, kbdev->current_nominal_freq, opp_idx);

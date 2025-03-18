@@ -22,4 +22,5 @@
 include $(src)/Kbuild-mtk-custom-env
 
 mali_kbase-y += \
-	platform/$(MALI_PLATFORM_DIR)/mali_kbase_config_$(MTK_PLATFORM).o
+	platform/$(MALI_PLATFORM_DIR)/mali_kbase_config_$(MTK_PLATFORM).o \
+	platform/$(MALI_PLATFORM_DIR)/mali_kbase_clk_rate_trace.o

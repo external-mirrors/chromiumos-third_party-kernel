@@ -33,6 +33,7 @@
 #include "ged_eb.h"
 #include "ged_dcs.h"
 #include "ged_async.h"
+#include "ged_clk_rate_trace.h"
 
 #if defined(MTK_GPU_BM_2)
 #include <gpu_bm.h>
@@ -3756,6 +3757,7 @@ void ged_dvfs_run(
 
 EXIT_ged_dvfs_run:
 	mutex_unlock(&gsDVFSLock);
+	ged_clk_rate_change_notify();
 }
 
 void ged_dvfs_sw_vsync_query_data(struct GED_DVFS_UM_QUERY_PACK *psQueryData)
@@ -4071,6 +4073,7 @@ int ged_dvfs_get_fallback_tuning(void)
 
 void ged_dvfs_notify_power_off(void)
 {
+	ged_clk_rate_change_notify();
 	if (g_last_commit_type == GED_DVFS_FALLBACK_COMMIT)
 		g_fallback_idle++;
 }

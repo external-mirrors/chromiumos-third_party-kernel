@@ -55,6 +55,7 @@
 #if defined(MTK_GPU_SLC_POLICY)
 #include "ged_gpu_slc.h"
 #endif /* MTK_GPU_SLC_POLICY */
+#include "ged_clk_rate_trace.h"
 
 /**
  * ===============================================
@@ -796,6 +797,12 @@ static int ged_pdrv_probe(struct platform_device *pdev)
 		goto ERROR;
 	}
 
+	err = ged_clk_rate_trace_init(&pdev->dev);
+	if (unlikely(err != GED_OK)) {
+		GED_LOGE("Failed to init clk rate trace");
+		goto ERROR;
+	}
+
 	err = ged_dvfs_system_init();
 	if (unlikely(err != GED_OK)) {
 		GED_LOGE("Failed to init common dvfs!\n");
@@ -864,7 +871,6 @@ static int ged_pdrv_probe(struct platform_device *pdev)
 #endif /* GED_BUFFER_LOG_DISABLE */
 
 	GED_LOGI("@%s: ged driver probe done\n", __func__);
-
 ERROR:
 	return err;
 }
@@ -905,6 +911,8 @@ static int ged_pdrv_remove(struct platform_device *pdev)
 	ged_kpi_system_exit();
 
 	ged_ge_exit();
+
+	ged_clk_rate_trace_exit();
 
 	ged_dvfs_system_exit();
 
