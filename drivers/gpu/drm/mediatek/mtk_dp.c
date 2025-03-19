@@ -3213,6 +3213,7 @@ static int mtk_dp_resume(struct device *dev)
 		dev_err(mtk_dp->dev, "Failed to initialize phy: %d\n", ret);
 		return ret;
 	}
+	mtk_dp->retry_times = 0;
 	mtk_dp_init_port(mtk_dp);
 	if (mtk_dp->bridge.type != DRM_MODE_CONNECTOR_eDP)
 		mtk_dp_hwirq_enable(mtk_dp, true);
