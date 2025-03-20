@@ -1583,6 +1583,35 @@ static void anx7625_init_gpio(struct anx7625_data *platform)
 	}
 }
 
+static u32 anx7625_get_pixel_clock(u8 lane_cnt, u8 rate)
+{
+	return (u32) lane_cnt * rate * 270000 / 24;
+}
+
+static void anx7625_get_downstream_capability(struct anx7625_data *ctx)
+{
+	int ret;
+	struct device *dev = ctx->dev;
+	u8 data[2];
+	u8 lanes, rate;
+
+	ctx->support_maximum_pixel_clock = SUPPORT_PIXEL_CLOCK;
+
+	ret = anx7625_aux_trans(ctx, DP_AUX_NATIVE_READ,
+				DP_MAX_LINK_RATE, 2, data);
+	if (ret < 0) {
+		dev_err(dev, "anx7625: get downstream link rate fail\n");
+		return;
+	}
+
+	lanes = min(2, data[1] & 0x1F);
+	rate = data[0];
+	ctx->support_maximum_pixel_clock = min(anx7625_get_pixel_clock(lanes, rate),
+					       SUPPORT_PIXEL_CLOCK);
+	DRM_DEV_DEBUG_DRIVER(dev, "get bandwidth %d, %d, %d\n", lanes, rate,
+			     ctx->support_maximum_pixel_clock);
+}
+
 static void anx7625_stop_dp_work(struct anx7625_data *ctx)
 {
 	ctx->hpd_status = 0;
@@ -1617,6 +1646,11 @@ static void anx7625_start_dp_work(struct anx7625_data *ctx)
 	ret = anx7625_reg_read(ctx, ctx->i2c.rx_p1_client, 0x86);
 	if (ret < 0)
 		return;
+
+	anx7625_get_downstream_capability(ctx);
+
+	DRM_DEV_DEBUG_DRIVER(dev, "Downstream maximum support %dK pixel clock\n",
+			     ctx->support_maximum_pixel_clock);
 
 	DRM_DEV_DEBUG_DRIVER(dev, "Secure OCM version=%02x\n", ret);
 }
@@ -2488,7 +2522,7 @@ anx7625_bridge_mode_valid(struct drm_bridge *bridge,
 	struct device *dev = ctx->dev;
 
 	dev_dbg(dev, "drm mode checking\n");
-	if (mode->clock > SUPPORT_PIXEL_CLOCK)
+	if (mode->clock > ctx->support_maximum_pixel_clock)
 		return MODE_CLOCK_HIGH;
 
 	if (mode->clock < SUPPORT_MIN_PIXEL_CLOCK)
@@ -2751,6 +2785,59 @@ static int anx7625_bridge_atomic_check(struct drm_bridge *bridge,
 	return anx7625_connector_atomic_check(ctx, conn_state);
 }
 
+static void lt_check_work_func(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct anx7625_data *ctx;
+	struct device *dev;
+	int ret;
+	u8 lanes, rate;
+	u32 downstream_max_pixel_clock;
+	u8 data[2];
+	struct drm_connector *conn;
+
+	dwork = to_delayed_work(work);
+	ctx = container_of(dwork, struct anx7625_data, lt_check_work);
+	dev = ctx->dev;
+
+	if (!ctx->connector)
+		return;
+
+	conn = ctx->connector;
+
+	ret = anx7625_reg_block_read(ctx, ctx->i2c.tx_p0_client, 0xa0, 2, data);
+	if (ret < 0)
+		return;
+
+	lanes = data[1] & 0x1F;
+	rate = data[0];
+	/*
+	 * Lane rate equals 0x19 and lane count equals 1
+	 * indicate OCM failed to do link training, then just
+	 * reset lane count and lane speed to 0.
+	 */
+	if (lanes == 1 && rate == 0x19) {
+		lanes = 0;
+		rate = 0;
+	}
+
+	downstream_max_pixel_clock = anx7625_get_pixel_clock(lanes, rate);
+
+	if (downstream_max_pixel_clock > ctx->dt.pixelclock.min)
+		return;
+
+	/* Grab the locks before changing connector property */
+	mutex_lock(&conn->dev->mode_config.mutex);
+	/*
+	 * Set connector link status to BAD and send a Uevent to notify
+	 * userspace to do a modeset.
+	 */
+	drm_connector_set_link_status_property(conn, DRM_MODE_LINK_STATUS_BAD);
+	mutex_unlock(&conn->dev->mode_config.mutex);
+	/* Send Hotplug uevent so userspace can reprobe */
+	drm_kms_helper_hotplug_event(ctx->bridge.dev);
+}
+
 static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 					 struct drm_bridge_state *state)
 {
@@ -2776,6 +2863,13 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 	_anx7625_hpd_polling(ctx, 5000 * 100, false);
 
 	anx7625_dp_start(ctx);
+	/*
+	 * Link training takes around 200ms, driver
+	 * delay 1s to check link training result is enough.
+	 */
+	queue_delayed_work(ctx->lt_check_workqueue,
+			   &ctx->lt_check_work,
+			   msecs_to_jiffies(1000));
 }
 
 static void anx7625_bridge_atomic_disable(struct drm_bridge *bridge,
@@ -3149,12 +3243,20 @@ static int anx7625_i2c_probe(struct i2c_client *client)
 	mutex_init(&platform->hdcp_state_lock);
 	mutex_init(&platform->aux_lock);
 
+	INIT_DELAYED_WORK(&platform->lt_check_work, lt_check_work_func);
+	platform->lt_check_workqueue = create_workqueue("lt workqueue");
+	if (!platform->lt_check_workqueue) {
+		dev_err(dev, "fail to create lt work queue\n");
+		ret = -ENOMEM;
+		return ret;
+	}
+
 	INIT_DELAYED_WORK(&platform->hdcp_work, hdcp_check_work_func);
 	platform->hdcp_workqueue = create_workqueue("hdcp workqueue");
 	if (!platform->hdcp_workqueue) {
 		dev_err(dev, "fail to create work queue\n");
 		ret = -ENOMEM;
-		return ret;
+		goto free_lt_wq;
 	}
 
 	platform->pdata.intp_irq = client->irq;
@@ -3263,6 +3365,10 @@ free_hdcp_wq:
 	if (platform->hdcp_workqueue)
 		destroy_workqueue(platform->hdcp_workqueue);
 
+free_lt_wq:
+	if (platform->lt_check_workqueue)
+		destroy_workqueue(platform->lt_check_workqueue);
+
 	return ret;
 }
 
@@ -3276,6 +3382,11 @@ static void anx7625_i2c_remove(struct i2c_client *client)
 
 	if (platform->pdata.intp_irq)
 		destroy_workqueue(platform->workqueue);
+
+	if (platform->lt_check_workqueue) {
+		cancel_delayed_work(&platform->lt_check_work);
+		destroy_workqueue(platform->lt_check_workqueue);
+	}
 
 	if (platform->hdcp_workqueue) {
 		cancel_delayed_work(&platform->hdcp_work);
