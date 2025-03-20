@@ -367,6 +367,11 @@ static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 	struct drm_dp_mst_topology_state *mst_state;
 	int ch, fs, len;
 
+	if (encoder_id < 0 || encoder_id >= DP_ENCODER_NUM) {
+		dev_err(mtk_dp->dev, "[DPTX] fail, encoder id error\n");
+		return;
+	}
+
 	ch = mtk_dp->info[encoder_id].audio_cur_cfg.channels;
 	fs = mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate;
 	len = mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits;
@@ -422,7 +427,7 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 	struct drm_dp_mst_topology_state *mst_state;
 
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-	if (IS_ERR(mst_state)) {
+	if (IS_ERR_OR_NULL(mst_state)) {
 		dev_err(mtk_dp->dev, "fail to get mst topology state!\n");
 		return;
 	}
@@ -439,6 +444,10 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 
 		payload = drm_atomic_get_mst_payload_state(mst_state,
 					mtk_dp->mtk_con[con_id]->port);
+		if (IS_ERR_OR_NULL(payload)) {
+			dev_err(mtk_dp->dev, "[DPTX] fail to get mst payload state!\n");
+			return;
+		}
 
 		start_slot = payload->vc_start_slot;
 		end_slot = start_slot + payload->time_slots;
@@ -455,7 +464,7 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 				start_slot, end_slot);
 		} else {
 			mtk_dp_mst_hal_set_timeslot(mtk_dp, encoder_id,
-				start_slot, end_slot, payload->vcpi);
+						    start_slot, end_slot, payload->vcpi);
 			mtk_dp_mst_hal_set_id_buf(mtk_dp, encoder_id, payload->vcpi);
 		}
 	}
@@ -468,10 +477,17 @@ static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_c
 	struct drm_dp_mst_topology_state *mst_state;
 	bool first_stream = mtk_dp_mst_drv_first_stream_enable(mtk_dp);
 	int i, ret;
+	struct drm_dp_mst_atomic_payload *payload;
 
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-	if (IS_ERR(mst_state)) {
+	if (IS_ERR_OR_NULL(mst_state)) {
 		dev_err(mtk_dp->dev, "fail to get mst topology state!\n");
+		return;
+	}
+
+	payload = drm_atomic_get_mst_payload_state(mst_state, mtk_con->port);
+	if (IS_ERR_OR_NULL(payload)) {
+		dev_err(mtk_dp->dev, "[DPTX] fail to get mst payload state!\n");
 		return;
 	}
 
@@ -497,8 +513,7 @@ static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_c
 	if (first_stream)
 		drm_dp_mst_topology_queue_probe(&mtk_dp->mgr);
 
-	ret = drm_dp_add_payload_part1(&mtk_dp->mgr, mst_state,
-			drm_atomic_get_mst_payload_state(mst_state, mtk_con->port));
+	ret = drm_dp_add_payload_part1(&mtk_dp->mgr, mst_state, payload);
 	if (ret < 0) {
 		dev_err(mtk_dp->dev, "fail to add payload part1!");
 		return;
@@ -607,12 +622,17 @@ static void mtk_dp_mst_drv_stop(struct mtk_dp *mtk_dp,
 	dev_dbg(mtk_dp->dev, "MST stop\n");
 
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-	if (IS_ERR(mst_state)) {
+	if (IS_ERR_OR_NULL(mst_state)) {
 		dev_err(mtk_dp->dev, "fail to get mst topology state!\n");
 		goto end;
 	}
 
 	payload = drm_atomic_get_mst_payload_state(mst_state, mtk_con->port);
+	if (IS_ERR_OR_NULL(payload)) {
+		dev_err(mtk_dp->dev, "[DPTX] fail to get mst payload state!\n");
+		goto end;
+	}
+
 	drm_dp_remove_payload_part1(&mtk_dp->mgr, mst_state, payload);
 
 	new_mst_state = drm_atomic_get_new_mst_topology_state(state, &mtk_dp->mgr);
@@ -761,6 +781,8 @@ static bool mtk_dp_mst_drv_detect_dsc_hblank_expansion_quirk(const struct mtk_dp
 	struct drm_dp_desc desc;
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 
+	memset(dpcd, 0, sizeof(dpcd));
+
 	if (!aux)
 		return false;
 
@@ -791,6 +813,7 @@ static bool mtk_dp_mst_drv_detect_dsc_hblank_expansion_quirk(const struct mtk_dp
 static void mtk_dp_mst_drv_read_port_dsc_caps(struct mtk_dp *mtk_dp, struct mtk_dp_con *connector)
 {
 	u8 dpcd_caps[DP_RECEIVER_CAP_SIZE];
+	memset(dpcd_caps, 0, sizeof(dpcd_caps));
 
 	if (!connector->dsc_aux)
 		return;

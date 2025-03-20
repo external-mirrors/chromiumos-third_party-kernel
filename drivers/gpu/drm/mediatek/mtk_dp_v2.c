@@ -1053,12 +1053,9 @@ static void mtk_dp_mn_calculate_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 {
 	u8 frame_rate = 60;
 	u32 pix_clk = 148500000;
-	u32 pll_rate; /*Base = 1Khz*/
-	u32 val, m_vid, n_vid;
-
-	n_vid = 0x8000;
-
-	pll_rate = (0x00d8 << 2) * 10;
+	u32 pll_rate = (0x00d8 << 2) * 10; /*Base = 1Khz*/
+	u32 val = 0, m_vid = 0;
+	u32 n_vid = 0x8000;
 
 	if (mtk_dp->info[encoder_id].dp_output_timing.frame_rate > 0) {
 		frame_rate = mtk_dp->info[encoder_id].dp_output_timing.frame_rate;
@@ -1086,7 +1083,7 @@ static void mtk_dp_mn_calculate_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 
 	val = pix_clk / (100000);
 
-	if (pix_clk > 0) {
+	if (val > 0) {
 		m_vid = (val * n_vid) / pll_rate;
 
 		dev_dbg(mtk_dp->dev, "[DPTX] Cal PR = %d x(1/10) Mhz\n", val);
@@ -1100,7 +1097,7 @@ static void mtk_dp_mn_calculate_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 		mtk_dp->info[encoder_id].video_m = pix_clk >> 24;
 		mtk_dp->info[encoder_id].video_n = pix_clk & GENMASK(23,0);
 		mtk_dp_mn_overwrite_v2(mtk_dp, encoder_id, true, m_vid, n_vid);
-	} else if (mtk_dp->training_info.link_rate >= DP_LINK_RATE_RBR) {
+	} else if (mtk_dp->training_info.link_rate >= DP_LINK_RATE_RBR && val > 0) {
 		m_vid = (val * n_vid) / (mtk_dp->training_info.link_rate * 270);
 		mtk_dp->info[encoder_id].video_m = m_vid;
 		mtk_dp->info[encoder_id].video_n = n_vid;
@@ -2070,10 +2067,12 @@ static void mtk_dp_audio_sample_arrange_v2(struct mtk_dp *mtk_dp,
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 	u32 value = 0;
+	u64 tmp = 0;
 
-	value = div_u64((mtk_dp->info[encoder_id].dp_output_timing.htt -
-				mtk_dp->info[encoder_id].dp_output_timing.hde) *
-				mtk_dp->training_info.link_rate * 27 * 200,
+	tmp = mtk_dp->info[encoder_id].dp_output_timing.htt -
+				mtk_dp->info[encoder_id].dp_output_timing.hde;
+
+	value = div_u64(tmp * mtk_dp->training_info.link_rate * 27 * 200,
 			mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate);
 
 	if (enable) {
@@ -2750,6 +2749,8 @@ static int mtk_dsc_compute_params_v2(struct mtk_dp *mtk_dp,
 
 	con_id = encoder_id_to_con_id(mtk_dp, encoder_id,
 				      mtk_dp->mst_enable ? DRM_DP_MST : DRM_DP_SST);
+	if (con_id < 0)
+		return con_id;
 
 	vdsc_cfg->rc_model_size = DSC_RC_MODEL_SIZE_CONST;
 
@@ -2817,6 +2818,9 @@ void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id
 {
 	struct drm_dsc_picture_parameter_set pps;
 	struct drm_dsc_config mtk_dsc_cfg;
+
+	memset(&pps, 0x0, sizeof(pps));
+	memset(&mtk_dsc_cfg, 0x0, sizeof(mtk_dsc_cfg));
 
 	mtk_dsc_compute_params_v2(mtk_dp, encoder_id, &mtk_dsc_cfg,
 				  mtk_dp->mode[encoder_id].hdisplay,
@@ -3172,7 +3176,7 @@ static void mtk_dp_phy_set_idle_pattern_v2(struct mtk_dp *mtk_dp, bool enable)
 static bool mtk_dp_ssc_check_v2(struct mtk_dp *mtk_dp, bool *p_enable)
 {
 	u8 status = 0;
-	u8 ret = 0;
+	int ret = 0;
 
 	*p_enable = mtk_dp->training_info.sink_ssc_en;
 	/* write DPCD_00107 = BIT4 when SSC enable */
@@ -3748,6 +3752,9 @@ static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 
 		if (mtk_dp->mst_enable) {
 			con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
+			if (con_id < 0)
+				return;
+
 			set_dsc_decompression_flag_v2(mtk_dp->mtk_con[con_id]->dsc_aux,
 						      DP_DECOMPRESSION_EN, true);
 		} else {
@@ -5053,6 +5060,7 @@ static void mtk_dp_training_check_swing_pre_v2(struct mtk_dp *mtk_dp,
 static void mtk_dp_check_and_set_power_state_v2(struct mtk_dp *mtk_dp)
 {
 	u8 temp[0x1];
+	memset(temp, 0x0, sizeof(temp));
 
 	drm_dp_dpcd_read(&mtk_dp->aux, DPCD_00600, temp, 0x1);
 	if (temp[0] != 0x01) {
@@ -5099,6 +5107,8 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 
 	memset(temp, 0x0, sizeof(temp));
 	memset(dpcd_buffer, 0x0, sizeof(dpcd_buffer));
+	memset(dpcd_202, 0x0, sizeof(dpcd_202));
+	memset(dpcd_200c, 0x0, sizeof(dpcd_200c));
 
 	mtk_dp_check_and_set_power_state_v2(mtk_dp);
 
@@ -6028,6 +6038,7 @@ static int mtk_dp_suspend_v2(struct device *dev)
 static int mtk_dp_resume_v2(struct device *dev)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
+	int ret = 0;
 
 	if (!mtk_dp) {
 		dev_dbg(mtk_dp->dev, "[DP] resume, dp not initial\n");
@@ -6043,7 +6054,11 @@ static int mtk_dp_resume_v2(struct device *dev)
 	pm_runtime_get_sync(dev);
 	mtk_dp->disp_state = DP_DISP_STATE_RESUME;
 
-	clk_prepare_enable(mtk_dp->pclk);
+	ret = clk_prepare_enable(mtk_dp->pclk);
+	if (ret) {
+		dev_err(mtk_dp->dev, "[DPTX] Failed to prepare and enable clock\n");
+		return ret;
+	}
 
 	mtk_dp_enable_mac_power_v2(mtk_dp);
 

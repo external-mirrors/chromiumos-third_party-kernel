@@ -59,33 +59,29 @@ static inline struct mtk_dp_con *encoder_to_mtk_con(struct drm_encoder *encoder,
 static inline int mtk_dp_con_id(struct mtk_dp *mtk_dp, struct mtk_dp_con *mtk_con)
 {
 	int i = 0;
-	int id = -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
-		if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i] == mtk_con) {
-			id = i;
-			break;
-		}
+		if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i] == mtk_con)
+			return i;
 	}
 
-	return id;
+	dev_err(mtk_dp->dev, "[DPTX] fail to find the connector id\n");
+	return -ENODEV;
 }
 
 static inline int encoder_id_to_con_id(struct mtk_dp *mtk_dp,
 				       int encoder_id, enum drm_dp_mst_mode dp_mode)
 {
 	int i = 0;
-	int id = -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
 		if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i]->encoder &&
 		    mtk_dp->mtk_con[i]->encoder_id == encoder_id &&
-			mtk_dp->mtk_con[i]->dp_mode == dp_mode) {
-			id = i;
-			break;
-		}
+			mtk_dp->mtk_con[i]->dp_mode == dp_mode)
+			return i;
 	}
 
-	return id;
+	dev_err(mtk_dp->dev, "[DPTX] fail to find the connector id by the encoder id\n");
+	return -ENODEV;
 }
 #endif
