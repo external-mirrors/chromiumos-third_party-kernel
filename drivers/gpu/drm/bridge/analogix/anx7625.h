@@ -467,7 +467,7 @@ enum audio_wd_len {
 #define MAX_EDID_BLOCK	3
 #define EDID_TRY_CNT	3
 #define SUPPORT_PIXEL_CLOCK	300000
-#define SUPPORT_MIN_PIXEL_CLOCK	50000
+#define SUPPORT_MIN_PIXEL_CLOCK	22000
 
 struct s_edid_data {
 	int edid_block_num;
@@ -524,6 +524,7 @@ struct anx7625_data {
 	int hpd_high_cnt;
 	int dp_en;
 	int hdcp_cp;
+	u32 support_maximum_pixel_clock;
 	bool hdcp_key_exist;
 	bool hdcp_1_4;
 	bool dsc_en;
@@ -540,6 +541,8 @@ struct anx7625_data {
 	struct workqueue_struct *workqueue;
 	struct delayed_work hdcp_work;
 	struct workqueue_struct *hdcp_workqueue;
+	struct delayed_work lt_check_work;
+	struct workqueue_struct *lt_check_workqueue;
 	/* Lock for hdcp work queue */
 	struct mutex hdcp_state_lock;
 	enum anx7625_hdcp_state hdcp_state;
