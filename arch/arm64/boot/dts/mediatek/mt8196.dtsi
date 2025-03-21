@@ -2507,7 +2507,7 @@
 				mediatek,rpmsg-name = "mtk_apu_pwr_ipi_tx";
 				operating-points-v2 = <&apu_opp_table>;
 				#cooling-cells = <2>;
-				dynamic-power-coefficient = <1024>;
+				dynamic-power-coefficient = <2932>;
 			};
 
 			apu-mdw-rpmsg {
@@ -2597,46 +2597,57 @@
 
 			opp@1800000000 {
 				opp-hz = /bits/ 64 <1800000000>;
+				opp-microvolt = <850000>;
 			};
 
 			opp@1600000000 {
 				opp-hz = /bits/ 64 <1600000000>;
+				opp-microvolt = <850000>;
 			};
 
 			opp@1450000000 {
 				opp-hz = /bits/ 64 <1450000000>;
+				opp-microvolt = <850000>;
 			};
 
 			opp@1300000000 {
 				opp-hz = /bits/ 64 <1300000000>;
+				opp-microvolt = <750000>;
 			};
 
 			opp@1115000000 {
 				opp-hz = /bits/ 64 <1115000000>;
+				opp-microvolt = <750000>;
 			};
 
 			opp@930000000 {
 				opp-hz = /bits/ 64 <930000000>;
+				opp-microvolt = <650000>;
 			};
 
 			opp@730000000 {
 				opp-hz = /bits/ 64 <730000000>;
+				opp-microvolt = <600000>;
 			};
 
 			opp@630000000 {
 				opp-hz = /bits/ 64 <630000000>;
+				opp-microvolt = <575000>;
 			};
 
 			opp@530000000 {
 				opp-hz = /bits/ 64 <530000000>;
+				opp-microvolt = <550000>;
 			};
 
 			opp@457500000 {
 				opp-hz = /bits/ 64 <457500000>;
+				opp-microvolt = <550000>;
 			};
 
 			opp@385000000 {
 				opp-hz = /bits/ 64 <385000000>;
+				opp-microvolt = <550000>;
 			};
 		};
 
