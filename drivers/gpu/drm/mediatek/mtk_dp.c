@@ -1687,7 +1687,10 @@ static void mtk_dp_initialize_priv_data(struct mtk_dp *mtk_dp)
 {
 	bool plugged_in = (mtk_dp->bridge.type == DRM_MODE_CONNECTOR_eDP);
 
-	mtk_dp->train_info.link_rate = DP_LINK_BW_5_4;
+	if (mtk_dp->data->edp_ver)
+		mtk_dp->train_info.link_rate = DP_LINK_BW_8_1;
+	else
+		mtk_dp->train_info.link_rate = DP_LINK_BW_5_4;
 	mtk_dp->train_info.lane_count = mtk_dp->max_lanes;
 	mtk_dp->train_info.cable_plugged_in = plugged_in;
 	mtk_dp->train_info.sink_ssc = false;
