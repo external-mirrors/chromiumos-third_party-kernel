@@ -86,6 +86,8 @@
 #define SP_TX_SYS_CTRL1_REG		0x80
 #define HDCP2TX_FW_EN			BIT(4)
 #define HDCP2TX_SOFT_EN			0x38
+#define SP_TX_SYS_CTRL3_REG		0x82
+#define STREAM_VALID			BIT(2)
 
 #define SP_TX_LINK_BW_SET_REG		0xA0
 #define SP_TX_LANE_COUNT_SET_REG	0xA1

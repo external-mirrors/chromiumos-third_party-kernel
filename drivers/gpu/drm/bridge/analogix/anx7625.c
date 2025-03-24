@@ -2329,10 +2329,20 @@ static void hdcp_check_work_func(struct work_struct *work)
 	}
 
 	if (anx7625_hdcp_get_state(ctx) == HDCP_INIT) {
-		anx7625_hdcp_set_state(ctx, HDCP_START);
+		val = anx7625_reg_read(ctx, ctx->i2c.tx_p0_client,
+				       SP_TX_SYS_CTRL3_REG);
+		if (val < 0) {
+			/* I2C bus error, stop try HDCP */
+			dev_err(dev, "Read video valid reg failed, stop HDCP\n");
+			return;
+		}
+
+		if (val & STREAM_VALID)
+			anx7625_hdcp_set_state(ctx, HDCP_START);
+
 		queue_delayed_work(ctx->hdcp_workqueue,
 				   &ctx->hdcp_work,
-				   msecs_to_jiffies(4000));
+				   msecs_to_jiffies(500));
 		return;
 	}
 
@@ -2388,10 +2398,10 @@ static void hdcp_check_work_func(struct work_struct *work)
 		}
 
 		anx7625_hdcp_set_state(ctx, HDCP_CHECK);
-		/* Check HDCP status after 5 seconds */
+		/* Check HDCP status after 1 seconds */
 		queue_delayed_work(ctx->hdcp_workqueue,
 				   &ctx->hdcp_work,
-				   msecs_to_jiffies(5000));
+				   msecs_to_jiffies(1000));
 		return;
 	}
 
@@ -2401,8 +2411,8 @@ static void hdcp_check_work_func(struct work_struct *work)
 	ret = readx_poll_timeout(anx7625_read_hdcp_status,
 				 ctx, val,
 				 ((val & HDCP_PASS) || (val < 0)),
-				 1000,
-				 1000 * 10);
+				 50000,
+				 50000 * 60);
 	if (ret) {
 		dev_err(dev, "HDCP status check failed\n");
 	} else {
