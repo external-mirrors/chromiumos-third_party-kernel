@@ -12,12 +12,15 @@
 #include <linux/of_device.h>
 #include <linux/rpmsg.h>
 #include <linux/thermal.h>
+#include <linux/remoteproc/mtk_apu.h>
+#include <linux/soc/mediatek/mtk_apu_pwr.h>
 
 #include "mtk_apu_pwr_ipi.h"
 
 struct mtk_apu_pwr_rpmsg {
 	struct device *dev;
 	struct rpmsg_device *rpdev;
+	struct mtk_apu *apu;
 	struct mutex send_lock;
 	struct completion comp;
 	unsigned int curr_freq;
@@ -154,10 +157,36 @@ static int mtk_apu_get_cur_freq(struct device *dev, unsigned long *freq)
 
 static int mtk_apu_get_dev_status(struct device *dev, struct devfreq_dev_status *stat)
 {
-	/*
-	 *	MediaTek NPU does not support dynamic adjustment of OPP level
-	 *	on the kernel side, so this function is bypassed.
-	 */
+	struct dev_pm_opp *opp;
+	unsigned long freq;
+	struct mtk_apu_pwr_rpmsg *power_rpmsg = dev_get_drvdata(dev);
+	int status;
+	int ret;
+
+	/* Approximate utilization stats via power status (on/off) */
+	status = mtk_apu_get_rpc_pwr_status(power_rpmsg->apu->power_pdev);
+	if (status < 0) {
+		dev_err(dev, "Failed to get APU power status, ret = %d\n", status);
+		return -EINVAL;
+	}
+
+	if (status & 1) {
+		stat->busy_time = 1;
+		ret = mtk_apu_get_cur_freq(dev, &freq);
+		if (ret)
+			return ret;
+		opp = devfreq_recommended_opp(dev, &freq, DEVFREQ_FLAG_LEAST_UPPER_BOUND);
+	} else {
+		stat->busy_time = 0;
+		freq = 0;
+		opp = dev_pm_opp_find_freq_ceil(dev, &freq);
+	}
+
+	if (IS_ERR(opp))
+		return PTR_ERR(opp);
+	dev_pm_opp_put(opp);
+	stat->total_time = 1;
+	stat->current_frequency = freq;
 	return 0;
 }
 
@@ -187,6 +216,12 @@ static int mtk_apu_pwr_tx_probe(struct rpmsg_device *rpdev)
 
 	power_rpmsg->dev = dev;
 	dev_set_drvdata(dev, power_rpmsg);
+
+	power_rpmsg->apu = dev_get_drvdata(dev->parent);
+	if (!power_rpmsg->apu) {
+		dev_err(dev, "failed to get APU device data\n");
+		return -ENODEV;
+	}
 
 	ret = dev_pm_opp_of_add_table(dev);
 	if (ret)
@@ -221,3 +256,4 @@ static struct rpmsg_driver apu_pwr_tx_rpmsg_drv = {
 module_rpmsg_driver(apu_pwr_tx_rpmsg_drv);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("MediaTek apu-tx-ipi rpmsg driver");
+MODULE_IMPORT_NS(MTK_APU_PWR);
