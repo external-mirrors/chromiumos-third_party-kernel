@@ -8,7 +8,7 @@
 
 / {
 	model = "Google Navi sku2 board";
-	compatible = "google,navi-sku2", "google,navi", "mediatek,mt8196";
+	compatible = "google,navi-sku2", "google,navi-sku7", "google,navi", "mediatek,mt8196";
 };
 
 &i2c2 {

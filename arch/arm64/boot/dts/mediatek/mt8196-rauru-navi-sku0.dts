@@ -9,5 +9,6 @@
 / {
 	model = "Google Navi unprovisioned 0x7FFFFFFF/sku0 board/sku3 board/sku4 board";
 	compatible = "google,navi-sku2147483647", "google,navi-sku2147480063",
-		"google,navi-sku0", "google,navi-sku3", "google,navi-sku4", "google,navi", "mediatek,mt8196";
+		"google,navi-sku0", "google,navi-sku3", "google,navi-sku4", "google,navi-sku6",
+		"google,navi-sku8", "google,navi-sku9", "google,navi", "mediatek,mt8196";
 };
