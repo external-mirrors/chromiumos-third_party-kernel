@@ -311,8 +311,8 @@ static unsigned long mtk_dp_atf_call_v2(struct mtk_dp *mtk_dp, unsigned int cmd,
 	arm_smccc_smc(MTK_DP_SIP_CONTROL_AARCH32, cmd, para,
 		      x3, 0xfefd, 0, 0, 0, &res);
 
-	dev_dbg(mtk_dp->dev, "%s, cmd:0x%x, p1:0x%x, ret:0x%lx-0x%lx",
-		__func__, cmd, para, res.a0, res.a1);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] %s, cmd:0x%x, p1:0x%x, ret:0x%lx-0x%lx",
+		    __func__, cmd, para, res.a0, res.a1);
 	return res.a1;
 }
 
@@ -321,7 +321,7 @@ u32 mtk_dp_read_v2(struct mtk_dp *mtk_dp, u32 offset)
 	u32 read_val = 0;
 
 	if (offset > MAX_MAC_REG_RANG) {
-		dev_err(mtk_dp->dev, "%s, error reg:0x%p, offset:0x%x\n",
+		dev_err(mtk_dp->dev, "[DPTX] %s, error reg:0x%p, offset:0x%x\n",
 			__func__, mtk_dp->regs, offset);
 		return 0;
 	}
@@ -335,7 +335,7 @@ u32 mtk_dp_read_v2(struct mtk_dp *mtk_dp, u32 offset)
 static void mtk_dp_write_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val)
 {
 	if ((offset % 4 != 0) || offset > MAX_MAC_REG_RANG) {
-		dev_err(mtk_dp->dev, "%s, error reg:0x%p, offset:0x%x, value:0x%x\n",
+		dev_err(mtk_dp->dev, "[DPTX] %s, error reg:0x%p, offset:0x%x, value:0x%x\n",
 			__func__, mtk_dp->regs, offset, val);
 		return;
 	}
@@ -349,7 +349,7 @@ void mtk_dp_mask_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 mask)
 	u32 tmp;
 
 	if ((offset % 4 != 0) || offset > MAX_MAC_REG_RANG) {
-		dev_err(mtk_dp->dev, "%s, error reg:0x%p, offset:0x%x, value:0x%x\n",
+		dev_err(mtk_dp->dev, "[DPTX] %s, error reg:0x%p, offset:0x%x, value:0x%x\n",
 			__func__, mtk_dp->regs, offset, val);
 		return;
 	}
@@ -381,7 +381,7 @@ static u32 mtk_dp_phy_read_v2(struct mtk_dp *mtk_dp, u32 offset)
 	u32 read_val = 0;
 
 	if (offset > MAX_PHYD_REG_RANG) {
-		dev_err(mtk_dp->dev, "%s, error offset:0x%x\n",
+		dev_err(mtk_dp->dev, "[DPTX] %s, error offset:0x%x\n",
 			__func__, offset);
 		return 0;
 	}
@@ -395,7 +395,7 @@ static u32 mtk_dp_phy_read_v2(struct mtk_dp *mtk_dp, u32 offset)
 static void mtk_dp_phy_write_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val)
 {
 	if ((offset % 4 != 0) || offset > MAX_PHYD_REG_RANG) {
-		dev_err(mtk_dp->dev, "%s, error offset:0x%x, value:0x%x\n",
+		dev_err(mtk_dp->dev, "[DPTX] %s, error offset:0x%x, value:0x%x\n",
 			__func__, offset, val);
 		return;
 	}
@@ -409,7 +409,7 @@ static void mtk_dp_phy_mask_v2(struct mtk_dp *mtk_dp, u32 offset, u32 val, u32 m
 	u32 tmp;
 
 	if ((offset % 4 != 0) || offset > MAX_PHYD_REG_RANG) {
-		dev_err(mtk_dp->dev, "%s, error reg:0x%p, offset:0x%x, value:0x%x\n",
+		dev_err(mtk_dp->dev, "[DPTX] %s, error reg:0x%p, offset:0x%x, value:0x%x\n",
 			__func__, mtk_dp->phyd_regs, offset, val);
 		return;
 	}
@@ -487,7 +487,7 @@ static u8 dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 		if (aux_irq_status & AUX_400US_TIMEOUT_IRQ_AUX_TX_P0_FLDMASK) {
 			/* for no reply should wait at least 3200 us */
 			usleep_range(AUX_NO_REPLY_WAIT_TIME, AUX_NO_REPLY_WAIT_TIME + 1);
-			dev_dbg(mtk_dp->dev, "(AUX Read)HW Timeout 400us irq");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] (AUX Read)HW Timeout 400us irq");
 			break;
 		}
 	}
@@ -495,20 +495,21 @@ static u8 dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 	if (wait_reply_count == 0x0) {
 		phy_status = READ_BYTE(mtk_dp, REG_3628_AUX_TX_P0);
 		if (phy_status != 0x01)
-			dev_err(mtk_dp->dev, "Aux R:Aux hang, need SW reset\n");
+			dev_err(mtk_dp->dev, "[DPTX] Aux R:Aux hang, need SW reset\n");
 
 		WRITE_2BYTE_MASK(mtk_dp, REG_3650_AUX_TX_P0,
 				 0x01 << MCU_ACK_TRANSACTION_COMPLETE_AUX_TX_P0_FLDMASK_POS,
 				 MCU_ACK_TRANSACTION_COMPLETE_AUX_TX_P0_FLDMASK);
 		WRITE_BYTE(mtk_dp, REG_3640_AUX_TX_P0, 0x7F);
 
-		dev_dbg(mtk_dp->dev, "wait_reply_count:%x, TimeOut", wait_reply_count);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] wait_reply_count:%x, TimeOut", wait_reply_count);
 		return AUX_HW_FAILED;
 	}
 
 	reply_cmd = READ_BYTE(mtk_dp, REG_3624_AUX_TX_P0) & GENMASK(3,0);
 	if (reply_cmd)
-		dev_dbg(mtk_dp->dev, "reply_cmd:%x, NACK or Defer\n", reply_cmd);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] reply_cmd:%x, NACK or Defer\n", reply_cmd);
 
 	if (length == 0)
 		WRITE_BYTE(mtk_dp, REG_362C_AUX_TX_P0, 0x00);
@@ -537,7 +538,7 @@ static u8 dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 		dev_dbg(mtk_dp->dev, "[AUX] Read reply_cmd:%d\n", reply_cmd);
 		ret = reply_cmd;
 	} else {
-		dev_dbg(mtk_dp->dev, "[AUX] Timeout Read reply_cmd:%d\n", reply_cmd);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [AUX] Timeout Read reply_cmd:%d\n", reply_cmd);
 		ret = AUX_HW_FAILED;
 	}
 
@@ -602,7 +603,7 @@ static u8 dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp,
 		if (aux_irq_status & AUX_400US_TIMEOUT_IRQ_AUX_TX_P0_FLDMASK) {
 			/* for no reply should wait at least 3200 us */
 			usleep_range(AUX_NO_REPLY_WAIT_TIME, AUX_NO_REPLY_WAIT_TIME + 1);
-			dev_dbg(mtk_dp->dev, "(AUX write)HW Timeout 400us irq");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] (AUX write)HW Timeout 400us irq");
 			break;
 		}
 		usleep_range(1, 2);
@@ -611,19 +612,19 @@ static u8 dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp,
 	if (wait_reply_count == 0x0) {
 		phy_status = READ_BYTE(mtk_dp, REG_3628_AUX_TX_P0);
 		if (phy_status != 0x01)
-			dev_err(mtk_dp->dev, "Aux Write:Aux hang, need SW reset!\n");
+			dev_err(mtk_dp->dev, "[DPTX] Aux Write:Aux hang, need SW reset!\n");
 
 		WRITE_BYTE(mtk_dp, REG_3650_AUX_TX_P0 + 1, 0x01);
 		WRITE_BYTE(mtk_dp, REG_3640_AUX_TX_P0, 0x7F);
 
-		dev_dbg(mtk_dp->dev, "reply_cmd:0x%x, wait_reply_count:%d\n",
-		        reply_cmd, wait_reply_count);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] reply_cmd:0x%x, wait_reply_count:%d\n",
+			    reply_cmd, wait_reply_count);
 		return AUX_HW_FAILED;
 	}
 
 	reply_cmd = READ_BYTE(mtk_dp, REG_3624_AUX_TX_P0) & GENMASK(3,0);
 	if (reply_cmd)
-		dev_dbg(mtk_dp->dev, "reply_cmd:%x, NACK or Defer\n", reply_cmd);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] reply_cmd:%x, NACK or Defer\n", reply_cmd);
 
 	WRITE_BYTE(mtk_dp, REG_3650_AUX_TX_P0 + 1, 0x01);
 
@@ -636,7 +637,8 @@ static u8 dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp,
 		dev_dbg(mtk_dp->dev, "[AUX] Write reply_cmd:%d\n", reply_cmd);
 		ret = reply_cmd;
 	} else {
-		dev_dbg(mtk_dp->dev, "[AUX] Timeout, Write reply_cmd:%d\n", reply_cmd);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] [AUX] Timeout, Write reply_cmd:%d\n", reply_cmd);
 		ret = AUX_HW_FAILED;
 	}
 
@@ -658,13 +660,13 @@ static bool mtk_dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 		retry_limit--;
 		if (reply_status) {
 			usleep_range(50, 51);
-			dev_dbg(mtk_dp->dev, "Retry Num:%d\n", retry_limit);
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Retry Num:%d\n", retry_limit);
 		} else {
 			return true;
 		}
 	} while (retry_limit > 0);
 
-	dev_err(mtk_dp->dev, "Aux Write Fail, cmd:%d, addr:0x%x, len:%zu\n",
+	dev_err(mtk_dp->dev, "[DPTX] Aux Write Fail, cmd:%d, addr:0x%x, len:%zu\n",
 		cmd, dpcd_addr, length);
 
 	return false;
@@ -725,7 +727,7 @@ static bool mtk_dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 						    dpcd_addr, length, data);
 		if (reply_status) {
 			usleep_range(50, 51);
-			dev_dbg(mtk_dp->dev, "Retry Num:%d\n", retry_limit);
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Retry Num:%d\n", retry_limit);
 		} else {
 			return true;
 		}
@@ -733,7 +735,7 @@ static bool mtk_dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 		retry_limit--;
 	} while (retry_limit > 0);
 
-	dev_err(mtk_dp->dev, "Aux Read Fail, cmd:%d, addr:0x%x, len:%zu\n",
+	dev_err(mtk_dp->dev, "[DPTX] Aux Read Fail, cmd:%d, addr:0x%x, len:%zu\n",
 		cmd, dpcd_addr, length);
 
 	return false;
@@ -824,7 +826,7 @@ static ssize_t mtk_dp_aux_transfer_v2(struct drm_dp_aux *mtk_aux,
 		break;
 
 	default:
-		dev_err(mtk_dp->dev, "invalid aux cmd:%d\n", cmd);
+		dev_err(mtk_dp->dev, "[DPTX] invalid aux cmd:%d\n", cmd);
 		ret = -EINVAL;
 		break;
 	}
@@ -920,14 +922,14 @@ static void mtk_dp_fec_init_setting_v2(struct mtk_dp *mtk_dp)
 
 static void mtk_dp_fec_enable_v2(struct mtk_dp *mtk_dp)
 {
-	dev_dbg(mtk_dp->dev, "FEC enable\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC enable\n");
 
 	WRITE_BYTE_MASK(mtk_dp, REG_3540_DP_TRANS_P0, BIT(0), BIT(0));
 }
 
 static void mtk_dp_fec_disable_v2(struct mtk_dp *mtk_dp)
 {
-	dev_dbg(mtk_dp->dev, "FEC disable\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC disable\n");
 
 	WRITE_BYTE_MASK(mtk_dp, REG_3540_DP_TRANS_P0, 0, BIT(0));
 }
@@ -938,17 +940,17 @@ static void mtk_dp_fec_ready_v2(struct mtk_dp *mtk_dp, u8 err_cnt_sel)
 	u8 *fec_cap = &mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap;
 
 	if (drm_dp_dpcd_readb(&mtk_dp->aux, DP_FEC_CAPABILITY, fec_cap) < 0) {
-		dev_err(mtk_dp->dev, "fail to read FEC DPCD\n");
+		dev_err(mtk_dp->dev, "[DPTX] fail to read FEC DPCD\n");
 		return;
 	}
-	dev_dbg(mtk_dp->dev, "FEC cap:0x%x\n", *fec_cap);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC cap:0x%x\n", *fec_cap);
 
 	if (drm_dp_sink_supports_fec(*fec_cap)) {
 		data[0] = (err_cnt_sel << 1) | 0x1;     /* FEC Ready */
 		drm_dp_dpcd_write(&mtk_dp->aux, 0x120, data, 0x1);
 		drm_dp_dpcd_read(&mtk_dp->aux, 0x280, data, 0x3);
-		dev_dbg(mtk_dp->dev, "FEC status & error Count:0x%x, 0x%x, 0x%x\n",
-		        data[0], data[1], data[2]);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC status & error Count:0x%x, 0x%x, 0x%x\n",
+			    data[0], data[1], data[2]);
 	}
 }
 
@@ -1013,10 +1015,11 @@ static void mtk_dp_msa_set_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id en
 	WRITE_2BYTE(mtk_dp, REG_3178_DP_ENCODER0_P0 + reg_offset,
 		    dp_timing->vde);
 
-	dev_dbg(mtk_dp->dev, "[%d] set MSA, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d\n",
-		encoder_id,
-		dp_timing->htt, dp_timing->vtt,
-		dp_timing->hde, dp_timing->vde, dp_timing->frame_rate);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [%d] set MSA, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d\n",
+		    encoder_id,
+		    dp_timing->htt, dp_timing->vtt,
+		    dp_timing->hde, dp_timing->vde, dp_timing->frame_rate);
 }
 
 static bool mtk_dp_mn_overwrite_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id,
@@ -1059,8 +1062,8 @@ static void mtk_dp_mn_calculate_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 
 	if (mtk_dp->info[encoder_id].dp_output_timing.frame_rate > 0) {
 		frame_rate = mtk_dp->info[encoder_id].dp_output_timing.frame_rate;
-		dev_dbg(mtk_dp->dev, "[DPTX] Frame Rate = %d\n",
-		        mtk_dp->info[encoder_id].dp_output_timing.frame_rate);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Frame Rate = %d\n",
+			    mtk_dp->info[encoder_id].dp_output_timing.frame_rate);
 
 		pix_clk = (u32)mtk_dp->info[encoder_id].dp_output_timing.htt *
 			  (u32)mtk_dp->info[encoder_id].dp_output_timing.vtt *
@@ -1068,26 +1071,26 @@ static void mtk_dp_mn_calculate_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	} else if (mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate > 0) {
 		frame_rate = 60;
 		pix_clk = mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate * 1000;
-		dev_dbg(mtk_dp->dev, "[DPTX] Pix Clk (kHz) = %llu\n",
-		        mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Pix Clk (kHz) = %llu\n",
+			    mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate);
 	} else {
 		frame_rate = 60;
 		pix_clk = (u32)mtk_dp->info[encoder_id].dp_output_timing.htt *
 			  (u32)mtk_dp->info[encoder_id].dp_output_timing.vtt *
 			  (u32)frame_rate;
 
-		dev_dbg(mtk_dp->dev, "[DPTX] both frame_rate & pix_clk = 0\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] both frame_rate & pix_clk = 0\n");
 	}
 
-	dev_dbg(mtk_dp->dev, "pix_clk = 0x%x\r\n", pix_clk);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pix_clk = 0x%x\r\n", pix_clk);
 
 	val = pix_clk / (100000);
 
 	if (val > 0) {
 		m_vid = (val * n_vid) / pll_rate;
 
-		dev_dbg(mtk_dp->dev, "[DPTX] Cal PR = %d x(1/10) Mhz\n", val);
-		dev_dbg(mtk_dp->dev, "[DPTX] m_vid 0x%x\n", m_vid);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Cal PR = %d x(1/10) Mhz\n", val);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] m_vid 0x%x\n", m_vid);
 		mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate = pix_clk / 1000;
 		mtk_dp->info[encoder_id].video_m = m_vid;
 		mtk_dp->info[encoder_id].video_n = n_vid;
@@ -1102,7 +1105,8 @@ static void mtk_dp_mn_calculate_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 		mtk_dp->info[encoder_id].video_m = m_vid;
 		mtk_dp->info[encoder_id].video_n = n_vid;
 	} else {
-		dev_dbg(mtk_dp->dev, "Set video MN fail, due to invalid link rate\n");
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] Set video MN fail, due to invalid link rate\n");
 	}
 }
 
@@ -1114,8 +1118,8 @@ static void mtk_dp_mvid_renew_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id
 	htt = mtk_dp->info[encoder_id].dp_output_timing.htt;
 	if (htt % 4 != 0) {
 		mvid = READ_4BYTE(mtk_dp, REG_33C8_DP_ENCODER1_P0 + reg_offset);
-		dev_dbg(mtk_dp->dev, "Encoder:%d, Odd Htt:%d, m_vid:%d, overwrite\n",
-		        encoder_id, htt, mvid);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Encoder:%d, Odd Htt:%d, m_vid:%d, overwrite\n",
+			    encoder_id, htt, mvid);
 		mtk_dp_mn_overwrite_v2(mtk_dp, encoder_id, true, mvid, 0x8000);
 	}
 }
@@ -1178,7 +1182,7 @@ static void mtk_dp_color_set_format_v2(struct mtk_dp *mtk_dp,
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "Set Color Format:0x%x\n", color_format);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Set Color Format:0x%x\n", color_format);
 
 	if (color_format == DP_PIXELFORMAT_RGB ||
 	    color_format == DP_PIXELFORMAT_YUV444)
@@ -1197,7 +1201,8 @@ static void mtk_dp_color_set_depth_v2(struct mtk_dp *mtk_dp,
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "Set Color Depth:%d (0~4=6/8/10/12/16 bpp)\n", color_depth);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] Set Color Depth:%d (0~4=6/8/10/12/16 bpp)\n", color_depth);
 
 	switch (color_depth) {
 	case DP_COLOR_DEPTH_6BIT:
@@ -1646,8 +1651,8 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 					   + offset * 4 + reg_index + reg_offset;
 
 				WRITE_BYTE(mtk_dp, addr, (db[offset * 2 + reg_index]));
-				dev_dbg(mtk_dp->dev, "SDP address:%u, data:%d\n",
-				        addr, db[offset * 2 + reg_index]);
+				drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SDP address:%u, data:%d\n",
+				            addr, db[offset * 2 + reg_index]);
 			}
 
 		if (sdp_type == DP_SDP_PKG_DRM) {
@@ -1658,7 +1663,8 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 					u8 offset = hb_offset * 2 + reg_index;
 
 					WRITE_BYTE(mtk_dp, addr, (hb[offset]));
-					dev_dbg(mtk_dp->dev, "W Reg addr:%x, index:%d\n", addr, offset);
+					drm_dbg_kms(mtk_dp->drm_dev,
+						    "[DPTX] W Reg addr:%x, index:%d\n", addr, offset);
 				}
 		} else if (sdp_type >= DP_SDP_PKG_PPS0 &&
 			   sdp_type <= DP_SDP_PKG_PPS3) {
@@ -1669,7 +1675,8 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 					u8 offset = hb_offset * 2 + reg_index;
 
 					WRITE_BYTE(mtk_dp, addr, hb[offset]);
-					dev_dbg(mtk_dp->dev, "W H1 Reg addr:%x, index:%d\n", addr, offset);
+					drm_dbg_kms(mtk_dp->drm_dev,
+						    "[DPTX] W H1 Reg addr:%x, index:%d\n", addr, offset);
 				}
 		} else if (sdp_type == DP_SDP_PKG_ADS) {
 			for (hb_offset = 0; hb_offset < (4 >> 1); hb_offset++)
@@ -1691,7 +1698,8 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 					u8 offset = hb_offset * 2 + reg_index;
 
 					WRITE_BYTE(mtk_dp, addr, hb[offset]);
-					dev_dbg(mtk_dp->dev, "W H2 Reg addr:%x, index:%d\n", addr, offset);
+					drm_dbg_kms(mtk_dp->drm_dev,
+						    "[DPTX] W H2 Reg addr:%x, index:%d\n", addr, offset);
 				}
 		}
 	}
@@ -1710,7 +1718,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30B4_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE ACM\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE ACM\n");
 		}
 
 		break;
@@ -1734,7 +1742,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, (REG_30B4_DP_ENCODER0_P0 + 1 + reg_offset), 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE ISRC\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE ISRC\n");
 		}
 
 		break;
@@ -1749,7 +1757,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, (REG_30A4_DP_ENCODER0_P0 + 1 + reg_offset), 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE AVI\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE AVI\n");
 		}
 
 		break;
@@ -1764,7 +1772,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30A8_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE AUI\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE AUI\n");
 		}
 
 		break;
@@ -1779,7 +1787,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30A8_DP_ENCODER0_P0 + 1 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE SPD\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE SPD\n");
 		}
 
 		break;
@@ -1794,7 +1802,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30AC_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE MPEG\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE MPEG\n");
 		}
 
 		break;
@@ -1809,7 +1817,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, (REG_30AC_DP_ENCODER0_P0 + 1 + reg_offset), 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE NTSC\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE NTSC\n");
 		}
 
 		break;
@@ -1824,7 +1832,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30B0_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE VSP\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE VSP\n");
 		}
 
 		break;
@@ -1839,7 +1847,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30B8_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE VSC\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE VSC\n");
 		}
 
 		break;
@@ -1854,7 +1862,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_30B0_DP_ENCODER0_P0 + 1 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE EXT\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE EXT\n");
 		}
 
 		break;
@@ -1869,7 +1877,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_31E8_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE PPS0\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE PPS0\n");
 		}
 
 		break;
@@ -1884,7 +1892,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_31E8_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE PPS1\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE PPS1\n");
 		}
 
 		break;
@@ -1899,7 +1907,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_31E8_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE PPS2\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE PPS2\n");
 		}
 
 		break;
@@ -1914,7 +1922,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_31E8_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE PPS3\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE PPS3\n");
 		}
 
 		break;
@@ -1933,7 +1941,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_3280_DP_ENCODER1_P0 + reg_offset,
 					BIT(5), BIT(5));
 			WRITE_BYTE(mtk_dp, REG_31DC_DP_ENCODER0_P0 + reg_offset, 0x05);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE DRM\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE DRM\n");
 		}
 
 		break;
@@ -1954,7 +1962,7 @@ static void mtk_dp_spkg_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 			WRITE_BYTE_MASK(mtk_dp, REG_31EC_DP_ENCODER0_P0 + reg_offset,
 					1 << ADS_CFG_DP_ENCODER0_P0_FLDMASK_POS,
 					ADS_CFG_DP_ENCODER0_P0_FLDMASK);
-			dev_dbg(mtk_dp->dev, "SENT SDP TYPE ADS\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SENT SDP TYPE ADS\n");
 		}
 
 		break;
@@ -2028,7 +2036,7 @@ void mtk_dp_audio_mute_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "[%d] enable:%d\n", encoder_id, enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d] enable:%d\n", encoder_id, enable);
 
 	mtk_dp->info[encoder_id].audio_mute = enable;
 
@@ -2086,8 +2094,9 @@ static void mtk_dp_audio_sample_arrange_v2(struct mtk_dp *mtk_dp,
 				 0, GENMASK(11, 0));
 	}
 
-	dev_dbg(mtk_dp->dev, "Encoder %d, Audio arrange patch enable = %d, value = 0x%x\n",
-	       encoder_id, enable, value);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] Encoder %d, Audio arrange patch enable = %d, value = 0x%x\n",
+		    encoder_id, enable, value);
 }
 
 static void mtk_dp_audio_sdp_setting_v2(struct mtk_dp *mtk_dp,
@@ -2148,7 +2157,8 @@ void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 		WRITE_BYTE_MASK(mtk_dp, REG_33F4_DP_ENCODER1_P0 + reg_offset, BIT(0), BIT(0));
 	}
 
-	dev_dbg(mtk_dp->dev, "encoder_id = %d, fs = %d, ch = %d\n", encoder_id, fs, channel);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] encoder_id = %d, fs = %d, ch = %d\n", encoder_id, fs, channel);
 
 	WRITE_BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + 1 + reg_offset, BIT(1), BIT(1));
 
@@ -2405,7 +2415,7 @@ static void mtk_dp_audio_sdp_config_v2(struct mtk_dp *mtk_dp, const enum dp_enco
 		SDP_DB[0x3] = 0x00;
 
 	mtk_dp_audio_sdp_setting_v2(mtk_dp, encoder_id, ch);
-	dev_dbg(mtk_dp->dev, "[%d] I2S Set Audio Channel = %d\n", encoder_id, ch);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d] I2S Set Audio Channel = %d\n", encoder_id, ch);
 	mtk_dp_spkg_sdp_v2(mtk_dp, encoder_id, true, DP_SDP_PKG_AUI, SDP_HB, SDP_DB);
 }
 
@@ -2419,7 +2429,7 @@ void mtk_dp_audio_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id enco
 	fs = mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate;
 	len = mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits;
 
-	dev_dbg(mtk_dp->dev, "[%d] ch:%d, fs:%d, len:%d\n", encoder_id, ch, fs, len);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d] ch:%d, fs:%d, len:%d\n", encoder_id, ch, fs, len);
 
 	mtk_dp_audio_sdp_config_v2(mtk_dp, encoder_id, ch, fs, len);
 
@@ -2427,7 +2437,8 @@ void mtk_dp_audio_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id enco
 
 	mtk_dp_audio_pg_enable_v2(mtk_dp, encoder_id, ch, fs, false);
 
-	dev_dbg(mtk_dp->dev, "[%d] Set audio M div %s\n", encoder_id, table[DP_AUDIO_M_DIV_D2]);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [%d] Set audio M div %s\n", encoder_id, table[DP_AUDIO_M_DIV_D2]);
 	mtk_dp_audio_set_mdiv_v2(mtk_dp, encoder_id, DP_AUDIO_M_DIV_D2);
 }
 
@@ -2437,7 +2448,7 @@ bool mtk_dp_parse_audio_cap_v2(struct mtk_dp *mtk_dp, struct mtk_dp_audio_cfg *c
 		return false;
 
 	if (cfg->sad_count <= 0) {
-		dev_dbg(mtk_dp->dev, "The SADs is NULL\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] The SADs is NULL\n");
 		return false;
 	}
 
@@ -2454,9 +2465,9 @@ void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp)
 	if (!mtk_dp->mst_enable && mtk_dp->mtk_con[DP_FIRST_CON]) {
 		plugged = mtk_dp->mtk_con[DP_FIRST_CON]->video_enable &
 			mtk_dp->info[DP_SST_ENCODER_PORT].audio_cur_cfg.detect_monitor;
-		dev_dbg(mtk_dp->dev, "SST, video enable:%d, detect monitor:%d\n",
-			mtk_dp->mtk_con[DP_FIRST_CON]->video_enable,
-			mtk_dp->info[DP_SST_ENCODER_PORT].audio_cur_cfg.detect_monitor);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SST, video enable:%d, detect monitor:%d\n",
+			    mtk_dp->mtk_con[DP_FIRST_CON]->video_enable,
+			    mtk_dp->info[DP_SST_ENCODER_PORT].audio_cur_cfg.detect_monitor);
 	} else {
 		for (encoder_id = 0; encoder_id < DP_ENCODER_NUM; encoder_id++) {
 			con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
@@ -2466,10 +2477,10 @@ void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp)
 			plugged = mtk_dp->mtk_con[con_id]->video_enable &&
 				mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor;
 
-			dev_dbg(mtk_dp->dev,
-				"MST, enc[%d] con[%d], video enable:%d, detect monitor:%d\n",
-				encoder_id, con_id, mtk_dp->mtk_con[con_id]->video_enable,
-				mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor);
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] MST, enc[%d] con[%d], video enable:%d, detect monitor:%d\n",
+				    encoder_id, con_id, mtk_dp->mtk_con[con_id]->video_enable,
+				    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor);
 
 			if (plugged)
 				break;
@@ -2477,8 +2488,9 @@ void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp)
 	}
 
 	if (mtk_dp->plugged_cb && mtk_dp->codec_dev) {
-		dev_dbg(mtk_dp->dev, "audio supported:%d, audio enable:%d, plugged:%d\n",
-		        mtk_dp->data->audio_supported, mtk_dp->audio_enable, plugged);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] audio supported:%d, audio enable:%d, plugged:%d\n",
+		            mtk_dp->data->audio_supported, mtk_dp->audio_enable, plugged);
 		mtk_dp->plugged_cb(mtk_dp->codec_dev, plugged);
 	}
 	mutex_unlock(&mtk_dp->update_plugged_status_lock);
@@ -2547,22 +2559,22 @@ static void mtk_dsc_read_dsc_dpcd_v2(struct mtk_dp *mtk_dp, struct drm_dp_aux *a
 				u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE])
 {
 	if (drm_dp_dpcd_read(aux, DP_DSC_SUPPORT, dsc_dpcd, DP_DSC_RECEIVER_CAP_SIZE) < 0)
-		dev_err(mtk_dp->dev, "Failed to read DPCD register 0x%x\n", DP_DSC_SUPPORT);
+		dev_err(mtk_dp->dev, "[DPTX] Failed to read DPCD register 0x%x\n", DP_DSC_SUPPORT);
 }
 
 void mtk_dp_dsc_support_v2(struct mtk_dp *mtk_dp)
 {
 	mtk_dsc_read_dsc_dpcd_v2(mtk_dp, &mtk_dp->aux, mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd);
 
-	dev_dbg(mtk_dp->dev, "sink dsc capable:%d\n",
-		drm_dp_sink_supports_dsc(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd));
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] sink dsc capable:%d\n",
+		    drm_dp_sink_supports_dsc(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd));
 }
 
 void mtk_dp_dsc_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "DSC enable\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DSC enable\n");
 
 	WRITE_2BYTE_MASK(mtk_dp, REG_31C4_DP_ENCODER0_P0 + reg_offset,
 			 0,
@@ -2592,7 +2604,7 @@ void mtk_dp_dsc_disable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encod
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "DSC disable\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DSC disable\n");
 
 	WRITE_2BYTE_MASK(mtk_dp, REG_31C4_DP_ENCODER0_P0 + reg_offset,
 			 0,
@@ -2652,12 +2664,12 @@ void mtk_dp_dsc_set_param_v2(struct mtk_dp *mtk_dp,
 	hde_last_num = ((hde_num_even + lane_count) * slice_num);
 	hde_last_num = DIV_ROUND_UP(hde_last_num,3);
 
-	dev_dbg(mtk_dp->dev, "encoder_id = %d\n", encoder_id);
-	dev_dbg(mtk_dp->dev, "slice_num = %d\n", slice_num);
-	dev_dbg(mtk_dp->dev, "chunk_size = %d\n", chunk_num);
-	dev_dbg(mtk_dp->dev, "lane count = %d\n", lane_count);
-	dev_dbg(mtk_dp->dev, "hde_last_num = %d\n", hde_last_num);
-	dev_dbg(mtk_dp->dev, "hde_num_even = %d\n", hde_num_even);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder_id = %d\n", encoder_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] slice_num = %d\n", slice_num);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] chunk_size = %d\n", chunk_num);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] lane count = %d\n", lane_count);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hde_last_num = %d\n", hde_last_num);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hde_num_even = %d\n", hde_num_even);
 
 	mtk_dp_set_chunk_size_v2(mtk_dp, encoder_id, slice_num - 1, chunk_num, chunk_num % 12,
 				 lane_count, hde_last_num, hde_num_even);
@@ -2670,11 +2682,12 @@ void mtk_dp_dsc_set_pps_v2(struct mtk_dp *mtk_dp,
 	int i;
 
 	for (i = 0; i < 128; i += 8)
-		dev_dbg(mtk_dp->dev, "0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x\n",
-			pps->pps_raw[i + 0], pps->pps_raw[i + 1],
-			pps->pps_raw[i + 2], pps->pps_raw[i + 3],
-			pps->pps_raw[i + 4], pps->pps_raw[i + 5],
-			pps->pps_raw[i + 6], pps->pps_raw[i + 7]);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x, 0x%02x\n",
+			    pps->pps_raw[i + 0], pps->pps_raw[i + 1],
+			    pps->pps_raw[i + 2], pps->pps_raw[i + 3],
+			    pps->pps_raw[i + 4], pps->pps_raw[i + 5],
+			    pps->pps_raw[i + 6], pps->pps_raw[i + 7]);
 
 	mtk_dp_spkg_sdp_v2(mtk_dp, encoder_id, enable, DP_SDP_PKG_PPS0, hb, pps->pps_raw +  0);
 	mtk_dp_spkg_sdp_v2(mtk_dp, encoder_id, enable, DP_SDP_PKG_PPS1, hb, pps->pps_raw + 32);
@@ -2694,46 +2707,46 @@ void mtk_dp_dsc_parse_pps_param_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	u8 bpp;
 
 	pps_struct.pps.major = (pps[0] >> 4) & 0xF;
-	dev_dbg(mtk_dp->dev, "major:%d\n", pps_struct.pps.major);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] major:%d\n", pps_struct.pps.major);
 	pps_struct.pps.minor = pps[0] & 0xF;
-	dev_dbg(mtk_dp->dev, "minor:%d\n", pps_struct.pps.minor);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] minor:%d\n", pps_struct.pps.minor);
 
 	pps_struct.pps.color_depth = (pps[3] >> 4) & 0xF;
-	dev_dbg(mtk_dp->dev, "color_depth:%d\n", pps_struct.pps.color_depth);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] color_depth:%d\n", pps_struct.pps.color_depth);
 	pps_struct.pps.buffer_depth = pps[3] & 0xF;
-	dev_dbg(mtk_dp->dev, "buffer_depth:%d\n", pps_struct.pps.buffer_depth);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] buffer_depth:%d\n", pps_struct.pps.buffer_depth);
 
 	pps_struct.pps.bp_enable = (pps[4] >> 5) & 0x1;
-	dev_dbg(mtk_dp->dev, "bp_enable:%d\n", pps_struct.pps.bp_enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bp_enable:%d\n", pps_struct.pps.bp_enable);
 	pps_struct.pps.convert_rgb = (pps[4] >> 4) & 0x1;
-	dev_dbg(mtk_dp->dev, "convert_rgb:%d\n", pps_struct.pps.convert_rgb);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] convert_rgb:%d\n", pps_struct.pps.convert_rgb);
 	pps_struct.pps.simple_422 = (pps[4] >> 3) & 0x1;
-	dev_dbg(mtk_dp->dev, "simple_422:%d\n", pps_struct.pps.simple_422);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] simple_422:%d\n", pps_struct.pps.simple_422);
 	pps_struct.pps.vbr_enable = (pps[4] >> 1) & 0x1;
-	dev_dbg(mtk_dp->dev, "vbr_enable:%d\n", pps_struct.pps.vbr_enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vbr_enable:%d\n", pps_struct.pps.vbr_enable);
 
 	pps_struct.pps.bit_per_pixel = ((pps[4] & 0x3) << 4) |
 						(pps[5]  >> 4);
-	dev_dbg(mtk_dp->dev, "bit_per_pixel:%d\n", pps_struct.pps.bit_per_pixel);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bit_per_pixel:%d\n", pps_struct.pps.bit_per_pixel);
 
 	pps_struct.pps.pic_height = (pps[6] << 8) | pps[7];
-	dev_dbg(mtk_dp->dev, "pic_height:%d\n", pps_struct.pps.pic_height);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pic_height:%d\n", pps_struct.pps.pic_height);
 	pps_struct.pps.pic_width = (pps[8] << 8) | pps[9];
-	dev_dbg(mtk_dp->dev, "pic_width:%d\n", pps_struct.pps.pic_width);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pic_width:%d\n", pps_struct.pps.pic_width);
 	pps_struct.pps.slice_height = (pps[10] << 8) | pps[11];
-	dev_dbg(mtk_dp->dev, "slice_height:%d\n", pps_struct.pps.slice_height);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] slice_height:%d\n", pps_struct.pps.slice_height);
 	pps_struct.pps.slice_width = (pps[12] << 8) | pps[13];
-	dev_dbg(mtk_dp->dev, "slice_width:%d\n", pps_struct.pps.slice_width);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] slice_width:%d\n", pps_struct.pps.slice_width);
 	pps_struct.pps.chunk_size = (pps[14] << 8) | pps[15];
-	dev_dbg(mtk_dp->dev, "chunk_size:%d\n", pps_struct.pps.chunk_size);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] chunk_size:%d\n", pps_struct.pps.chunk_size);
 
 	pps_struct.pps.native_420 = (pps[88] >> 1) & 0x1;
-	dev_dbg(mtk_dp->dev, "native_420:%d\n", pps_struct.pps.native_420);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] native_420:%d\n", pps_struct.pps.native_420);
 	pps_struct.pps.native_422 = pps[88] & 0x1;
-	dev_dbg(mtk_dp->dev, "native_422:%d\n", pps_struct.pps.native_422);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] native_422:%d\n", pps_struct.pps.native_422);
 
 	bpp = ((pps[4] & 0x3) << 4) | (pps[5]  >> 4);
-	dev_dbg(mtk_dp->dev, "bpp:%d\n", bpp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bpp:%d\n", bpp);
 
 	memcpy(&mtk_dp->info[encoder_id].pps.pps_raw, pps, 128);
 }
@@ -2782,7 +2795,7 @@ static int mtk_dsc_compute_params_v2(struct mtk_dp *mtk_dp,
 	ret = drm_dsc_setup_rc_params(vdsc_cfg, DRM_DSC_1_2_444);
 
 	if (ret < 0)
-		dev_err(mtk_dp->dev, "drm_dsc_setup_rc_params ret %d\n", ret);
+		dev_err(mtk_dp->dev, "[DPTX] drm_dsc_setup_rc_params ret %d\n", ret);
 
 	/* InitialScaleValue is a 6 bit value with 3 fractional bits (U3.3) */
 	vdsc_cfg->initial_scale_value = (vdsc_cfg->rc_model_size << 3) /
@@ -2801,13 +2814,13 @@ static int mtk_dsc_compute_params_v2(struct mtk_dp *mtk_dp,
 
 	vdsc_cfg->line_buf_depth = bpc + 1;
 
-	dev_dbg(mtk_dp->dev, "line_buf_depth:%d\n", vdsc_cfg->line_buf_depth);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] line_buf_depth:%d\n", vdsc_cfg->line_buf_depth);
 
 	vdsc_cfg->block_pred_enable =
 		mtk_dp->mtk_con[con_id]->dsc_dpcd[DP_DSC_BLK_PREDICTION_SUPPORT - DP_DSC_SUPPORT] &
 		DP_DSC_BLK_PREDICTION_IS_SUPPORTED;
 
-	dev_dbg(mtk_dp->dev, "block_pred_enable:%d\n", vdsc_cfg->block_pred_enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] block_pred_enable:%d\n", vdsc_cfg->block_pred_enable);
 
 	drm_dsc_compute_rc_parameters(vdsc_cfg);
 
@@ -2830,7 +2843,7 @@ void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id
 
 	memcpy(mtk_dp->prop_dsc_cfg[encoder_id]->values,
 	       &mtk_dsc_cfg, sizeof(struct drm_dsc_config));
-	dev_dbg(mtk_dp->dev, "dsc version:%d", mtk_dsc_cfg.dsc_version_minor);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] dsc version:%d", mtk_dsc_cfg.dsc_version_minor);
 }
 
 u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode)
@@ -2909,7 +2922,7 @@ static void mtk_dp_phy_set_lane_pwr_v2(struct mtk_dp *mtk_dp, enum dp_lane_count
 		PHY_WRITE_BYTE_MASK(mtk_dp, PHYD_DIG_GLB_OFFSET + DP_PHY_DIG_TX_CTL_0,
 				    power_bmp << TX_LN_EN_FLDMASK_POS,
 				TX_LN_EN_FLDMASK);
-		dev_dbg(mtk_dp->dev, "set lane pwr %x\n", (PHY_READ_BYTE(mtk_dp, PHYD_DIG_GLB_OFFSET
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] set lane pwr %x\n", (PHY_READ_BYTE(mtk_dp, PHYD_DIG_GLB_OFFSET
 						+ DP_PHY_DIG_TX_CTL_0) &
 					TX_LN_EN_FLDMASK) >> TX_LN_EN_FLDMASK_POS);
 	} while (--power_indx >= 0);
@@ -2926,7 +2939,8 @@ static void mtk_dp_phy_clear_lane_pwr_v2(struct mtk_dp *mtk_dp)
 		PHY_WRITE_BYTE_MASK(mtk_dp, PHYD_DIG_GLB_OFFSET + DP_PHY_DIG_TX_CTL_0,
 				    power_bmp << TX_LN_EN_FLDMASK_POS,
 				    TX_LN_EN_FLDMASK);
-		dev_dbg(mtk_dp->dev, "clear lane pwr %x\n", (PHY_READ_BYTE(mtk_dp, PHYD_DIG_GLB_OFFSET
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] clear lane pwr %x\n", (PHY_READ_BYTE(mtk_dp, PHYD_DIG_GLB_OFFSET
 							     + DP_PHY_DIG_TX_CTL_0) &
 							     TX_LN_EN_FLDMASK) >> TX_LN_EN_FLDMASK_POS);
 	} while (power_bmp > 0);
@@ -2939,7 +2953,7 @@ static void mtk_dp_phy_power_on_v2(struct mtk_dp *mtk_dp)
 	PHY_WRITE_BYTE_MASK(mtk_dp, PHYD_DIG_GLB_OFFSET + DP_PHY_DIG_PLL_CTL_0,
 			    0x3 << FORCE_PWR_STATE_VAL_FLDMASK_POS, FORCE_PWR_STATE_VAL_FLDMASK);
 
-	dev_dbg(mtk_dp->dev, "DP PHYD power on\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP PHYD power on\n");
 }
 
 static void mtk_dp_phy_power_down_v2(struct mtk_dp *mtk_dp)
@@ -2956,7 +2970,7 @@ static void mtk_dp_phy_power_down_v2(struct mtk_dp *mtk_dp)
 	PHY_WRITE_BYTE_MASK(mtk_dp, PHYD_DIG_GLB_OFFSET + DP_PHY_DIG_SW_RST,
 			    BIT(1) | BIT(3), BIT(1) | BIT(3));
 
-	dev_dbg(mtk_dp->dev, "DP PHYD power down\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP PHYD power down\n");
 }
 
 static void mtk_dp_phy_reset_swing_pre_v2(struct mtk_dp *mtk_dp)
@@ -3021,7 +3035,7 @@ static void mtk_dp_phy_ssc_enable_v2(struct mtk_dp *mtk_dp, bool enable)
 		PHY_WRITE_BYTE_MASK(mtk_dp, PHYD_DIG_GLB_OFFSET + DP_PHY_DIG_PLL_CTL_1,
 				    0x0, TPLL_SSC_EN_FLDMASK);
 
-	dev_dbg(mtk_dp->dev, "Phy SSC enable = %d\n", enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Phy SSC enable = %d\n", enable);
 }
 
 static void mtk_dp_phy_param_init_v2(struct mtk_dp *mtk_dp, u32 *buffer, u32 size)
@@ -3030,7 +3044,7 @@ static void mtk_dp_phy_param_init_v2(struct mtk_dp *mtk_dp, u32 *buffer, u32 siz
 	u8  mask = GENMASK(5,0);
 
 	if (!buffer || size != DP_PHY_REG_COUNT) {
-		dev_err(mtk_dp->dev, "invalid param\n");
+		dev_err(mtk_dp->dev, "[DPTX] invalid param\n");
 		return;
 	}
 
@@ -3089,7 +3103,7 @@ static void mtk_dp_phy_flip_enable_v2(struct mtk_dp *mtk_dp)
 	tmp |= BIT(18);
 	writel(tmp, mtk_dp->phy_mux_regs);
 
-	dev_dbg(mtk_dp->dev, "Swap enable\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Swap enable\n");
 }
 
 static void mtk_dp_phy_flip_disable_v2(struct mtk_dp *mtk_dp)
@@ -3105,7 +3119,7 @@ static void mtk_dp_phy_flip_disable_v2(struct mtk_dp *mtk_dp)
 	tmp &= ~BIT(18);
 	writel(tmp, mtk_dp->phy_mux_regs);
 
-	dev_dbg(mtk_dp->dev, "Swap disable\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Swap disable\n");
 }
 
 static void mtk_dp_phy_set_param_v2(struct mtk_dp *mtk_dp)
@@ -3169,7 +3183,7 @@ static void mtk_dp_phy_training_config_v2(struct mtk_dp *mtk_dp, const u8 link_r
 
 static void mtk_dp_phy_set_idle_pattern_v2(struct mtk_dp *mtk_dp, bool enable)
 {
-	dev_dbg(mtk_dp->dev, "Idle pattern enable:%d\n", enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Idle pattern enable:%d\n", enable);
 	WRITE_BYTE_MASK(mtk_dp, REG_3580_DP_TRANS_P0 + 1, enable ? 0x0f : 0x00, 0x0f);
 }
 
@@ -3186,12 +3200,12 @@ static bool mtk_dp_ssc_check_v2(struct mtk_dp *mtk_dp, bool *p_enable)
 
 	if (ret < 0) {
 		*p_enable = false;
-		dev_err(mtk_dp->dev, "Write DPCD_00107 Fail!!!\n");
+		dev_err(mtk_dp->dev, "[DPTX] Write DPCD_00107 Fail!!!\n");
 		return false;
 	}
 
-	dev_dbg(mtk_dp->dev, "%s SSC via DPCD_00107\n",
-		(*p_enable) ? "Enable" : "Disable ");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] %s SSC via DPCD_00107\n",
+		    (*p_enable) ? "Enable" : "Disable ");
 
 	return true;
 }
@@ -3200,7 +3214,7 @@ static void mtk_dp_video_mute_sw_v2(struct mtk_dp *mtk_dp, const enum dp_encoder
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "encoder:%d, enable:%d\n", encoder_id, enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder:%d, enable:%d\n", encoder_id, enable);
 
 	WRITE_BYTE_MASK(mtk_dp, REG_304C_DP_ENCODER0_P0 + reg_offset, enable ? BIT(2) : 0, BIT(2));
 }
@@ -3209,7 +3223,7 @@ void mtk_dp_video_mute_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encode
 {
 	u32 reg_offset = DP_REG_OFFSET(encoder_id);
 
-	dev_dbg(mtk_dp->dev, "encoder:%d, enable:%d\n", encoder_id, enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder:%d, enable:%d\n", encoder_id, enable);
 
 	mtk_dp->info[encoder_id].video_mute = enable;
 
@@ -3310,8 +3324,8 @@ static void mtk_dp_sdp_set_down_cnt_init_v2(struct mtk_dp *mtk_dp, const enum dp
 
 	sdp_down_cnt = mtk_dp_calculate_sdp_down_cnt_v2(mtk_dp, sdp_down_cnt);
 
-	dev_dbg(mtk_dp->dev, "pixcel_rate:%llu sdp_down_cnt:%x\n",
-		mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate, sdp_down_cnt);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pixcel_rate:%llu sdp_down_cnt:%x\n",
+		    mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate, sdp_down_cnt);
 
 	/* [11 : 0]REG_sdp_down_cnt_init */
 	WRITE_2BYTE_MASK(mtk_dp, REG_3040_DP_ENCODER0_P0 + reg_offset, sdp_down_cnt, GENMASK(11,0));
@@ -3329,20 +3343,21 @@ static void mtk_dp_sdp_set_down_cnt_init_in_hblanking_v2(struct mtk_dp *mtk_dp,
 					mtk_dp->training_info.link_rate * 2700 * 2,
 				mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate);
 
-	dev_dbg(mtk_dp->dev, "[%d] htt:%d, hde:%d, link_rate:%d, pixcel_rate:%llu, color_format:0x%x\n",
-		encoder_id,
-		mtk_dp->info[encoder_id].dp_output_timing.htt,
-		mtk_dp->info[encoder_id].dp_output_timing.hde,
-		mtk_dp->training_info.link_rate,
-		mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate,
-		mtk_dp->info[encoder_id].format);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [%d] htt:%d, hde:%d, link_rate:%d, pixcel_rate:%llu, color_format:0x%x\n",
+		    encoder_id,
+		    mtk_dp->info[encoder_id].dp_output_timing.htt,
+		    mtk_dp->info[encoder_id].dp_output_timing.hde,
+		    mtk_dp->training_info.link_rate,
+		    mtk_dp->info[encoder_id].dp_output_timing.pixcel_rate,
+		    mtk_dp->info[encoder_id].format);
 
 	if (mtk_dp->info[encoder_id].format == DP_PIXELFORMAT_YUV420)
 		sdp_down_cnt = sdp_down_cnt / 2;
 
 	sdp_down_cnt = mtk_dp_calculate_sdp_down_cnt_v2(mtk_dp, sdp_down_cnt);
 
-	dev_dbg(mtk_dp->dev, "sdp_down_cnt_blank:%x\n", sdp_down_cnt);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] sdp_down_cnt_blank:%x\n", sdp_down_cnt);
 
 	/* [11 : 0]REG_sdp_down_cnt_init_in_hblank */
 	WRITE_2BYTE_MASK(mtk_dp, REG_3364_DP_ENCODER1_P0 + reg_offset, sdp_down_cnt, GENMASK(11,0));
@@ -3401,7 +3416,8 @@ static void mtk_dp_tu_set_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id enc
 	n_value = tu_size / 10;
 	f_value = tu_size % 10;
 
-	dev_dbg(mtk_dp->dev, "tu_size:%d n_value:%d f_value:%d\n", tu_size, n_value, f_value);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] tu_size:%d n_value:%d f_value:%d\n", tu_size, n_value, f_value);
 	if (mtk_dp->training_info.link_lane_count > 0) {
 		sram_read_start = mtk_dp->info[encoder_id].dp_output_timing.hde /
 			(mtk_dp->training_info.link_lane_count * 4 * 2 * 2);
@@ -3423,7 +3439,7 @@ static bool mtk_dp_swingt_set_pre_emphasis_v2(struct mtk_dp *mtk_dp,
 					      enum dp_swing_num swing_level,
 					      enum dp_preemphasis_num pre_emphasis_level)
 {
-	dev_dbg(mtk_dp->dev, "lane:%d, set Swing:0x%x, Emp:0x%x\n",
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] lane:%d, set Swing:0x%x, Emp:0x%x\n",
 	        lane_num, swing_level, pre_emphasis_level);
 
 	switch (lane_num) {
@@ -3464,7 +3480,7 @@ static bool mtk_dp_swingt_set_pre_emphasis_v2(struct mtk_dp *mtk_dp,
 		break;
 
 	default:
-		dev_err(mtk_dp->dev, "lane number is error\n");
+		dev_err(mtk_dp->dev, "[DPTX] lane number is error\n");
 		return false;
 	}
 
@@ -3478,7 +3494,7 @@ static void mtk_dp_enable_video_interlance_v2(struct mtk_dp *mtk_dp,
 
 	WRITE_BYTE_MASK(mtk_dp, REG_3030_DP_ENCODER0_P0 + 1 + reg_offset,
 			BIT(6) | BIT(5), GENMASK(6,5));
-	dev_dbg(mtk_dp->dev, "DP imode force-ov\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP imode force-ov\n");
 }
 
 static void mtk_dp_disable_video_interlance_v2(struct mtk_dp *mtk_dp,
@@ -3488,7 +3504,7 @@ static void mtk_dp_disable_video_interlance_v2(struct mtk_dp *mtk_dp,
 
 	WRITE_BYTE_MASK(mtk_dp, REG_3030_DP_ENCODER0_P0 + 1 + reg_offset,
 			BIT(6), GENMASK(6,5));
-	dev_dbg(mtk_dp->dev, "DP pmode force-ov\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP pmode force-ov\n");
 }
 
 static void mtk_dp_set_lane_count_v2(struct mtk_dp *mtk_dp, const enum dp_lane_count lane_count)
@@ -3502,7 +3518,7 @@ static void mtk_dp_set_lane_count_v2(struct mtk_dp *mtk_dp, const enum dp_lane_c
 	} else if (value < mtk_dp->training_info.max_link_lane_count) {
 		WRITE_BYTE_MASK(mtk_dp, REG_35F0_DP_TRANS_P0, BIT(3), GENMASK(3,2));
 	} else {
-		dev_dbg(mtk_dp->dev, "Un-expected lane count:%d\n", lane_count);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Un-expected lane count:%d\n", lane_count);
 		return;
 	}
 
@@ -3521,7 +3537,7 @@ static void mtk_dp_set_lane_count_v2(struct mtk_dp *mtk_dp, const enum dp_lane_c
 
 static void mtk_dp_set_training_pattern_v2(struct mtk_dp *mtk_dp, int value)
 {
-	dev_dbg(mtk_dp->dev, "Set Train Pattern:0x%x\n", value);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Set Train Pattern:0x%x\n", value);
 
 	if (value <= DP_TPS4) {
 		if (value == DP_TPS1) /* if Set TPS1 */
@@ -3564,7 +3580,7 @@ static void mtk_dp_set_misc_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 	format = mtk_dp->info[encoder_id].format;
 	depth = mtk_dp->info[encoder_id].depth;
 
-	dev_dbg(mtk_dp->dev, "format:0x%x, depth:0x%x\n", format, depth);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] format:0x%x, depth:0x%x\n", format, depth);
 
 	/* MISC0[7:5] color depth */
 	DP_MISC.misc.color_depth = depth;
@@ -3626,7 +3642,7 @@ static void mtk_dp_set_dp_out_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id
 	mtk_dp_mn_calculate_v2(mtk_dp, encoder_id);
 
 	mtk_dp_pg_enable_v2(mtk_dp, encoder_id, false);
-	dev_dbg(mtk_dp->dev, "Set dpintf output\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Set dpintf output\n");
 
 	mtk_dp_mvid_renew_v2(mtk_dp, encoder_id);
 	mtk_dp_tu_set_v2(mtk_dp, encoder_id);
@@ -3642,17 +3658,18 @@ static void mtk_dp_verify_clock_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 
 	m = READ_4BYTE(mtk_dp, REG_33C8_DP_ENCODER1_P0 + reg_offset);
 	pix_clk = div_u64(m * ls_clk * 1000 * 1000, n);
-	dev_dbg(mtk_dp->dev, "[%d] video M:0x%llx, DP calc pixel clock:%llu Hz, dp_intf clock:%llu Hz\n",
-	       encoder_id, m, pix_clk, pix_clk / 4);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [%d] video M:0x%llx, DP calc pixel clock:%llu Hz, dp_intf clock:%llu Hz\n",
+	            encoder_id, m, pix_clk, pix_clk / 4);
 
 	m = READ_4BYTE(mtk_dp, REG_33D0_DP_ENCODER1_P0);
 	fs = div_u64( m * ls_clk * 1000 * 1000, n * 512);
-	dev_dbg(mtk_dp->dev, "[%d] audio M:0x%llx, fs:%llu\n", encoder_id, m, fs);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d] audio M:0x%llx, fs:%llu\n", encoder_id, m, fs);
 }
 
 void mtk_dp_video_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
 {
-	dev_dbg(mtk_dp->dev, "Output Video[%d] enable\n", encoder_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Output Video[%d] enable\n", encoder_id);
 
 	mtk_dp_set_dp_out_v2(mtk_dp, encoder_id);
 	mtk_dp_verify_clock_v2(mtk_dp, encoder_id);
@@ -3661,7 +3678,7 @@ void mtk_dp_video_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id enco
 static void mtk_dp_stop_sent_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
 void mtk_dp_video_disable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
 {
-	dev_dbg(mtk_dp->dev, "Output Video[%d] disable\n", encoder_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Output Video[%d] disable\n", encoder_id);
 
 	mtk_dp_stop_sent_sdp_v2(mtk_dp, encoder_id);
 	mtk_dp_sdp_path_reset_v2(mtk_dp, encoder_id);
@@ -3677,7 +3694,7 @@ static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	u8 data;
 
 	if (!mtk_dp->dp_ready) {
-		dev_err(mtk_dp->dev, "%s, DP is not ready\n", __func__);
+		dev_err(mtk_dp->dev, "[DPTX] %s, DP is not ready\n", __func__);
 		return;
 	}
 
@@ -3710,19 +3727,19 @@ static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	dp_timing->vfp = vm.vfront_porch;
 	dp_timing->vde = vm.vactive;
 
-	dev_dbg(mtk_dp->dev, "frame_rate:%d\n", dp_timing->frame_rate);
-	dev_dbg(mtk_dp->dev, "htt:%d\n", dp_timing->htt);
-	dev_dbg(mtk_dp->dev, "hbp:%d\n", dp_timing->hbp);
-	dev_dbg(mtk_dp->dev, "hsw:%d\n", dp_timing->hsw);
-	dev_dbg(mtk_dp->dev, "hsp:%d\n", dp_timing->hsp);
-	dev_dbg(mtk_dp->dev, "hfp:%d\n", dp_timing->hfp);
-	dev_dbg(mtk_dp->dev, "hde:%d\n", dp_timing->hde);
-	dev_dbg(mtk_dp->dev, "vtt:%d\n", dp_timing->vtt);
-	dev_dbg(mtk_dp->dev, "vbp:%d\n", dp_timing->vbp);
-	dev_dbg(mtk_dp->dev, "vsw:%d\n", dp_timing->vsw);
-	dev_dbg(mtk_dp->dev, "vsp:%d\n", dp_timing->vsp);
-	dev_dbg(mtk_dp->dev, "vfp:%d\n", dp_timing->vfp);
-	dev_dbg(mtk_dp->dev, "vde:%d\n", dp_timing->vde);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] frame_rate:%d\n", dp_timing->frame_rate);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] htt:%d\n", dp_timing->htt);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hbp:%d\n", dp_timing->hbp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hsw:%d\n", dp_timing->hsw);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hsp:%d\n", dp_timing->hsp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hfp:%d\n", dp_timing->hfp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hde:%d\n", dp_timing->hde);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vtt:%d\n", dp_timing->vtt);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vbp:%d\n", dp_timing->vbp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vsw:%d\n", dp_timing->vsw);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vsp:%d\n", dp_timing->vsp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vfp:%d\n", dp_timing->vfp);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vde:%d\n", dp_timing->vde);
 
 	mtk_dp_mn_calculate_v2(mtk_dp, encoder_id);
 
@@ -3784,11 +3801,11 @@ static u8 mtk_dp_get_sink_count_v2(struct mtk_dp *mtk_dp)
 	else
 		ret = drm_dp_dpcd_read(&mtk_dp->aux, DPCD_00200, &tmp, 0x1);
 	if (ret < 0) {
-		dev_dbg(mtk_dp->dev, "Failed to read DPCD: %d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Failed to read DPCD: %d\n", ret);
 		return 0;
 	}
 
-	dev_dbg(mtk_dp->dev, "sink count:%d\n", DP_GET_SINK_COUNT(tmp));
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] sink count:%d\n", DP_GET_SINK_COUNT(tmp));
 	return DP_GET_SINK_COUNT(tmp);
 }
 
@@ -3830,7 +3847,8 @@ static bool mtk_dp_check_sink_cap_v2(struct mtk_dp *mtk_dp)
 	}
 
 	mtk_dp->training_info.dpcd_rev = tmp[0x0];
-	dev_dbg(mtk_dp->dev, "SINK DPCD version:0x%x\n", mtk_dp->training_info.dpcd_rev);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] SINK DPCD version:0x%x\n", mtk_dp->training_info.dpcd_rev);
 
 	if (drm_dp_read_dpcd_caps(&mtk_dp->aux, mtk_dp->rx_cap) != 0)
 		return false;
@@ -3848,10 +3866,10 @@ static bool mtk_dp_check_sink_cap_v2(struct mtk_dp *mtk_dp)
 
 	if ((tmp[0x3] & BIT(0)) == 0x1) {
 		mtk_dp->training_info.sink_ssc_en = true;
-		dev_dbg(mtk_dp->dev, "SINK SUPPORT SSC\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SINK SUPPORT SSC\n");
 	} else {
 		mtk_dp->training_info.sink_ssc_en = false;
-		dev_dbg(mtk_dp->dev, "SINK NOT SUPPORT SSC\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SINK NOT SUPPORT SSC\n");
 	}
 
 	ret = drm_dp_dpcd_read(&mtk_dp->aux, DPCD_00021, tmp, 0x1);
@@ -3882,11 +3900,12 @@ static bool mtk_dp_check_sink_cap_v2(struct mtk_dp *mtk_dp)
 		mtk_dp->training_info.dp_mst_en = (tmp[0x0] & BIT(0));
 	}
 
-	dev_dbg(mtk_dp->dev, "mst_cap:%d, mst_en:%d, mst_branch:%d, port_present:%d\n",
-		mtk_dp->training_info.dp_mst_cap,
-		mtk_dp->training_info.dp_mst_en,
-		mtk_dp->training_info.dp_mst_branch,
-		mtk_dp->training_info.dwn_strm_port_present);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] mst_cap:%d, mst_en:%d, mst_branch:%d, port_present:%d\n",
+		    mtk_dp->training_info.dp_mst_cap,
+		    mtk_dp->training_info.dp_mst_en,
+		    mtk_dp->training_info.dp_mst_branch,
+		    mtk_dp->training_info.dwn_strm_port_present);
 
 	ret = drm_dp_dpcd_read(&mtk_dp->aux, DPCD_00600, tmp, 0x1);
 	if (ret < 0)
@@ -3914,10 +3933,10 @@ static bool mtk_dp_check_sink_cap_v2(struct mtk_dp *mtk_dp)
 static void mtk_dp_hotplug_uevent_v2(struct mtk_dp *mtk_dp)
 {
 	if (mtk_dp->drm_dev) {
-		dev_dbg(mtk_dp->dev, "notify drm framework hotplug event\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] notify drm framework hotplug event\n");
 		drm_helper_hpd_irq_event(mtk_dp->drm_dev);
 	} else {
-		dev_dbg(mtk_dp->dev, "there is no drm dev\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] there is no drm dev\n");
 	}
 }
 
@@ -3931,7 +3950,7 @@ static void mtk_dp_hpd_interrupt_clr_v2(struct mtk_dp *mtk_dp, u16 status)
 	WRITE_2BYTE_MASK(mtk_dp, REG_3668_AUX_TX_P0, status, status);
 	WRITE_2BYTE_MASK(mtk_dp, REG_3668_AUX_TX_P0, 0, status);
 
-	dev_dbg(mtk_dp->dev, "HPD ISR status:0x%x\n", mtk_dp_hpd_get_irq_status_v2(mtk_dp));
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD ISR status:0x%x\n", mtk_dp_hpd_get_irq_status_v2(mtk_dp));
 }
 
 static void mtk_dp_hpd_interrupt_enable_v2(struct mtk_dp *mtk_dp, bool enable)
@@ -4174,7 +4193,7 @@ static void mtk_dp_hdcp_disable_handle(struct work_struct *data)
 	if (mtk_dp->hdcp_info.auth_status == AUTH_ZERO)
 		goto end;
 
-	dev_dbg(mtk_dp->dev, "[HDCP] disable HDCP\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [HDCP] disable HDCP\n");
 
 	if (mtk_dp->hdcp_info.auth_version == HDCP_VERSION_2X)
 		mtk_dp_hdcp2x_disable(&mtk_dp->hdcp_info);
@@ -4275,7 +4294,7 @@ static void mtk_dp_hdcp_enable_handle(struct work_struct *data)
 	if (mtk_dp->hdcp_info.auth_status == AUTH_PASS)
 		goto end;
 
-	dev_dbg(mtk_dp->dev, "[HDCP] start HDCP work\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [HDCP] start HDCP work\n");
 
 	mtk_dp_hdcp_get_info(mtk_dp);
 
@@ -4300,8 +4319,8 @@ end:
 void mtk_dp_hdcp_enable(struct mtk_dp *mtk_dp)
 {
 	if (!mtk_dp->training_info.cable_plug_in || !mtk_dp->dp_ready) {
-		dev_dbg(mtk_dp->dev, "[HDCP] cable_plug_in:%d, dp_ready:%d",
-		       mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [HDCP] cable_plug_in:%d, dp_ready:%d",
+			    mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
 		return;
 	}
 
@@ -4341,11 +4360,12 @@ static void mtk_dp_hdcp_prop_work(struct work_struct *work)
 		/* only update between ENABLED/DESIRED */
 		if (mtk_dp->con_state[encoder_id].content_protection !=
 			DRM_MODE_CONTENT_PROTECTION_UNDESIRED) {
-			dev_dbg(mtk_dp->dev, "[HDCP][%d] con:%d, cp:%d, ct:%d, status:%d, version:%d\n",
-				encoder_id, con_id,
-				mtk_dp->con_state[encoder_id].content_protection,
-				mtk_dp->con_state[encoder_id].content_protection,
-				mtk_dp->hdcp_info.auth_status, mtk_dp->hdcp_info.auth_version);
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] [HDCP][%d] con:%d, cp:%d, ct:%d, status:%d, version:%d\n",
+				    encoder_id, con_id,
+				    mtk_dp->con_state[encoder_id].content_protection,
+				    mtk_dp->con_state[encoder_id].content_protection,
+				    mtk_dp->hdcp_info.auth_status, mtk_dp->hdcp_info.auth_version);
 
 			drm_hdcp_update_content_protection(&mtk_dp->mtk_con[con_id]->connector, update_cp);
 		}
@@ -4361,10 +4381,11 @@ void mtk_dp_hdcp_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 
 	mutex_lock(&mtk_dp->hdcp_mutex);
 
-	dev_dbg(mtk_dp->dev, "[HDCP][%d] atomic check, [cp ct]:old[%d %d], new[%d %d]\n", id,
-		mtk_dp->con_state[id].content_protection,
-		mtk_dp->con_state[id].hdcp_content_type,
-		state->content_protection, state->hdcp_content_type);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [HDCP][%d] atomic check, [cp ct]:old[%d %d], new[%d %d]\n", id,
+		    mtk_dp->con_state[id].content_protection,
+		    mtk_dp->con_state[id].hdcp_content_type,
+		    state->content_protection, state->hdcp_content_type);
 
 	memcpy(&mtk_dp->con_state[id], state, sizeof(struct drm_connector_state));
 
@@ -4412,7 +4433,7 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 	}
 
 end:
-	dev_dbg(mtk_dp->dev, "dsc:%d, ret:%d\n", *dsc, ret);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] dsc:%d, ret:%d\n", *dsc, ret);
 	return ret;
 }
 
@@ -4438,11 +4459,17 @@ static void mtk_dp_encoder_mode_set_v2(struct drm_encoder *encoder,
 
 	drm_mode_copy(&mtk_dp->mode[encoder_id], adjusted);
 
-	dev_dbg(mtk_dp->dev, "encoder[%d] mode set, HV tt:%d %d, HV act:%d %d, fps:%d, clk:%d\n",
-		encoder_id,
-		mtk_dp->mode[encoder_id].htotal, mtk_dp->mode[encoder_id].vtotal,
-		mtk_dp->mode[encoder_id].hdisplay, mtk_dp->mode[encoder_id].vdisplay,
-		drm_mode_vrefresh(&mtk_dp->mode[encoder_id]), mtk_dp->mode[encoder_id].clock);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] encoder[%d] SST dump timing info, clock:%d, "
+		    "hdisplay:%d, hsync_start:%d, hsync_end:%d, "
+		    "htotal:%d, hskew:%d, vdisplay:%d, "
+		    "vsync_start:%d, vsync_end:%d, vtotal:%d, "
+		    "vscan:%d, flags:%d\n",
+		    encoder_id, mtk_dp->mode[encoder_id].clock,
+		    mtk_dp->mode[encoder_id].hdisplay, mtk_dp->mode[encoder_id].hsync_start, mtk_dp->mode[encoder_id].hsync_end,
+		    mtk_dp->mode[encoder_id].htotal, mtk_dp->mode[encoder_id].hskew, mtk_dp->mode[encoder_id].vdisplay,
+		    mtk_dp->mode[encoder_id].vsync_start, mtk_dp->mode[encoder_id].vsync_end, mtk_dp->mode[encoder_id].vtotal,
+		    mtk_dp->mode[encoder_id].vscan, mtk_dp->mode[encoder_id].flags);
 
 	bridge = list_first_entry_or_null(&encoder->bridge_chain,
 					  struct drm_bridge, chain_node);
@@ -4450,10 +4477,11 @@ static void mtk_dp_encoder_mode_set_v2(struct drm_encoder *encoder,
 		bridge_state = drm_priv_to_bridge_state(bridge->base.state);
 		out_bus_format = bridge_state->output_bus_cfg.format;
 
-		dev_dbg(mtk_dp->dev, "encoder[%d] input format 0x%04x, output format 0x%04x\n",
-			encoder_id,
-			bridge_state->input_bus_cfg.format,
-			bridge_state->output_bus_cfg.format);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] encoder[%d] input format 0x%04x, output format 0x%04x\n",
+			    encoder_id,
+			    bridge_state->input_bus_cfg.format,
+			    bridge_state->output_bus_cfg.format);
 
 		if (out_bus_format == MEDIA_BUS_FMT_YUYV8_1X16)
 			mtk_dp->info[encoder_id].format = DP_PIXELFORMAT_YUV422;
@@ -4487,7 +4515,7 @@ static void mtk_dp_encoder_disable_v2(struct drm_encoder *encoder)
 
 	mtk_dp = mtk_con->mtk_dp;
 
-	dev_dbg(mtk_dp->dev, "encoder[%d] disable", mtk_con->encoder_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder[%d] disable", mtk_con->encoder_id);
 
 	mtk_dp_video_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
 	mtk_dp_audio_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
@@ -4511,12 +4539,12 @@ static void mtk_dp_encoder_enable_v2(struct drm_encoder *encoder)
 
 	mtk_dp = mtk_con->mtk_dp;
 
-	dev_dbg(mtk_dp->dev, "encoder[%d] enable", mtk_con->encoder_id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder[%d] enable", mtk_con->encoder_id);
 
 	if (!mtk_dp->training_info.cable_plug_in || !mtk_dp->dp_ready) {
-		dev_dbg(mtk_dp->dev, "encoder[%d] cable_plug_in:%d, dp_ready:%d",
-			mtk_con->encoder_id,
-			mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] encoder[%d] cable_plug_in:%d, dp_ready:%d",
+			    mtk_con->encoder_id,
+			    mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
 		return;
 	}
 
@@ -4540,15 +4568,15 @@ static void mtk_dp_encoder_enable_v2(struct drm_encoder *encoder)
 		       sizeof(mtk_dp->info[DP_ENCODER_ID_0].audio_cur_cfg));
 	}
 
-	dev_dbg(mtk_dp->dev, "pattern_gen:%d, audio_enable:%d\n",
-		mtk_dp->info[DP_ENCODER_ID_0].pattern_gen, mtk_dp->audio_enable);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pattern_gen:%d, audio_enable:%d\n",
+		    mtk_dp->info[DP_ENCODER_ID_0].pattern_gen, mtk_dp->audio_enable);
 
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
 
 	/* HDCP */
-	dev_dbg(mtk_dp->dev, "hdcp_content_type:%d, content protection: %d",
-		mtk_dp->con_state[DP_SST_ENCODER_PORT].hdcp_content_type,
-		mtk_dp->con_state[DP_SST_ENCODER_PORT].content_protection);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hdcp_content_type:%d, content protection: %d",
+		    mtk_dp->con_state[DP_SST_ENCODER_PORT].hdcp_content_type,
+		    mtk_dp->con_state[DP_SST_ENCODER_PORT].content_protection);
 	if (mtk_dp->con_state[DP_SST_ENCODER_PORT].content_protection ==
 		DRM_MODE_CONTENT_PROTECTION_DESIRED)
 		mtk_dp_hdcp_enable(mtk_dp);
@@ -4589,7 +4617,7 @@ static enum drm_connector_status mtk_dp_con_detect_v2
 		dp_mode = drm_dp_read_mst_cap(&mtk_dp->aux, mtk_dp->rx_cap);
 		if (dp_mode == DRM_DP_MST) {
 			if (!mtk_dp->mst_enable && mtk_dp->dp_ready) {
-				dev_dbg(mtk_dp->dev, "support MST\n");
+				drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] support MST\n");
 				mtk_dp->mst_enable = true;
 
 				mtk_dp_mst_drv_prepare(mtk_dp);
@@ -4598,7 +4626,7 @@ static enum drm_connector_status mtk_dp_con_detect_v2
 		}
 
 		if (mtk_dp->mst_enable) {
-			dev_dbg(mtk_dp->dev, "support SST\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] support SST\n");
 			mtk_dp_mst_drv_unprepare(mtk_dp);
 			mtk_dp->mst_enable = false;
 		}
@@ -4608,11 +4636,12 @@ static enum drm_connector_status mtk_dp_con_detect_v2
 		ret = connector_status_connected;
 
 end:
-	dev_dbg(mtk_dp->dev, "connector[%d], plug in:%d, sink count:%d, mst:%d, detect:%d",
-		mtk_dp_con_id(mtk_dp, mtk_con),
-		mtk_dp->training_info.cable_plug_in,
-		mtk_dp->training_info.sink_count,
-		mtk_dp->mst_enable, ret);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] connector[%d], plug in:%d, sink count:%d, mst:%d, detect:%d",
+		    mtk_dp_con_id(mtk_dp, mtk_con),
+		    mtk_dp->training_info.cable_plug_in,
+		    mtk_dp->training_info.sink_count,
+		    mtk_dp->mst_enable, ret);
 	return ret;
 }
 
@@ -4622,7 +4651,7 @@ static void mtk_dp_con_destroy_v2(struct drm_connector *connector)
 	struct mtk_dp *mtk_dp = mtk_con->mtk_dp;
 	int id =  mtk_dp_con_id(mtk_dp, mtk_con);
 
-	dev_dbg(mtk_dp->dev, "[%d]\n", id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d]\n", id);
 
 	if (id < 0)
 		return;
@@ -4654,7 +4683,7 @@ static void mtk_dp_con_early_unregister_v2(struct drm_connector *connector)
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
-	dev_dbg(mtk_dp->dev, "[DP] con early unregister\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] con early unregister\n");
 }
 
 static const struct drm_connector_funcs mtk_dp_con_funcs = {
@@ -4681,21 +4710,23 @@ static enum drm_mode_status mtk_dp_con_mode_valid_v2(struct drm_connector *conne
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
 
-	dev_dbg(mtk_dp->dev, "[%d] sst Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d, YCBCR422:%d\n",
-		mtk_con->encoder_id, mode->htotal, mode->vtotal,
-		mode->hdisplay, mode->vdisplay,
-		drm_mode_vrefresh(mode), mode->clock,
-		connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR422);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [%d] sst Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d, YCBCR422:%d\n",
+		    mtk_con->encoder_id, mode->htotal, mode->vtotal,
+		    mode->hdisplay, mode->vdisplay,
+		    drm_mode_vrefresh(mode), mode->clock,
+		    connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR422);
 
 	bpp = connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR422 ? 16 : 24;
 
 	mode_status = mtk_dp_check_mode_v2(mtk_dp, mode, bpp, &dsc);
 
-	dev_dbg(mtk_dp->dev, "[%d] sst status:%d, dsc:%d, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
-		mtk_con->encoder_id, mode_status, dsc,
-		mode->htotal, mode->vtotal,
-		mode->hdisplay, mode->vdisplay,
-		drm_mode_vrefresh(mode), mode->clock);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] [%d] sst status:%d, dsc:%d, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d, clk:%d\n",
+		    mtk_con->encoder_id, mode_status, dsc,
+		    mode->htotal, mode->vtotal,
+		    mode->hdisplay, mode->vdisplay,
+		    drm_mode_vrefresh(mode), mode->clock);
 
 	return mode_status;
 }
@@ -4713,10 +4744,10 @@ static int mtk_dp_con_get_modes_v2(struct drm_connector *connector)
 	mtk_dp = mtk_con->mtk_dp;
 
 	if (!mtk_con->edid) {
-		dev_dbg(mtk_dp->dev, "get edid\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] get edid\n");
 		mtk_con->edid = drm_get_edid(connector, &mtk_dp->aux.ddc);
 		if (!mtk_con->edid) {
-			dev_err(mtk_dp->dev, "Failed to read EDID\n");
+			dev_err(mtk_dp->dev, "[DPTX] Failed to read EDID\n");
 			goto fail;
 		}
 	}
@@ -4730,14 +4761,14 @@ static int mtk_dp_con_get_modes_v2(struct drm_connector *connector)
 
 	ret = drm_connector_update_edid_property(&mtk_con->connector, mtk_con->edid);
 	if (ret) {
-		dev_err(mtk_dp->dev, "Failed to update EDID property: %d\n", ret);
+		dev_err(mtk_dp->dev, "[DPTX] Failed to update EDID property: %d\n", ret);
 		goto fail;
 	}
 
 	num_modes = drm_add_edid_modes(&mtk_con->connector, mtk_con->edid);
 
 fail:
-	dev_dbg(mtk_dp->dev, "num_modes:%d\n", num_modes);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] num_modes:%d\n", num_modes);
 	return num_modes;
 }
 
@@ -4770,17 +4801,17 @@ static struct mtk_dp_con *mtk_dp_create_connector_v2(struct mtk_dp *mtk_dp)
 	bridge = devm_drm_of_get_bridge(mtk_dp->dev, mtk_dp->dev->of_node,
 					DP_SST_ENCODER_PORT, DP_ENCODER_ENDPOINT);
 	if (IS_ERR(bridge)) {
-		dev_dbg(mtk_dp->dev, "create con, can not find bridge[%d, %d]",
-			DP_SST_ENCODER_PORT, DP_ENCODER_ENDPOINT);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] create con, can not find bridge[%d, %d]",
+			    DP_SST_ENCODER_PORT, DP_ENCODER_ENDPOINT);
 		return NULL;
 	}
 	if (!bridge->encoder) {
-		dev_dbg(mtk_dp->dev, "create con, bridge have no encoder[%d, %d]",
-			DP_SST_ENCODER_PORT, DP_ENCODER_ENDPOINT);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] create con, bridge have no encoder[%d, %d]",
+			    DP_SST_ENCODER_PORT, DP_ENCODER_ENDPOINT);
 		return NULL;
 	}
-	dev_dbg(mtk_dp->dev, "create con, found dp_intf[%d] bridge node:%pOF\n",
-		DP_SST_ENCODER_PORT, bridge->of_node);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] create con, found dp_intf[%d] bridge node:%pOF\n",
+		    DP_SST_ENCODER_PORT, bridge->of_node);
 
 	mtk_con = kzalloc(sizeof(*mtk_con), GFP_KERNEL);
 	if (!mtk_con)
@@ -4791,7 +4822,8 @@ static struct mtk_dp_con *mtk_dp_create_connector_v2(struct mtk_dp *mtk_dp)
 	ret = drm_connector_init(mtk_dp->drm_dev, &mtk_con->connector,
 				 &mtk_dp_con_funcs, DRM_MODE_CONNECTOR_DisplayPort);
 	if (ret) {
-		dev_dbg(mtk_dp->dev, "create con, failed to init connector:%d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] create con, failed to init connector:%d\n", ret);
 		kfree(mtk_con);
 		return NULL;
 	}
@@ -4806,7 +4838,8 @@ static struct mtk_dp_con *mtk_dp_create_connector_v2(struct mtk_dp *mtk_dp)
 
 	ret = drm_connector_attach_encoder(&mtk_con->connector, bridge->encoder);
 	if (ret) {
-		dev_dbg(mtk_dp->dev, "create con, failed to attach encoder:%d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] create con, failed to attach encoder:%d\n", ret);
 		kfree(mtk_con);
 		return NULL;
 	}
@@ -4822,7 +4855,8 @@ static struct mtk_dp_con *mtk_dp_create_connector_v2(struct mtk_dp *mtk_dp)
 
 	ret = drm_connector_register(&mtk_con->connector);
 	if (ret) {
-		dev_dbg(mtk_dp->dev, "create con, failed to register connector:%d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] create con, failed to register connector:%d\n", ret);
 		kfree(mtk_con);
 		return NULL;
 	}
@@ -4830,7 +4864,7 @@ static struct mtk_dp_con *mtk_dp_create_connector_v2(struct mtk_dp *mtk_dp)
 	drm_encoder_helper_add(bridge->encoder, &mtk_dp_encoder_helper_funcs);
 
 	mtk_dp->mtk_con[DP_FIRST_CON] = mtk_con;
-	dev_dbg(mtk_dp->dev, "create con, create mtk connector[%d]\n", DP_FIRST_CON);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] create con, create mtk connector[%d]\n", DP_FIRST_CON);
 
 	return mtk_dp->mtk_con[DP_FIRST_CON];
 }
@@ -4849,14 +4883,14 @@ static int mtk_dp_bridge_attach_v2(struct drm_bridge *bridge,
 	mtk_dp->drm_dev = bridge->dev;
 
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)) {
-		dev_dbg(mtk_dp->dev, "Driver does not provide a connector");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Driver does not provide a connector");
 		return -EINVAL;
 	}
 
 	mtk_dp->aux.drm_dev = bridge->dev;
 	ret = drm_dp_aux_register(&mtk_dp->aux);
 	if (ret) {
-		dev_dbg(mtk_dp->dev, "failed to register DP AUX channel:%d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] failed to register DP AUX channel:%d\n", ret);
 		return ret;
 	}
 
@@ -4942,16 +4976,16 @@ set_fmts:
 	else
 		input_fmts[0] = fmt;
 
-	dev_dbg(mtk_dp->dev, "get_input_bus_fmts, fmt:%s",
-		(!use_platform_format) ?
-		(input_fmts[0] == MEDIA_BUS_FMT_YUYV8_1X16) ?
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] get_input_bus_fmts, fmt:%s",
+		    (!use_platform_format) ?
+		    (input_fmts[0] == MEDIA_BUS_FMT_YUYV8_1X16) ?
 			"MEDIA_BUS_FMT_YUYV8_1X16" : "MEDIA_BUS_FMT_RGB888_1X24" :
-		"mt8196_input_fmts");
+			"mt8196_input_fmts");
 	return input_fmts;
 
 end:
 	*num_input_fmts = 0;
-	dev_err(mtk_dp->dev, "get_input_bus_fmts, return NULL");
+	dev_err(mtk_dp->dev, "[DPTX] get_input_bus_fmts, return NULL");
 	return NULL;
 }
 
@@ -5125,12 +5159,12 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 		loop++;
 
 		if (!mtk_dp->training_info.cable_plug_in) {
-			dev_dbg(mtk_dp->dev, "Training Abort, HPD is low\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Training Abort, HPD is low\n");
 			return DP_LT_NONE;
 		}
 
 		if (mtk_dp->training_info.cr_done == 0x0) {
-			dev_dbg(mtk_dp->dev, "CR Training START\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] CR Training START\n");
 			mtk_dp_set_scramble_v2(mtk_dp, false);
 
 			if (control == 0x0)	{
@@ -5159,7 +5193,7 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 			}
 
 			if (drm_dp_clock_recovery_ok(dpcd_202, lane_count)) {
-				dev_dbg(mtk_dp->dev, "CR Training Success\n");
+				drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] CR Training Success\n");
 
 				mtk_dp->training_info.cr_done = true;
 
@@ -5178,10 +5212,10 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 				}
 
 				cr_loop++;
-				dev_dbg(mtk_dp->dev, "CR Training Fail\n");
+				drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] CR Training Fail\n");
 			}
 		} else if (mtk_dp->training_info.eq_done == 0x0) {
-			dev_dbg(mtk_dp->dev, "EQ Training START\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] EQ Training START\n");
 
 			if (control == 0x1) {
 				if (mtk_dp->training_info.tps4_support) {
@@ -5222,15 +5256,16 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 			}
 
 			if (drm_dp_channel_eq_ok(dpcd_202, lane_count)) {
-				dev_dbg(mtk_dp->dev, "EQ Training Success\n");
+				drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] EQ Training Success\n");
 				if (dpcd_202[2] & 0x1) {
 					mtk_dp->training_info.eq_done = true;
-					dev_dbg(mtk_dp->dev, "Inter-lane skew Success\n");
+					drm_dbg_kms(mtk_dp->drm_dev,
+						    "[DPTX] Inter-lane skew Success\n");
 					break;
 				}
 			}
 
-			dev_dbg(mtk_dp->dev, "EQ Training Fail\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] EQ Training Fail\n");
 			eq_loop++;
 			if (dpcd_206 == dpcd_202[0x4])
 				loop++;
@@ -5240,7 +5275,7 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 
 		mtk_dp_training_check_swing_pre_v2(mtk_dp, lane_count, dpcd_202,
 						   dpcd_buffer, true, false);
-		dev_dbg(mtk_dp->dev, "retry_times:%d, loop:%d\n", retry_times, loop);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] retry_times:%d, loop:%d\n", retry_times, loop);
 	} while ((loop < DP_LT_RETRY_LIMIT) &&
 		 (cr_loop < DP_LT_MAX_CR_LOOP) &&
 		 (eq_loop < DP_LT_MAX_EQ_LOOP));
@@ -5256,13 +5291,14 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 		mtk_dp_set_scramble_v2(mtk_dp, true);
 		mtk_dp_set_enhanced_frame_mode_v2(mtk_dp, ENABLE_DP_EF_MODE);
 
-		dev_dbg(mtk_dp->dev, "Training PASS, link rate:0x%x, lane count:%d\n",
-			mtk_dp->training_info.link_rate,
-			mtk_dp->training_info.link_lane_count);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] Training PASS, link rate:0x%x, lane count:%d\n",
+			    mtk_dp->training_info.link_rate,
+			    mtk_dp->training_info.link_lane_count);
 		return DP_LT_PASS;
 	}
 
-	dev_err(mtk_dp->dev, "Training Fail\n");
+	dev_err(mtk_dp->dev, "[DPTX] Training Fail\n");
 
 	res = mtk_dp_check_training_res_v2(mtk_dp, dpcd_202[0]);
 
@@ -5284,7 +5320,7 @@ static int mtk_dp_set_training_start_v2(struct mtk_dp *mtk_dp)
 
 	link_rate = mtk_dp->rx_cap[1];
 	lane_count = mtk_dp->rx_cap[2] & GENMASK(4, 0);
-	dev_dbg(mtk_dp->dev, "RX support link rate:0x%x, lane count:%d",
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] RX support link rate:0x%x, lane count:%d",
 		link_rate, lane_count);
 
 	link_rate = (link_rate >= max_link_rate) ?
@@ -5316,14 +5352,14 @@ static int mtk_dp_set_training_start_v2(struct mtk_dp *mtk_dp)
 
 	do {
 		if (!mtk_dp->training_info.cable_plug_in) {
-			dev_dbg(mtk_dp->dev, "plug out, stop training");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] plug out, stop training");
 			return DP_RET_PLUG_OUT;
 		}
 
 		mtk_dp->training_info.cr_done = false;
 		mtk_dp->training_info.eq_done = false;
 
-		dev_dbg(mtk_dp->dev, "training with link rate:0x%x, lane count:%d",
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] training with link rate:0x%x, lane count:%d",
 			link_rate, lane_count);
 
 		mtk_dp_training_flow_v2(mtk_dp, link_rate, lane_count);
@@ -5388,7 +5424,7 @@ static int mtk_dp_training_handle_v2(struct mtk_dp *mtk_dp)
 		if (drm_dp_sink_supports_fec(mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap))
 			mtk_dp_fec_enable_v2(mtk_dp);
 	} else {
-		dev_err(mtk_dp->dev, "Handle Training Fail 6 times\n");
+		dev_err(mtk_dp->dev, "[DPTX] Handle Training Fail 6 times\n");
 	}
 
 	return ret;
@@ -5448,10 +5484,10 @@ static int mtk_dp_audio_get_eld_v2(struct device *dev, void *data, uint8_t *buf,
 			if (i < 0)
 				continue;
 
-			dev_dbg(mtk_dp->dev,
-				"MST, enc[%d] con[%d], video enable:%d, detect monitor:%d\n",
-				encoder_id, i, mtk_dp->mtk_con[i]->video_enable,
-				mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor);
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] MST, enc[%d] con[%d], video enable:%d, detect monitor:%d\n",
+				    encoder_id, i, mtk_dp->mtk_con[i]->video_enable,
+				    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor);
 
 			if (mtk_dp->mtk_con[i]->video_enable &&
 			    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor) {
@@ -5529,10 +5565,12 @@ static bool mtk_dp_link_ok_v2(struct mtk_dp *mtk_dp,
 	if (ok)
 		return true;
 
-	dev_dbg(mtk_dp->dev, "ln0_1:0x%x ln2_3:0x%x align:0x%x sink:0x%x adj_req0_1:0x%x adj_req2_3:0x%x\n",
-		link_status[0], link_status[1], link_status[2],
-		link_status[3], link_status[4], link_status[5]);
-	dev_dbg(mtk_dp->dev, "%s link not ok, retraining\n", uhbr ? "128b/132b" : "8b/10b");
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] ln0_1:0x%x ln2_3:0x%x align:0x%x sink:0x%x adj_req0_1:0x%x adj_req2_3:0x%x\n",
+		    link_status[0], link_status[1], link_status[2],
+		    link_status[3], link_status[4], link_status[5]);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] %s link not ok, retraining\n", uhbr ? "128b/132b" : "8b/10b");
 
 	return false;
 }
@@ -5544,7 +5582,7 @@ static bool mtk_dp_mst_link_status(struct mtk_dp *mtk_dp)
 
 	if (drm_dp_dpcd_read(&mtk_dp->aux, DP_LANE0_1_STATUS_ESI, link_status,
 			     esi_link_status_size) != esi_link_status_size) {
-		dev_dbg(mtk_dp->dev, "fail to read link status\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] fail to read link status\n");
 		return false;
 	}
 
@@ -5565,11 +5603,11 @@ static bool mtk_dp_mst_hpd_event_handler(struct mtk_dp *mtk_dp)
 
 		rc = drm_dp_dpcd_read(&mtk_dp->aux, DP_SINK_COUNT_ESI, esi, 4);
 		if (rc != 4) {
-			dev_err(mtk_dp->dev, "fail to get ESI\n");
+			dev_err(mtk_dp->dev, "[DPTX] fail to get ESI\n");
 			link_ok = false;
 			break;
 		}
-		dev_dbg(mtk_dp->dev, "DPRX ESI: %4ph\n", esi);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DPRX ESI: %4ph\n", esi);
 
 		/* check link fail */
 		if (link_ok && esi[3] & LINK_STATUS_CHANGED) {
@@ -5581,7 +5619,7 @@ static bool mtk_dp_mst_hpd_event_handler(struct mtk_dp *mtk_dp)
 		drm_dp_mst_hpd_irq_handle_event(&mtk_dp->mgr, esi, ack, &handled);
 
 		if (esi[1] & DP_CP_IRQ) {
-			dev_dbg(mtk_dp->dev, "DP CP IRQ\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP CP IRQ\n");
 			ack[1] |= DP_CP_IRQ;
 		}
 
@@ -5594,7 +5632,7 @@ static bool mtk_dp_mst_hpd_event_handler(struct mtk_dp *mtk_dp)
 				break;
 		}
 		if (retry == ACK_ESI_RETRY_TIMES)
-			dev_err(mtk_dp->dev, "fail to ack ESI\n");
+			dev_err(mtk_dp->dev, "[DPTX] fail to ack ESI\n");
 
 		if (ack[1] & (DP_DOWN_REP_MSG_RDY | DP_UP_REQ_MSG_RDY))
 			drm_dp_mst_hpd_irq_send_new_request(&mtk_dp->mgr);
@@ -5603,7 +5641,7 @@ static bool mtk_dp_mst_hpd_event_handler(struct mtk_dp *mtk_dp)
 	}
 
 	if (!link_ok) {
-		dev_err(mtk_dp->dev, "mst link fail, training again\n");
+		dev_err(mtk_dp->dev, "[DPTX] mst link fail, training again\n");
 		mtk_dp->dp_ready = false;
 		mtk_dp_training_handle_v2(mtk_dp);
 		return false;
@@ -5626,13 +5664,13 @@ static void mtk_dp_check_device_service_irq_v2(struct mtk_dp *mtk_dp)
 	drm_dp_dpcd_writeb(&mtk_dp->aux, DP_DEVICE_SERVICE_IRQ_VECTOR, val);
 
 	if (val & DP_AUTOMATED_TEST_REQUEST)
-		dev_dbg(mtk_dp->dev, "DP_AUTOMATED_TEST_REQUEST\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP_AUTOMATED_TEST_REQUEST\n");
 
 	if (val & DP_CP_IRQ)
-		dev_dbg(mtk_dp->dev, "DP_CP_IRQ\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] DP_CP_IRQ\n");
 
 	if (val & DP_SINK_SPECIFIC_IRQ)
-		dev_dbg(mtk_dp->dev, "Sink specific irq unhandled\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Sink specific irq unhandled\n");
 }
 
 static bool mtk_dp_check_link_service_irq_v2(struct mtk_dp *mtk_dp)
@@ -5652,7 +5690,7 @@ static bool mtk_dp_check_link_service_irq_v2(struct mtk_dp *mtk_dp)
 		return reprobe_needed;
 
 	if (val & HDMI_LINK_STATUS_CHANGED)
-		dev_dbg(mtk_dp->dev, "link status changed!\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] link status changed!\n");
 
 	return reprobe_needed;
 }
@@ -5681,7 +5719,7 @@ static bool mtk_dp_hpd_event_handler_v2(struct mtk_dp *mtk_dp)
 	sink_cnt = mtk_dp_get_sink_count_v2(mtk_dp);
 
 	if (sink_cnt == 0 || sink_cnt != mtk_dp->training_info.sink_count) {
-		dev_dbg(mtk_dp->dev, "sink count change:%d\n", sink_cnt);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] sink count change:%d\n", sink_cnt);
 		mtk_dp->dp_ready = false;
 		mdelay(200);
 		return false;
@@ -5694,7 +5732,7 @@ static bool mtk_dp_hpd_event_handler_v2(struct mtk_dp *mtk_dp)
 		link_ok = false;
 
 	if (!link_ok) {
-		dev_err(mtk_dp->dev, "link fail, training again\n");
+		dev_err(mtk_dp->dev, "[DPTX] link fail, training again\n");
 		mtk_dp->dp_ready = false;
 		mtk_dp_training_handle_v2(mtk_dp);
 		return false;
@@ -5731,14 +5769,17 @@ static void mtk_dp_init_property_v2(struct mtk_dp *mtk_dp)
 		bridge = devm_drm_of_get_bridge(mtk_dp->dev,
 						mtk_dp->dev->of_node, i, DP_ENCODER_ENDPOINT);
 		if (IS_ERR(bridge)) {
-			dev_dbg(mtk_dp->dev, "find encoder, can not find bridge[%d, %d]", i, 0);
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] find encoder, can not find bridge[%d, %d]", i, 0);
 			continue;
 		}
 		if (!bridge->encoder) {
-			dev_dbg(mtk_dp->dev, "find encoder, bridge have no encoder[%d, %d]", i, 0);
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] find encoder, bridge have no encoder[%d, %d]", i, 0);
 			continue;
 		}
-		dev_dbg(mtk_dp->dev, "find encoder, found dp_intf[%d] bridge node:%pOF\n", i, bridge->of_node);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] find encoder, found dp_intf[%d] bridge node:%pOF\n", i, bridge->of_node);
 
 		snprintf(result, sizeof(result), "%s%d", dsc_enable, i);
 		prop = mtk_dp_find_property_v2(bridge->encoder,
@@ -5746,7 +5787,7 @@ static void mtk_dp_init_property_v2(struct mtk_dp *mtk_dp)
 		if (prop)
 			mtk_dp->prop_dsc_enable[i] = prop;
 		else
-			dev_err(mtk_dp->dev, "[%d] fail to find property dp_dsc_enable", i);
+			dev_err(mtk_dp->dev, "[DPTX] [%d] fail to find property dp_dsc_enable", i);
 
 		snprintf(result, sizeof(result), "%s%d", dsc_cfg, i);
 		prop = mtk_dp_find_property_v2(bridge->encoder,
@@ -5754,7 +5795,7 @@ static void mtk_dp_init_property_v2(struct mtk_dp *mtk_dp)
 		if (prop)
 			mtk_dp->prop_dsc_cfg[i] = prop;
 		else
-			dev_err(mtk_dp->dev, "[%d] fail to find property dp_dsc_cfg", i);
+			dev_err(mtk_dp->dev, "[DPTX] [%d] fail to find property dp_dsc_cfg", i);
 	}
 
 	mtk_dp->init_property = true;
@@ -5782,15 +5823,16 @@ static irqreturn_t mtk_dp_hpd_event_thread_v2(int hpd, void *dev)
 	if (mtk_dp->training_info.phy_status & HPD_INT_EVNET)
 		mtk_dp->training_info.phy_status &= ~HPD_INT_EVNET;
 
-	dev_dbg(mtk_dp->dev, "cable_state_change:0x%x, phy_status:0x%x\n", cable_state_change, phy_status);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] cable_state_change:0x%x, phy_status:0x%x\n",
+		    cable_state_change, phy_status);
 
 	if (cable_state_change) {
 		if (!mtk_dp->training_info.cable_plug_in) {
-			dev_dbg(mtk_dp->dev, "HPD_DISCON\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD_DISCON\n");
 			mtk_dp_hotplug_uevent_v2(mtk_dp);
 			mtk_dp_disconnect_release_v2(mtk_dp);
 		} else {
-			dev_dbg(mtk_dp->dev, "HPD_CON\n");
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD_CON\n");
 			mtk_dp_init_property_v2(mtk_dp);
 			mtk_dp_initial_setting_v2(mtk_dp);
 			mtk_dp_analog_power_on_v2(mtk_dp);
@@ -5825,7 +5867,7 @@ static irqreturn_t mtk_dp_hpd_event_thread_v2(int hpd, void *dev)
 	}
 
 end:
-	dev_dbg(mtk_dp->dev, "event thread done\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] event thread done\n");
 	return IRQ_HANDLED;
 }
 
@@ -5833,8 +5875,8 @@ static void mtk_dp_hpd_handle_in_isr_v2(struct mtk_dp *mtk_dp)
 {
 	bool current_hpd = mtk_dp_hpd_get_pin_level_v2(mtk_dp);
 
-	dev_dbg(mtk_dp->dev, "current_hpd:0x%x, phy_status:0x%x\n",
-		current_hpd, mtk_dp->training_info.phy_status);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] current_hpd:0x%x, phy_status:0x%x\n",
+		    current_hpd, mtk_dp->training_info.phy_status);
 
 	if (mtk_dp->training_info.phy_status == HPD_INITIAL_STATE)
 		return;
@@ -5865,7 +5907,7 @@ static void mtk_dp_hpd_handle_in_isr_v2(struct mtk_dp *mtk_dp)
 		mtk_dp->training_info.cable_state_change = true;
 		mtk_dp->need_debounce = true;
 
-		dev_dbg(mtk_dp->dev, "HPD_CON_ISR\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD_CON_ISR\n");
 	}
 
 	if (mtk_dp->training_info.phy_status & HPD_DISCONNECT) {
@@ -5875,12 +5917,12 @@ static void mtk_dp_hpd_handle_in_isr_v2(struct mtk_dp *mtk_dp)
 		mtk_dp->training_info.cable_state_change = true;
 		mtk_dp->need_debounce = true;
 
-		dev_dbg(mtk_dp->dev, "HPD_DISCON_ISR\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD_DISCON_ISR\n");
 	}
 
 	/* handle IRQ in thread */
 	if (mtk_dp->training_info.phy_status & HPD_INT_EVNET)
-		dev_dbg(mtk_dp->dev, "****** HPD_INT ******\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] ****** HPD_INT ******\n");
 }
 
 static irqreturn_t mtk_dp_hpd_event_v2(int hpd, void *dev)
@@ -5892,7 +5934,7 @@ static irqreturn_t mtk_dp_hpd_event_v2(int hpd, void *dev)
 
 	int_status = READ_4BYTE(mtk_dp, DP_TX_TOP_IRQ_STATUS);
 
-	dev_dbg(mtk_dp->dev, "int_status = 0x%x\n", int_status);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] int_status = 0x%x\n", int_status);
 
 	if (int_status & BIT(3))
 		WRITE_4BYTE_MASK(mtk_dp, DP_TX_TOP_IRQ_MASK, ENCODER_1_IRQ_MSK, ENCODER_1_IRQ_MSK);
@@ -5908,15 +5950,15 @@ static irqreturn_t mtk_dp_hpd_event_v2(int hpd, void *dev)
 
 		hw_status = mtk_dp_hpd_get_irq_status_v2(mtk_dp);
 		if (hw_status != 0)
-			dev_dbg(mtk_dp->dev, "hw status:0x%x\n", hw_status);
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hw status:0x%x\n", hw_status);
 
 		mtk_dp->training_info.phy_status |= hw_status;
 
 		mtk_dp_hpd_handle_in_isr_v2(mtk_dp);
 
 		if (mtk_dp->training_info.cable_state_change)
-			dev_dbg(mtk_dp->dev, "cable_state_change:0x%x, hw_status:%x\n",
-				mtk_dp->training_info.cable_state_change, hw_status);
+			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] cable_state_change:0x%x, hw_status:%x\n",
+				    mtk_dp->training_info.cable_state_change, hw_status);
 
 		if (hw_status)
 			mtk_dp_hpd_interrupt_clr_v2(mtk_dp, hw_status);
@@ -5942,12 +5984,12 @@ static int mtk_dp_dt_parse_pdata_v2(struct mtk_dp *mtk_dp,
 	u32 phy_params_dts[DP_PHY_REG_COUNT];
 
 	if (of_address_to_resource(dev->of_node, 0, &regs) != 0)
-		dev_dbg(mtk_dp->dev, "Missing reg[0] in %s node\n",
-			dev->of_node->full_name);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Missing reg[0] in %s node\n",
+			    dev->of_node->full_name);
 
 	if (of_address_to_resource(dev->of_node, 1, &regs) != 0)
-		dev_dbg(mtk_dp->dev, "Missing reg[1] in %s node\n",
-			dev->of_node->full_name);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Missing reg[1] in %s node\n",
+			    dev->of_node->full_name);
 
 	mtk_dp->regs = of_iomap(dev->of_node, 0);
 	mtk_dp->phyd_regs = of_iomap(dev->of_node, 1);
@@ -5957,7 +5999,8 @@ static int mtk_dp_dt_parse_pdata_v2(struct mtk_dp *mtk_dp,
 	ret = of_property_read_u32_array(dev->of_node, "dptx,phy_params",
 					 phy_params_dts, ARRAY_SIZE(phy_params_dts));
 	if (ret) {
-		dev_dbg(mtk_dp->dev, "get phy_params fail, use default val, ret:%d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] get phy_params fail, use default val, ret:%d\n", ret);
 		mtk_dp_phy_param_init_v2(mtk_dp,
 					 phy_params_int, ARRAY_SIZE(phy_params_int));
 	} else {
@@ -5967,18 +6010,18 @@ static int mtk_dp_dt_parse_pdata_v2(struct mtk_dp *mtk_dp,
 
 	vdisp_ao_node = of_parse_phandle(dev->of_node, "mediatek,vdisp-ao", 0);
 	if (!vdisp_ao_node) {
-		dev_dbg(dev, "mediatek,vdisp-ao property not found\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] mediatek,vdisp-ao property not found\n");
 		return 0;
 	}
 
 	vdisp_ao_pdev = of_find_device_by_node(vdisp_ao_node);
 	of_node_put(vdisp_ao_node);
 	if (WARN_ON(!vdisp_ao_pdev)) {
-		dev_err(dev, "vdisp-ao find pdev failed\n");
+		dev_err(dev, "[DPTX] vdisp-ao find pdev failed\n");
 		return -ENODEV;
 	}
 	mtk_dp->vdisp_ao_dev =  &vdisp_ao_pdev->dev;
-	dev_dbg(dev, "vdiso-ao get dev success\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] vdiso-ao get dev success\n");
 
 	return 0;
 }
@@ -6004,19 +6047,19 @@ static int mtk_dp_suspend_v2(struct device *dev)
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
 
 	if (!mtk_dp) {
-		dev_dbg(mtk_dp->dev, "[DP] suspend, dp not initial\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] suspend, dp not initial\n");
 		return 0;
 	}
 
 	if (mtk_dp->disp_state == DP_DISP_STATE_SUSPENDING ||
 	    mtk_dp->disp_state == DP_DISP_STATE_SUSPEND) {
-		dev_dbg(mtk_dp->dev, "[DP] have suspended and do nothing\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] have suspended and do nothing\n");
 		return 0;
 	}
 
 	mtk_dp->disp_state = DP_DISP_STATE_SUSPENDING;
 
-	dev_dbg(mtk_dp->dev, "[DP] suspend +\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] suspend +\n");
 
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, false);
 
@@ -6027,10 +6070,10 @@ static int mtk_dp_suspend_v2(struct device *dev)
 	clk_disable_unprepare(mtk_dp->pclk);
 
 	mtk_dp->disp_state = DP_DISP_STATE_SUSPEND;
-	dev_dbg(mtk_dp->dev, "pm_runtime_put_sync\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pm_runtime_put_sync\n");
 	pm_runtime_put_sync(mtk_dp->dev);
 
-	dev_dbg(mtk_dp->dev, "[DP] suspend -\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] suspend -\n");
 
 	return 0;
 }
@@ -6041,16 +6084,16 @@ static int mtk_dp_resume_v2(struct device *dev)
 	int ret = 0;
 
 	if (!mtk_dp) {
-		dev_dbg(mtk_dp->dev, "[DP] resume, dp not initial\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] resume, dp not initial\n");
 		return 0;
 	}
 
 	if (mtk_dp->disp_state == DP_DISP_STATE_RESUME) {
-		dev_dbg(mtk_dp->dev, "[DP] have resumed and do nothing\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] have resumed and do nothing\n");
 		return 0;
 	}
 
-	dev_dbg(mtk_dp->dev, "pm_runtime_get_sync\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pm_runtime_get_sync\n");
 	pm_runtime_get_sync(dev);
 	mtk_dp->disp_state = DP_DISP_STATE_RESUME;
 
@@ -6070,7 +6113,7 @@ static int mtk_dp_resume_v2(struct device *dev)
 
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, true);
 
-	dev_dbg(mtk_dp->dev, "[DP] resume done\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] resume done\n");
 
 	return 0;
 }
@@ -6082,9 +6125,10 @@ static int mtk_drm_dp_notifier_v2(struct notifier_block *notifier,
 	struct mtk_dp *mtk_dp = container_of(notifier, struct mtk_dp, notifier);
 	struct device *dev = mtk_dp->dev;
 
-	dev_dbg(mtk_dp->dev, "%s pm_event %lu dev %s usage_count %d nb priority %d\n",
-		__func__, pm_event, dev_name(dev), atomic_read(&dev->power.usage_count),
-		notifier->priority);
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] %s pm_event %lu dev %s usage_count %d nb priority %d\n",
+		    __func__, pm_event, dev_name(dev), atomic_read(&dev->power.usage_count),
+		    notifier->priority);
 
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
@@ -6105,14 +6149,16 @@ static int mtk_dp_pm_init_v2(struct mtk_dp *mtk_dp, struct platform_device *pdev
 	mtk_dp->genpd_dp_tx = dev_pm_domain_attach_by_name(dev, "pd_dp_tx");
 	if (IS_ERR_OR_NULL(mtk_dp->genpd_dp_tx)) {
 		ret = PTR_ERR(mtk_dp->genpd_dp_tx) ? : -ENODATA;
-		dev_dbg(mtk_dp->dev, "failed to attach pd_dp_tx pm-domain: %d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] failed to attach pd_dp_tx pm-domain: %d\n", ret);
 		return -ENODEV;
 	}
 
 	mtk_dp->genpd_dp_phy = dev_pm_domain_attach_by_name(dev, "pd_dp_phy");
 	if (IS_ERR_OR_NULL(mtk_dp->genpd_dp_phy)) {
 		ret = PTR_ERR(mtk_dp->genpd_dp_phy) ? : -ENODATA;
-		dev_dbg(mtk_dp->dev, "failed to attach pd_dp_phy pm-domain: %d\n", ret);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] failed to attach pd_dp_phy pm-domain: %d\n", ret);
 		return -ENODEV;
 	}
 
@@ -6120,7 +6166,7 @@ static int mtk_dp_pm_init_v2(struct mtk_dp *mtk_dp, struct platform_device *pdev
 						 DL_FLAG_PM_RUNTIME |
 						 DL_FLAG_STATELESS);
 	if (!mtk_dp->genpd_dl_dp_tx) {
-		dev_dbg(mtk_dp->dev, "failed to add dp tx link\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] failed to add dp tx link\n");
 		return -ENODEV;
 	}
 
@@ -6128,7 +6174,7 @@ static int mtk_dp_pm_init_v2(struct mtk_dp *mtk_dp, struct platform_device *pdev
 						  DL_FLAG_PM_RUNTIME |
 						  DL_FLAG_STATELESS);
 	if (!mtk_dp->genpd_dl_dp_phy) {
-		dev_dbg(mtk_dp->dev, "failed to add dp phy link\n");
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] failed to add dp phy link\n");
 		return -ENODEV;
 	}
 
@@ -6160,12 +6206,12 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 		return ret;
 
 	pm_runtime_enable(mtk_dp->dev);
-	dev_dbg(mtk_dp->dev, "pm_runtime_get_sync\n");
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pm_runtime_get_sync\n");
 	pm_runtime_get_sync(mtk_dp->dev);
 
 	irq_num = platform_get_irq(pdev, 0);
 	if (irq_num < 0) {
-		dev_dbg(mtk_dp->dev, "failed to request dp irq resource\n");
+		dev_err(mtk_dp->dev, "[DPTX] failed to request dp irq resource\n");
 		return -EPROBE_DEFER;
 	}
 
@@ -6182,7 +6228,7 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 
 		ret = mtk_dp_register_audio_driver_v2(dev);
 		if (ret) {
-			dev_dbg(mtk_dp->dev, "Failed to register audio driver: %d\n", ret);
+			dev_err(mtk_dp->dev, "[DPTX] Failed to register audio driver: %d\n", ret);
 			return ret;
 		}
 	}
@@ -6196,7 +6242,7 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 					IRQ_TYPE_LEVEL_HIGH, dev_name(&pdev->dev),
 					mtk_dp);
 	if (ret) {
-		dev_dbg(mtk_dp->dev, "failed to request mediatek dp irq\n");
+		dev_err(mtk_dp->dev, "[DPTX] failed to request mediatek dp irq\n");
 		return -EPROBE_DEFER;
 	}
 
@@ -6215,7 +6261,7 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&mtk_dp->check_work, mtk_dp_hdcp_check_work);
 	mtk_dp->hdcp_workqueue = create_workqueue("mtk_dp_hdcp_work");
 	if (!mtk_dp->hdcp_workqueue) {
-		dev_dbg(mtk_dp->dev, "failed to create hdcp work queue");
+		dev_err(mtk_dp->dev, "[DPTX] failed to create hdcp work queue");
 		return -ENOMEM;
 	}
 
@@ -6224,26 +6270,26 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	mtk_dp->pclk = devm_clk_get(mtk_dp->dev, "mux_dp");
 	if (IS_ERR(mtk_dp->pclk))
 		return dev_err_probe(dev, PTR_ERR(mtk_dp->pclk),
-				     "Failed to get pixel clock\n");
+				     "[DPTX] Failed to get pixel clock\n");
 	mtk_dp->pclk_src = devm_clk_get(mtk_dp->dev, "ck_26m");
 	if (IS_ERR(mtk_dp->pclk_src))
 		return dev_err_probe(dev, PTR_ERR(mtk_dp->pclk_src),
-				     "Failed to get pixel source clock\n");
+				     "[DPTX] Failed to get pixel source clock\n");
 
 	ret = clk_prepare_enable(mtk_dp->pclk);
 	if (ret < 0)
-		dev_err(mtk_dp->dev, "Failed to enable pclk:%d\n", ret);
+		dev_err(mtk_dp->dev, "[DPTX] Failed to enable pclk:%d\n", ret);
 
 	ret = clk_set_parent(mtk_dp->pclk, mtk_dp->pclk_src);
 	if (ret < 0)
-		dev_err(mtk_dp->dev, "Failed to clk_set_parent:%d\n", ret);
+		dev_err(mtk_dp->dev, "[DPTX] Failed to clk_set_parent:%d\n", ret);
 
 	dev_dbg(mtk_dp->dev, "pclk:%ld\n", clk_get_rate(mtk_dp->pclk));
 
 	mtk_dp->notifier.notifier_call = mtk_drm_dp_notifier_v2;
 	ret = register_pm_notifier(&mtk_dp->notifier);
 	if (ret)
-		dev_err(mtk_dp->dev, "register pm notifier failed %d", ret);
+		dev_err(mtk_dp->dev, "[DPTX] register pm notifier failed %d", ret);
 
 	return ret;
 }
@@ -6256,7 +6302,7 @@ static int mtk_drm_dp_remove_v2(struct platform_device *pdev)
 	/* unregister pm notifier */
 	ret = unregister_pm_notifier(&mtk_dp->notifier);
 	if (ret)
-		dev_err(mtk_dp->dev, "unregister_pm_notifier failed %d", ret);
+		dev_err(mtk_dp->dev, "[DPTX] unregister_pm_notifier failed %d", ret);
 
 	clk_disable_unprepare(mtk_dp->pclk);
 	mtk_dp_disable_mac_power_v2(mtk_dp);

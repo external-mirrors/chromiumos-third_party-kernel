@@ -12,6 +12,7 @@
 #include <drm/drm_of.h>
 #include <drm/drm_simple_kms_helper.h>
 #include <drm/display/drm_dsc_helper.h>
+#include <drm/drm_print.h>
 
 #include <linux/clk.h>
 #include <linux/component.h>
@@ -198,7 +199,7 @@ static void mtk_dpi_sw_reset_v2(struct mtk_dpi *dpi, bool reset)
 
 static void mtk_dpi_enable_v2(struct mtk_dpi *dpi)
 {
-	dev_dbg(dpi->dev, "enable dpi");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] enable dpi");
 	mtk_dpi_mask_v2(dpi, DPI_EN, EN, EN);
 }
 
@@ -451,7 +452,7 @@ static void mtk_dpi_config_color_format_v2(struct mtk_dpi *dpi,
 {
 	mtk_dpi_config_channel_swap_v2(dpi, MTK_DPI_OUT_CHANNEL_SWAP_RGB);
 
-	dev_dbg(dpi->dev, "format:%d", format);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] format:%d", format);
 
 	if (format == MTK_DPI_COLOR_FORMAT_YCBCR_422) {
 		mtk_dpi_config_yuv422_enable_v2(dpi);
@@ -496,7 +497,7 @@ static void mtk_dpi_power_off_v2(struct mtk_dpi *dpi)
 	if (--dpi->refcount != 0)
 		return;
 
-	dev_dbg(dpi->dev, "power off\n");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] power off\n");
 
 	mtk_dpi_disable_v2(dpi);
 
@@ -513,24 +514,24 @@ static int mtk_dpi_power_on_v2(struct mtk_dpi *dpi)
 	if (++dpi->refcount != 1)
 		return 0;
 
-	dev_dbg(dpi->dev, "power on\n");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] power on\n");
 
 	ret = clk_prepare_enable(dpi->hf_fmm_ck);
 	if (ret) {
-		dev_err(dpi->dev, "Failed to enable hf_fmm_ck clock: %d\n", ret);
+		dev_err(dpi->dev, "[DPTX] Failed to enable hf_fmm_ck clock: %d\n", ret);
 		goto err_refcount;
 	}
 
 	ret = clk_prepare_enable(dpi->hf_fdp_ck);
 	if (ret) {
-		dev_err(dpi->dev, "Failed to enable hf_fdp_ck clock: %d\n", ret);
+		dev_err(dpi->dev, "[DPTX] Failed to enable hf_fdp_ck clock: %d\n", ret);
 		clk_disable_unprepare(dpi->hf_fmm_ck);
 		goto err_refcount;
 	}
 
 	ret = clk_prepare_enable(dpi->pclk_src[TVDPLL_PLL]);
 	if (ret) {
-		dev_err(dpi->dev, "Failed to enable pclk_src: %d\n", ret);
+		dev_err(dpi->dev, "[DPTX] Failed to enable pclk_src: %d\n", ret);
 		clk_disable_unprepare(dpi->hf_fmm_ck);
 		clk_disable_unprepare(dpi->hf_fdp_ck);
 		goto err_refcount;
@@ -538,7 +539,7 @@ static int mtk_dpi_power_on_v2(struct mtk_dpi *dpi)
 
 	ret = clk_prepare_enable(dpi->pclk);
 	if (ret) {
-		dev_err(dpi->dev, "Failed to enable pclk:%d\n", ret);
+		dev_err(dpi->dev, "[DPTX] Failed to enable pclk:%d\n", ret);
 		clk_disable_unprepare(dpi->hf_fmm_ck);
 		clk_disable_unprepare(dpi->hf_fdp_ck);
 		clk_disable_unprepare(dpi->pclk_src[TVDPLL_PLL]);
@@ -559,10 +560,10 @@ static void mtk_dpi_set_golden_setting_v2(struct mtk_dpi *dpi, u32 hsize, u32 vs
 
 	unsigned int rw_times = 0;
 
-	dev_dbg(dpi->dev, "HV:%d x %d, sodi_high:%d, sodi_low:%d\n",
-		 hsize, vsize,
-		dp_buf_sodi_high,
-		dp_buf_sodi_low);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] HV:%d x %d, sodi_high:%d, sodi_low:%d\n",
+		    hsize, vsize,
+		    dp_buf_sodi_high,
+		    dp_buf_sodi_low);
 
 	mtk_dpi_mask_v2(dpi, DPI_BUF_SODI_HIGH, dp_buf_sodi_high, GENMASK(31,0));
 
@@ -604,8 +605,9 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 		mode_htotal =  mode->htotal;
 		vm.pixelclock = div_u64(mode->clock * 1000 * htotal, mode_htotal);
 
-		dev_dbg(dpi->dev, "DSC compress mode, hactive:%d, pixelclock:%lu\n",
-			vm.hactive, vm.pixelclock);
+		drm_dbg_kms(dpi->bridge.dev,
+			    "[DPTX] DSC compress mode, hactive:%d, pixelclock:%lu\n",
+			    vm.hactive, vm.pixelclock);
 		dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
 	} else
 		vm.pixelclock = mode->clock * 1000;
@@ -619,31 +621,31 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 
 	pll_rate = vm.pixelclock * (1 << clksrc);
 
-	dev_dbg(dpi->dev, "pixel:%lu, clksrc:%d, pll_rate/4:%lu\n",
-		 vm.pixelclock, clksrc, pll_rate / 4);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] pixel:%lu, clksrc:%d, pll_rate/4:%lu\n",
+		     vm.pixelclock, clksrc, pll_rate / 4);
 
 	ret = clk_set_rate(dpi->pclk_src[TVDPLL_PLL], pll_rate / 4);
 	if (ret) {
-		dev_err(dpi->dev, "cannot set pclk_src[TVDPLL_PLL]: err=%d\n",
+		dev_err(dpi->dev, "[DPTX] cannot set pclk_src[TVDPLL_PLL]: err=%d\n",
 			 ret);
 	}
 
 	ret = clk_set_parent(dpi->pclk, dpi->pclk_src[clksrc]);
 	if (ret) {
-		dev_err(dpi->dev, "clk_set_parent dp_intf->pclk: err=%d\n",
+		dev_err(dpi->dev, "[DPTX] clk_set_parent dp_intf->pclk: err=%d\n",
 			 ret);
 	}
 
-	dev_dbg(dpi->dev, "pclk_src[TVDPLL_PLL]:%ld\n",
-		 clk_get_rate(dpi->pclk_src[TVDPLL_PLL]));
-	dev_dbg(dpi->dev, "pclk_src[clksrc]:%ld\n",
-		 clk_get_rate(dpi->pclk_src[clksrc]));
-	dev_dbg(dpi->dev, "pclk:%ld\n",
-		 clk_get_rate(dpi->pclk));
-	dev_dbg(dpi->dev, "hf_fmm_ck:%ld\n",
-		 clk_get_rate(dpi->hf_fmm_ck));
-	dev_dbg(dpi->dev, "hf_fdp_ck:%ld\n",
-		 clk_get_rate(dpi->hf_fdp_ck));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] pclk_src[TVDPLL_PLL]:%ld\n",
+		    clk_get_rate(dpi->pclk_src[TVDPLL_PLL]));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] pclk_src[clksrc]:%ld\n",
+		    clk_get_rate(dpi->pclk_src[clksrc]));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] pclk:%ld\n",
+		    clk_get_rate(dpi->pclk));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] hf_fmm_ck:%ld\n",
+		    clk_get_rate(dpi->hf_fmm_ck));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] hf_fdp_ck:%ld\n",
+		    clk_get_rate(dpi->hf_fdp_ck));
 
 	dpi_pol.ck_pol = MTK_DPI_POLARITY_FALLING;
 	dpi_pol.de_pol = MTK_DPI_POLARITY_RISING;
@@ -735,7 +737,7 @@ static u32 *mtk_dpi_bridge_atomic_get_output_bus_fmts_v2(struct drm_bridge *brid
 	*num_output_fmts = 0;
 
 	if (!dpi->conf->output_fmts) {
-		dev_err(dpi->dev, "output_fmts should not be null\n");
+		dev_err(dpi->dev, "[DPTX] output_fmts should not be null\n");
 		return NULL;
 	}
 
@@ -795,9 +797,9 @@ static void mtk_dpi_bridge_mode_set_v2(struct drm_bridge *bridge,
 	unsigned int out_bus_format;
 
 	drm_mode_copy(&dpi->mode, adjusted_mode);
-	dev_dbg(dpi->dev, "mode set, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d\n",
-		dpi->mode.htotal, dpi->mode.vtotal,
-		dpi->mode.hdisplay, dpi->mode.vdisplay, drm_mode_vrefresh(mode));
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] mode set, Htt:%d, Vtt:%d, Hact:%d, Vact:%d, fps:%d\n",
+		    dpi->mode.htotal, dpi->mode.vtotal,
+		    dpi->mode.hdisplay, dpi->mode.vdisplay, drm_mode_vrefresh(mode));
 
 	dpi->bit_num = MTK_DPI_OUT_BIT_NUM_8BITS;
 	dpi->channel_swap = MTK_DPI_OUT_CHANNEL_SWAP_RGB;
@@ -805,8 +807,8 @@ static void mtk_dpi_bridge_mode_set_v2(struct drm_bridge *bridge,
 
 	dpi->dsc_enable = dpi->prop_dsc_enable->values[0];
 	memcpy(&dpi->dsc_config, dpi->prop_dsc_cfg->values, sizeof(struct drm_dsc_config));
-	dev_dbg(dpi->dev, "dsc enable:%d\n", dpi->dsc_enable);
-	dev_dbg(dpi->dev, "dsc version:%d", dpi->dsc_config.dsc_version_minor);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dsc enable:%d\n", dpi->dsc_enable);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dsc version:%d", dpi->dsc_config.dsc_version_minor);
 
 	bridge_state = drm_priv_to_bridge_state(bridge->base.state);
 
@@ -816,9 +818,9 @@ static void mtk_dpi_bridge_mode_set_v2(struct drm_bridge *bridge,
 		if (dpi->conf->num_output_fmts)
 			out_bus_format = dpi->conf->output_fmts[0];
 
-	dev_dbg(dpi->dev, "input format 0x%04x, output format 0x%04x\n",
-		bridge_state->input_bus_cfg.format,
-		bridge_state->output_bus_cfg.format);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] input format 0x%04x, output format 0x%04x\n",
+		    bridge_state->input_bus_cfg.format,
+		    bridge_state->output_bus_cfg.format);
 
 	dpi->output_fmt = out_bus_format;
 	if (out_bus_format == MEDIA_BUS_FMT_YUYV8_1X16)
@@ -846,7 +848,7 @@ static void mtk_dpi_bridge_pre_enable_v2(struct drm_bridge *bridge)
 
 	if (dpi->dsc_enable) {
 		dpi->color_format = MTK_DPI_COLOR_FORMAT_RGB;
-		dev_dbg(dpi->dev, "dsc enable with the output format as RGB\n");
+		drm_dbg_kms(dpi->bridge.dev, "[DPTX] dsc enable with the output format as RGB\n");
 	}
 
 	mtk_dpi_power_on_v2(dpi);
@@ -863,7 +865,7 @@ static void mtk_dpi_bridge_enable_v2(struct drm_bridge *bridge)
 {
 	struct mtk_dpi *dpi = bridge_to_dpi_v2(bridge);
 
-	dev_dbg(dpi->dev, "dpi enabled\n");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] dpi enabled\n");
 }
 
 static enum drm_mode_status
@@ -897,7 +899,7 @@ void mtk_dpi_start_v2(struct device *dev)
 {
 	struct mtk_dpi *dpi = dev_get_drvdata(dev);
 
-	dev_dbg(dev, "start\n");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] start\n");
 
 	mtk_dpi_power_on_v2(dpi);
 }
@@ -906,7 +908,7 @@ void mtk_dpi_stop_v2(struct device *dev)
 {
 	struct mtk_dpi *dpi = dev_get_drvdata(dev);
 
-	dev_dbg(dev, "stop\n");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] stop\n");
 
 	mtk_dpi_power_off_v2(dpi);
 }
@@ -916,7 +918,7 @@ unsigned int mtk_dpi_encoder_index_v2(struct device *dev)
 	struct mtk_dpi *dpi = dev_get_drvdata(dev);
 	unsigned int encoder_index = drm_encoder_index(&dpi->encoder);
 
-	dev_dbg(dev, "encoder index:%d\n", encoder_index);
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] encoder index:%d\n", encoder_index);
 	return encoder_index;
 }
 
@@ -929,7 +931,8 @@ void mtk_dpi_get_dsc_info_v2(struct device *dev, struct dsc_info *dsc_info)
 		memcpy(&dsc_info->dsc_config, &dpi->dsc_config, sizeof(struct drm_dsc_config));
 	}
 
-	dev_dbg(dev, "get dsc info, compression_enable:%d\n", dsc_info->compression_enable);
+	drm_dbg_kms(dpi->bridge.dev,
+		    "[DPTX] get dsc info, compression_enable:%d\n", dsc_info->compression_enable);
 }
 
 static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data)
@@ -943,12 +946,12 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 	char result[20];
 	int ret;
 
-	dev_dbg(dev, "encoder init\n");
+	drm_dbg_kms(dpi->bridge.dev, "[DPTX] encoder init\n");
 	dpi->mmsys_dev = priv->mmsys_dev;
 	ret = drm_simple_encoder_init(drm_dev, &dpi->encoder,
 				      DRM_MODE_ENCODER_TMDS);
 	if (ret) {
-		dev_err(dev, "Failed to initialize decoder: %d\n", ret);
+		dev_err(dev, "[DPTX] Failed to initialize decoder: %d\n", ret);
 		return ret;
 	}
 
@@ -956,7 +959,7 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 	prop = drm_property_create_bool(dpi->encoder.dev,
 					DRM_MODE_PROP_ATOMIC, result);
 	if (!prop) {
-		dev_err(dev, "failed to create property dp_dsc_enable\n");
+		dev_err(dev, "[DPTX] failed to create property dp_dsc_enable\n");
 		return ret;
 	}
 	dpi->prop_dsc_enable = prop;
@@ -966,7 +969,7 @@ static int mtk_dpi_bind_v2(struct device *dev, struct device *master, void *data
 				   DRM_MODE_PROP_BLOB | DRM_MODE_PROP_IMMUTABLE,
 				   result, sizeof(struct drm_dsc_config));
 	if (!prop) {
-		dev_err(dev, "failed to create property dp_dsc_cfg\n");
+		dev_err(dev, "[DPTX] failed to create property dp_dsc_cfg\n");
 		return ret;
 	}
 	dpi->prop_dsc_cfg = prop;
@@ -1035,7 +1038,7 @@ static const struct mtk_dpi_conf mt8196_dpintf_conf = {
 
 static void mt8196_get_clk_v2(struct mtk_dpi *dp_intf)
 {
-	dev_dbg(dp_intf->dev, "get clk\n");
+	drm_dbg_kms(dp_intf->bridge.dev, "[DPTX] get clk\n");
 
 	dp_intf->pclk = devm_clk_get(dp_intf->dev, "mux_dp");
 	dp_intf->pclk_src[TCK_26M] = devm_clk_get(dp_intf->dev, "dpi_26m");
@@ -1050,7 +1053,7 @@ static void mt8196_get_clk_v2(struct mtk_dpi *dp_intf)
 		IS_ERR(dp_intf->pclk_src[TVDPLL_D8]) ||
 		IS_ERR(dp_intf->pclk_src[TVDPLL_D16]) ||
 		IS_ERR(dp_intf->pclk_src[TVDPLL_PLL]))
-		dev_err(dp_intf->dev, "Failed to get pclk andr src clock, -%d-%d-%d-%d-%d-%d-\n",
+		dev_err(dp_intf->dev, "[DPTX] Failed to get pclk andr src clock, -%d-%d-%d-%d-%d-%d-\n",
 			IS_ERR(dp_intf->pclk),
 			IS_ERR(dp_intf->pclk_src[TCK_26M]),
 			IS_ERR(dp_intf->pclk_src[TVDPLL_D4]),
@@ -1080,7 +1083,7 @@ static int mtk_dpi_probe_v2(struct platform_device *pdev)
 	if (!dpi->no_next_bridge) {
 		dpi->next_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 0, 0);
 		if (IS_ERR(dpi->next_bridge)) {
-			dev_err(dev, "Can not find next_bridge");
+			dev_err(dev, "[DPTX] Can not find next_bridge");
 			return -EPROBE_DEFER;
 		}
 
@@ -1090,13 +1093,13 @@ static int mtk_dpi_probe_v2(struct platform_device *pdev)
 	dpi->pinctrl = devm_pinctrl_get(&pdev->dev);
 	if (IS_ERR(dpi->pinctrl)) {
 		dpi->pinctrl = NULL;
-		dev_err(&pdev->dev, "Cannot find pinctrl!\n");
+		dev_err(&pdev->dev, "[DPTX] Cannot find pinctrl!\n");
 	}
 	if (dpi->pinctrl) {
 		dpi->pins_gpio = pinctrl_lookup_state(dpi->pinctrl, "sleep");
 		if (IS_ERR(dpi->pins_gpio)) {
 			dpi->pins_gpio = NULL;
-			dev_err(&pdev->dev, "Cannot find pinctrl idle!\n");
+			dev_err(&pdev->dev, "[DPTX] Cannot find pinctrl idle!\n");
 		}
 		if (dpi->pins_gpio)
 			pinctrl_select_state(dpi->pinctrl, dpi->pins_gpio);
@@ -1104,24 +1107,24 @@ static int mtk_dpi_probe_v2(struct platform_device *pdev)
 		dpi->pins_dpi = pinctrl_lookup_state(dpi->pinctrl, "default");
 		if (IS_ERR(dpi->pins_dpi)) {
 			dpi->pins_dpi = NULL;
-			dev_err(&pdev->dev, "Cannot find pinctrl active!\n");
+			dev_err(&pdev->dev, "[DPTX] Cannot find pinctrl active!\n");
 		}
 	}
 	dpi->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(dpi->regs))
 		return dev_err_probe(dev, PTR_ERR(dpi->regs),
-				     "Failed to ioremap mem resource\n");
+				     "[DPTX] Failed to ioremap mem resource\n");
 
 	dpi->hf_fmm_ck = devm_clk_get(dev, "hf_fmm_ck");
 	if (IS_ERR(dpi->hf_fmm_ck)) {
 		ret = PTR_ERR(dpi->hf_fmm_ck);
-		dev_err(dev, "Failed to get hf_fmm_ck clock: %d\n", ret);
+		dev_err(dev, "[DPTX] Failed to get hf_fmm_ck clock: %d\n", ret);
 		return ret;
 	}
 	dpi->hf_fdp_ck = devm_clk_get(dev, "hf_fdp_ck");
 	if (IS_ERR(dpi->hf_fdp_ck)) {
 		ret = PTR_ERR(dpi->hf_fdp_ck);
-		dev_err(dev, "Failed to get hf_fdp_ck clock: %d\n", ret);
+		dev_err(dev, "[DPTX] Failed to get hf_fdp_ck clock: %d\n", ret);
 		return ret;
 	}
 
@@ -1145,7 +1148,7 @@ static int mtk_dpi_probe_v2(struct platform_device *pdev)
 
 	ret = component_add(dev, &mtk_dpi_component_ops);
 	if (ret)
-		return dev_err_probe(dev, ret, "Failed to add component.\n");
+		return dev_err_probe(dev, ret, "[DPTX] Failed to add component.\n");
 
 	return 0;
 }
