@@ -3472,7 +3472,6 @@
 				      "tvdpll_d16",
 				      "dpi_ck",
 				      "dpi_26m";
-			num = <0>;
 			phys = <&dp_tx>;
 			phy-names = "dp_tx";
 		};
@@ -3497,8 +3496,6 @@
 				      "tvdpll_d16",
 				      "dpi_ck",
 				      "dpi_26m";
-			num = <1>;
-			no-next-bridge;
 			phys = <&dp_tx>;
 			phy-names = "dp_tx";
 			status = "disabled";
