@@ -33,10 +33,8 @@ static int tee_dev_match(struct tee_ioctl_version_data *t, const void *v)
 int cmdq_sec_init_context(struct cmdq_sec_tee_context *tee)
 {
 	tee->tee_context = tee_client_open_context(NULL, tee_dev_match, NULL, NULL);
-	if (IS_ERR(tee->tee_context)) {
-		dev_err(tee->dev, "[%s][%d] tee_client_open_context failed!", __func__, __LINE__);
+	if (IS_ERR(tee->tee_context))
 		return -EFAULT;
-	}
 
 	return 0;
 }
