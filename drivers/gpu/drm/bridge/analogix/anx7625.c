@@ -1767,14 +1767,6 @@ static int anx7625_hpd_change_detect(struct anx7625_data *ctx)
 		return intr_vector;
 	}
 	DRM_DEV_DEBUG_DRIVER(dev, "0x7e:0x44=%x\n", intr_vector);
-	status = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				   INTERFACE_CHANGE_INT,
-				   intr_vector & (~intr_vector));
-	if (status < 0) {
-		DRM_DEV_ERROR(dev, "cannot clear interrupt change reg.\n");
-		return status;
-	}
-
 	if (!(intr_vector & HPD_STATUS_CHANGE))
 		return -ENOENT;
 
