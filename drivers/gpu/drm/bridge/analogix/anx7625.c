@@ -1661,13 +1661,13 @@ static int anx7625_read_hpd_status_p0(struct anx7625_data *ctx)
 }
 
 static int _anx7625_hpd_polling(struct anx7625_data *ctx,
-				unsigned long wait_us, bool force_polling)
+				unsigned long wait_us)
 {
 	int ret, val;
 	struct device *dev = ctx->dev;
 
 	/* Interrupt mode, no need poll HPD status, just return */
-	if (ctx->pdata.intp_irq && !force_polling)
+	if (ctx->pdata.intp_irq)
 		return 0;
 
 	ret = readx_poll_timeout(anx7625_read_hpd_status_p0,
@@ -1702,7 +1702,7 @@ static int anx7625_wait_hpd_asserted(struct drm_dp_aux *aux,
 	int ret;
 
 	pm_runtime_get_sync(dev);
-	ret = _anx7625_hpd_polling(ctx, wait_us, false);
+	ret = _anx7625_hpd_polling(ctx, wait_us);
 	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
@@ -1775,11 +1775,8 @@ static int anx7625_hpd_change_detect(struct anx7625_data *ctx)
 		return status;
 	}
 
-	if (!(intr_vector & HPD_STATUS_CHANGE)) {
-		_anx7625_hpd_polling(ctx, 1000*100, true);
-		/* No need to raise up irq event */
+	if (!(intr_vector & HPD_STATUS_CHANGE))
 		return -ENOENT;
-	}
 
 	status = anx7625_reg_read(ctx, ctx->i2c.rx_p0_client,
 				  SYSTEM_STSTUS);
@@ -1992,7 +1989,7 @@ static struct edid *anx7625_get_edid(struct anx7625_data *ctx)
 	}
 
 	pm_runtime_get_sync(dev);
-	_anx7625_hpd_polling(ctx, 5000 * 100, false);
+	_anx7625_hpd_polling(ctx, 5000 * 100);
 	edid_num = sp_tx_edid_read(ctx, p_edid->edid_raw_data);
 	pm_runtime_put_sync(dev);
 
@@ -2870,7 +2867,7 @@ static void anx7625_bridge_atomic_enable(struct drm_bridge *bridge,
 	ctx->connector = connector;
 
 	pm_runtime_get_sync(dev);
-	_anx7625_hpd_polling(ctx, 5000 * 100, false);
+	_anx7625_hpd_polling(ctx, 5000 * 100);
 
 	anx7625_dp_start(ctx);
 	/*
@@ -3349,7 +3346,7 @@ static int anx7625_i2c_probe(struct i2c_client *client)
 	if (!platform->pdata.low_power_mode) {
 		anx7625_disable_pd_protocol(platform);
 		pm_runtime_get_sync(dev);
-		_anx7625_hpd_polling(platform, 5000 * 100, false);
+		_anx7625_hpd_polling(platform, 5000 * 100);
 	}
 
 	/* Add work function */
