@@ -3611,7 +3611,7 @@
 			reg = <0 0x32890000 0 0x1000>;
 			clocks = <&ovlsys_config_clk CLK_OVL_EXDMA6_DISP>;
 			power-domains = <&hfrpsys MT8196_POWER_DOMAIN_OVL0_DORMANT>;
-			mediatek,larb = <&smi_larb1 SMMU_L1_P3_OVL_RDMA6>;
+			mediatek,larb = <&smi_larb1>;
 			#dma-cells = <1>;
 		};
 
