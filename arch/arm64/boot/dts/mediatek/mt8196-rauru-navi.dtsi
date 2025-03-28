@@ -215,6 +215,10 @@
 	/delete-property/ backlight;
 };
 
+&edp_tx {
+	swing-level = <3>;
+};
+
 &mt6373_vcn33_3 {
 	status = "disabled";
 };
