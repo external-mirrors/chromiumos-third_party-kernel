@@ -6328,7 +6328,7 @@ static const struct mtk_dp_data mt8196_dp_data = {
 	.audio_supported = true,
 	.audio_m_div2_bit = 0,
 	.dsc_support = true,
-	.mst_support = true,
+	.mst_support = false,   /* Temporarily disable the MST feature */
 };
 
 static const struct of_device_id mtk_dp_of_match_v2[] = {
