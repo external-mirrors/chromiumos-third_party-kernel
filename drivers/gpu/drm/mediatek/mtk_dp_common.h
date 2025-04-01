@@ -285,6 +285,8 @@ struct mtk_dp_data {
 	u16 audio_m_div2_bit;
 	bool dsc_support;
 	bool mst_support;
+	u16 min_hdisplay;
+	u16 min_vdisplay;
 };
 
 struct dp_timing_parameter {
