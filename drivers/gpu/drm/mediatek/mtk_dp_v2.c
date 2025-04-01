@@ -4412,6 +4412,11 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 		(mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay))
 		return MODE_BAD;
 
+	/* This is for temporarily removing the timing. */
+	if (mode->hdisplay < mtk_dp->data->min_hdisplay ||
+	    mode->vdisplay < mtk_dp->data->min_vdisplay)
+		return MODE_BAD;
+
 	*dsc = false;
 
 	rate = drm_dp_bw_code_to_link_rate(mtk_dp->training_info.link_rate) *
@@ -6334,6 +6339,8 @@ static const struct mtk_dp_data mt8196_dp_data = {
 	.mst_support = false,   /* Temporarily disable the MST feature */
 	.max_hdisplay = 3840,
 	.max_vdisplay = 2160,
+	.min_hdisplay = 800,
+	.min_vdisplay = 600,
 };
 
 static const struct of_device_id mtk_dp_of_match_v2[] = {

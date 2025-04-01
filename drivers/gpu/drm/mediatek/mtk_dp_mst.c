@@ -804,6 +804,11 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 		(mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay))
 		return MODE_BAD;
 
+	/* This is for temporarily removing the timing. */
+	if (mode->hdisplay < mtk_dp->data->min_hdisplay ||
+	    mode->vdisplay < mtk_dp->data->min_vdisplay)
+		return MODE_BAD;
+
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
 	if (IS_ERR(mst_state)) {
 		dev_err(mtk_dp->dev, "[DPTX] fail to get mst topology state!\n");
