@@ -28,16 +28,11 @@ static int mt8196_convert_cm_ch(unsigned int ch)
 	return ch - 1;
 }
 
-static unsigned int calculate_cm_update(int rate, int ch)
+static unsigned int calculate_cm_update(unsigned int rate, unsigned int ch)
 {
 	unsigned int update_val;
 
-	update_val = 26000000 / rate / (ch / 2);
-	update_val = update_val * 10 / 7;
-	if (update_val > 100)
-		update_val = 100;
-	if (update_val < 7)
-		update_val = 7;
+	update_val = (((26000000 / rate) - 10) / (ch / 2)) - 1;
 
 	return update_val;
 }
@@ -45,25 +40,21 @@ static unsigned int calculate_cm_update(int rate, int ch)
 int mt8196_set_cm(struct mtk_base_afe *afe, int id,
 	       bool update, bool swap, unsigned int ch)
 {
-	unsigned int rate = 0;
-	unsigned int update_val = 0;
-	int reg;
 	struct mt8196_afe_private *afe_priv = afe->platform_priv;
+	unsigned int rate = afe_priv->cm_rate[id];
+	unsigned int rate_val = mt8196_general_rate_transform(afe->dev, rate);
+	unsigned int update_val = update ? calculate_cm_update(rate, ch) : 0x64;
+	int reg = AFE_CM0_CON0 + 0x10 * id;
 
 	dev_info(afe->dev, "%s()-0, CM%d, rate %d, update %d, swap %d, ch %d\n",
 		__func__, id, rate, update, swap, ch);
 
-	rate = afe_priv->cm_rate[id];
-	update_val = update ? calculate_cm_update(rate, (int)ch) : 0x64;
-
-	reg = AFE_CM0_CON0 + 0x10 * id;
 	/* update cnt */
 	mtk_regmap_update_bits(afe->regmap, reg, AFE_CM_UPDATE_CNT_MASK,
 							update_val, AFE_CM_UPDATE_CNT_SFT);
-
 	/* rate */
 	mtk_regmap_update_bits(afe->regmap, reg, AFE_CM_1X_EN_SEL_FS_MASK,
-							rate, AFE_CM_1X_EN_SEL_FS_SFT);
+							rate_val, AFE_CM_1X_EN_SEL_FS_SFT);
 
 	/* ch num */
 	ch = mt8196_convert_cm_ch(ch);

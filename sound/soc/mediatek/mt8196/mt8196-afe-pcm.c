@@ -254,7 +254,7 @@ static int mt8196_memif_fs(struct snd_pcm_substream *substream,
 		break;
 	}
 
-	mt8196_set_cm_rate(afe, cm, rate_reg);
+	mt8196_set_cm_rate(afe, cm, rate);
 
 	return rate_reg;
 }
