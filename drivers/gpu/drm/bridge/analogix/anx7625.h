@@ -469,7 +469,7 @@ enum audio_wd_len {
 #define MAX_EDID_BLOCK	3
 #define EDID_TRY_CNT	3
 #define SUPPORT_PIXEL_CLOCK	300000
-#define SUPPORT_MIN_PIXEL_CLOCK	22000
+#define SUPPORT_MIN_PIXEL_CLOCK	38000
 
 struct s_edid_data {
 	int edid_block_num;
