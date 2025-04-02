@@ -731,6 +731,23 @@ void mtk_dp_mst_drv_unprepare(struct mtk_dp *mtk_dp)
 	mtk_dp->mst_start = false;
 }
 
+static u8 mtk_dp_mst_drv_get_sink_count(struct mtk_dp *mtk_dp)
+{
+	u8 sink_count = 0;
+	u8 i;
+
+	if (!mtk_dp->mst_enable)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
+		if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i]->dp_mode == DRM_DP_MST &&
+			mtk_dp->mtk_con[i]->connector.status == connector_status_connected)
+			sink_count++;
+	}
+
+	return sink_count;
+}
+
 static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 								struct mtk_dp_con *mtk_con,
 								struct drm_display_mode *mode,
@@ -741,6 +758,11 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 	int need_pbn = 0;
 	int valid_pbn = 0;
 	enum drm_mode_status ret = MODE_CLOCK_HIGH;
+	u8 sink_count;
+
+	if ((mtk_dp->data->max_hdisplay != 0 && mode->hdisplay > mtk_dp->data->max_hdisplay) ||
+		(mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay))
+		return MODE_BAD;
 
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
 	if (IS_ERR(mst_state)) {
@@ -750,8 +772,13 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 
 	*dsc = false;
 
-	/* divide the total equally for one stream */
-	valid_pbn = dfixed_trunc(mst_state->pbn_div) * TOTAL_AVAVIL_SLOT / DP_ENCODER_NUM;
+	sink_count = mtk_dp_mst_drv_get_sink_count(mtk_dp);
+	if (!sink_count) {
+		dev_err(mtk_dp->dev, "fail to get mst sink count!\n");
+		return ret;
+	}
+
+	valid_pbn = dfixed_trunc(mst_state->pbn_div) * TOTAL_AVAVIL_SLOT / sink_count;
 
 	need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, bpp, false);
 	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, dfixed_trunc(mst_state->pbn_div), need_pbn);

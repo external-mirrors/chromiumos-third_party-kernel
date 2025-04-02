@@ -4406,8 +4406,11 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 	u32 rate;
 	int pixel_clock;
 	u8 color_bpp;
-
 	enum drm_mode_status ret = MODE_CLOCK_HIGH;
+
+	if ((mtk_dp->data->max_hdisplay != 0 && mode->hdisplay > mtk_dp->data->max_hdisplay) ||
+		(mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay))
+		return MODE_BAD;
 
 	*dsc = false;
 
@@ -6329,6 +6332,8 @@ static const struct mtk_dp_data mt8196_dp_data = {
 	.audio_m_div2_bit = 0,
 	.dsc_support = true,
 	.mst_support = false,   /* Temporarily disable the MST feature */
+	.max_hdisplay = 3840,
+	.max_vdisplay = 2160,
 };
 
 static const struct of_device_id mtk_dp_of_match_v2[] = {
