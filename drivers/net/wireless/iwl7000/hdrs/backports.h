@@ -79,6 +79,12 @@ WRAP_LOCKED(cfg80211_links_removed)(struct net_device *dev, u16 removed_links)
 	mutex_unlock(&dev->ieee80211_ptr->mtx);
 }
 #define cfg80211_links_removed WRAP_LOCKED(cfg80211_links_removed)
+static inline u32
+iwl7000_ieee80211_mandatory_rates(struct ieee80211_supported_band *sband)
+{
+	return ieee80211_mandatory_rates(sband);
+}
+#define ieee80211_mandatory_rates iwl7000_ieee80211_mandatory_rates
 
 static inline bool LINUX_BACKPORT(napi_schedule)(struct napi_struct *n)
 {
@@ -159,7 +165,6 @@ ssize_t wiphy_locked_debugfs_write(struct wiphy *wiphy, struct file *file,
 	return ret;
 }
 #endif
-#define KUNIT_STATIC_STUB_REDIRECT(real_fn_name, args...) do {} while (0)
 
 static inline void cfg80211_schedule_channels_check(struct wireless_dev *wdev)
 {
@@ -324,13 +329,6 @@ static inline void LINUX_BACKPORT(free_netdev)(struct net_device *dev)
 	free_netdev(dev);
 }
 #define free_netdev LINUX_BACKPORT(free_netdev)
-
-#define kmemdup_array LINUX_BACKPORT(kmemdup_array)
-static inline void *
-kmemdup_array(const void *src, size_t count, size_t element_size, gfp_t gfp)
-{
-       return kmemdup(src, element_size * count, gfp);
-}
 
 
 enum ieee80211_ap_reg_power {
