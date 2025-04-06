@@ -480,7 +480,7 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 
 		if (sta) {
 			link_sta = rcu_dereference_protected(sta->link[link_id],
-							     lockdep_rtnl_is_held());
+							     lockdep_is_held(&sta->local->hw.wiphy->mtx));
 			if (!link_sta)
 				return -ENOLINK;
 		}
@@ -880,7 +880,7 @@ int ieee80211_key_link(struct ieee80211_key *key,
 
 		if (link_id >= 0) {
 			link_sta = rcu_dereference_protected(sta->link[link_id],
-							     lockdep_rtnl_is_held());
+							     lockdep_is_held(&sta->local->hw.wiphy->mtx));
 			if (!link_sta) {
 				ret = -ENOLINK;
 				goto out;
