@@ -4,7 +4,6 @@
  */
 
 #include <net/mac80211.h>
-#include <linux/ip.h>
 
 #include "mld.h"
 #include "mac80211.h"
@@ -12,17 +11,9 @@
 #include "iface.h"
 #include "power.h"
 #include "sta.h"
-#include "agg.h"
 #include "scan.h"
-#include "d3.h"
-#include "tlc.h"
-#include "key.h"
-#include "ap.h"
-#include "tx.h"
 #include "fw/api/scan.h"
 #include "fw/api/context.h"
-#include "fw/api/filter.h"
-#include "fw/api/sta.h"
 #ifdef CONFIG_PM_SLEEP
 #include "fw/api/d3.h"
 #endif /* CONFIG_PM_SLEEP */
@@ -33,7 +24,7 @@
 
 #define IWL_MLD_LIMITS(ap)					\
 	{							\
-		.max = 2,					\
+		.max = 1,					\
 		.types = BIT(NL80211_IFTYPE_STATION),		\
 	},							\
 	{							\
@@ -59,13 +50,13 @@ static const struct ieee80211_iface_combination
 iwl_mld_iface_combinations[] = {
 	{
 		.num_different_channels = 2,
-		.max_interfaces = 4,
+		.max_interfaces = 3,
 		.limits = iwl_mld_limits,
 		.n_limits = ARRAY_SIZE(iwl_mld_limits),
 	},
 	{
 		.num_different_channels = 1,
-		.max_interfaces = 4,
+		.max_interfaces = 3,
 		.limits = iwl_mld_limits_ap,
 		.n_limits = ARRAY_SIZE(iwl_mld_limits_ap),
 	},
@@ -349,12 +340,8 @@ static void iwl_mac_hw_set_wiphy(struct iwl_mld *mld)
 		ieee80211_hw_set(hw, SUPPORTS_ONLY_HE_MULTI_BSSID);
 	}
 
-	if (iwlmld_mod_params.power_scheme != IWL_POWER_SCHEME_CAM)
-		wiphy->flags |= WIPHY_FLAG_PS_ON_BY_DEFAULT;
-	else
-		wiphy->flags &= ~WIPHY_FLAG_PS_ON_BY_DEFAULT;
-
 	/* TODO:
+	 * 1. iwlmld_mod_params CAM MODE (WIPHY_FLAG_PS_ON_BY_DEFAULT)
 	 * 2. tm (time measurement) ext capab
 	 * 3. eml_capabilities debug override
 	 *
@@ -374,10 +361,6 @@ static void iwl_mac_hw_set_misc(struct iwl_mld *mld)
 
 	hw->netdev_features = NETIF_F_HIGHDMA | NETIF_F_SG;
 	hw->netdev_features |= mld->cfg->features;
-#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
-	if (mld->trans->dbg_cfg.HW_CSUM_DISABLE)
-		hw->netdev_features &= ~IWL_CSUM_NETIF_FLAGS_MASK;
-#endif
 
 	hw->max_tx_fragments = mld->trans->max_skb_frags;
 	hw->max_listen_interval = 10;
@@ -448,13 +431,7 @@ static void
 iwl_mld_mac80211_tx(struct ieee80211_hw *hw,
 		    struct ieee80211_tx_control *control, struct sk_buff *skb)
 {
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	/* TODO: drop offchannel if there is no active ROC (task=offchannel) */
-
-	/* TODO: translate MLD to link address in MLD AP (task=MLO) */
-
-	iwl_mld_tx_skb(mld, skb, NULL);
+	WARN_ON("Not supported yet\n");
 }
 
 static void
@@ -474,36 +451,21 @@ int iwl_mld_mac80211_start(struct ieee80211_hw *hw)
 {
 	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
 	int ret;
-	bool in_d3 = false;
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-#ifdef CONFIG_PM_SLEEP
-	/* Unless the host goes into hibernate the FW always stays on and
-	 * the d3_resume flow is used. When wowlan is configured, mac80211
-	 * would call it's resume callback and the wowlan_resume flow
-	 * would be used.
+	/* TODO:
+	 * 1. fast resume (set also mld->scan.last_start_time_jiffies)
 	 */
-
-	in_d3 = mld->fw_status.in_d3;
-	if (in_d3) {
-		/* mac80211 already cleaned up the state, no need for cleanup */
-		ret = iwl_mld_no_wowlan_resume(mld);
-		if (ret)
-			iwl_mld_stop_fw(mld);
-	}
-#endif /* CONFIG_PM_SLEEP */
 
 	if (mld->fw_status.in_hw_restart) {
 		iwl_mld_stop_fw(mld);
 		iwl_mld_restart_cleanup(mld);
 	}
 
-	if (!in_d3 || ret) {
-		ret = iwl_mld_start_fw(mld);
-		if (ret)
-			goto error;
-	}
+	ret = iwl_mld_start_fw(mld);
+	if (ret)
+		goto error;
 
 	mld->scan.last_start_time_jiffies = jiffies;
 
@@ -536,13 +498,13 @@ void iwl_mld_mac80211_stop(struct ieee80211_hw *hw, bool suspend)
 	wiphy_work_cancel(mld->wiphy, &mld->add_txqs_wk);
 
 	/* TODO:
-	 * ftm_initiator_smooth_stop
+	 * 1. suspend
+	 * 2. ftm_initiator_smooth_stop
 	 */
 
-	/* if the suspend flow fails the fw is in error. Stop it here, and it
-	 * will be started upon wakeup
-	 */
-	if (!suspend || iwl_mld_no_wowlan_suspend(mld))
+	if (suspend)
+		WARN_ON(1);
+	else
 		iwl_mld_stop_fw(mld);
 
 	/* the work might have been scheduled again - cancel it now as the hw
@@ -580,9 +542,7 @@ int iwl_mld_mac80211_add_interface(struct ieee80211_hw *hw,
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION &&
-	    ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_AP &&
-	    vif->type != NL80211_IFTYPE_MONITOR) {
+	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION) {
 		IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n", __func__);
 		return 0;
 	}
@@ -604,19 +564,12 @@ int iwl_mld_mac80211_add_interface(struct ieee80211_hw *hw,
 
 	if (ieee80211_vif_type_p2p(vif) == NL80211_IFTYPE_STATION)
 		vif->driver_flags |= IEEE80211_VIF_BEACON_FILTER |
-				     IEEE80211_VIF_SUPPORTS_CQM_RSSI |
-				     IEEE80211_VIF_REMOVE_AP_AFTER_DISASSOC;
+				     IEEE80211_VIF_SUPPORTS_CQM_RSSI;
 
 	if (vif->p2p || iwl_fw_lookup_cmd_ver(mld->fw, PHY_CONTEXT_CMD, 0) < 5)
 		vif->driver_flags |= IEEE80211_VIF_IGNORE_OFDMA_WIDER_BW;
 
-	if (vif->type == NL80211_IFTYPE_STATION)
-		iwl_mld_update_mac_power(mld, vif, false);
-
-	if (vif->type == NL80211_IFTYPE_MONITOR) {
-		mld->monitor.on = true;
-		ieee80211_hw_set(mld->hw, RX_INCLUDES_FCS);
-	}
+	/* TODO: power considerations */
 
 	return 0;
 
@@ -635,9 +588,7 @@ void iwl_mld_mac80211_remove_interface(struct ieee80211_hw *hw,
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION &&
-	    ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_AP &&
-	    vif->type != NL80211_IFTYPE_MONITOR) {
+	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION) {
 		IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n", __func__);
 		return;
 	}
@@ -646,102 +597,11 @@ void iwl_mld_mac80211_remove_interface(struct ieee80211_hw *hw,
 		vif->driver_flags &= ~(IEEE80211_VIF_BEACON_FILTER |
 				       IEEE80211_VIF_SUPPORTS_CQM_RSSI);
 
-	if (vif->type == NL80211_IFTYPE_MONITOR) {
-		__clear_bit(IEEE80211_HW_RX_INCLUDES_FCS, mld->hw->flags);
-		mld->monitor.on = false;
-	}
+	/* TODO: power considerations */
 
 	iwl_mld_remove_link(mld, &vif->bss_conf);
 
 	iwl_mld_rm_vif(mld, vif);
-}
-
-struct iwl_mld_mc_iter_data {
-	struct iwl_mld *mld;
-	int port_id;
-};
-
-static void iwl_mld_mc_iface_iterator(void *data, u8 *mac,
-				      struct ieee80211_vif *vif)
-{
-	struct iwl_mld_mc_iter_data *mc_data = data;
-	struct iwl_mld *mld = mc_data->mld;
-	struct iwl_mcast_filter_cmd *cmd = mld->mcast_filter_cmd;
-	struct iwl_host_cmd hcmd = {
-		.id = MCAST_FILTER_CMD,
-		.dataflags[0] = IWL_HCMD_DFL_NOCOPY,
-	};
-	int ret, len;
-
-	/* If we don't have free ports, mcast frames will be dropped */
-	if (WARN_ON_ONCE(mc_data->port_id >= MAX_PORT_ID_NUM))
-		return;
-
-	if (vif->type != NL80211_IFTYPE_STATION || !vif->cfg.assoc)
-		return;
-
-	cmd->port_id = mc_data->port_id++;
-	ether_addr_copy(cmd->bssid, vif->bss_conf.bssid);
-	len = roundup(sizeof(*cmd) + cmd->count * ETH_ALEN, 4);
-
-	hcmd.len[0] = len;
-	hcmd.data[0] = cmd;
-
-	ret = iwl_mld_send_cmd(mld, &hcmd);
-	if (ret)
-		IWL_ERR(mld, "mcast filter cmd error. ret=%d\n", ret);
-}
-
-static void iwl_mld_recalc_multicast_filter(struct iwl_mld *mld)
-{
-	struct iwl_mld_mc_iter_data iter_data = {
-		.mld = mld,
-	};
-
-	if (WARN_ON_ONCE(!mld->mcast_filter_cmd))
-		return;
-
-	ieee80211_iterate_active_interfaces(mld->hw,
-					    IEEE80211_IFACE_ITER_NORMAL,
-					    iwl_mld_mc_iface_iterator,
-					    &iter_data);
-}
-
-static u64
-iwl_mld_mac80211_prepare_multicast(struct ieee80211_hw *hw,
-				   struct netdev_hw_addr_list *mc_list)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-	struct iwl_mcast_filter_cmd *cmd;
-	struct netdev_hw_addr *addr;
-	int addr_count = netdev_hw_addr_list_count(mc_list);
-	bool pass_all = addr_count > MAX_MCAST_FILTERING_ADDRESSES;
-	int len;
-
-	if (pass_all)
-		addr_count = 0;
-
-	/* len must be a multiple of 4 */
-	len = roundup(sizeof(*cmd) + addr_count * ETH_ALEN, 4);
-	cmd = kzalloc(len, GFP_ATOMIC);
-	if (!cmd)
-		return 0;
-
-	if (pass_all) {
-		cmd->pass_all = 1;
-		goto out;
-	}
-
-	netdev_hw_addr_list_for_each(addr, mc_list) {
-		IWL_DEBUG_MAC80211(mld, "mcast addr (%d): %pM\n",
-				   cmd->count, addr->addr);
-		ether_addr_copy(&cmd->addr_list[cmd->count * ETH_ALEN],
-				addr->addr);
-		cmd->count++;
-	}
-
-out:
-	return (u64)(unsigned long)cmd;
 }
 
 static
@@ -751,25 +611,12 @@ void iwl_mld_mac80211_configure_filter(struct ieee80211_hw *hw,
 				       u64 multicast)
 {
 	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-	struct iwl_mcast_filter_cmd *cmd = (void *)(unsigned long)multicast;
 
-	/* Replace previous configuration */
-	kfree(mld->mcast_filter_cmd);
-	mld->mcast_filter_cmd = cmd;
+	/* TODO: for now just log the function is not implemented
+	 * and set total_flags = 0 to avoid mac80211 warning
+	 */
+	IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n", __func__);
 
-	if (!cmd)
-		goto out;
-
-	if (changed_flags & FIF_ALLMULTI)
-		cmd->pass_all = !!(*total_flags & FIF_ALLMULTI);
-
-	if (cmd->pass_all)
-		cmd->count = 0;
-
-	/* TODO: vendor command active_rx_filter (task=vendor_cmds) */
-
-	iwl_mld_recalc_multicast_filter(mld);
-out:
 	*total_flags = 0;
 }
 
@@ -825,7 +672,8 @@ int iwl_mld_add_chanctx(struct ieee80211_hw *hw,
 		return ret;
 	}
 
-	return 0;
+	/* TODO: remove on RLC offload */
+	return iwl_mld_send_rlc_cmd(mld, fw_id);
 }
 
 static
@@ -889,15 +737,9 @@ int iwl_mld_assign_vif_chanctx(struct ieee80211_hw *hw,
 	if (WARN_ON(!mld_link))
 		return -EINVAL;
 
-	/* for AP, mac parameters such as HE support are updated at this stage. */
-	if (vif->type == NL80211_IFTYPE_AP) {
-		ret = iwl_mld_mac_fw_action(mld, vif, FW_CTXT_ACTION_MODIFY);
-
-		if (ret) {
-			IWL_ERR(mld, "failed to update MAC %pM\n", vif->addr);
-			return -EINVAL;
-		}
-	}
+	/* TODO: for AP, send mac ctxt cmd to update HE cap (or in start_ap?)
+	 * (task=AP)
+	 */
 
 	rcu_assign_pointer(mld_link->chan_ctx, ctx);
 
@@ -926,8 +768,6 @@ int iwl_mld_assign_vif_chanctx(struct ieee80211_hw *hw,
 	if (vif->type == NL80211_IFTYPE_STATION)
 		iwl_mld_send_ap_tx_power_constraint_cmd(mld, vif, link);
 
-	/* TODO: task=sniffer add sniffer station */
-
 	return 0;
 err:
 	RCU_INIT_POINTER(mld_link->chan_ctx, NULL);
@@ -943,13 +783,14 @@ void iwl_mld_unassign_vif_chanctx(struct ieee80211_hw *hw,
 	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
+	int ret;
 
 	if (WARN_ON(!mld_link))
 		return;
 
-	iwl_mld_deactivate_link(mld, link);
-
-	/* TODO: task=sniffer remove sniffer station */
+	ret = iwl_mld_deactivate_link(mld, link);
+	if (ret)
+		return;
 
 	/* TODO: detect exiting EMLSR (task=EMLSR)*/
 
@@ -965,37 +806,26 @@ void iwl_mld_unassign_vif_chanctx(struct ieee80211_hw *hw,
 	}
 }
 
+#ifdef CONFIG_PM_SLEEP
+static
+int iwl_mld_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
+{
+	WARN_ON("Not supported yet\n");
+	return -EOPNOTSUPP;
+}
+
+static
+int iwl_mld_resume(struct ieee80211_hw *hw)
+{
+	WARN_ON("Not supported yet\n");
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_PM_SLEEP */
+
 static
 int iwl_mld_mac80211_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
 {
 	return -EOPNOTSUPP;
-}
-
-static void
-iwl_mld_link_info_changed_ap_ibss(struct iwl_mld *mld,
-				  struct ieee80211_vif *vif,
-				  struct ieee80211_bss_conf *link,
-				  u64 changes)
-{
-	u32 link_changes = 0;
-
-	if (changes & BSS_CHANGED_ERP_SLOT)
-		link_changes |= LINK_CONTEXT_MODIFY_RATES_INFO;
-
-	if (changes & (BSS_CHANGED_ERP_CTS_PROT | BSS_CHANGED_HT))
-		link_changes |= LINK_CONTEXT_MODIFY_PROTECT_FLAGS;
-
-	if (changes & (BSS_CHANGED_QOS | BSS_CHANGED_BANDWIDTH))
-		link_changes |= LINK_CONTEXT_MODIFY_QOS_PARAMS;
-
-	if (changes & BSS_CHANGED_HE_BSS_COLOR)
-		link_changes |= LINK_CONTEXT_MODIFY_HE_PARAMS;
-
-	if (link_changes)
-		iwl_mld_change_link_in_fw(mld, link, link_changes);
-
-	if (changes & BSS_CHANGED_BEACON)
-		iwl_mld_update_beacon_template(mld, vif, link);
 }
 
 static
@@ -1029,81 +859,31 @@ u32 iwl_mld_link_changed_mapping(struct ieee80211_vif *vif,
 	return link_changes;
 }
 
-static void
-iwl_mld_mac80211_link_info_changed_sta(struct iwl_mld *mld,
-				       struct ieee80211_vif *vif,
-				       struct ieee80211_bss_conf *link_conf,
-				       u64 changes)
+static
+void iwl_mld_mac80211_link_info_changed(struct ieee80211_hw *hw,
+					struct ieee80211_vif *vif,
+					struct ieee80211_bss_conf *link_conf,
+					u64 changes)
 {
-	u32 link_changes = iwl_mld_link_changed_mapping(vif, link_conf,
-							changes);
+	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
+	u32 link_changes;
 
+	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION) {
+		IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n", __func__);
+		return;
+	}
+
+	link_changes = iwl_mld_link_changed_mapping(vif, link_conf, changes);
 	if (link_changes)
 		iwl_mld_change_link_in_fw(mld, link_conf, link_changes);
 
 	if (changes & BSS_CHANGED_TPE)
 		iwl_mld_send_ap_tx_power_constraint_cmd(mld, vif, link_conf);
 
-	if (changes & BSS_CHANGED_BEACON_INFO)
-		iwl_mld_update_mac_power(mld, vif, false);
-
-	// todo: BSS_CHANGED_BEACON_INFO (task=beacon_filter)
+	// todo: BSS_CHANGED_BEACON_INFO (task=beacon_filter, power)
 	// todo: BSS_CHANGED_BANDWIDTH (task=EMLSR)
 	// todo: BSS_CHANGED_CQM
-}
-
-static int iwl_mld_update_mu_groups(struct iwl_mld *mld,
-				    struct ieee80211_bss_conf *link_conf)
-{
-	struct iwl_mu_group_mgmt_cmd cmd = {};
-
-	BUILD_BUG_ON(sizeof(cmd.membership_status) !=
-		     sizeof(link_conf->mu_group.membership));
-	BUILD_BUG_ON(sizeof(cmd.user_position) !=
-		     sizeof(link_conf->mu_group.position));
-
-	memcpy(cmd.membership_status, link_conf->mu_group.membership,
-	       WLAN_MEMBERSHIP_LEN);
-	memcpy(cmd.user_position, link_conf->mu_group.position,
-	       WLAN_USER_POSITION_LEN);
-
-	return iwl_mld_send_cmd_pdu(mld,
-				    WIDE_ID(DATA_PATH_GROUP,
-					    UPDATE_MU_GROUPS_CMD),
-				    &cmd);
-}
-
-static void
-iwl_mld_mac80211_link_info_changed(struct ieee80211_hw *hw,
-				   struct ieee80211_vif *vif,
-				   struct ieee80211_bss_conf *link_conf,
-				   u64 changes)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	switch (vif->type) {
-	case NL80211_IFTYPE_STATION:
-		iwl_mld_mac80211_link_info_changed_sta(mld, vif, link_conf,
-						       changes);
-		break;
-	case NL80211_IFTYPE_AP:
-		iwl_mld_link_info_changed_ap_ibss(mld, vif, link_conf,
-						  changes);
-		break;
-	case NL80211_IFTYPE_MONITOR:
-		/* The firmware tracks this on its own in STATION mode, but
-		 * obviously not in sniffer mode.
-		 */
-		if (changes & BSS_CHANGED_MU_GROUPS)
-			iwl_mld_update_mu_groups(mld, link_conf);
-		break;
-	default:
-		/* shouldn't happen */
-		WARN_ON_ONCE(1);
-	}
-
-	if (changes & BSS_CHANGED_TXPOWER)
-		iwl_mld_set_tx_power(mld, link_conf, link_conf->txpower);
+	// todo: BSS_CHANGED_TXPOWER (task=power)
 }
 
 static
@@ -1116,8 +896,10 @@ void iwl_mld_mac80211_vif_cfg_changed(struct ieee80211_hw *hw,
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	if (vif->type != NL80211_IFTYPE_STATION)
+	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION) {
+		IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n", __func__);
 		return;
+	}
 
 	if (changes & BSS_CHANGED_ASSOC) {
 		ret = iwl_mld_mac_fw_action(mld, vif, FW_CTXT_ACTION_MODIFY);
@@ -1130,16 +912,19 @@ void iwl_mld_mac80211_vif_cfg_changed(struct ieee80211_hw *hw,
 			 */
 	}
 
-	if (changes & BSS_CHANGED_PS) {
-		/* Send both device-level and MAC-level power commands since the
-		 * firmware checks the POWER_TABLE_CMD's POWER_SAVE_EN bit to
-		 * determine SMPS mode.
-		 */
-		iwl_mld_update_device_power(mld, false);
-		iwl_mld_update_mac_power(mld, vif, false);
-	}
-
+	//todo: BSS_CHANGED_PS - power_update_mac
 	//todo: BSS_CHANGED_MLD_VALID_LINKS/CHANGED_MLD_TTLM - mlo_int_scan_wk
+}
+
+static
+int iwl_mld_mac80211_set_key(struct ieee80211_hw *hw,
+			     enum set_key_cmd cmd,
+			     struct ieee80211_vif *vif,
+			     struct ieee80211_sta *sta,
+			     struct ieee80211_key_conf *key)
+{
+	WARN_ON("Not supported yet\n");
+	return -EOPNOTSUPP;
 }
 
 static int
@@ -1218,11 +1003,7 @@ iwl_mld_mac80211_reconfig_complete(struct ieee80211_hw *hw,
 	switch (reconfig_type) {
 	case IEEE80211_RECONFIG_TYPE_RESTART:
 		mld->fw_status.in_hw_restart = false;
-		iwl_mld_send_recovery_cmd(mld, ERROR_RECOVERY_END_OF_RECOVERY);
-		iwl_trans_finish_sw_reset(mld->trans);
-		/* no need to lock, adding in parallel would schedule too */
-		if (!list_empty(&mld->txqs_to_add))
-			wiphy_work_queue(mld->wiphy, &mld->add_txqs_wk);
+		/* TODO: send recovery cmd */
 		break;
 	case IEEE80211_RECONFIG_TYPE_SUSPEND:
 		break;
@@ -1295,8 +1076,7 @@ iwl_mld_mac80211_conf_tx(struct ieee80211_hw *hw,
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct iwl_mld_link *link;
 
-	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION &&
-	    ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_AP) {
+	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION) {
 		IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n", __func__);
 		return 0;
 	}
@@ -1314,22 +1094,6 @@ iwl_mld_mac80211_conf_tx(struct ieee80211_hw *hw,
 	 */
 	/* TODO: change link for p2p device (task=P2P) */
 	return 0;
-}
-
-static void iwl_mld_set_uapsd(struct iwl_mld *mld, struct ieee80211_vif *vif)
-{
-	vif->driver_flags &= ~IEEE80211_VIF_SUPPORTS_UAPSD;
-
-	if (vif->type != NL80211_IFTYPE_STATION)
-		return;
-
-	if (vif->p2p &&
-	    !(iwlwifi_mod_params.uapsd_disable & IWL_DISABLE_UAPSD_P2P_CLIENT))
-		vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD;
-
-	if (!vif->p2p &&
-	    !(iwlwifi_mod_params.uapsd_disable & IWL_DISABLE_UAPSD_BSS))
-		vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD;
 }
 
 static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
@@ -1350,40 +1114,13 @@ static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
 		if (vif->type == NL80211_IFTYPE_STATION && !sta->tdls)
 			mld_vif->ap_sta = sta;
 
-		/* Initialize TLC here already - this really tells
-		 * the firmware only what the supported legacy rates are
-		 * (may be) since it's initialized already from what the
-		 * AP advertised in the beacon/probe response. This will
-		 * allow the firmware to send auth/assoc frames with one
-		 * of the supported rates already, rather than having to
-		 * use a mandatory rate.
-		 * If we're the AP, we'll just assume mandatory rates at
-		 * this point, but we know nothing about the STA anyway.
-		 */
-		iwl_mld_config_tlc(mld, vif, sta);
-
 		return ret;
 	} else if (old_state == IEEE80211_STA_NONE &&
 		   new_state == IEEE80211_STA_AUTH) {
-		iwl_mld_set_uapsd(mld, vif);
 		return 0;
 	} else if (old_state == IEEE80211_STA_AUTH &&
 		   new_state == IEEE80211_STA_ASSOC) {
-		ret = iwl_mld_update_all_link_stations(mld, sta);
-
-		/* Now the link_sta's capabilities are set, update the FW */
-		iwl_mld_config_tlc(mld, vif, sta);
-
-		if (vif->type == NL80211_IFTYPE_AP) {
-			/* Update MAC_CFG_FILTER_ACCEPT_BEACON if at least
-			 * one sta is associated
-			 */
-			if (++mld_vif->num_associated_stas == 1)
-				ret = iwl_mld_mac_fw_action(mld, vif,
-							    FW_CTXT_ACTION_MODIFY);
-		}
-
-		return ret;
+		return iwl_mld_update_all_link_stations(mld, sta);
 	} else if (old_state == IEEE80211_STA_ASSOC &&
 		   new_state == IEEE80211_STA_AUTHORIZED) {
 		mld_vif->authorized = true;
@@ -1398,9 +1135,6 @@ static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
 		 */
 		if (!sta->mfp)
 			ret = iwl_mld_update_all_link_stations(mld, sta);
-
-		/* We can use wide bandwidth now, not only 20 MHz */
-		iwl_mld_config_tlc(mld, vif, sta);
 
 		return ret;
 	} else {
@@ -1420,28 +1154,16 @@ static int iwl_mld_move_sta_state_down(struct iwl_mld *mld,
 	if (old_state == IEEE80211_STA_AUTHORIZED &&
 	    new_state == IEEE80211_STA_ASSOC) {
 		mld_vif->authorized = false;
-		/* once we move into assoc state, need to update the FW to
-		 * stop using wide bandwidth
-		 */
-		iwl_mld_config_tlc(mld, vif, sta);
 	} else if (old_state == IEEE80211_STA_ASSOC &&
 		   new_state == IEEE80211_STA_AUTH) {
-		if (vif->type == NL80211_IFTYPE_AP &&
-		    !WARN_ON(!mld_vif->num_associated_stas)) {
-			/* Update MAC_CFG_FILTER_ACCEPT_BEACON if the last sta
-			 * is disassociating
-			 */
-			if (--mld_vif->num_associated_stas == 0)
-				iwl_mld_mac_fw_action(mld, vif,
-						      FW_CTXT_ACTION_MODIFY);
-		}
+		/* nothing */
 	} else if (old_state == IEEE80211_STA_AUTH &&
 		   new_state == IEEE80211_STA_NONE) {
 		/* nothing */
 	} else if (old_state == IEEE80211_STA_NONE &&
 		   new_state == IEEE80211_STA_NOTEXIST) {
-		iwl_mld_remove_sta(mld, sta);
 		mld_vif->ap_sta = NULL;
+		iwl_mld_remove_sta(mld, sta);
 	} else {
 		IWL_ERR(mld, "NOT IMPLEMENTED YET\n");
 		return -EINVAL;
@@ -1461,8 +1183,7 @@ static int iwl_mld_mac80211_sta_state(struct ieee80211_hw *hw,
 	IWL_DEBUG_MAC80211(mld, "station %pM state change %d->%d\n",
 			   sta->addr, old_state, new_state);
 
-	if ((ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION &&
-	     ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_AP) ||
+	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_STATION ||
 	    sta->tdls) {
 		IWL_ERR(mld, "NOT IMPLEMENTED YET %s\n", __func__);
 		return -EINVAL;
@@ -1492,7 +1213,7 @@ static void iwl_mld_mac80211_flush(struct ieee80211_hw *hw,
 			wiphy_dereference(mld->wiphy,
 					  mld->fw_id_to_link_sta[i]);
 
-		if (IS_ERR_OR_NULL(link_sta))
+		if (!link_sta)
 			continue;
 
 		/* Check that the sta belongs to the given vif */
@@ -1515,321 +1236,6 @@ static void iwl_mld_mac80211_flush_sta(struct ieee80211_hw *hw,
 	iwl_mld_flush_sta_txqs(mld, sta);
 }
 
-static int
-iwl_mld_mac80211_ampdu_action(struct ieee80211_hw *hw,
-			      struct ieee80211_vif *vif,
-			      struct ieee80211_ampdu_params *params)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-	struct ieee80211_sta *sta = params->sta;
-	enum ieee80211_ampdu_mlme_action action = params->action;
-	u16 tid = params->tid;
-	u16 ssn = params->ssn;
-	u16 buf_size = params->buf_size;
-	u16 timeout = params->timeout;
-	int ret;
-
-	IWL_DEBUG_HT(mld, "A-MPDU action on addr %pM tid: %d action: %d\n",
-		     sta->addr, tid, action);
-
-	switch (action) {
-	case IEEE80211_AMPDU_RX_START:
-		/* TODO: BT coex amsdu disallowed (task=coex) */
-		ret = iwl_mld_ampdu_rx_start(mld, sta, tid, ssn, buf_size,
-					     timeout);
-		break;
-	case IEEE80211_AMPDU_RX_STOP:
-		ret = iwl_mld_ampdu_rx_stop(mld, sta, tid);
-		break;
-	default:
-		/* The mac80211 TX_AMPDU_SETUP_IN_HW flag is set for all
-		 * devices, since all support TX A-MPDU offload in hardware.
-		 * Therefore, no TX action should be requested here.
-		 */
-		WARN_ON_ONCE(1);
-		return -EINVAL;
-	}
-
-	return ret;
-}
-
-static bool iwl_mld_can_hw_csum(struct sk_buff *skb)
-{
-	u8 protocol = ip_hdr(skb)->protocol;
-
-	return protocol == IPPROTO_TCP || protocol == IPPROTO_UDP;
-}
-
-static bool iwl_mld_mac80211_can_aggregate(struct ieee80211_hw *hw,
-					   struct sk_buff *head,
-					   struct sk_buff *skb)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	if (!IS_ENABLED(CONFIG_INET))
-		return false;
-
-	/* For now don't aggregate IPv6 in AMSDU */
-	if (skb->protocol != htons(ETH_P_IP))
-		return false;
-#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
-	if (mld->trans->dbg_cfg.HW_CSUM_DISABLE)
-		return false;
-#endif
-
-	/* Allow aggregation only if both frames have the same HW csum offload
-	 * capability, ensuring consistent HW or SW csum handling in A-MSDU.
-	 */
-	return iwl_mld_can_hw_csum(skb) == iwl_mld_can_hw_csum(head);
-}
-
-static void iwl_mld_mac80211_sync_rx_queues(struct ieee80211_hw *hw)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	iwl_mld_sync_rx_queues(mld, IWL_MLD_RXQ_EMPTY, NULL, 0);
-}
-
-static void iwl_mld_sta_rc_update(struct ieee80211_hw *hw,
-				  struct ieee80211_vif *vif,
-				  struct ieee80211_link_sta *link_sta,
-				  u32 changed)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	if (changed & (IEEE80211_RC_BW_CHANGED |
-		       IEEE80211_RC_SUPP_RATES_CHANGED |
-		       IEEE80211_RC_NSS_CHANGED)) {
-		struct ieee80211_bss_conf *link =
-			link_conf_dereference_check(vif, link_sta->link_id);
-
-		if (WARN_ON(!link))
-			return;
-
-		iwl_mld_config_tlc_link(mld, vif, link, link_sta);
-	}
-}
-
-static void iwl_mld_set_wakeup(struct ieee80211_hw *hw, bool enabled)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	device_set_wakeup_enable(mld->trans->dev, enabled);
-}
-
-/* Returns 0 on success. 1 if failed to suspend with wowlan:
- * If the circumstances didn't satisfy the conditions for suspension
- * with wowlan, mac80211 would use the no_wowlan flow.
- * If an error had occurred we update the trans status and state here
- * and the result will be stopping the FW.
- */
-static int
-iwl_mld_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-	int ret;
-
-	iwl_fw_runtime_suspend(&mld->fwrt);
-
-	ret = iwl_mld_wowlan_suspend(mld, wowlan);
-	if (ret) {
-		if (ret < 0) {
-			mld->trans->state = IWL_TRANS_NO_FW;
-			set_bit(STATUS_FW_ERROR, &mld->trans->status);
-		}
-		return 1;
-	}
-
-	if (iwl_mld_no_wowlan_suspend(mld))
-		return 1;
-
-	return 0;
-}
-
-static int iwl_mld_resume(struct ieee80211_hw *hw)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-	int ret;
-
-	ret = iwl_mld_wowlan_resume(mld);
-
-	if (!ret)
-		iwl_fw_runtime_resume(&mld->fwrt);
-
-	return ret;
-}
-
-static int iwl_mld_alloc_ptk_pn(struct iwl_mld *mld,
-				struct iwl_mld_sta *mld_sta,
-				struct ieee80211_key_conf *key,
-				struct iwl_mld_ptk_pn **ptk_pn)
-{
-	u8 num_rx_queues = mld->trans->num_rx_queues;
-	int keyidx = key->keyidx;
-	struct ieee80211_key_seq seq;
-
-	if (WARN_ON(keyidx >= ARRAY_SIZE(mld_sta->ptk_pn)))
-		return -EINVAL;
-
-	WARN_ON(rcu_access_pointer(mld_sta->ptk_pn[keyidx]));
-	*ptk_pn = kzalloc(struct_size(*ptk_pn, q, num_rx_queues),
-			  GFP_KERNEL);
-	if (!*ptk_pn)
-		return -ENOMEM;
-
-	for (u8 tid = 0; tid < IWL_MAX_TID_COUNT; tid++) {
-		ieee80211_get_key_rx_seq(key, tid, &seq);
-		for (u8 q = 0; q < num_rx_queues; q++)
-			memcpy((*ptk_pn)->q[q].pn[tid], seq.ccmp.pn,
-			       IEEE80211_CCMP_PN_LEN);
-	}
-
-	rcu_assign_pointer(mld_sta->ptk_pn[keyidx], *ptk_pn);
-
-	return 0;
-}
-
-static int iwl_mld_set_key_add(struct iwl_mld *mld,
-			       struct ieee80211_vif *vif,
-			       struct ieee80211_sta *sta,
-			       struct ieee80211_key_conf *key)
-{
-	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
-	struct iwl_mld_sta *mld_sta =
-		sta ? iwl_mld_sta_from_mac80211(sta) : NULL;
-	struct iwl_mld_ptk_pn *ptk_pn = NULL;
-	int keyidx = key->keyidx;
-	int ret;
-
-	switch (key->cipher) {
-	case WLAN_CIPHER_SUITE_WEP40:
-	case WLAN_CIPHER_SUITE_WEP104:
-		IWL_DEBUG_MAC80211(mld, "Use SW encryption for WEP\n");
-		return -EOPNOTSUPP;
-	case WLAN_CIPHER_SUITE_TKIP:
-		if (vif->type == NL80211_IFTYPE_STATION) {
-			key->flags |= IEEE80211_KEY_FLAG_PUT_MIC_SPACE;
-			break;
-		}
-		IWL_DEBUG_MAC80211(mld, "Use SW encryption for TKIP\n");
-		return -EOPNOTSUPP;
-	case WLAN_CIPHER_SUITE_CCMP:
-	case WLAN_CIPHER_SUITE_GCMP:
-	case WLAN_CIPHER_SUITE_GCMP_256:
-	case WLAN_CIPHER_SUITE_AES_CMAC:
-	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
-	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
-		break;
-	default:
-		return -EOPNOTSUPP;
-	}
-
-	if (vif->type == NL80211_IFTYPE_STATION &&
-	    (keyidx == 6 || keyidx == 7))
-		rcu_assign_pointer(mld_vif->bigtks[keyidx - 6], key);
-
-	/* TODO: for AP/IBSS, store the GTK and IGTK, and send it when
-	 * start_ap_ibss is called (see ap_early_keys) (task=soft_ap)
-	 */
-
-	if (!mld->fw_status.in_hw_restart && mld_sta &&
-	    key->flags & IEEE80211_KEY_FLAG_PAIRWISE &&
-	    (key->cipher == WLAN_CIPHER_SUITE_CCMP ||
-	     key->cipher == WLAN_CIPHER_SUITE_GCMP ||
-	     key->cipher == WLAN_CIPHER_SUITE_GCMP_256)) {
-		ret = iwl_mld_alloc_ptk_pn(mld, mld_sta, key, &ptk_pn);
-		if (ret)
-			return ret;
-	}
-
-	/* TODO: for iwlmei, track the cipher of the pairwise key (task=iwlmei) */
-
-	IWL_DEBUG_MAC80211(mld, "set hwcrypto key (sta:%pM, id:%d)\n",
-			   sta ? sta->addr : NULL, keyidx);
-
-	ret = iwl_mld_add_key(mld, vif, sta, key);
-	if (ret) {
-		IWL_WARN(mld, "set key failed (%d)\n", ret);
-		key->hw_key_idx = STA_KEY_IDX_INVALID;
-		if (ptk_pn) {
-			RCU_INIT_POINTER(mld_sta->ptk_pn[keyidx], NULL);
-			kfree(ptk_pn);
-		}
-
-		return -EOPNOTSUPP;
-	}
-
-	return 0;
-}
-
-static void iwl_mld_set_key_remove(struct iwl_mld *mld,
-				   struct ieee80211_vif *vif,
-				   struct ieee80211_sta *sta,
-				   struct ieee80211_key_conf *key)
-{
-	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
-	struct iwl_mld_sta *mld_sta =
-		sta ? iwl_mld_sta_from_mac80211(sta) : NULL;
-	int keyidx = key->keyidx;
-
-	if (vif->type == NL80211_IFTYPE_STATION &&
-	    (keyidx == 6 || keyidx == 7))
-		RCU_INIT_POINTER(mld_vif->bigtks[keyidx - 6], NULL);
-
-	/* TODO: ignore AP early key (task=softAP) */
-
-	if (mld_sta && key->flags & IEEE80211_KEY_FLAG_PAIRWISE &&
-	    (key->cipher == WLAN_CIPHER_SUITE_CCMP ||
-	     key->cipher == WLAN_CIPHER_SUITE_GCMP ||
-	     key->cipher == WLAN_CIPHER_SUITE_GCMP_256)) {
-		struct iwl_mld_ptk_pn *ptk_pn;
-
-		if (WARN_ON(keyidx >= ARRAY_SIZE(mld_sta->ptk_pn)))
-			return;
-
-		ptk_pn = wiphy_dereference(mld->wiphy,
-					   mld_sta->ptk_pn[keyidx]);
-		RCU_INIT_POINTER(mld_sta->ptk_pn[keyidx], NULL);
-		if (!WARN_ON(!ptk_pn))
-			kfree_rcu(ptk_pn, rcu_head);
-	}
-
-	/* We already removed it */
-	if (key->hw_key_idx == STA_KEY_IDX_INVALID)
-		return;
-
-	IWL_DEBUG_MAC80211(mld, "disable hwcrypto key\n");
-
-	iwl_mld_remove_key(mld, vif, sta, key);
-}
-
-static int iwl_mld_mac80211_set_key(struct ieee80211_hw *hw,
-				    enum set_key_cmd cmd,
-				    struct ieee80211_vif *vif,
-				    struct ieee80211_sta *sta,
-				    struct ieee80211_key_conf *key)
-{
-	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-	int ret;
-
-	switch (cmd) {
-	case SET_KEY:
-		ret = iwl_mld_set_key_add(mld, vif, sta, key);
-		if (ret)
-			ret = -EOPNOTSUPP;
-		break;
-	case DISABLE_KEY:
-		iwl_mld_set_key_remove(mld, vif, sta, key);
-		ret = 0;
-		break;
-	default:
-		ret = -EINVAL;
-		break;
-	}
-
-	return ret;
-}
-
 const struct ieee80211_ops iwl_mld_hw_ops = {
 	.tx = iwl_mld_mac80211_tx,
 	.start = iwl_mld_mac80211_start,
@@ -1838,7 +1244,6 @@ const struct ieee80211_ops iwl_mld_hw_ops = {
 	.add_interface = iwl_mld_mac80211_add_interface,
 	.remove_interface = iwl_mld_mac80211_remove_interface,
 	.conf_tx = iwl_mld_mac80211_conf_tx,
-	.prepare_multicast = iwl_mld_mac80211_prepare_multicast,
 	.configure_filter = iwl_mld_mac80211_configure_filter,
 	.reconfig_complete = iwl_mld_mac80211_reconfig_complete,
 	.wake_tx_queue = iwl_mld_mac80211_wake_tx_queue,
@@ -1860,24 +1265,12 @@ const struct ieee80211_ops iwl_mld_hw_ops = {
 	.sta_state = iwl_mld_mac80211_sta_state,
 	.flush = iwl_mld_mac80211_flush,
 	.flush_sta = iwl_mld_mac80211_flush_sta,
-	.ampdu_action = iwl_mld_mac80211_ampdu_action,
-	.can_aggregate_in_amsdu = iwl_mld_mac80211_can_aggregate,
-	.sync_rx_queues = iwl_mld_mac80211_sync_rx_queues,
-	.link_sta_rc_update = iwl_mld_sta_rc_update,
-	.start_ap = iwl_mld_start_ap_ibss,
-	.stop_ap = iwl_mld_stop_ap_ibss,
 #ifdef CONFIG_PM_SLEEP
 	.suspend = iwl_mld_suspend,
 	.resume = iwl_mld_resume,
-	.set_wakeup = iwl_mld_set_wakeup,
-	.set_rekey_data = iwl_mld_set_rekey_data,
-#if IS_ENABLED(CONFIG_IPV6)
-	.ipv6_addr_change = iwl_mld_ipv6_addr_change,
-#endif /* IS_ENABLED(CONFIG_IPV6) */
 #endif /* CONFIG_PM_SLEEP */
 #ifdef CPTCFG_IWLWIFI_DEBUGFS
 	.vif_add_debugfs = iwl_mld_add_vif_debugfs,
 	.link_add_debugfs = iwl_mld_add_link_debugfs,
-	.link_sta_add_debugfs = iwl_mld_add_link_sta_debugfs,
 #endif
 };

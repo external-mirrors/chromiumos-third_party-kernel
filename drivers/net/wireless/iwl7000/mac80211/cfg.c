@@ -1610,7 +1610,7 @@ static int ieee80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
 	link_conf->ema_ap = false;
 	link_conf->bssid_indicator = 0;
 
-	__sta_info_flush(sdata, true, link_id, NULL);
+	__sta_info_flush(sdata, true, link_id);
 
 	ieee80211_remove_link_keys(link, &keys);
 	if (!list_empty(&keys)) {
@@ -1627,9 +1627,10 @@ static int ieee80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
 
 	if (sdata->wdev.cac_started) {
 		chandef = link_conf->chanreq.oper;
-		wiphy_delayed_work_cancel(wiphy, &link->dfs_cac_timer_work);
+		wiphy_delayed_work_cancel(wiphy, &sdata->dfs_cac_timer_work);
 		cfg80211_cac_event(sdata->dev, &chandef,
-				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
+				   NL80211_RADAR_CAC_ABORTED,
+				   GFP_KERNEL);
 	}
 
 	drv_stop_ap(sdata->local, sdata, link_conf);
@@ -1667,7 +1668,7 @@ static int sta_apply_auth_flags(struct ieee80211_local *local,
 		 * before drv_sta_state() is called.
 		 */
 		if (!test_sta_flag(sta, WLAN_STA_RATE_CONTROL))
-			rate_control_rate_init_all_links(sta);
+			rate_control_rate_init(sta);
 
 		ret = sta_info_move_state(sta, IEEE80211_STA_ASSOC);
 		if (ret)
@@ -2096,7 +2097,7 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct net_device *dev,
 	 */
 	if (!test_sta_flag(sta, WLAN_STA_TDLS_PEER) &&
 	    test_sta_flag(sta, WLAN_STA_ASSOC))
-		rate_control_rate_init_all_links(sta);
+		rate_control_rate_init(sta);
 
 	return sta_info_insert(sta);
 }
@@ -3455,57 +3456,48 @@ static int ieee80211_start_radar_detection(struct wiphy *wiphy,
 					   struct cfg80211_chan_def *chandef,
 					   u32 cac_time_ms)
 {
-	unsigned int link_id = 0;
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_chan_req chanreq = { .oper = *chandef };
 	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_link_data *link_data;
 	int err;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
-	if (!list_empty(&local->roc_list) || local->scanning)
-		return -EBUSY;
-
-	link_data = sdata_dereference(sdata->link[link_id], sdata);
-	if (!link_data)
-		return -ENOLINK;
+	if (!list_empty(&local->roc_list) || local->scanning) {
+		err = -EBUSY;
+		goto out_unlock;
+	}
 
 	/* whatever, but channel contexts should not complain about that one */
-	link_data->smps_mode = IEEE80211_SMPS_OFF;
-	link_data->needed_rx_chains = local->rx_chains;
+	sdata->deflink.smps_mode = IEEE80211_SMPS_OFF;
+	sdata->deflink.needed_rx_chains = local->rx_chains;
 
-	err = ieee80211_link_use_channel(link_data, &chanreq,
+	err = ieee80211_link_use_channel(&sdata->deflink, &chanreq,
 					 IEEE80211_CHANCTX_SHARED);
 	if (err)
-		return err;
+		goto out_unlock;
 
-	wiphy_delayed_work_queue(wiphy, &link_data->dfs_cac_timer_work,
+	wiphy_delayed_work_queue(wiphy, &sdata->dfs_cac_timer_work,
 				 msecs_to_jiffies(cac_time_ms));
 
-	return 0;
+ out_unlock:
+	return err;
 }
 
 static void ieee80211_end_cac(struct wiphy *wiphy,
 			      struct net_device *dev)
 {
-	unsigned int link_id = 0;
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_link_data *link_data;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	list_for_each_entry(sdata, &local->interfaces, list) {
-		link_data = sdata_dereference(sdata->link[link_id], sdata);
-		if (!link_data)
-			continue;
-
 		wiphy_delayed_work_cancel(wiphy,
-					  &link_data->dfs_cac_timer_work);
+					  &sdata->dfs_cac_timer_work);
 
 		if (sdata->wdev.cac_started) {
-			ieee80211_link_release_channel(link_data);
+			ieee80211_link_release_channel(&sdata->deflink);
 			sdata->wdev.cac_started = false;
 		}
 	}
@@ -3644,12 +3636,13 @@ void ieee80211_csa_finish(struct ieee80211_vif *vif, unsigned int link_id)
 }
 EXPORT_SYMBOL(ieee80211_csa_finish);
 
-void ieee80211_channel_switch_disconnect(struct ieee80211_vif *vif)
+void ieee80211_channel_switch_disconnect(struct ieee80211_vif *vif, bool block_tx)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
 	struct ieee80211_local *local = sdata->local;
 
+	sdata->csa_blocked_queues = block_tx;
 	sdata_info(sdata, "channel switch failed, disconnecting\n");
 	wiphy_work_queue(local->hw.wiphy, &ifmgd->csa_connection_drop_work);
 }
@@ -4997,13 +4990,6 @@ ieee80211_add_link_station(struct wiphy *wiphy, struct net_device *dev,
 	if (ret) {
 		ieee80211_sta_free_link(sta, params->link_id);
 		return ret;
-	}
-
-	if (test_sta_flag(sta, WLAN_STA_ASSOC)) {
-		struct link_sta_info *link_sta;
-
-		link_sta = sdata_dereference(sta->link[params->link_id], sdata);
-		rate_control_rate_init(link_sta);
 	}
 
 	/* ieee80211_sta_activate_link frees the link upon failure */
