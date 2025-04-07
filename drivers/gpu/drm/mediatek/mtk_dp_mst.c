@@ -480,6 +480,43 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 	mtk_dp_mst_hal_vcp_table_update(mtk_dp);
 }
 
+static int mtk_dp_mst_drv_get_fec_status(struct mtk_dp *mtk_dp)
+{
+	int ret;
+	u8 status;
+
+	ret = drm_dp_dpcd_readb(&mtk_dp->aux, DP_FEC_STATUS, &status);
+	if (ret < 0)
+		return ret;
+
+	return status;
+}
+
+static void mtk_dp_mst_drv_wait_fec_detected(struct mtk_dp *mtk_dp, bool enabled)
+{
+	int mask = enabled ? DP_FEC_DECODE_EN_DETECTED : DP_FEC_DECODE_DIS_DETECTED;
+	int status;
+	int err;
+
+	if (!drm_dp_sink_supports_fec(mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap))
+		return;
+
+	mtk_dp_fec_enable_v2(mtk_dp);
+
+	err = readx_poll_timeout(mtk_dp_mst_drv_get_fec_status, mtk_dp, status,
+				 status & mask || status < 0,
+				 10000, 200000);
+
+	if (!err && status >= 0)
+		return;
+
+	if (err == -ETIMEDOUT)
+		dev_err(mtk_dp->dev, "[DPTX] Timeout detected, FEC:%s\n",
+			str_enabled_disabled(enabled));
+	else
+		dev_err(mtk_dp->dev, "[DPTX] fail to read FEC detected status:%d\n", status);
+}
+
 static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_con *mtk_con)
 {
 	struct drm_dp_mst_topology_state *mst_state;
@@ -531,6 +568,9 @@ static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_c
 	ret = drm_dp_check_act_status(&mtk_dp->mgr);
 	if (ret != 0)
 		dev_err(mtk_dp->dev, "[DPTX] fail to check act status!");
+
+	if (first_stream)
+		mtk_dp_mst_drv_wait_fec_detected(mtk_dp, true);
 
 	ret = drm_dp_add_payload_part2(&mtk_dp->mgr,
 			drm_atomic_get_mst_payload_state(mst_state, mtk_con->port));

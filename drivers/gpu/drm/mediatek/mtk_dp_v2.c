@@ -920,7 +920,7 @@ static void mtk_dp_fec_init_setting_v2(struct mtk_dp *mtk_dp)
 			 FEC_FIFO_UNDER_POINT_DP_TRANS_P0_FLDMASK);
 }
 
-static void mtk_dp_fec_enable_v2(struct mtk_dp *mtk_dp)
+void mtk_dp_fec_enable_v2(struct mtk_dp *mtk_dp)
 {
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC enable\n");
 
@@ -934,9 +934,8 @@ static void mtk_dp_fec_disable_v2(struct mtk_dp *mtk_dp)
 	WRITE_BYTE_MASK(mtk_dp, REG_3540_DP_TRANS_P0, 0, BIT(0));
 }
 
-static void mtk_dp_fec_ready_v2(struct mtk_dp *mtk_dp, u8 err_cnt_sel)
+static void mtk_dp_fec_ready_v2(struct mtk_dp *mtk_dp)
 {
-	u8 data[3] = {0};
 	u8 *fec_cap = &mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap;
 
 	if (drm_dp_dpcd_readb(&mtk_dp->aux, DP_FEC_CAPABILITY, fec_cap) < 0) {
@@ -946,11 +945,12 @@ static void mtk_dp_fec_ready_v2(struct mtk_dp *mtk_dp, u8 err_cnt_sel)
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC cap:0x%x\n", *fec_cap);
 
 	if (drm_dp_sink_supports_fec(*fec_cap)) {
-		data[0] = (err_cnt_sel << 1) | 0x1;     /* FEC Ready */
-		drm_dp_dpcd_write(&mtk_dp->aux, 0x120, data, 0x1);
-		drm_dp_dpcd_read(&mtk_dp->aux, 0x280, data, 0x3);
-		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] FEC status & error Count:0x%x, 0x%x, 0x%x\n",
-			    data[0], data[1], data[2]);
+		if (drm_dp_dpcd_writeb(&mtk_dp->aux, DP_FEC_CONFIGURATION, DP_FEC_READY) <= 0)
+			dev_err(mtk_dp->dev, "[DPTX] Failed to set FEC_READY\n");
+
+		if (drm_dp_dpcd_writeb(&mtk_dp->aux, DP_FEC_STATUS,
+			       DP_FEC_DECODE_EN_DETECTED | DP_FEC_DECODE_DIS_DETECTED) <= 0)
+			dev_err(mtk_dp->dev, "[DPTX] Failed to clear FEC detected flags\n");
 	}
 }
 
@@ -3854,7 +3854,7 @@ static bool mtk_dp_check_sink_cap_v2(struct mtk_dp *mtk_dp)
 		return false;
 
 	if (mtk_dp->training_info.dpcd_rev >= 0x14) {
-		mtk_dp_fec_ready_v2(mtk_dp, FEC_BIT_ERROR_COUNT);
+		mtk_dp_fec_ready_v2(mtk_dp);
 		mtk_dp_dsc_support_v2(mtk_dp);
 	}
 
@@ -4550,6 +4550,9 @@ static void mtk_dp_encoder_enable_v2(struct drm_encoder *encoder)
 			    mtk_dp->training_info.cable_plug_in, mtk_dp->dp_ready);
 		return;
 	}
+
+	if (drm_dp_sink_supports_fec(mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap))
+		mtk_dp_fec_enable_v2(mtk_dp);
 
 	mtk_dp_video_mute_v2(mtk_dp, DP_ENCODER_ID_0, true);
 	mtk_dp_video_enable_v2(mtk_dp, DP_ENCODER_ID_0);
@@ -5422,13 +5425,10 @@ static int mtk_dp_training_handle_v2(struct mtk_dp *mtk_dp)
 	mtk_dp_fec_disable_v2(mtk_dp);
 
 	ret = mtk_dp_set_training_start_v2(mtk_dp);
-	if (ret == DP_RET_NOERR) {
+	if (ret == DP_RET_NOERR)
 		mtk_dp->dp_ready = true;
-		if (drm_dp_sink_supports_fec(mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap))
-			mtk_dp_fec_enable_v2(mtk_dp);
-	} else {
+	else
 		dev_err(mtk_dp->dev, "[DPTX] Handle Training Fail 6 times\n");
-	}
 
 	return ret;
 }
