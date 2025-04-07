@@ -161,7 +161,18 @@ static int mtk_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 static unsigned int mtk_cpufreq_hw_get(unsigned int cpu)
 {
 	struct cpufreq_mtk *c;
+	struct cpufreq_policy *policy;
 	unsigned int index;
+	unsigned int freq;
+
+	policy = cpufreq_cpu_get(cpu);
+	if (policy) {
+		freq = policy->cur;
+		cpufreq_cpu_put(policy);
+
+		if (freq)
+			return freq;
+	}
 
 	c = mtk_freq_domain_map[cpu];
 
