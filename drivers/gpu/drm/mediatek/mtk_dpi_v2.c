@@ -178,6 +178,7 @@ struct mtk_dpi_conf {
 	bool dsc_support;
 	bool use_version_2;
 	bool pol_positive_default;
+	bool hfp_adjustment_for_bs;
 };
 
 bool mtk_dpi_v2;
@@ -270,10 +271,8 @@ static void mtk_dpi_config_pol_v2(struct mtk_dpi *dpi,
 
 	mask = HSYNC_POL | VSYNC_POL;
 
-	/* TODO (b:401139318,b:402400555): tentative workaround for HDMI timing */
-	if (dpi->mode.hdisplay != 1280 || dpi->mode.vdisplay != 1024)
-		pol = (dpi_pol->hsync_pol == MTK_DPI_POLARITY_RISING ? 0 : HSYNC_POL) |
-		      (dpi_pol->vsync_pol == MTK_DPI_POLARITY_RISING ? 0 : VSYNC_POL);
+	pol = (dpi_pol->hsync_pol == MTK_DPI_POLARITY_RISING ? 0 : HSYNC_POL) |
+	      (dpi_pol->vsync_pol == MTK_DPI_POLARITY_RISING ? 0 : VSYNC_POL);
 	if (dpi->conf->is_ck_de_pol) {
 		mask |= CK_POL | DE_POL;
 		pol |= (dpi_pol->ck_pol == MTK_DPI_POLARITY_RISING ?
@@ -654,6 +653,12 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 	dpi_pol.vsync_pol = vm.flags & DISPLAY_FLAGS_VSYNC_HIGH ?
 			    MTK_DPI_POLARITY_FALLING : MTK_DPI_POLARITY_RISING;
 
+	if (dpi->conf->pol_positive_default) {
+		/* Due to the HW design, force DPI polarity positive */
+		dpi_pol.hsync_pol = MTK_DPI_POLARITY_RISING;
+		dpi_pol.vsync_pol = MTK_DPI_POLARITY_RISING;
+	}
+
 	/*
 	 * Depending on the IP version, we may output a different amount of
 	 * pixels for each iteration: divide the clock by this number and
@@ -665,6 +670,13 @@ static int mtk_dpi_set_display_mode_v2(struct mtk_dpi *dpi,
 		1 : (vm.hback_porch / dpi->conf->pixels_per_iter);
 	hsync.front_porch = ((vm.hfront_porch / dpi->conf->pixels_per_iter) == 0) ?
 		1 : (vm.hfront_porch / dpi->conf->pixels_per_iter);
+
+	if (dpi->conf->hfp_adjustment_for_bs) {
+		/* Tuning the DPI H front porch to generate BS normally */
+		u16 hfp_adjustment = dpi->dsc_enable ? 5 : 1;
+		hsync.back_porch += (hsync.front_porch - hfp_adjustment);
+		hsync.front_porch = hfp_adjustment;
+	}
 
 	hsync.shift_half_line = false;
 	vsync_lodd.sync_width = vm.vsync_len;
@@ -1037,6 +1049,7 @@ static const struct mtk_dpi_conf mt8196_dpintf_conf = {
 	.dsc_support = true,
 	.use_version_2 = true,
 	.pol_positive_default = true,
+	.hfp_adjustment_for_bs = true,
 };
 
 static void mt8196_get_clk_v2(struct mtk_dpi *dp_intf)
