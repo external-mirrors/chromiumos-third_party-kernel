@@ -4693,6 +4693,7 @@
 				clocks = <&venc_gcon_clk CLK_VEN1_CKE3_JPGDEC_JPGDEC>;
 				clock-names = "jpgdec";
 				power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VEN0>;
+				mediatek,smmu-config = <&jpeg_smmu0>;
 			};
 
 			jpgdec1: jpeg-decoder@38840000 {
@@ -4702,6 +4703,7 @@
 				clocks = <&venc_gcon_core1_clk CLK_VEN2_CKE3_JPGDEC_JPGDEC>;
 				clock-names = "jpgdec";
 				power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VEN1>;
+				mediatek,smmu-config = <&jpeg_smmu1>;
 			};
 		};
 
@@ -4720,6 +4722,7 @@
 				clocks = <&venc_gcon_clk CLK_VEN1_CKE2_JPGENC_JPGENC>;
 				clock-names = "jpgenc";
 				power-domains = <&hfrpsys  MT8196_POWER_DOMAIN_VEN0>;
+				mediatek,smmu-config = <&jpeg_smmu0>;
 			};
 
 			jpgenc1: jpeg-encoder@38830000 {
@@ -4730,7 +4733,18 @@
 					<&venc_gcon_core1_clk  CLK_VEN2_CKE2_JPGENC_JPGENC>;
 				clock-names = "jpgenc", "jpgenc_c1";
 				power-domains = <&hfrpsys MT8196_POWER_DOMAIN_VEN1>;
+				mediatek,smmu-config = <&jpeg_smmu1>;
 			};
+		};
+
+		jpeg_smmu0: syscon@380d0000 {
+			compatible = "mediatek,mt8196-jpeg-smmu", "syscon";
+			reg = <0 0x380d0000 0 0x1000>;
+		};
+
+		jpeg_smmu1: syscon@388d0000 {
+			compatible = "mediatek,mt8196-jpeg-smmu", "syscon";
+			reg = <0 0x388d0000 0 0x1000>;
 		};
 
 		mtk_apu_mem_code: mtk-apu-mem-code {
