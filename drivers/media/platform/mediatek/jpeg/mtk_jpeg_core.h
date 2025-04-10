@@ -11,6 +11,7 @@
 
 #include <linux/clk.h>
 #include <linux/interrupt.h>
+#include <linux/mfd/syscon.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fh.h>
@@ -34,17 +35,13 @@
 
 #define MTK_JPEG_MAX_EXIF_SIZE	(64 * 1024)
 
-#define JPG_REG_CORE0_GUSER_ID				0x380d0000
-#define JPG_REG_CORE1_GUSER_ID				0x388d0000
+#define JPEG_DEC_SMMU_SID				0
+#define JPEG_ENC_SMMU_SID				0
 #define JPG_REG_GUSER_ID_MASK				0x7
 #define JPG_REG_GUSER_ID_DEC_SID			0x4
 #define JPG_REG_GUSER_ID_ENC_SID			0x5
 #define JPG_REG_DEC_GUSER_ID_SHIFT			8
 #define JPG_REG_ENC_GUSER_ID_SHIFT			4
-#define GUSER_ID_MAPRANGE					4
-
-
-
 
 /**
  * enum mtk_jpeg_ctx_state - states of the context state machine
@@ -75,6 +72,7 @@ enum mtk_jpeg_ctx_state {
  * @multi_core:		mark jpeg hw is multi_core or not
  * @jpeg_worker:		jpeg dec or enc worker
  * @support_34bit:	flag to check if support dma_address 34bit
+ * @support_smmu:	flag to check if support smmu
  */
 struct mtk_jpeg_variant {
 	struct clk_bulk_data *clks;
@@ -93,6 +91,7 @@ struct mtk_jpeg_variant {
 	u32 max_hw_count;
 	void (*jpeg_worker)(struct work_struct *work);
 	bool support_34bit;
+	bool support_smmu;
 };
 
 struct mtk_jpeg_src_buf {
@@ -162,6 +161,7 @@ struct mtk_jpegdec_clk {
  * @hw_rdy:		record hw ready
  * @hw_state:		record hw state
  * @hw_lock:		spinlock protecting the hw device resource
+ * @smmu_regmap:	SMMU registers mapping
  */
 struct mtk_jpegenc_comp_dev {
 	struct device *dev;
@@ -175,6 +175,7 @@ struct mtk_jpegenc_comp_dev {
 	enum mtk_jpeg_hw_state hw_state;
 	/* spinlock protecting the hw device resource */
 	spinlock_t hw_lock;
+	struct regmap *smmu_regmap;
 };
 
 /**
@@ -189,6 +190,7 @@ struct mtk_jpegenc_comp_dev {
  * @hw_param:			jpeg decode hw parameters
  * @hw_state:			record hw state
  * @hw_lock:			spinlock protecting hw
+ * @smmu_regmap:		SMMU registers mapping
  */
 struct mtk_jpegdec_comp_dev {
 	struct device *dev;
@@ -202,6 +204,7 @@ struct mtk_jpegdec_comp_dev {
 	enum mtk_jpeg_hw_state hw_state;
 	/* spinlock protecting the hw device resource */
 	spinlock_t hw_lock;
+	struct regmap *smmu_regmap;
 };
 
 /**

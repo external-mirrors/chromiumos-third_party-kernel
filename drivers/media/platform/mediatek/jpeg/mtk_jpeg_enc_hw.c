@@ -65,30 +65,6 @@ void mtk_jpeg_enc_reset(void __iomem *base)
 }
 EXPORT_SYMBOL_GPL(mtk_jpeg_enc_reset);
 
-void mtk_jpeg_enc_set_smmu_sid(struct device *dev, int hwid)
-{
-	void __iomem *enc_reg_base;
-	u32 val, mask;
-
-	if (hwid)
-		enc_reg_base = ioremap(JPG_REG_CORE1_GUSER_ID, GUSER_ID_MAPRANGE);
-	else
-		enc_reg_base = ioremap(JPG_REG_CORE0_GUSER_ID, GUSER_ID_MAPRANGE);
-	if (!enc_reg_base) {
-		dev_err(dev, "Failed to map hardware address JPG_REG_GUSER_ID\n");
-		return;
-	}
-
-	val = ioread32(enc_reg_base);
-	mask = ~(JPG_REG_GUSER_ID_MASK << JPG_REG_ENC_GUSER_ID_SHIFT);
-	val &= mask;
-	val |= (JPG_REG_GUSER_ID_ENC_SID << JPG_REG_ENC_GUSER_ID_SHIFT);
-
-	iowrite32(val, enc_reg_base);
-	iounmap(enc_reg_base);
-}
-EXPORT_SYMBOL_GPL(mtk_jpeg_enc_set_smmu_sid);
-
 u32 mtk_jpeg_enc_get_file_size(void __iomem *base, bool support_34bit)
 {
 	/*
@@ -386,6 +362,25 @@ static int mtk_jpegenc_hw_init_irq(struct mtk_jpegenc_comp_dev *dev)
 	return 0;
 }
 
+static int mtk_jpegenc_smmu_init(struct mtk_jpegenc_comp_dev *dev)
+{
+	struct mtk_jpeg_dev *master_dev = dev->master_dev;
+
+	if (!master_dev->variant->support_smmu)
+		return 0;
+
+	dev->smmu_regmap =
+                syscon_regmap_lookup_by_phandle(dev->plat_dev->dev.of_node,
+						"mediatek,smmu-config");
+        if (IS_ERR(dev->smmu_regmap)) {
+		return dev_err_probe(dev->dev, dev->smmu_regmap,
+				     "mmap smmu_base failed(%ld)\n",
+				     PTR_ERR(dev->smmu_regmap));
+	}
+
+	return 0;
+}
+
 static int mtk_jpegenc_hw_probe(struct platform_device *pdev)
 {
 	struct mtk_jpegenc_clk *jpegenc_clk;
@@ -435,6 +430,10 @@ static int mtk_jpegenc_hw_probe(struct platform_device *pdev)
 	master_dev->enc_hw_dev[i] = dev;
 	master_dev->reg_encbase[i] = dev->reg_base;
 	dev->master_dev = master_dev;
+
+	ret = mtk_jpegenc_smmu_init(dev);
+	if (ret)
+		return ret;
 
 	platform_set_drvdata(pdev, dev);
 	pm_runtime_enable(&pdev->dev);
