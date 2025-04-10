@@ -424,13 +424,21 @@ static void cmdq_sec_irq_notify_callback(struct mbox_client *cl, void *mssg)
 
 static void cmdq_sec_irq_notify_stop(struct cmdq_sec *cmdq)
 {
-	dma_unmap_single(cmdq->pdata->mbox->dev, cmdq->clt_pkt.pa_base,
-			 cmdq->clt_pkt.buf_size, DMA_TO_DEVICE);
-	kfree(cmdq->clt_pkt.va_base);
-	memset(&cmdq->clt_pkt, 0, sizeof (cmdq->clt_pkt));
-	mbox_free_channel(cmdq->notify_chan);
-	cmdq->notify_chan = NULL;
-	memset(&cmdq->notify_clt, 0, sizeof (cmdq->notify_clt));
+	if (cmdq->notify_chan) {
+		/* trigger shutdown channel first to clear the task in thread */
+		mbox_free_channel(cmdq->notify_chan);
+		cmdq->notify_chan = NULL;
+		memset(&cmdq->notify_clt, 0, sizeof (cmdq->notify_clt));
+	}
+
+	if (cmdq->clt_pkt.pa_base)
+		dma_unmap_single(cmdq->pdata->mbox->dev, cmdq->clt_pkt.pa_base,
+				 cmdq->clt_pkt.buf_size, DMA_TO_DEVICE);
+
+	if (cmdq->clt_pkt.buf_size) {
+		kfree(cmdq->clt_pkt.va_base);
+		memset(&cmdq->clt_pkt, 0, sizeof (cmdq->clt_pkt));
+	}
 }
 
 static int cmdq_sec_irq_notify_start(struct cmdq_sec *cmdq)
@@ -444,31 +452,21 @@ static int cmdq_sec_irq_notify_start(struct cmdq_sec *cmdq)
 		return 0;
 	}
 
-	cmdq->notify_clt.dev = cmdq->pdata->mbox->dev;
-	cmdq->notify_clt.rx_callback = cmdq_sec_irq_notify_callback;
-	cmdq->notify_clt.tx_block = false;
-	cmdq->notify_clt.knows_txdone = true;
-	cmdq->notify_chan = mbox_request_channel(&cmdq->notify_clt, 0);
-	if (IS_ERR(cmdq->notify_chan)) {
-		dev_err(&cmdq->dev, "failed to request channel\n");
-		return -ENODEV;
-	}
-
 	cmdq->clt_pkt.va_base = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!cmdq->clt_pkt.va_base)
-		return -ENOMEM;
-
+	if (!cmdq->clt_pkt.va_base) {
+		err = -ENOMEM;
+		goto notify_stop;
+	}
 	cmdq->clt_pkt.buf_size = PAGE_SIZE;
+
 	dma_addr = dma_map_single(cmdq->pdata->mbox->dev, cmdq->clt_pkt.va_base,
 				  cmdq->clt_pkt.buf_size, DMA_TO_DEVICE);
 	if (dma_mapping_error(cmdq->pdata->mbox->dev, dma_addr)) {
 		dev_err(cmdq->pdata->mbox->dev, "dma map failed, size=%lu\n", PAGE_SIZE);
-		kfree(cmdq->clt_pkt.va_base);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto notify_stop;
 	}
 	cmdq->clt_pkt.pa_base = dma_addr;
-
-	INIT_WORK(&cmdq->irq_notify_work, cmdq_sec_irq_notify_work);
 
 	/* generate irq notify loop command */
 	inst = (u64 *)cmdq->clt_pkt.va_base;
@@ -486,17 +484,35 @@ static int cmdq_sec_irq_notify_start(struct cmdq_sec *cmdq)
 				   cmdq->clt_pkt.pa_base,
 				   cmdq->clt_pkt.cmd_buf_size,
 				   DMA_TO_DEVICE);
+
+	cmdq->notify_clt.dev = cmdq->pdata->mbox->dev;
+	cmdq->notify_clt.rx_callback = cmdq_sec_irq_notify_callback;
+	cmdq->notify_clt.tx_block = false;
+	cmdq->notify_clt.knows_txdone = true;
+	cmdq->notify_chan = mbox_request_channel(&cmdq->notify_clt, 0);
+	if (IS_ERR(cmdq->notify_chan)) {
+		dev_err(&cmdq->dev, "failed to request channel\n");
+		err = -ENODEV;
+		goto notify_stop;
+	}
+
+	INIT_WORK(&cmdq->irq_notify_work, cmdq_sec_irq_notify_work);
+
 	err = mbox_send_message(cmdq->notify_chan, &cmdq->clt_pkt);
 	if (err < 0) {
-		dev_err(&cmdq->dev, "%s failed:%d", __func__, err);
-		cmdq_sec_irq_notify_stop(cmdq);
-		return err;
+		dev_err(&cmdq->dev, "%s mbox_send_message failed:%d", __func__, err);
+		goto notify_stop;
 	}
 	mbox_client_txdone(cmdq->notify_chan, 0);
-
 	dev_dbg(&cmdq->dev, "%s success!", __func__);
 
 	return 0;
+
+notify_stop:
+
+	cmdq_sec_irq_notify_stop(cmdq);
+
+	return err;
 }
 
 static int cmdq_sec_mbox_flush(struct mbox_chan *chan, unsigned long timeout)
@@ -711,7 +727,16 @@ static int cmdq_sec_mbox_startup(struct mbox_chan *chan)
 
 static void cmdq_sec_mbox_shutdown(struct mbox_chan *chan)
 {
+	struct cmdq_thread *thread = (struct cmdq_thread *)chan->con_priv;
+	struct cmdq_sec_thread *sec_thread = container_of(thread,
+							  struct cmdq_sec_thread, thread);
+
 	cmdq_sec_mbox_flush(chan, 0);
+
+	if (sec_thread->task_exec_wq) {
+		destroy_workqueue(sec_thread->task_exec_wq);
+		sec_thread->task_exec_wq = NULL;
+	}
 }
 
 static const struct mbox_chan_ops cmdq_sec_mbox_chan_ops = {
@@ -724,6 +749,26 @@ struct cmdq_sec_mailbox cmdq_sec_mbox = {
 	.ops = &cmdq_sec_mbox_chan_ops,
 };
 EXPORT_SYMBOL_GPL(cmdq_sec_mbox);
+
+static int cmdq_sec_suspend(struct device *dev)
+{
+	struct cmdq_sec *cmdq = dev_get_drvdata(dev);
+
+	cmdq_sec_irq_notify_stop(cmdq);
+	return 0;
+}
+
+static int cmdq_sec_resume(struct device *dev)
+{
+	struct cmdq_sec *cmdq = dev_get_drvdata(dev);
+
+	return cmdq_sec_irq_notify_start(cmdq);
+}
+
+static const struct dev_pm_ops cmdq_sec_pm_ops = {
+	.suspend = cmdq_sec_suspend,
+	.resume = cmdq_sec_resume,
+};
 
 static int cmdq_sec_probe(struct platform_device *pdev)
 {
@@ -790,7 +835,6 @@ static int cmdq_sec_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(dev, "%s %d: cmdq_sec_irq_notify_start() failed: %d\n",
 			__func__, __LINE__, ret);
-		cmdq_sec_irq_notify_stop(cmdq);
 		goto probe_err;
 	}
 
@@ -841,10 +885,8 @@ static int cmdq_sec_probe(struct platform_device *pdev)
 	return 0;
 
 probe_err:
-
 	if (cmdq && cmdq->pdata) {
-		if (cmdq->notify_chan)
-			cmdq_sec_irq_notify_stop(cmdq);
+		cmdq_sec_irq_notify_stop(cmdq);
 
 		if (cmdq_sec_task_submit(cmdq, NULL, NULL, CMD_CMDQ_IWC_PATH_RES_RELEASE))
 			dev_err(dev, "%s %d: CMD_CMDQ_IWC_PATH_RES_RELEASE failed\n",
@@ -867,8 +909,7 @@ static int cmdq_sec_remove(struct platform_device *pdev)
 	struct cmdq_sec *cmdq = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
 
-	if (cmdq->notify_chan)
-		cmdq_sec_irq_notify_stop(cmdq);
+	cmdq_sec_irq_notify_stop(cmdq);
 
 	if (cmdq_sec_task_submit(cmdq, NULL, NULL, CMD_CMDQ_IWC_PATH_RES_RELEASE))
 		dev_err(dev, "%s %d: CMD_CMDQ_IWC_PATH_RES_RELEASE failed\n",
@@ -890,6 +931,7 @@ static struct platform_driver cmdq_sec_drv = {
 	.remove = cmdq_sec_remove,
 	.driver = {
 		.name = "mtk-cmdq-sec",
+		.pm = &cmdq_sec_pm_ops,
 	},
 };
 module_platform_driver(cmdq_sec_drv);
