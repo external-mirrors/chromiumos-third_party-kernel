@@ -4472,6 +4472,8 @@ struct ieee80211_prep_tx_info {
  *	new links bitmaps may be 0 if going from/to a non-MLO situation.
  *	The @old array contains pointers to the old bss_conf structures
  *	that were already removed, in case they're needed.
+ *	Note that removal of link should always succeed, so the return value
+ *	will be ignored in a removal only case.
  *	This callback can sleep.
  * @change_sta_links: Change the valid links of a station, similar to
  *	@change_vif_links. This callback can sleep.
@@ -6681,6 +6683,31 @@ void ieee80211_iter_keys_rcu(struct ieee80211_hw *hw,
  * or not.
  */
 void ieee80211_iter_chan_contexts_atomic(
+	struct ieee80211_hw *hw,
+	void (*iter)(struct ieee80211_hw *hw,
+		     struct ieee80211_chanctx_conf *chanctx_conf,
+		     void *data),
+	void *iter_data);
+
+/**
+ * ieee80211_iter_chan_contexts_atomic - iterate channel contexts
+ * @hw: pointer obtained from ieee80211_alloc_hw().
+ * @iter: iterator function
+ * @iter_data: data passed to iterator function
+ *
+ * Iterate all active channel contexts. This function can only be used while
+ * holding the wiphy mutex.
+ *
+ * The iterator will not find a context that's being added (during
+ * the driver callback to add it) but will find it while it's being
+ * removed.
+ *
+ * Note that during hardware restart, all contexts that existed
+ * before the restart are considered already present so will be
+ * found while iterating, whether they've been re-added already
+ * or not.
+ */
+void ieee80211_iter_chan_contexts_mtx(
 	struct ieee80211_hw *hw,
 	void (*iter)(struct ieee80211_hw *hw,
 		     struct ieee80211_chanctx_conf *chanctx_conf,

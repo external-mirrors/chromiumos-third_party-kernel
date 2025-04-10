@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #ifndef __iwl_mld_mlo_h__
 #define __iwl_mld_mlo_h__
@@ -24,7 +24,7 @@ static inline bool iwl_mld_emlsr_active(struct ieee80211_vif *vif)
 	return !!(vif->driver_flags & IEEE80211_VIF_EML_ACTIVE);
 }
 
-static inline bool iwl_mld_vif_has_emlsr(struct ieee80211_vif *vif)
+static inline bool iwl_mld_vif_has_emlsr_cap(struct ieee80211_vif *vif)
 {
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 
@@ -128,9 +128,27 @@ void iwl_mld_handle_emlsr_mode_notif(struct iwl_mld *mld,
 void iwl_mld_handle_emlsr_trans_fail_notif(struct iwl_mld *mld,
 					   struct iwl_rx_packet *pkt);
 
-void iwl_mld_emlsr_update_tpt(struct iwl_mld *mld);
+void iwl_mld_emlsr_check_tpt(struct wiphy *wiphy, struct wiphy_work *wk);
 void iwl_mld_emlsr_unblock_tpt_wk(struct wiphy *wiphy, struct wiphy_work *wk);
 
 void iwl_mld_select_links(struct iwl_mld *mld);
+
+void iwl_mld_emlsr_check_equal_bw(struct iwl_mld *mld,
+				  struct ieee80211_vif *vif,
+				  struct ieee80211_bss_conf *link);
+
+void iwl_mld_emlsr_check_bt(struct iwl_mld *mld);
+
+void iwl_mld_emlsr_check_chan_load(struct iwl_mld *mld);
+
+/**
+ * iwl_mld_retry_emlsr - Retry entering EMLSR
+ * @mld: MLD context
+ * @vif: VIF to retry EMLSR on
+ *
+ * Retry entering EMLSR on the given VIF.
+ * Use this if one of the parameters that can prevent EMLSR has changed.
+ */
+void iwl_mld_retry_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif);
 
 #endif /* __iwl_mld_mlo_h__ */

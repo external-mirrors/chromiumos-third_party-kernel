@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 
 #include "constants.h"
@@ -261,9 +261,27 @@ static bool iwl_mld_fill_mu_edca(struct iwl_mld *mld,
 	return true;
 }
 
-int
-iwl_mld_change_link_in_fw(struct iwl_mld *mld, struct ieee80211_bss_conf *link,
-			  u32 changes)
+static u8 iwl_mld_sta_rx_bw_to_fw(enum ieee80211_sta_rx_bandwidth bw)
+{
+	switch (bw) {
+	default: /* potential future values not supported by this hw/driver */
+	case IEEE80211_STA_RX_BW_20:
+		return IWL_LINK_MODIFY_BW_20;
+	case IEEE80211_STA_RX_BW_40:
+		return IWL_LINK_MODIFY_BW_40;
+	case IEEE80211_STA_RX_BW_80:
+		return IWL_LINK_MODIFY_BW_80;
+	case IEEE80211_STA_RX_BW_160:
+		return IWL_LINK_MODIFY_BW_160;
+	case IEEE80211_STA_RX_BW_320:
+		return IWL_LINK_MODIFY_BW_320;
+	}
+}
+
+static int _iwl_mld_change_link_in_fw(struct iwl_mld *mld,
+				      struct ieee80211_bss_conf *link,
+				      enum ieee80211_sta_rx_bandwidth bw,
+				      u32 changes)
 {
 	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
 	struct ieee80211_vif *vif = link->vif;
@@ -291,6 +309,16 @@ iwl_mld_change_link_in_fw(struct iwl_mld *mld, struct ieee80211_bss_conf *link,
 
 	cmd.active = cpu_to_le32(mld_link->active);
 
+	if ((changes & LINK_CONTEXT_MODIFY_ACTIVE) && !mld_link->active &&
+	    mld_link->silent_deactivation) {
+		/* We are de-activating a link that is having CSA with
+		 * immediate quiet in EMLSR. Tell the firmware not to send any
+		 * frame.
+		 */
+		cmd.block_tx = 1;
+		mld_link->silent_deactivation = false;
+	}
+
 	if (vif->type == NL80211_IFTYPE_ADHOC && link->bssid)
 		ether_addr_copy(cmd.ibss_bssid_addr, link->bssid);
 
@@ -308,6 +336,9 @@ iwl_mld_change_link_in_fw(struct iwl_mld *mld, struct ieee80211_bss_conf *link,
 
 	cmd.bi = cpu_to_le32(link->beacon_int);
 	cmd.dtim_interval = cpu_to_le32(link->beacon_int * link->dtim_period);
+
+	if (changes & LINK_CONTEXT_MODIFY_BANDWIDTH)
+		cmd.modify_bandwidth = iwl_mld_sta_rx_bw_to_fw(bw);
 
 	/* Configure HE parameters only if HE is supported, and only after
 	 * the parameters are set in mac80211 (meaning after assoc)
@@ -370,6 +401,24 @@ send_cmd:
 	return iwl_mld_send_link_cmd(mld, &cmd, FW_CTXT_ACTION_MODIFY);
 }
 
+int iwl_mld_change_link_in_fw(struct iwl_mld *mld,
+			      struct ieee80211_bss_conf *link,
+			      u32 changes)
+{
+	if (WARN_ON(changes & LINK_CONTEXT_MODIFY_BANDWIDTH))
+		changes &= ~LINK_CONTEXT_MODIFY_BANDWIDTH;
+
+	return _iwl_mld_change_link_in_fw(mld, link, 0, changes);
+}
+
+int iwl_mld_change_link_omi_bw(struct iwl_mld *mld,
+			       struct ieee80211_bss_conf *link,
+			       enum ieee80211_sta_rx_bandwidth bw)
+{
+	return _iwl_mld_change_link_in_fw(mld, link, bw,
+					  LINK_CONTEXT_MODIFY_BANDWIDTH);
+}
+
 int iwl_mld_activate_link(struct iwl_mld *mld,
 			  struct ieee80211_bss_conf *link)
 {
@@ -381,6 +430,7 @@ int iwl_mld_activate_link(struct iwl_mld *mld,
 	if (WARN_ON(!mld_link || mld_link->active))
 		return -EINVAL;
 
+	mld_link->rx_omi.exit_ts = jiffies;
 	mld_link->active = true;
 
 	ret = iwl_mld_change_link_in_fw(mld, link,
@@ -442,6 +492,309 @@ iwl_mld_rm_link_from_fw(struct iwl_mld *mld, struct ieee80211_bss_conf *link)
 	return iwl_mld_send_link_cmd(mld, &cmd, FW_CTXT_ACTION_REMOVE);
 }
 
+static void iwl_mld_omi_bw_update(struct iwl_mld *mld,
+				  struct ieee80211_bss_conf *link_conf,
+				  struct iwl_mld_link *mld_link,
+				  struct ieee80211_link_sta *link_sta,
+				  enum ieee80211_sta_rx_bandwidth bw,
+				  bool ap_update)
+{
+	enum ieee80211_sta_rx_bandwidth apply_bw;
+
+	mld_link->rx_omi.desired_bw = bw;
+
+	/* Can't update OMI while already in progress, desired_bw was
+	 * set so on FW notification the worker will see the change
+	 * and apply new the new desired bw.
+	 */
+	if (mld_link->rx_omi.bw_in_progress)
+		return;
+
+	if (bw == IEEE80211_STA_RX_BW_MAX)
+		apply_bw = ieee80211_chan_width_to_rx_bw(link_conf->chanreq.oper.width);
+	else
+		apply_bw = bw;
+
+	if (!ap_update) {
+		/* The update isn't due to AP tracking after leaving OMI,
+		 * where the AP could increase BW and then we must tell
+		 * it that we can do the increased BW as well, if we did
+		 * update the chandef.
+		 * In this case, if we want MAX, then we will need to send
+		 * a new OMI to the AP if it increases its own bandwidth as
+		 * we can (due to internal and FW limitations, and being
+		 * worried the AP might break) only send to what we're doing
+		 * at the moment. In this case, set last_max_bw; otherwise
+		 * if we really want to decrease our bandwidth set it to 0
+		 * to indicate no updates are needed if the AP changes.
+		 */
+		if (bw != IEEE80211_STA_RX_BW_MAX)
+			mld_link->rx_omi.last_max_bw = apply_bw;
+		else
+			mld_link->rx_omi.last_max_bw = 0;
+	} else {
+		/* Otherwise, if we're already trying to do maximum and
+		 * the AP is changing, set last_max_bw to the new max the
+		 * AP is using, we'll only get to this code path if the
+		 * new bandwidth of the AP is bigger than what we sent it
+		 * previously. This avoids repeatedly sending updates if
+		 * it changes bandwidth, only doing it once on an increase.
+		 */
+		mld_link->rx_omi.last_max_bw = apply_bw;
+	}
+
+	if (ieee80211_prepare_rx_omi_bw(link_sta, bw)) {
+		mld_link->rx_omi.bw_in_progress = apply_bw;
+		iwl_mld_change_link_omi_bw(mld, link_conf, apply_bw);
+	}
+}
+
+static void iwl_mld_omi_bw_finished_work(struct wiphy *wiphy,
+					 struct wiphy_work *work)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
+	struct iwl_mld_link *mld_link =
+		container_of(work, typeof(*mld_link), rx_omi.finished_work.work);
+	enum ieee80211_sta_rx_bandwidth desired_bw, switched_to_bw;
+	struct ieee80211_vif *vif = mld_link->vif;
+	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
+	struct ieee80211_bss_conf *link_conf;
+	struct ieee80211_link_sta *link_sta;
+
+	if (!mld_vif->ap_sta)
+		return;
+
+	link_sta = wiphy_dereference(mld->wiphy,
+				     mld_vif->ap_sta->link[mld_link->link_id]);
+	if (WARN_ON_ONCE(!link_sta))
+		return;
+
+	link_conf = link_conf_dereference_protected(vif, link_sta->link_id);
+	if (WARN_ON_ONCE(!link_conf))
+		return;
+
+	if (WARN_ON(!mld_link->rx_omi.bw_in_progress))
+		return;
+
+	desired_bw = mld_link->rx_omi.desired_bw;
+	switched_to_bw = mld_link->rx_omi.bw_in_progress;
+
+	ieee80211_finalize_rx_omi_bw(link_sta);
+	mld_link->rx_omi.bw_in_progress = 0;
+
+	if (desired_bw != switched_to_bw)
+		iwl_mld_omi_bw_update(mld, link_conf, mld_link, link_sta,
+				      desired_bw, false);
+}
+
+static struct ieee80211_vif *
+iwl_mld_get_omi_bw_reduction_pointers(struct iwl_mld *mld,
+				      struct ieee80211_link_sta **link_sta,
+				      struct iwl_mld_link **mld_link)
+{
+	struct iwl_mld_vif *mld_vif;
+	struct ieee80211_vif *vif;
+	int n_link_stas = 0;
+
+	*link_sta = NULL;
+
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	if (mld->trans->dbg_cfg.omi_bw_mode == 0)
+		return NULL;
+	/* omi_bw_mode == 1 forces even for older HW */
+	if (mld->trans->dbg_cfg.omi_bw_mode == -1)
+#endif
+	if (mld->trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_SC)
+		return NULL;
+
+	vif = iwl_mld_get_bss_vif(mld);
+	if (!vif)
+		return NULL;
+
+	for (int i = 0; i < ARRAY_SIZE(mld->fw_id_to_link_sta); i++) {
+		struct ieee80211_link_sta *tmp;
+
+		tmp = wiphy_dereference(mld->wiphy, mld->fw_id_to_link_sta[i]);
+		if (IS_ERR_OR_NULL(tmp))
+			continue;
+
+		n_link_stas++;
+		*link_sta = tmp;
+	}
+
+	/* can't do anything if we have TDLS peers or EMLSR */
+	if (n_link_stas != 1)
+		return NULL;
+
+	mld_vif = iwl_mld_vif_from_mac80211(vif);
+	*mld_link = iwl_mld_link_dereference_check(mld_vif,
+						   (*link_sta)->link_id);
+	if (WARN_ON(!*mld_link))
+		return NULL;
+
+	return vif;
+}
+
+void iwl_mld_omi_ap_changed_bw(struct iwl_mld *mld,
+			       struct ieee80211_bss_conf *link_conf,
+			       enum ieee80211_sta_rx_bandwidth bw)
+{
+	struct ieee80211_link_sta *link_sta;
+	struct iwl_mld_link *mld_link;
+	struct ieee80211_vif *vif;
+
+	vif = iwl_mld_get_omi_bw_reduction_pointers(mld, &link_sta, &mld_link);
+	if (!vif)
+		return;
+
+	if (WARN_ON(link_conf->vif != vif))
+		return;
+
+	/* This is 0 if we requested an OMI BW reduction and don't want to
+	 * be sending an OMI when the AP's bandwidth changes.
+	 */
+	if (!mld_link->rx_omi.last_max_bw)
+		return;
+
+	/* We only need to tell the AP if it increases BW over what we last
+	 * told it we were using, if it reduces then our last OMI to it will
+	 * not get used anyway (e.g. we said we want 160 but it's doing 80.)
+	 */
+	if (bw < mld_link->rx_omi.last_max_bw)
+		return;
+
+	iwl_mld_omi_bw_update(mld, link_conf, mld_link, link_sta, bw, true);
+}
+
+void iwl_mld_handle_omi_status_notif(struct iwl_mld *mld,
+				     struct iwl_rx_packet *pkt)
+{
+	struct ieee80211_link_sta *link_sta;
+	struct iwl_mld_link *mld_link;
+	struct ieee80211_vif *vif;
+
+	vif = iwl_mld_get_omi_bw_reduction_pointers(mld, &link_sta, &mld_link);
+	if (IWL_FW_CHECK(mld, !vif, "unexpected OMI notification\n"))
+		return;
+
+	if (IWL_FW_CHECK(mld, !mld_link->rx_omi.bw_in_progress,
+			 "OMI notification when not requested\n"))
+		return;
+
+	wiphy_delayed_work_queue(mld->hw->wiphy,
+				 &mld_link->rx_omi.finished_work,
+				 msecs_to_jiffies(IWL_MLD_OMI_AP_SETTLE_DELAY));
+}
+
+void iwl_mld_leave_omi_bw_reduction(struct iwl_mld *mld)
+{
+	struct ieee80211_bss_conf *link_conf;
+	struct ieee80211_link_sta *link_sta;
+	struct iwl_mld_link *mld_link;
+	struct ieee80211_vif *vif;
+
+	vif = iwl_mld_get_omi_bw_reduction_pointers(mld, &link_sta, &mld_link);
+	if (!vif)
+		return;
+
+	link_conf = link_conf_dereference_protected(vif, link_sta->link_id);
+	if (WARN_ON_ONCE(!link_conf))
+		return;
+
+	if (!link_conf->he_support)
+		return;
+
+	mld_link->rx_omi.exit_ts = jiffies;
+
+	iwl_mld_omi_bw_update(mld, link_conf, mld_link, link_sta,
+			      IEEE80211_STA_RX_BW_MAX, false);
+}
+
+void iwl_mld_check_omi_bw_reduction(struct iwl_mld *mld)
+{
+	enum ieee80211_sta_rx_bandwidth bw = IEEE80211_STA_RX_BW_MAX;
+	struct ieee80211_chanctx_conf *chanctx;
+	struct ieee80211_bss_conf *link_conf;
+	struct ieee80211_link_sta *link_sta;
+	struct cfg80211_chan_def chandef;
+	struct iwl_mld_link *mld_link;
+	struct iwl_mld_vif *mld_vif;
+	struct ieee80211_vif *vif;
+	struct iwl_mld_phy *phy;
+	u16 punctured;
+	int exit_thr;
+
+	/* not allowed in CAM mode */
+	if (iwlmld_mod_params.power_scheme == IWL_POWER_SCHEME_CAM)
+		return;
+
+	/* must have one BSS connection (no P2P), no TDLS, nor EMLSR */
+	vif = iwl_mld_get_omi_bw_reduction_pointers(mld, &link_sta, &mld_link);
+	if (!vif)
+		return;
+
+	link_conf = link_conf_dereference_protected(vif, link_sta->link_id);
+	if (WARN_ON_ONCE(!link_conf))
+		return;
+
+	if (!link_conf->he_support)
+		return;
+
+	chanctx = wiphy_dereference(mld->wiphy, mld_link->chan_ctx);
+	if (WARN_ON(!chanctx))
+		return;
+
+	mld_vif = iwl_mld_vif_from_mac80211(vif);
+	if (!mld_vif->authorized)
+		goto apply;
+
+	/* must not be in low-latency mode */
+	if (iwl_mld_vif_low_latency(mld_vif))
+		goto apply;
+
+	chandef = link_conf->chanreq.oper;
+
+	switch (chandef.width) {
+	case NL80211_CHAN_WIDTH_320:
+		exit_thr = IWL_MLD_OMI_EXIT_CHAN_LOAD_320;
+		break;
+	case NL80211_CHAN_WIDTH_160:
+		exit_thr = IWL_MLD_OMI_EXIT_CHAN_LOAD_160;
+		break;
+	default:
+		/* since we reduce to 80 MHz, must have more to start with */
+		goto apply;
+	}
+
+	/* not to be done if primary 80 MHz is punctured */
+	if (cfg80211_chandef_primary(&chandef, NL80211_CHAN_WIDTH_80,
+				     &punctured) < 0 ||
+	    punctured != 0)
+		goto apply;
+
+	phy = iwl_mld_phy_from_mac80211(chanctx);
+
+	if (phy->channel_load_by_us > exit_thr) {
+		/* send OMI for max bandwidth */
+		goto apply;
+	}
+
+	if (phy->channel_load_by_us > IWL_MLD_OMI_ENTER_CHAN_LOAD) {
+		/* no changes between enter/exit thresholds */
+		return;
+	}
+
+	if (time_is_before_jiffies(mld_link->rx_omi.exit_ts +
+				   msecs_to_jiffies(IWL_MLD_OMI_EXIT_PROTECTION)))
+		return;
+
+	/* reduce bandwidth to 80 MHz to save power */
+	bw = IEEE80211_STA_RX_BW_80;
+apply:
+	iwl_mld_omi_bw_update(mld, link_conf, mld_link, link_sta, bw, false);
+}
+
 IWL_MLD_ALLOC_FN(link, bss_conf)
 
 /* Constructor function for struct iwl_mld_link */
@@ -449,9 +802,15 @@ static int
 iwl_mld_init_link(struct iwl_mld *mld, struct ieee80211_bss_conf *link,
 		  struct iwl_mld_link *mld_link)
 {
+	mld_link->vif = link->vif;
+	mld_link->link_id = link->link_id;
+
 	iwl_mld_init_internal_sta(&mld_link->bcast_sta);
 	iwl_mld_init_internal_sta(&mld_link->mcast_sta);
 	iwl_mld_init_internal_sta(&mld_link->aux_sta);
+
+	wiphy_delayed_work_init(&mld_link->rx_omi.finished_work,
+				iwl_mld_omi_bw_finished_work);
 
 	return iwl_mld_allocate_link_fw_id(mld, &mld_link->fw_id, link);
 }
@@ -516,6 +875,8 @@ int iwl_mld_remove_link(struct iwl_mld *mld,
 		kfree_rcu(link, rcu_head);
 
 	RCU_INIT_POINTER(mld_vif->link[bss_conf->link_id], NULL);
+
+	wiphy_delayed_work_cancel(mld->wiphy, &link->rx_omi.finished_work);
 
 	if (WARN_ON(link->fw_id >= mld->fw->ucode_capa.num_links))
 		return -EINVAL;
@@ -667,9 +1028,13 @@ static const struct iwl_mld_rssi_to_grade rssi_to_grade_map[] = {
 
 #define MAX_GRADE (rssi_to_grade_map[ARRAY_SIZE(rssi_to_grade_map) - 1].grade)
 
-#define DEFAULT_CHAN_LOAD_LB	30
-#define DEFAULT_CHAN_LOAD_HB	15
-#define DEFAULT_CHAN_LOAD_UHB	0
+#define DEFAULT_CHAN_LOAD_2GHZ	30
+#define DEFAULT_CHAN_LOAD_5GHZ	15
+#define DEFAULT_CHAN_LOAD_6GHZ	0
+
+/* Factors calculation is done with fixed-point with a scaling factor of 1/256 */
+#define SCALE_FACTOR 256
+#define MAX_CHAN_LOAD 256
 
 static unsigned int
 iwl_mld_get_n_subchannels(const struct ieee80211_bss_conf *link_conf)
@@ -693,8 +1058,131 @@ iwl_mld_get_n_subchannels(const struct ieee80211_bss_conf *link_conf)
 	return n_subchannels;
 }
 
+static int
+iwl_mld_get_chan_load_from_element(struct iwl_mld *mld,
+				   struct ieee80211_bss_conf *link_conf)
+{
+	struct ieee80211_vif *vif = link_conf->vif;
+	const struct cfg80211_bss_ies *ies;
+	const struct element *bss_load_elem = NULL;
+	const struct ieee80211_bss_load_elem *bss_load;
+
+	guard(rcu)();
+
+	if (ieee80211_vif_link_active(vif, link_conf->link_id))
+		ies = rcu_dereference(link_conf->bss->beacon_ies);
+	else
+		ies = rcu_dereference(link_conf->bss->ies);
+
+	if (ies)
+		bss_load_elem = cfg80211_find_elem(WLAN_EID_QBSS_LOAD,
+						   ies->data, ies->len);
+
+	if (!bss_load_elem ||
+	    bss_load_elem->datalen != sizeof(*bss_load))
+		return -EINVAL;
+
+	bss_load = (const void *)bss_load_elem->data;
+
+	return bss_load->channel_util;
+}
+
+static unsigned int
+iwl_mld_get_chan_load_by_us(struct iwl_mld *mld,
+			    struct ieee80211_bss_conf *link_conf,
+			    bool expect_active_link)
+{
+	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link_conf);
+	struct ieee80211_chanctx_conf *chan_ctx;
+	struct iwl_mld_phy *phy;
+
+	if (!mld_link || !mld_link->active) {
+		WARN_ON(expect_active_link);
+		return 0;
+	}
+
+	if (WARN_ONCE(!rcu_access_pointer(mld_link->chan_ctx),
+		      "Active link (%u) without channel ctxt assigned!\n",
+		      link_conf->link_id))
+		return 0;
+
+	chan_ctx = wiphy_dereference(mld->wiphy, mld_link->chan_ctx);
+	phy = iwl_mld_phy_from_mac80211(chan_ctx);
+
+	return phy->channel_load_by_us;
+}
+
+/* Returns error if the channel utilization element is invalid/unavailable */
+int iwl_mld_get_chan_load_by_others(struct iwl_mld *mld,
+				    struct ieee80211_bss_conf *link_conf,
+				    bool expect_active_link)
+{
+	int chan_load;
+	unsigned int chan_load_by_us;
+
+	/* get overall load */
+	chan_load = iwl_mld_get_chan_load_from_element(mld, link_conf);
+	if (chan_load < 0)
+		return chan_load;
+
+	chan_load_by_us = iwl_mld_get_chan_load_by_us(mld, link_conf,
+						      expect_active_link);
+
+	/* channel load by us is given in percentage */
+	chan_load_by_us =
+		NORMALIZE_PERCENT_TO_255(chan_load_by_us);
+
+	/* Use only values that firmware sends that can possibly be valid */
+	if (chan_load_by_us <= chan_load)
+		chan_load -= chan_load_by_us;
+
+	return chan_load;
+}
+
+static unsigned int
+iwl_mld_get_default_chan_load(struct ieee80211_bss_conf *link_conf)
+{
+	enum nl80211_band band = link_conf->chanreq.oper.chan->band;
+
+	switch (band) {
+	case NL80211_BAND_2GHZ:
+		return DEFAULT_CHAN_LOAD_2GHZ;
+	case NL80211_BAND_5GHZ:
+		return DEFAULT_CHAN_LOAD_5GHZ;
+	case NL80211_BAND_6GHZ:
+		return DEFAULT_CHAN_LOAD_6GHZ;
+	default:
+		WARN_ON(1);
+		return 0;
+	}
+}
+
+unsigned int iwl_mld_get_chan_load(struct iwl_mld *mld,
+				   struct ieee80211_bss_conf *link_conf)
+{
+	int chan_load;
+
+	chan_load = iwl_mld_get_chan_load_by_others(mld, link_conf, false);
+	if (chan_load >= 0)
+		return chan_load;
+
+	/* No information from the element, take the defaults */
+	chan_load = iwl_mld_get_default_chan_load(link_conf);
+
+	/* The defaults are given in percentage */
+	return NORMALIZE_PERCENT_TO_255(chan_load);
+}
+
+static unsigned int
+iwl_mld_get_avail_chan_load(struct iwl_mld *mld,
+			    struct ieee80211_bss_conf *link_conf)
+{
+	return MAX_CHAN_LOAD - iwl_mld_get_chan_load(mld, link_conf);
+}
+
 /* This function calculates the grade of a link. Returns 0 in error case */
-unsigned int iwl_mld_get_link_grade(struct ieee80211_bss_conf *link_conf)
+unsigned int iwl_mld_get_link_grade(struct iwl_mld *mld,
+				    struct ieee80211_bss_conf *link_conf)
 {
 	enum nl80211_band band;
 	int rssi_idx;
@@ -725,6 +1213,12 @@ unsigned int iwl_mld_get_link_grade(struct ieee80211_bss_conf *link_conf)
 	if (!link_rssi)
 		link_rssi = rssi_to_grade_map[0].rssi[rssi_idx];
 
+	IWL_DEBUG_EHT(mld,
+		      "Calculating grade of link %d: band = %d, bandwidth = %d, punctured subchannels =0x%x RSSI = %d\n",
+		      link_conf->link_id, band,
+		      link_conf->chanreq.oper.width,
+		      link_conf->chanreq.oper.punctured, link_rssi);
+
 	/* Get grade based on RSSI */
 	for (int i = 0; i < ARRAY_SIZE(rssi_to_grade_map); i++) {
 		const struct iwl_mld_rssi_to_grade *line =
@@ -737,8 +1231,11 @@ unsigned int iwl_mld_get_link_grade(struct ieee80211_bss_conf *link_conf)
 	}
 
 	/* Apply the channel load and puncturing factors */
-	/* TODO: task=EMLSR task=statistics */
+	grade = grade * iwl_mld_get_avail_chan_load(mld, link_conf) / SCALE_FACTOR;
 	grade = grade * iwl_mld_get_n_subchannels(link_conf);
+
+	IWL_DEBUG_EHT(mld, "Link %d's grade: %d\n", link_conf->link_id, grade);
 
 	return grade;
 }
+EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_get_link_grade);

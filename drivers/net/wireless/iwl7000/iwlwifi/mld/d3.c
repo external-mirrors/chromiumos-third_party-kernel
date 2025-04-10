@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #include "mld.h"
 
@@ -204,8 +204,14 @@ void iwl_mld_ipv6_addr_change(struct ieee80211_hw *hw,
 }
 #endif
 
-static bool iwl_mld_check_err_tables(struct iwl_mld *mld,
-				     struct ieee80211_vif *vif)
+enum rt_status {
+	FW_ALIVE,
+	FW_NEEDS_RESET,
+	FW_ERROR,
+};
+
+static enum rt_status iwl_mld_check_err_tables(struct iwl_mld *mld,
+					       struct ieee80211_vif *vif)
 {
 	u32 err_id;
 
@@ -219,43 +225,43 @@ static bool iwl_mld_check_err_tables(struct iwl_mld *mld,
 			};
 			ieee80211_report_wowlan_wakeup(vif, &wakeup,
 						       GFP_KERNEL);
+
+			return FW_NEEDS_RESET;
 		}
-		return true;
+		return FW_ERROR;
 	}
 
 	/* check if we have lmac2 set and check for error */
 	if (iwl_fwrt_read_err_table(mld->trans,
 				    mld->trans->dbg.lmac_error_event_table[1],
 				    NULL))
-		return true;
+		return FW_ERROR;
 
 	/* check for umac error */
 	if (iwl_fwrt_read_err_table(mld->trans,
 				    mld->trans->dbg.umac_error_event_table,
 				    NULL))
-		return true;
+		return FW_ERROR;
 
-	return false;
+	return FW_ALIVE;
 }
 
-static
-struct ieee80211_vif *iwl_mld_get_bss_vif(struct iwl_mld *mld)
+static bool iwl_mld_fw_needs_restart(struct iwl_mld *mld,
+				     struct ieee80211_vif *vif)
 {
-	unsigned long fw_id_bitmap;
-	int fw_id;
+	enum rt_status rt_status = iwl_mld_check_err_tables(mld, vif);
 
-	fw_id_bitmap = iwl_mld_get_fw_bss_vifs_ids(mld);
+	if (rt_status == FW_ALIVE)
+		return false;
 
-	if (hweight8(fw_id_bitmap) != 1) {
-		IWL_ERR(mld,
-			"Must have exactly one bss vif for wowlan\n");
-		return NULL;
+	if (rt_status == FW_ERROR) {
+		IWL_ERR(mld, "FW Error occurred during suspend\n");
+		iwl_fwrt_dump_error_logs(&mld->fwrt);
+		iwl_dbg_tlv_time_point(&mld->fwrt,
+				       IWL_FW_INI_TIME_POINT_FW_ASSERT, NULL);
 	}
 
-	fw_id = __ffs(fw_id_bitmap);
-
-	return wiphy_dereference(mld->wiphy,
-				 mld->fw_id_to_vif[fw_id]);
+	return true;
 }
 
 static int
@@ -473,9 +479,14 @@ iwl_mld_handle_wowlan_info_notif(struct iwl_mld *mld,
 
 	if (IWL_FW_CHECK(mld, len < expected_len,
 			 "Invalid wowlan_info_notif (expected=%ud got=%ud)\n",
-			 expected_len, len)) {
+			 expected_len, len))
 		return true;
-	}
+
+	if (IWL_FW_CHECK(mld, notif->tid_offloaded_tx != IWL_WOWLAN_OFFLOAD_TID,
+			 "Invalid tid_offloaded_tx %d\n",
+			 wowlan_status->tid_offloaded_tx))
+		return true;
+
 
 	iwl_mld_convert_gtk_resume_data(mld, wowlan_status, notif->gtk,
 					&notif->gtk[0].sc);
@@ -486,16 +497,14 @@ iwl_mld_handle_wowlan_info_notif(struct iwl_mld *mld,
 
 	wowlan_status->replay_ctr = le64_to_cpu(notif->replay_ctr);
 	wowlan_status->pattern_number = le16_to_cpu(notif->pattern_number);
-	/* TODO: FW_CHECK the tid_offloaded_tx (task=wowlan)
-	 * With the new wowlan_info_notif we'll get this value from the FW
-	 */
+
 	wowlan_status->tid_offloaded_tx = notif->tid_offloaded_tx;
 	wowlan_status->last_qos_seq = le16_to_cpu(notif->qos_seq_ctr);
 	wowlan_status->num_of_gtk_rekeys =
 		le32_to_cpu(notif->num_of_gtk_rekeys);
 	wowlan_status->wakeup_reasons = le32_to_cpu(notif->wakeup_reasons);
 	return false;
-	/* TODO: mlo_links (task=mlo)*/
+	/* TODO: mlo_links (task=MLO)*/
 }
 
 static bool
@@ -560,18 +569,6 @@ iwl_mld_set_wake_packet(struct iwl_mld *mld,
 		skb_put_data(pkt, pktdata, hdrlen);
 		pktdata += hdrlen;
 		pkt_bufsize -= hdrlen;
-
-		if (ieee80211_has_protected(hdr->frame_control)) {
-			/* This is unlocked and using gtk_i(c)vlen,
-			 * but since everything is under RTNL still
-			 * that's not really a problem - changing
-			 * it would be difficult.
-			 */
-
-			IWL_ERR(mld, "NOT IMPLEMENTED YET: %s\n",
-				__func__);
-			/* TODO: (task=security) */
-		}
 
 		/* if truncated, FCS/ICV is (partially) gone */
 		if (truncated >= icvlen) {
@@ -796,7 +793,7 @@ iwl_mld_resume_keys_iter(struct ieee80211_hw *hw,
 	struct iwl_mld_wowlan_status *wowlan_status = data->wowlan_status;
 	u8 status_idx;
 
-	/* TODO: check key link id (task=mlo) */
+	/* TODO: check key link id (task=MLO) */
 	if (data->unhandled_cipher)
 		return;
 
@@ -1377,7 +1374,7 @@ int iwl_mld_no_wowlan_resume(struct iwl_mld *mld)
 	mld->fw_status.in_d3 = false;
 	iwl_fw_dbg_read_d3_debug_data(&mld->fwrt);
 
-	if (iwl_mld_check_err_tables(mld, NULL))
+	if (iwl_mld_fw_needs_restart(mld, NULL))
 		ret = -ENODEV;
 	else
 		ret = iwl_mld_wait_d3_notif(mld, &resume_data, false);
@@ -1388,6 +1385,7 @@ int iwl_mld_no_wowlan_resume(struct iwl_mld *mld)
 	if (ret) {
 		mld->trans->state = IWL_TRANS_NO_FW;
 		set_bit(STATUS_FW_ERROR, &mld->trans->status);
+		return ret;
 	} else {
 		iwl_mld_low_latency_restart(mld);
 	}
@@ -1834,7 +1832,6 @@ iwl_mld_wowlan_config(struct iwl_mld *mld, struct ieee80211_vif *bss_vif,
 	if (ret)
 		return ret;
 
-	/* TODO: check if order matters*/
 	ret = iwl_mld_suspend_send_security_cmds(mld, bss_vif, mld_vif,
 						 ap_sta_id);
 	if (ret)
@@ -1932,7 +1929,7 @@ int iwl_mld_wowlan_resume(struct iwl_mld *mld)
 
 	iwl_fw_dbg_read_d3_debug_data(&mld->fwrt);
 
-	if (iwl_mld_check_err_tables(mld, bss_vif)) {
+	if (iwl_mld_fw_needs_restart(mld, bss_vif)) {
 		fw_err = true;
 		goto err;
 	}

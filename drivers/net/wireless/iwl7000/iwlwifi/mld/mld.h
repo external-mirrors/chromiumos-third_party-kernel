@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #ifndef __iwl_mld_h__
 #define __iwl_mld_h__
@@ -23,6 +23,8 @@
 #include "fw/api/rx.h"
 #include "fw/api/rs.h"
 #include "fw/api/context.h"
+#include "fw/api/coex.h"
+#include "fw/api/location.h"
 
 #include "fw/dbg.h"
 
@@ -33,6 +35,68 @@
 #include "low_latency.h"
 #include "constants.h"
 #include "rfi.h"
+#include "ptp.h"
+#include "time_sync.h"
+
+/**
+ * DOC: Introduction
+ *
+ * iwlmld is an operation mode (a.k.a. op_mode) for Intel wireless devices.
+ * It is used for devices that ship after 2024 which typically support
+ * the WiFi-7 features. MLD stands for multi-link device. Note that there are
+ * devices that do not support WiFi-7 or even WiFi 6E and yet use iwlmld, but
+ * the firmware APIs used in this driver are WiFi-7 compatible.
+ *
+ * In the architecture of iwlwifi, an op_mode is a layer that translates
+ * mac80211's APIs into commands for the firmware and, of course, notifications
+ * from the firmware to mac80211's APIs. An op_mode must implement the
+ * interface defined in iwl-op-mode.h to interact with the transport layer
+ * which allows to send and receive data to the device, start the hardware,
+ * etc...
+ */
+
+/**
+ * DOC: Locking policy
+ *
+ * iwlmld has a very simple locking policy: it doesn't have any mutexes. It
+ * relies on cfg80211's wiphy->mtx and takes the lock when needed. All the
+ * control flows originating from mac80211 already acquired the lock, so that
+ * part is trivial, but also notifications that are received from the firmware
+ * and handled asynchronously are handled only after having taken the lock.
+ * This is described in notif.c.
+ * There are spin_locks needed to synchronize with the data path, around the
+ * allocation of the queues, for example.
+ */
+
+/**
+ * DOC: Debugfs
+ *
+ * iwlmld adds its share of debugfs hooks and its handlers are synchronized
+ * with the wiphy_lock using wiphy_locked_debugfs. This avoids races against
+ * resources deletion while the debugfs hook is being used.
+ */
+
+/**
+ * DOC: Main resources
+ *
+ * iwlmld is designed with the life cycle of the resource in mind. The
+ * resources are:
+ *
+ *  - struct iwl_mld (matches mac80211's struct ieee80211_hw)
+ *
+ *  - struct iwl_mld_vif (matches macu80211's struct ieee80211_vif)
+ *    iwl_mld_vif contains an array of pointers to struct iwl_mld_link
+ *    which describe the links for this vif.
+ *
+ *  - struct iwl_mld_sta (matches mac80211's struct ieee80211_sta)
+ *    iwl_mld_sta contains an array of points to struct iwl_mld_link_sta
+ *    which describes the link stations for this station
+ *
+ * Each object has properties that can survive a firmware reset or not.
+ * Asynchronous firmware notifications can declare themselves as dependent on a
+ * certain instance of those resources and that means that the notifications
+ * will be cancelled once the instance is destroyed.
+ */
 
 #define IWL_MLD_MAX_ADDRESSES		5
 
@@ -64,6 +128,7 @@
  *	cleanup using iwl_mld_free_internal_sta
  * @netdetect: indicates the FW is in suspend mode with netdetect configured
  * @p2p_device_vif: points to the p2p device vif if exists
+ * @bt_is_active: indicates that BT is active
  * @dev: pointer to device struct. For printing purposes
  * @trans: pointer to the transport layer
  * @cfg: pointer to the device configuration
@@ -83,13 +148,16 @@
  *	&async_handlers_list.
  * @ct_kill_exit_wk: worker to exit thermal kill
  * @fw_status: bitmap of fw status bits
- * @fw_status.in_hw_restart: indicates that we are currently in restart flow.
- * @fw_status.in_d3: indicates FW is in suspend mode and should be resumed
+ * @running: true if the firmware is running
+ * @do_not_dump_once: true if firmware dump must be prevented once
+ * @in_d3: indicates FW is in suspend mode and should be resumed
+ * @in_hw_restart: indicates that we are currently in restart flow.
  *	rather than restarted. Should be unset upon restart.
  * @radio_kill: bitmap of radio kill status
  * @radio_kill.hw: radio is killed by hw switch
  * @radio_kill.ct: radio is killed because the device it too hot
  * @addresses: device MAC addresses.
+ * @scan: instance of the scan object
  * @wowlan: WoWLAN support data.
  * @led: the led device
  * @mcc_src: the source id of the MCC, comes from the firmware
@@ -116,6 +184,9 @@
  *	being IBSS manager for that time and needing to respond to probe
  *	requests
  * @rfi: RFI data.
+ * @ptp_data: data of the PTP clock
+ * @time_sync: time sync data.
+ * @ftm_initiator: FTM initiator data
  */
 struct iwl_mld {
 	/* Add here fields that need clean up on restart */
@@ -139,6 +210,7 @@ struct iwl_mld {
 		bool netdetect;
 #endif /* CONFIG_PM_SLEEP */
 		struct ieee80211_vif *p2p_device_vif;
+		bool bt_is_active;
 	);
 	struct ieee80211_link_sta __rcu *fw_id_to_link_sta[IWL_STATION_COUNT_MAX];
 	/* And here fields that survive a fw restart */
@@ -205,13 +277,27 @@ struct iwl_mld {
 	struct iwl_mld_cooling_device cooling_dev;
 #endif
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
-	/* the hcmd number on which nmi will be triggered */
+	/**
+	 * @nmi_thresh: the hcmd number on which nmi will be triggered
+	 */
 	u8 nmi_thresh;
-	/* counts the number of hcmd sent */
+	/**
+	 * @hcmd_counter: counts the number of hcmd sent
+	 */
 	u32 hcmd_counter;
 #endif
 
 	struct iwl_mld_rfi rfi;
+
+	struct ptp_data ptp_data;
+
+	struct iwl_mld_time_sync_data __rcu *time_sync;
+
+	struct {
+		struct cfg80211_pmsr_request *req;
+		struct wireless_dev *req_wdev;
+		int responses[IWL_TOF_MAX_APS];
+	} ftm_initiator;
 };
 
 /* memset the part of the struct that requires cleanup on restart */
@@ -236,14 +322,12 @@ iwl_cleanup_mld(struct iwl_mld *mld)
 	CLEANUP_STRUCT(&mld->scan);
 
 	iwl_mld_cleanup_rfi(mld);
+
+#ifdef CONFIG_PM_SLEEP
 	mld->fw_status.in_d3 = false;
+#endif
 
 	iwl_mld_low_latency_restart_cleanup(mld);
-
-	/* Empty the list of async notification handlers so we won't process
-	 * notifications from the dead fw after the reconfig flow.
-	 */
-	iwl_mld_purge_async_handlers_list(mld);
 }
 
 enum iwl_power_scheme {

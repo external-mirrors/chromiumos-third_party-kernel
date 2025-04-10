@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #include <linux/crc32.h>
 
@@ -106,7 +106,7 @@ struct iwl_mld_scan_params {
 	struct cfg80211_sched_scan_plan *scan_plans;
 	bool iter_notif;
 	bool respect_p2p_go;
-	s8 fw_link_id;
+	u8 fw_link_id;
 	struct cfg80211_scan_6ghz_params *scan_6ghz_params;
 	u32 n_6ghz_params;
 	bool scan_6ghz;
@@ -473,6 +473,8 @@ iwl_mld_scan_get_cmd_gen_flags(struct iwl_mld *mld,
 
 	if (params->enable_6ghz_passive)
 		flags |= IWL_UMAC_SCAN_GEN_FLAGS_V2_6GHZ_PASSIVE_SCAN;
+
+	flags |= IWL_UMAC_SCAN_GEN_FLAGS_V2_ADAPTIVE_DWELL;
 
 	return flags;
 }
@@ -1255,32 +1257,33 @@ iwl_mld_config_sched_scan_profiles(struct iwl_mld *mld,
 	return ret;
 }
 
-static bool
-iwl_mld_sched_scan_handle_non_psc_channels(struct iwl_mld_scan_params *params)
+static int
+iwl_mld_sched_scan_handle_non_psc_channels(struct iwl_mld_scan_params *params,
+					   bool *non_psc_included)
 {
-	bool non_psc_included = false;
 	int i, j;
 
+	*non_psc_included = false;
 	/* for 6 GHZ band only PSC channels need to be added */
 	for (i = 0; i < params->n_channels; i++) {
 		struct ieee80211_channel *channel = params->channels[i];
 
 		if (channel->band == NL80211_BAND_6GHZ &&
 		    !cfg80211_channel_is_psc(channel)) {
-			non_psc_included = true;
+			*non_psc_included = true;
 			break;
 		}
 	}
 
-	if (!non_psc_included)
-		return false;
+	if (!*non_psc_included)
+		return 0;
 
 	params->channels =
 		kmemdup(params->channels,
 			sizeof(params->channels[0]) * params->n_channels,
 			GFP_KERNEL);
 	if (!params->channels)
-		return false;
+		return -ENOMEM;
 
 	for (i = j = 0; i < params->n_channels; i++) {
 		if (params->channels[i]->band == NL80211_BAND_6GHZ &&
@@ -1291,7 +1294,7 @@ iwl_mld_sched_scan_handle_non_psc_channels(struct iwl_mld_scan_params *params)
 
 	params->n_channels = j;
 
-	return true;
+	return 0;
 }
 
 static void
@@ -1663,7 +1666,10 @@ int iwl_mld_sched_scan_start(struct iwl_mld *mld,
 
 	iwl_mld_scan_build_probe_req(mld, vif, ies, &params);
 
-	non_psc_included = iwl_mld_sched_scan_handle_non_psc_channels(&params);
+	ret = iwl_mld_sched_scan_handle_non_psc_channels(&params,
+							 &non_psc_included);
+	if (ret)
+		goto out;
 
 	if (!iwl_mld_scan_fits(mld, req->n_ssids, ies, params.n_channels)) {
 		ret = -ENOBUFS;
@@ -1763,10 +1769,6 @@ static void iwl_mld_int_mlo_scan_start(struct iwl_mld *mld,
 	IWL_DEBUG_SCAN(mld, "Starting Internal MLO scan: n_channels=%zu\n",
 		       n_channels);
 
-	if (!vif->cfg.assoc || !ieee80211_vif_is_mld(vif) ||
-	    hweight16(vif->valid_links) == 1)
-		return;
-
 	size = struct_size(req, channels, n_channels);
 	req = kzalloc(size, GFP_KERNEL);
 	if (!req)
@@ -1792,6 +1794,9 @@ static void iwl_mld_int_mlo_scan_start(struct iwl_mld *mld,
 	ret = _iwl_mld_single_scan_start(mld, vif, req, &ies,
 					 IWL_MLD_SCAN_INT_MLO);
 
+	if (!ret)
+		mld->scan.last_mlo_scan_time = ktime_get_boottime_ns();
+
 	IWL_DEBUG_SCAN(mld, "Internal MLO scan: ret=%d\n", ret);
 }
 
@@ -1803,6 +1808,10 @@ void iwl_mld_int_mlo_scan(struct iwl_mld *mld, struct ieee80211_vif *vif)
 	u8 link_id;
 
 	lockdep_assert_wiphy(mld->wiphy);
+
+	if (!vif->cfg.assoc || !ieee80211_vif_is_mld(vif) ||
+	    hweight16(vif->valid_links) == 1)
+		return;
 
 	if (mld->scan.status & IWL_MLD_SCAN_INT_MLO) {
 		IWL_DEBUG_SCAN(mld, "Internal MLO scan is already running\n");
@@ -1966,7 +1975,11 @@ void iwl_mld_report_scan_aborted(struct iwl_mld *mld)
 			ieee80211_sched_scan_stopped(mld->hw);
 	}
 
-	/* TODO: IWL_MLD_SCAN_INT_MLO */
+	uid = iwl_mld_scan_uid_by_status(mld, IWL_MLD_SCAN_INT_MLO);
+	if (uid >= 0) {
+		IWL_DEBUG_SCAN(mld, "Internal MLO scan aborted\n");
+		mld->scan.uid_status[uid] = IWL_MLD_SCAN_NONE;
+	}
 
 	BUILD_BUG_ON(IWL_MLD_SCAN_NONE != 0);
 	memset(mld->scan.uid_status, 0, sizeof(mld->scan.uid_status));

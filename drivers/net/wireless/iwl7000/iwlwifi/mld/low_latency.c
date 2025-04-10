@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #include "mld.h"
 #include "iface.h"
@@ -120,9 +120,9 @@ static void iwl_mld_low_latency_wk(struct wiphy *wiphy, struct wiphy_work *wk)
 		wiphy_delayed_work_queue(mld->wiphy, &mld->low_latency.work,
 					 MLD_LL_ACTIVE_WK_PERIOD);
 
-	ieee80211_iterate_active_interfaces(mld->hw,
-					    IEEE80211_IFACE_ITER_NORMAL,
-					    iwl_mld_low_latency_iter, mld);
+	ieee80211_iterate_active_interfaces_mtx(mld->hw,
+						IEEE80211_IFACE_ITER_NORMAL,
+						iwl_mld_low_latency_iter, mld);
 }
 
 int iwl_mld_low_latency_init(struct iwl_mld *mld)
@@ -222,6 +222,9 @@ void iwl_mld_vif_update_low_latency(struct iwl_mld *mld,
 		iwl_mld_vif_set_low_latency(mld_vif, prev, cause);
 		return;
 	}
+
+	if (low_latency)
+		iwl_mld_leave_omi_bw_reduction(mld);
 
 	if (ieee80211_vif_type_p2p(vif) != NL80211_IFTYPE_P2P_CLIENT)
 		return;

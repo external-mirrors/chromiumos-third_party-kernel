@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #ifndef __iwl_mld_iface_h__
 #define __iwl_mld_iface_h__
@@ -58,6 +58,10 @@ enum iwl_mld_emlsr_blocked {
  *      not equal
  * @IWL_MLD_EMLSR_EXIT_LOW_RSSI: Link RSSI is unsuitable for EMLSR
  * @IWL_MLD_EMLSR_EXIT_LINK_USAGE: Exit EMLSR due to low TPT on secondary link
+ * @IWL_MLD_EMLSR_EXIT_BT_COEX: Exit EMLSR due to BT coexistence
+ * @IWL_MLD_EMLSR_EXIT_CHAN_LOAD: Exit EMLSR because the primary channel is not
+ *	loaded enough to justify EMLSR.
+ * @IWL_MLD_EMLSR_EXIT_RFI: Exit EMLSR due to RFI
  */
 enum iwl_mld_emlsr_exit {
 	IWL_MLD_EMLSR_EXIT_BLOCK		= 0x1,
@@ -68,6 +72,9 @@ enum iwl_mld_emlsr_exit {
 	IWL_MLD_EMLSR_EXIT_BANDWIDTH		= 0x20,
 	IWL_MLD_EMLSR_EXIT_LOW_RSSI		= 0x40,
 	IWL_MLD_EMLSR_EXIT_LINK_USAGE		= 0x80,
+	IWL_MLD_EMLSR_EXIT_BT_COEX		= 0x100,
+	IWL_MLD_EMLSR_EXIT_CHAN_LOAD		= 0x200,
+	IWL_MLD_EMLSR_EXIT_RFI			= 0x400,
 };
 
 /**
@@ -81,6 +88,8 @@ enum iwl_mld_emlsr_exit {
  * @last_exit_ts: Time of the last EMLSR exit (if @last_exit_reason is non-zero)
  * @exit_repeat_count: Number of times EMLSR was exited for the same reason
  * @unblock_tpt_wk: Unblock EMLSR because the throughput limit was reached
+ * @check_tpt_wk: a worker to check if IWL_MLD_EMLSR_BLOCKED_TPT should be
+ *	added, for example if there is no longer enough traffic.
  * @prevent_done_wk: Worker to remove %IWL_MLD_EMLSR_BLOCKED_PREVENTION
  * @tmp_non_bss_done_wk: Worker to remove %IWL_MLD_EMLSR_BLOCKED_TMP_NON_BSS
  */
@@ -99,6 +108,7 @@ struct iwl_mld_emlsr {
 	);
 
 	struct wiphy_work unblock_tpt_wk;
+	struct wiphy_delayed_work check_tpt_wk;
 
 	struct wiphy_delayed_work prevent_done_wk;
 	struct wiphy_delayed_work tmp_non_bss_done_wk;
@@ -124,6 +134,7 @@ struct iwl_mld_emlsr {
  * @beacon_inject_active: indicates an active debugfs beacon ie injection
  * @low_latency_causes: bit flags, indicating the causes for low-latency,
  *	see @iwl_mld_low_latency_cause.
+ * @ps_disabled: indicates that PS is disabled for this interface
  * @mld: pointer to the mld structure.
  * @deflink: default link data, for use in non-MLO,
  * @link: reference to link data for each valid link, for use in MLO.
@@ -150,6 +161,7 @@ struct iwl_mld_vif {
 		bool beacon_inject_active;
 #endif
 		u8 low_latency_causes;
+		bool ps_disabled;
 	);
 	/* And here fields that survive a fw restart */
 	struct iwl_mld *mld;
@@ -222,5 +234,7 @@ static inline bool iwl_mld_vif_low_latency(const struct iwl_mld_vif *mld_vif)
 {
 	return !!mld_vif->low_latency_causes;
 }
+
+struct ieee80211_vif *iwl_mld_get_bss_vif(struct iwl_mld *mld);
 
 #endif /* __iwl_mld_iface_h__ */

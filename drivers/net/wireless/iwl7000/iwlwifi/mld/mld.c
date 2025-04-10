@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2024-2025 Intel Corporation
  */
-
+#include <linux/rtnetlink.h>
 #include <net/mac80211.h>
 
 #include "fw/api/rx.h"
@@ -24,6 +24,9 @@
 #include "thermal.h"
 #include "low_latency.h"
 #include "hcmd.h"
+#include "fw/api/location.h"
+
+#include "iwl-nvm-parse.h"
 
 #define DRV_DESCRIPTION "Intel(R) MLD wireless driver for Linux"
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
@@ -70,6 +73,14 @@ static void iwl_mld_debug_setup_random_nmi(struct iwl_mld *mld)
 	}
 }
 #endif
+
+static void iwl_mld_hw_set_regulatory(struct iwl_mld *mld)
+{
+	struct wiphy *wiphy = mld->wiphy;
+
+	wiphy->regulatory_flags |= REGULATORY_WIPHY_SELF_MANAGED;
+	wiphy->regulatory_flags |= REGULATORY_ENABLE_RELAX_NO_IR;
+}
 
 VISIBLE_IF_IWLWIFI_KUNIT
 void iwl_construct_mld(struct iwl_mld *mld, struct iwl_trans *trans,
@@ -175,6 +186,8 @@ static const struct iwl_hcmd_names iwl_mld_legacy_names[] = {
 	HCMD_NAME(TX_CMD),
 	HCMD_NAME(TXPATH_FLUSH),
 	HCMD_NAME(LEDS_CMD),
+	HCMD_NAME(WNM_80211V_TIMING_MEASUREMENT_NOTIFICATION),
+	HCMD_NAME(WNM_80211V_TIMING_MEASUREMENT_CONFIRM_NOTIFICATION),
 	HCMD_NAME(SCAN_OFFLOAD_UPDATE_PROFILES_CMD),
 	HCMD_NAME(POWER_TABLE_CMD),
 	HCMD_NAME(PSM_UAPSD_AP_MISBEHAVING_NOTIFICATION),
@@ -199,6 +212,7 @@ static const struct iwl_hcmd_names iwl_mld_legacy_names[] = {
 	HCMD_NAME(WOWLAN_CONFIGURATION),
 	HCMD_NAME(WOWLAN_TSC_RSC_PARAM),
 	HCMD_NAME(WOWLAN_KEK_KCK_MATERIAL),
+	HCMD_NAME(DEBUG_HOST_COMMAND),
 	HCMD_NAME(LDBG_CONFIG_CMD),
 };
 
@@ -261,14 +275,25 @@ static const struct iwl_hcmd_names iwl_mld_mac_conf_names[] = {
  */
 static const struct iwl_hcmd_names iwl_mld_data_path_names[] = {
 	HCMD_NAME(TRIGGER_RX_QUEUES_NOTIF_CMD),
+	HCMD_NAME(WNM_PLATFORM_PTM_REQUEST_CMD),
+	HCMD_NAME(WNM_80211V_TIMING_MEASUREMENT_CONFIG_CMD),
 	HCMD_NAME(RFH_QUEUE_CONFIG_CMD),
 	HCMD_NAME(TLC_MNG_CONFIG_CMD),
 	HCMD_NAME(RX_BAID_ALLOCATION_CONFIG_CMD),
 	HCMD_NAME(SCD_QUEUE_CONFIG_CMD),
+	HCMD_NAME(OMI_SEND_STATUS_NOTIF),
 	HCMD_NAME(ESR_MODE_NOTIF),
 	HCMD_NAME(MONITOR_NOTIF),
 	HCMD_NAME(TLC_MNG_UPDATE_NOTIF),
 	HCMD_NAME(MU_GROUP_MGMT_NOTIF),
+};
+
+/* Please keep this array *SORTED* by hex value.
+ * Access is done through binary search
+ */
+static const struct iwl_hcmd_names iwl_mld_location_names[] = {
+	HCMD_NAME(TOF_RANGE_REQ_CMD),
+	HCMD_NAME(TOF_RANGE_RESPONSE_NOTIF),
 };
 
 /* Please keep this array *SORTED* by hex value.
@@ -312,6 +337,7 @@ const struct iwl_hcmd_arr iwl_mld_groups[] = {
 	[SYSTEM_GROUP] = HCMD_ARR(iwl_mld_system_names),
 	[MAC_CONF_GROUP] = HCMD_ARR(iwl_mld_mac_conf_names),
 	[DATA_PATH_GROUP] = HCMD_ARR(iwl_mld_data_path_names),
+	[LOCATION_GROUP] = HCMD_ARR(iwl_mld_location_names),
 	[REGULATORY_AND_NVM_GROUP] = HCMD_ARR(iwl_mld_reg_and_nvm_names),
 	[DEBUG_GROUP] = HCMD_ARR(iwl_mld_debug_names),
 	[PHY_OPS_GROUP] = HCMD_ARR(iwl_mld_phy_names),
@@ -367,6 +393,7 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	struct ieee80211_hw *hw;
 	struct iwl_op_mode *op_mode;
 	struct iwl_mld *mld;
+	u32 eckv_value;
 	int ret;
 
 	/* Allocate and initialize a new hardware device */
@@ -389,13 +416,21 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	iwl_mld_get_bios_tables(mld);
 	iwl_uefi_get_sgom_table(trans, &mld->fwrt);
 	iwl_uefi_get_step_table(trans);
+	if (iwl_bios_get_eckv(&mld->fwrt, &eckv_value))
+		IWL_DEBUG_RADIO(mld, "ECKV table doesn't exist in BIOS\n");
+	else
+		trans->ext_32khz_clock_valid = !!eckv_value;
 	iwl_bios_setup_step(trans, &mld->fwrt);
 	mld->bios_enable_puncturing = iwl_uefi_get_puncturing(&mld->fwrt);
 	mld->rfi.bios_enabled = iwl_rfi_is_enabled_in_bios(&mld->fwrt);
 
+	iwl_mld_hw_set_regulatory(mld);
+
 	/* Configure transport layer with the opmode specific params */
 	iwl_mld_configure_trans(op_mode);
 
+	/* needed for regulatory init */
+	rtnl_lock();
 	/* Needed for sending commands */
 	wiphy_lock(mld->wiphy);
 
@@ -405,12 +440,29 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 			break;
 	}
 
-	wiphy_unlock(mld->wiphy);
+	if (!ret) {
+		mld->nvm_data = iwl_get_nvm(mld->trans, mld->fw, 0, 0);
+		if (IS_ERR(mld->nvm_data)) {
+			IWL_ERR(mld, "Failed to read NVM: %d\n", ret);
+			ret = PTR_ERR(mld->nvm_data);
+		}
+	}
 
-	if (ret)
-		goto free_hw;
+	if (ret) {
+		wiphy_unlock(mld->wiphy);
+		rtnl_unlock();
+		goto err;
+	}
+
+	/* We are about to stop the FW. Notifications may require an
+	 * operational FW, so handle them all here before we stop.
+	 */
+	wiphy_work_flush(mld->wiphy, &mld->async_handlers_wk);
 
 	iwl_mld_stop_fw(mld);
+
+	wiphy_unlock(mld->wiphy);
+	rtnl_unlock();
 
 	ret = iwl_mld_leds_init(mld);
 	if (ret)
@@ -433,6 +485,8 @@ iwl_op_mode_mld_start(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 	iwl_mld_add_debugfs_files(mld, dbgfs_dir);
 	iwl_mld_thermal_initialize(mld);
 
+	iwl_mld_ptp_init(mld);
+
 	return op_mode;
 
 low_latency_free:
@@ -443,7 +497,8 @@ leds_exit:
 	iwl_mld_leds_exit(mld);
 free_nvm:
 	kfree(mld->nvm_data);
-free_hw:
+err:
+	iwl_trans_op_mode_leave(mld->trans);
 	ieee80211_free_hw(mld->hw);
 	return ERR_PTR(ret);
 }
@@ -453,11 +508,13 @@ iwl_op_mode_mld_stop(struct iwl_op_mode *op_mode)
 {
 	struct iwl_mld *mld = IWL_OP_MODE_GET_MLD(op_mode);
 
+	iwl_mld_ptp_remove(mld);
 	iwl_mld_leds_exit(mld);
 
 	wiphy_lock(mld->wiphy);
 	iwl_mld_thermal_exit(mld);
 	iwl_mld_low_latency_stop(mld);
+	iwl_mld_deinit_time_sync(mld);
 	wiphy_unlock(mld->wiphy);
 
 	ieee80211_unregister_hw(mld->hw);

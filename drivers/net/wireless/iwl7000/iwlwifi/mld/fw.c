@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 
 #include "mld.h"
@@ -8,10 +8,13 @@
 #include "fw/api/alive.h"
 #include "fw/api/scan.h"
 #include "fw/api/rx.h"
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+#include "fw/api/config.h"
+#include "phy.h"
+#endif
 #include "fw/dbg.h"
 #include "fw/pnvm.h"
 #include "hcmd.h"
-#include "iwl-nvm-parse.h"
 #include "power.h"
 #include "mcc.h"
 #include "led.h"
@@ -118,7 +121,7 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 	u32 umac_error_table;
 	u16 status;
 
-	if (version != 6 || pkt_len != sizeof(*palive))
+	if (version < 6 || version > 7 || pkt_len != sizeof(*palive))
 		return false;
 
 	palive = (void *)pkt->data;
@@ -167,6 +170,10 @@ static bool iwl_alive_fn(struct iwl_notif_wait_data *notif_wait,
 		     "UMAC version: Major - 0x%x, Minor - 0x%x\n",
 		     le32_to_cpu(umac->umac_major),
 		     le32_to_cpu(umac->umac_minor));
+
+	if (version >= 7)
+		IWL_DEBUG_FW(mld, "FW alive flags 0x%x\n",
+			     le16_to_cpu(palive->flags));
 
 	iwl_fwrt_update_fw_versions(&mld->fwrt, lmac1, umac);
 
@@ -289,6 +296,11 @@ int iwl_mld_run_fw_init_sequence(struct iwl_mld *mld)
 				   ARRAY_SIZE(init_complete),
 				   NULL, NULL);
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	if (mld->trans->dbg_cfg.MLD_SNIFFER_REDUCED_SENSITIVITY)
+		init_cfg.init_flags |= cpu_to_le32(BIT(IWL_INIT_PHY));
+#endif
+
 	ret = iwl_mld_send_cmd_pdu(mld,
 				   WIDE_ID(SYSTEM_GROUP, INIT_EXTENDED_CFG_CMD),
 				   &init_cfg);
@@ -298,21 +310,23 @@ int iwl_mld_run_fw_init_sequence(struct iwl_mld *mld)
 		goto init_failure;
 	}
 
+#ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
+	if (mld->trans->dbg_cfg.MLD_SNIFFER_REDUCED_SENSITIVITY) {
+		ret = iwl_mld_send_phy_cfg_cmd(mld);
+		if (ret) {
+			IWL_ERR(mld, "Failed to send PHY config command: %d\n",
+				ret);
+			iwl_remove_notification(&mld->notif_wait, &init_wait);
+			goto init_failure;
+		}
+	}
+#endif
+
 	ret = iwl_wait_notification(&mld->notif_wait, &init_wait,
 				    MLD_INIT_COMPLETE_TIMEOUT);
 	if (ret) {
 		IWL_ERR(mld, "Failed to get INIT_COMPLETE %d\n", ret);
 		goto init_failure;
-	}
-
-	if (!mld->nvm_data) {
-		mld->nvm_data = iwl_get_nvm(mld->trans, mld->fw, 0, 0);
-		if (IS_ERR(mld->nvm_data)) {
-			ret = PTR_ERR(mld->nvm_data);
-			mld->nvm_data = NULL;
-			IWL_ERR(mld, "Failed to read NVM: %d\n", ret);
-			goto init_failure;
-		}
 	}
 
 	return 0;
@@ -330,24 +344,37 @@ int iwl_mld_load_fw(struct iwl_mld *mld)
 
 	ret = iwl_trans_start_hw(mld->trans);
 	if (ret)
-		return ret;
+		goto err;
 
 	ret = iwl_mld_run_fw_init_sequence(mld);
 	if (ret)
-		return ret;
+		goto err;
+
+	ret = iwl_mld_init_mcc(mld);
+	if (ret)
+		goto err;
 
 	mld->fw_status.running = true;
 
 	return 0;
+err:
+	iwl_mld_stop_fw(mld);
+	return ret;
 }
 
 void iwl_mld_stop_fw(struct iwl_mld *mld)
 {
+	lockdep_assert_wiphy(mld->wiphy);
+
 	iwl_abort_notification_waits(&mld->notif_wait);
 
 	iwl_fw_dbg_stop_sync(&mld->fwrt);
 
 	iwl_trans_stop_device(mld->trans);
+
+	wiphy_work_cancel(mld->wiphy, &mld->async_handlers_wk);
+
+	iwl_mld_purge_async_handlers_list(mld);
 
 	mld->fw_status.running = false;
 }
@@ -476,12 +503,10 @@ static int iwl_mld_config_fw(struct iwl_mld *mld)
 	if (ret)
 		return ret;
 
-	ret = iwl_mld_init_mcc(mld);
-	if (ret)
-		return ret;
-
-	if (mld->fw_status.in_hw_restart)
+	if (mld->fw_status.in_hw_restart) {
 		iwl_mld_send_recovery_cmd(mld, ERROR_RECOVERY_UPDATE_DB);
+		iwl_mld_time_sync_fw_config(mld);
+	}
 
 	iwl_mld_led_config_fw(mld);
 
@@ -513,7 +538,7 @@ int iwl_mld_start_fw(struct iwl_mld *mld)
 	ret = iwl_mld_load_fw(mld);
 	if (IWL_FW_CHECK(mld, ret, "Failed to start firmware %d\n", ret)) {
 		iwl_fw_dbg_error_collect(&mld->fwrt, FW_DBG_TRIGGER_DRIVER);
-		goto error;
+		return ret;
 	}
 
 	IWL_DEBUG_INFO(mld, "uCode started.\n");

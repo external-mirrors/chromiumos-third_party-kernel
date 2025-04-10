@@ -3,10 +3,12 @@
  * Copyright (C) 2024-2025 Intel Corporation
  */
 
+#include <kunit/static_stub.h>
 #include "mld.h"
 #include "hcmd.h"
 #include "rfi.h"
 #include "fw/api/rfi.h"
+#include "iface.h"
 
 static const
 struct iwl_rfi_ddr_lut_entry iwl_mld_rfi_ddr_table[IWL_RFI_DDR_LUT_SIZE] = {
@@ -187,8 +189,15 @@ static bool iwl_mld_rfi_fw_state_supported(struct iwl_mld *mld)
 bool iwl_mld_rfi_supported(struct iwl_mld *mld,
 			   enum iwl_mld_rfi_feature rfi_feature)
 {
-	u32 mac_type = CSR_HW_REV_TYPE(mld->trans->hw_rev);
+	u32 mac_type;
 
+	KUNIT_STATIC_STUB_REDIRECT(iwl_mld_rfi_supported, mld, rfi_feature);
+
+	/* Disable RFI feature for SLE, ESL, FPGA */
+	if (CPTCFG_IWL_TIMEOUT_FACTOR > 1)
+		return false;
+
+	mac_type = CSR_HW_REV_TYPE(mld->trans->hw_rev);
 	if (!(mld->trans->trans_cfg->integrated && mld->rfi.bios_enabled &&
 	      iwl_mld_rfi_fw_state_supported(mld)))
 		return false;
@@ -207,6 +216,7 @@ bool iwl_mld_rfi_supported(struct iwl_mld *mld,
 	       fw_has_capa(&mld->fw->ucode_capa,
 			   IWL_UCODE_TLV_CAPA_RFI_DDR_SUPPORT);
 }
+EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_rfi_supported);
 
 static void iwl_mld_set_default_rfi_config_cmd(struct iwl_rfi_config_cmd *cmd)
 {
@@ -364,4 +374,156 @@ void iwl_mld_handle_rfi_support_notif(struct iwl_mld *mld,
 		IWL_DEBUG_FW(mld, "RFIm is deactivated, reason = %d\n",
 			     mld->rfi.fw_state);
 	}
+}
+
+VISIBLE_IF_IWLWIFI_KUNIT
+bool
+iwl_mld_rfi_ddr_emlsr_accept_link_pair(struct iwl_mld *mld, u8 channel_a,
+				       u8 band_a, u8 channel_b, u8 band_b)
+{
+	struct iwl_rfi_freq_table_resp_cmd *fw_table = mld->rfi.fw_table;
+	bool chan_a_is_interfered = false;
+	bool chan_b_is_interfered = false;
+	u8 n_interfering_entries = 0;
+
+	lockdep_assert_wiphy(mld->wiphy);
+
+	if (!iwl_mld_rfi_supported(mld, IWL_MLD_RFI_DDR_FEATURE))
+		return true;
+
+	for (int i = 0; i < ARRAY_SIZE(fw_table->ddr_table); i++) {
+		struct iwl_rfi_ddr_lut_entry *ddr_table_entry =
+			&fw_table->ddr_table[i];
+		bool entry_interferes_chan_a = false;
+		bool entry_interferes_chan_b = false;
+
+		/* freq 0 means empty row */
+		if (!ddr_table_entry->freq)
+			continue;
+
+		for (int j = 0; j < ARRAY_SIZE(ddr_table_entry->channels);
+		     j++) {
+			/* channel 0 means empty entry */
+			if (!ddr_table_entry->channels[j])
+				continue;
+
+			if (ddr_table_entry->channels[j] == channel_a &&
+			    ddr_table_entry->bands[j] == band_a) {
+				entry_interferes_chan_a = true;
+				chan_a_is_interfered = true;
+			}
+			if (ddr_table_entry->channels[j] == channel_b &&
+			    ddr_table_entry->bands[j] == band_b) {
+				entry_interferes_chan_b = true;
+				chan_b_is_interfered = true;
+			}
+
+			if (entry_interferes_chan_a && entry_interferes_chan_b)
+				break;
+		}
+
+		if (entry_interferes_chan_a || entry_interferes_chan_b)
+			n_interfering_entries++;
+	}
+
+	/* Allow EMLSR if at least one of the channel is free from DDR
+	 * interference
+	 */
+	if (!chan_a_is_interfered || !chan_b_is_interfered)
+		return true;
+
+	/* Wifi firmware can request PMC firmware not to operate on given
+	 * DDR freq. so if there is only one interfering freq at most,
+	 * we can ask PMC not to operate on it, hence EMLSR is allowed
+	 */
+	return n_interfering_entries < 2;
+}
+EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_rfi_ddr_emlsr_accept_link_pair);
+
+VISIBLE_IF_IWLWIFI_KUNIT
+bool
+iwl_mld_rfi_dlvr_emlsr_accept_link_pair(struct iwl_mld *mld, u8 channel_a,
+					u8 band_a, u8 channel_b, u8 band_b)
+{
+	struct iwl_rfi_freq_table_resp_cmd *fw_table = mld->rfi.fw_table;
+	bool chan_a_is_interfered = false;
+	bool chan_b_is_interfered = false;
+	bool has_free_entry = false;
+
+	lockdep_assert_wiphy(mld->wiphy);
+
+	if (!iwl_mld_rfi_supported(mld, IWL_MLD_RFI_DLVR_FEATURE))
+		return true;
+
+	for (int i = 0; i < ARRAY_SIZE(fw_table->dlvr_table); i++) {
+		struct iwl_rfi_dlvr_lut_entry *dlvr_table_entry =
+			&fw_table->dlvr_table[i];
+		bool entry_interferes_chan_a = false;
+		bool entry_interferes_chan_b = false;
+
+		/* freq 0 means empty row */
+		if (!dlvr_table_entry->freq)
+			continue;
+
+		for (int j = 0; j < ARRAY_SIZE(dlvr_table_entry->channels);
+		     j++) {
+			/* channel 0 means empty entry */
+			if (!dlvr_table_entry->channels[j])
+				continue;
+
+			if (dlvr_table_entry->channels[j] == channel_a &&
+			    dlvr_table_entry->bands[j] == band_a) {
+				entry_interferes_chan_a = true;
+				chan_a_is_interfered = true;
+			}
+			if (dlvr_table_entry->channels[j] == channel_b &&
+			    dlvr_table_entry->bands[j] == band_b) {
+				entry_interferes_chan_b = true;
+				chan_b_is_interfered = true;
+			}
+
+			if (entry_interferes_chan_a && entry_interferes_chan_b)
+				break;
+		}
+
+		if (!entry_interferes_chan_a && !entry_interferes_chan_b) {
+			has_free_entry = true;
+			break;
+		}
+	}
+
+	/* Allow EMLSR if at least one of the channel is free from DLVR
+	 * interference
+	 */
+	if (!chan_a_is_interfered || !chan_b_is_interfered)
+		return true;
+
+	/* Wifi firmware can request PMC firmware to operate on given DLVR freq.
+	 * hence allow EMLSR if there is free DLVR entry.
+	 */
+	return has_free_entry;
+}
+EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_rfi_dlvr_emlsr_accept_link_pair);
+
+u32
+iwl_mld_rfi_emlsr_state_link_pair(struct iwl_mld *mld,
+				  const struct cfg80211_chan_def *chandef_a,
+				  const struct cfg80211_chan_def *chandef_b)
+{
+	u8 channel_a = ieee80211_frequency_to_channel(chandef_a->center_freq1);
+	u8 channel_b = ieee80211_frequency_to_channel(chandef_b->center_freq1);
+	u8 band_a = iwl_mld_nl80211_band_to_fw(chandef_a->chan->band);
+	u8 band_b = iwl_mld_nl80211_band_to_fw(chandef_b->chan->band);
+
+	if (mld->rfi.fw_state != IWL_RFI_DDR_SUBSET_TABLE_READY ||
+	    !mld->rfi.fw_table)
+		return 0;
+
+	if (iwl_mld_rfi_ddr_emlsr_accept_link_pair(mld, channel_a, band_a,
+						   channel_b, band_b) &&
+	    iwl_mld_rfi_dlvr_emlsr_accept_link_pair(mld, channel_a, band_a,
+						    channel_b, band_b))
+		return 0;
+
+	return IWL_MLD_EMLSR_EXIT_RFI;
 }

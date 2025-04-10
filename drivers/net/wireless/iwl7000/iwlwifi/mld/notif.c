@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 
 #include "mld.h"
@@ -34,6 +34,8 @@
 #include "roc.h"
 #include "stats.h"
 #include "coex.h"
+#include "time_sync.h"
+#include "ftm-initiator.h"
 
 /* Please use this in an increasing order of the versions */
 #define CMD_VER_ENTRY(_ver, _struct) { .size = sizeof(struct _struct), .ver = _ver },
@@ -74,6 +76,13 @@ static bool iwl_mld_cancel_##name##_notif(struct iwl_mld *mld,			\
 				  u8: (notif)->id_member);			\
 }
 
+static bool iwl_mld_always_cancel(struct iwl_mld *mld,
+				  struct iwl_rx_packet *pkt,
+				  u32 obj_id)
+{
+	return true;
+}
+
 /* Currently only defined for the RX_HANDLER_SIZES options. Use this for
  * notifications that belong to a specific object, and that should be
  * canceled when the object is removed
@@ -103,6 +112,9 @@ static bool iwl_mld_cancel_##name##_notif(struct iwl_mld *mld,			\
 
 #define RX_HANDLER_OF_SCAN(_grp, _cmd, _name)				\
 	RX_HANDLER_OF_OBJ(_grp, _cmd, _name, SCAN)
+
+#define RX_HANDLER_OF_FTM_REQ(_grp, _cmd, _name)				\
+	RX_HANDLER_OF_OBJ(_grp, _cmd, _name, FTM_REQ)
 
 static void iwl_mld_handle_mfuart_notif(struct iwl_mld *mld,
 					struct iwl_rx_packet *pkt)
@@ -298,6 +310,26 @@ static void iwl_mld_handle_beacon_notification(struct iwl_mld *mld,
 	mld->ibss_manager = !!beacon->ibss_mgr_status;
 }
 
+/**
+ * DOC: Notification versioning
+ *
+ * The firmware's notifications change from time to time. In order to
+ * differentiate between different versions of the same notification, the
+ * firmware advertises the version of each notification.
+ * Here are listed all the notifications that are supported. Several versions
+ * of the same notification can be allowed at the same time:
+ *
+ * CMD_VERSION(my_multi_version_notif,
+ *	       CMD_VER_ENTRY(1, iwl_my_multi_version_notif_ver1)
+ *	       CMD_VER_ENTRY(2, iwl_my_multi_version_notif_ver2)
+ *
+ * etc...
+ *
+ * The driver will enforce that the notification coming from the firmware
+ * has its version listed here and it'll also enforce that the firmware sent
+ * at least enough bytes to cover the structure listed in the CMD_VER_ENTRY.
+ */
+
 CMD_VERSIONS(scan_complete_notif,
 	     CMD_VER_ENTRY(1, iwl_umac_scan_complete))
 CMD_VERSIONS(scan_iter_complete_notif,
@@ -345,11 +377,18 @@ CMD_VERSIONS(bt_coex_notif,
 CMD_VERSIONS(beacon_notification,
 	     CMD_VER_ENTRY(6, iwl_extended_beacon_notif))
 CMD_VERSIONS(emlsr_mode_notif,
-	     CMD_VER_ENTRY(1, iwl_mvm_esr_mode_notif))
+	     CMD_VER_ENTRY(1, iwl_esr_mode_notif))
 CMD_VERSIONS(emlsr_trans_fail_notif,
 	     CMD_VER_ENTRY(1, iwl_esr_trans_fail_notif))
 CMD_VERSIONS(uapsd_misbehaving_ap_notif,
 	     CMD_VER_ENTRY(1, iwl_uapsd_misbehaving_ap_notif))
+CMD_VERSIONS(time_msmt_notif,
+	     CMD_VER_ENTRY(1, iwl_time_msmt_notify))
+CMD_VERSIONS(time_sync_confirm_notif,
+	     CMD_VER_ENTRY(1, iwl_time_msmt_cfm_notify))
+CMD_VERSIONS(omi_status_notif,
+	     CMD_VER_ENTRY(1, iwl_omi_send_status_notif))
+CMD_VERSIONS(ftm_resp_notif, CMD_VER_ENTRY(9, iwl_tof_range_rsp_ntfy))
 
 DEFINE_SIMPLE_CANCELLATION(session_prot, iwl_session_prot_notif, mac_link_id)
 DEFINE_SIMPLE_CANCELLATION(tlc, iwl_tlc_update_notif, sta_id)
@@ -365,14 +404,38 @@ DEFINE_SIMPLE_CANCELLATION(probe_resp_data, iwl_probe_resp_data_notif,
 			   mac_id)
 DEFINE_SIMPLE_CANCELLATION(uapsd_misbehaving_ap, iwl_uapsd_misbehaving_ap_notif,
 			   mac_id)
+#define iwl_mld_cancel_omi_status_notif iwl_mld_always_cancel
+DEFINE_SIMPLE_CANCELLATION(ftm_resp, iwl_tof_range_rsp_ntfy, request_id)
 
-/*
- * Handlers for fw notifications
- * Convention: RX_HANDLER(grp, cmd, name, context),
- * This list should be in order of frequency for performance purposes.
+/**
+ * DOC: Handlers for fw notifications
  *
- * The handler can be one from three contexts, see &iwl_rx_handler_context
+ * Here are listed the notifications IDs (including the group ID), the handler
+ * of the notification and how it should be called:
+ *
+ *  - RX_HANDLER_SYNC: will be called as part of the Rx path
+ *  - RX_HANDLER_ASYNC: will be handled in a working with the wiphy_lock held
+ *
+ * This means that if the firmware sends two notifications A and B in that
+ * order and notification A is RX_HANDLER_ASYNC and notification is
+ * RX_HANDLER_SYNC, the handler of B will likely be called before the handler
+ * of A.
+ *
+ * This list should be in order of frequency for performance purposes.
+ * The handler can be one from two contexts, see &iwl_rx_handler_context
+ *
+ * A handler can declare that it relies on a specific object in which case it
+ * can be cancelled in case the object is deleted. In order to use this
+ * mechanism, a cancellation function is needed. The cancellation function must
+ * receive an object id (the index of that object in the firmware) and a
+ * notification payload. It'll return true if that specific notification should
+ * be cancelled upon the obliteration of the specific instance of the object.
+ *
+ * DEFINE_SIMPLE_CANCELLATION allows to easily create a cancellation function
+ * that wills simply return true if a given object id matches the object id in
+ * the firmware notification.
  */
+
 VISIBLE_IF_IWLWIFI_KUNIT
 const struct iwl_rx_handler iwl_mld_rx_handlers[] = {
 	RX_HANDLER_NO_OBJECT(LEGACY_GROUP, TX_CMD, tx_resp_notif,
@@ -431,6 +494,16 @@ const struct iwl_rx_handler iwl_mld_rx_handlers[] = {
 			     emlsr_trans_fail_notif, RX_HANDLER_ASYNC)
 	RX_HANDLER_OF_VIF(LEGACY_GROUP, PSM_UAPSD_AP_MISBEHAVING_NOTIFICATION,
 			  uapsd_misbehaving_ap_notif)
+	RX_HANDLER_NO_OBJECT(LEGACY_GROUP,
+			     WNM_80211V_TIMING_MEASUREMENT_NOTIFICATION,
+			     time_msmt_notif, RX_HANDLER_SYNC)
+	RX_HANDLER_NO_OBJECT(LEGACY_GROUP,
+			     WNM_80211V_TIMING_MEASUREMENT_CONFIRM_NOTIFICATION,
+			     time_sync_confirm_notif, RX_HANDLER_ASYNC)
+	RX_HANDLER_OF_LINK(DATA_PATH_GROUP, OMI_SEND_STATUS_NOTIF,
+			   omi_status_notif)
+	RX_HANDLER_OF_FTM_REQ(LOCATION_GROUP, TOF_RANGE_RESPONSE_NOTIF,
+			      ftm_resp_notif)
 };
 EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_rx_handlers);
 
@@ -562,6 +635,8 @@ void iwl_mld_rx(struct iwl_op_mode *op_mode, struct napi_struct *napi,
 	else if (unlikely(cmd_id == WIDE_ID(DATA_PATH_GROUP,
 					    RX_QUEUES_NOTIFICATION)))
 		iwl_mld_handle_rx_queues_sync_notif(mld, napi, pkt, 0);
+	else if (cmd_id == WIDE_ID(DATA_PATH_GROUP, RX_NO_DATA_NOTIF))
+		iwl_mld_rx_monitor_no_data(mld, napi, pkt, 0);
 	else
 		iwl_mld_rx_notif(mld, rxb, pkt);
 }
@@ -583,6 +658,32 @@ void iwl_mld_rx_rss(struct iwl_op_mode *op_mode, struct napi_struct *napi,
 		iwl_mld_handle_rx_queues_sync_notif(mld, napi, pkt, queue);
 	else if (unlikely(cmd_id == WIDE_ID(LEGACY_GROUP, FRAME_RELEASE)))
 		iwl_mld_handle_frame_release_notif(mld, napi, pkt, queue);
+}
+
+void iwl_mld_delete_handlers(struct iwl_mld *mld, const u16 *cmds, int n_cmds)
+{
+	struct iwl_async_handler_entry *entry, *tmp;
+
+	spin_lock_bh(&mld->async_handlers_lock);
+	list_for_each_entry_safe(entry, tmp, &mld->async_handlers_list, list) {
+		bool match = false;
+
+		for (int i = 0; i < n_cmds; i++) {
+			if (entry->rx_h->cmd_id == cmds[i]) {
+				match = true;
+				break;
+			}
+		}
+
+		if (!match)
+			continue;
+
+		iwl_mld_log_async_handler_op(mld, "Delete", &entry->rxb);
+		iwl_free_rxb(&entry->rxb);
+		list_del(&entry->list);
+		kfree(entry);
+	}
+	spin_unlock_bh(&mld->async_handlers_lock);
 }
 
 void iwl_mld_async_handlers_wk(struct wiphy *wiphy, struct wiphy_work *wk)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2005-2014, 2018-2024 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2025 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -1325,7 +1325,7 @@ static void iwl_xvt_flush_sta_tids(struct iwl_xvt *xvt)
 	for (i = 0; i < ARRAY_SIZE(xvt->queue_data); i++)
 		sta_mask |= xvt->queue_data[i].sta_mask;
 
-	for_each_set_bit(sta_id, &sta_mask, sizeof(sta_mask))
+	for_each_set_bit(sta_id, &sta_mask, sizeof(sta_mask) * BITS_PER_BYTE)
 		iwl_xvt_txpath_flush_send_cmd(xvt, sta_id, 0xFFFF);
 }
 
@@ -1888,6 +1888,8 @@ static int iwl_xvt_add_txq(struct iwl_xvt *xvt, u32 sta_mask,
 					    size, 0);
 		if (queue_id < 0)
 			return queue_id;
+		if (queue_id >= ARRAY_SIZE(xvt->queue_data))
+			return -ENOSPC;
 	} else {
 		iwl_trans_txq_enable_cfg(xvt->trans, queue_id, ssn, NULL, 0);
 		ret = iwl_xvt_send_cmd_pdu(xvt, SCD_QUEUE_CFG, 0, sizeof(*cmd),

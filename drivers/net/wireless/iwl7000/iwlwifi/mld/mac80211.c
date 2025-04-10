@@ -23,6 +23,7 @@
 #include "iface.h"
 #include "mlo.h"
 #include "stats.h"
+#include "ftm-initiator.h"
 #include "low_latency.h"
 #include "fw/api/scan.h"
 #include "fw/api/context.h"
@@ -175,14 +176,6 @@ static void iwl_mld_hw_set_security(struct iwl_mld *mld)
 			      NL80211_EXT_FEATURE_BEACON_PROTECTION);
 }
 
-static void iwl_mld_hw_set_regulatory(struct iwl_mld *mld)
-{
-	struct wiphy *wiphy = mld->wiphy;
-
-	wiphy->regulatory_flags |= REGULATORY_WIPHY_SELF_MANAGED;
-	wiphy->regulatory_flags |= REGULATORY_ENABLE_RELAX_NO_IR;
-}
-
 static void iwl_mld_hw_set_antennas(struct iwl_mld *mld)
 {
 	struct wiphy *wiphy = mld->wiphy;
@@ -278,6 +271,10 @@ static void iwl_mac_hw_set_wiphy(struct iwl_mld *mld)
 	struct wiphy *wiphy = hw->wiphy;
 	const struct iwl_ucode_capabilities *ucode_capa = &mld->fw->ucode_capa;
 
+	snprintf(wiphy->fw_version,
+		 sizeof(wiphy->fw_version),
+		 "%.31s", mld->fw->fw_version);
+
 	wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) |
 				 BIT(NL80211_IFTYPE_P2P_CLIENT) |
 				 BIT(NL80211_IFTYPE_AP) |
@@ -293,8 +290,6 @@ static void iwl_mac_hw_set_wiphy(struct iwl_mld *mld)
 			   NL80211_FEATURE_LOW_PRIORITY_SCAN |
 			   NL80211_FEATURE_P2P_GO_OPPPS |
 			   NL80211_FEATURE_AP_MODE_CHAN_WIDTH_CHANGE |
-			   NL80211_FEATURE_DYNAMIC_SMPS |
-			   NL80211_FEATURE_STATIC_SMPS |
 			   NL80211_FEATURE_SUPPORTS_WMM_ADMISSION |
 			   NL80211_FEATURE_TX_POWER_INSERTION |
 			   NL80211_FEATURE_DS_PARAM_SET_IE_IN_PROBES;
@@ -397,7 +392,11 @@ static void iwl_mac_hw_set_misc(struct iwl_mld *mld)
 	hw->sta_data_size = sizeof(struct iwl_mld_sta);
 	hw->txq_data_size = sizeof(struct iwl_mld_txq);
 
-	hw->max_rx_aggregation_subframes = IEEE80211_MAX_AMPDU_BUF_EHT;
+	/* TODO: Remove this division when IEEE80211_MAX_AMPDU_BUF_EHT size
+	 * is supported.
+	 * Note: ensure that IWL_DEFAULT_QUEUE_SIZE_EHT is updated accordingly.
+	 */
+	hw->max_rx_aggregation_subframes = IEEE80211_MAX_AMPDU_BUF_EHT / 2;
 
 #ifdef CPTCFG_IWLWIFI_SUPPORT_DEBUG_OVERRIDES
 	if (mld->trans->dbg_cfg.rx_agg_subframes)
@@ -440,7 +439,6 @@ int iwl_mld_register_hw(struct iwl_mld *mld)
 	iwl_mld_hw_set_addresses(mld);
 	iwl_mld_hw_set_channels(mld);
 	iwl_mld_hw_set_security(mld);
-	iwl_mld_hw_set_regulatory(mld);
 	iwl_mld_hw_set_pm(mld);
 	iwl_mld_hw_set_antennas(mld);
 	iwl_mac_hw_set_radiotap(mld);
@@ -538,6 +536,8 @@ iwl_mld_restart_cleanup(struct iwl_mld *mld)
 
 	ieee80211_iterate_stations_atomic(mld->hw,
 					  iwl_mld_cleanup_sta, NULL);
+
+	iwl_mld_ftm_restart_cleanup(mld);
 }
 
 static
@@ -910,6 +910,7 @@ int iwl_mld_add_chanctx(struct ieee80211_hw *hw,
 	if (fw_id < 0)
 		return fw_id;
 
+	phy->mld = mld;
 	phy->fw_id = fw_id;
 	phy->chandef = *iwl_mld_get_chandef_from_chanctx(ctx);
 
@@ -993,11 +994,13 @@ iwl_mld_chandef_get_primary_80(struct cfg80211_chan_def *chandef)
 	return (control_start - data_start) / 80;
 }
 
-static bool iwl_mld_can_activate_link(struct ieee80211_vif *vif,
+static bool iwl_mld_can_activate_link(struct iwl_mld *mld,
+				      struct ieee80211_vif *vif,
 				      struct ieee80211_bss_conf *link)
 {
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct iwl_mld_sta *mld_sta;
+	struct iwl_mld_link_sta *link_sta;
 
 	/* In association, we activate the assoc link before adding the STA. */
 	if (!mld_vif->ap_sta || !vif->cfg.assoc)
@@ -1009,7 +1012,10 @@ static bool iwl_mld_can_activate_link(struct ieee80211_vif *vif,
 	 * STA was added to the FW. It'll be activated in
 	 * iwl_mld_update_link_stas
 	 */
-	return rcu_access_pointer(mld_sta->link[link->link_id]);
+	link_sta = wiphy_dereference(mld->wiphy, mld_sta->link[link->link_id]);
+
+	/* In restart we can have a link_sta that doesn't exist in FW yet */
+	return link_sta && link_sta->in_fw;
 }
 
 static
@@ -1055,6 +1061,8 @@ int iwl_mld_assign_vif_chanctx(struct ieee80211_hw *hw,
 	if (n_active > 1) {
 		struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 
+		iwl_mld_leave_omi_bw_reduction(mld);
+
 		/* Indicate to mac80211 that EML is enabled */
 		vif->driver_flags |= IEEE80211_VIF_EML_ACTIVE;
 
@@ -1083,7 +1091,7 @@ int iwl_mld_assign_vif_chanctx(struct ieee80211_hw *hw,
 	 */
 
 	/* Now activate the link */
-	if (iwl_mld_can_activate_link(vif, link)) {
+	if (iwl_mld_can_activate_link(mld, vif, link)) {
 		ret = iwl_mld_activate_link(mld, link);
 		if (ret)
 			goto err;
@@ -1151,7 +1159,7 @@ void iwl_mld_unassign_vif_chanctx(struct ieee80211_hw *hw,
 static
 int iwl_mld_mac80211_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
 {
-	return -EOPNOTSUPP;
+	return 0;
 }
 
 static void
@@ -1240,7 +1248,24 @@ iwl_mld_mac80211_link_info_changed_sta(struct iwl_mld *mld,
 	if (changes & (BSS_CHANGED_CQM | BSS_CHANGED_BEACON_INFO))
 		iwl_mld_enable_beacon_filter(mld, link_conf, false);
 
-	/* TODO: BSS_CHANGED_BANDWIDTH (task=EMLSR) */
+	/* If we have used OMI before to reduce bandwidth to 80 MHz and then
+	 * increased to 160 MHz again, and then the AP changes to 320 MHz, it
+	 * will think that we're limited to 160 MHz right now. Update it by
+	 * requesting a new OMI bandwidth.
+	 */
+	if (changes & BSS_CHANGED_BANDWIDTH) {
+		enum ieee80211_sta_rx_bandwidth bw;
+
+		bw = ieee80211_chan_width_to_rx_bw(link_conf->chanreq.oper.width);
+
+		iwl_mld_omi_ap_changed_bw(mld, link_conf, bw);
+	}
+
+	if (changes & BSS_CHANGED_BANDWIDTH)
+		iwl_mld_emlsr_check_equal_bw(mld, vif, link_conf);
+
+	if (changes & BSS_CHANGED_P2P_PS)
+		iwl_mld_mac_fw_action(mld, vif, FW_CTXT_ACTION_MODIFY);
 }
 
 static int iwl_mld_update_mu_groups(struct iwl_mld *mld,
@@ -1328,6 +1353,23 @@ static void iwl_mld_set_twt_testmode(struct iwl_mld *mld)
 }
 #endif
 
+static void
+iwl_mld_smps_wa(struct iwl_mld *mld, struct ieee80211_vif *vif, bool enable)
+{
+	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
+
+	/* Send the device-level power commands since the
+	 * firmware checks the POWER_TABLE_CMD's POWER_SAVE_EN bit to
+	 * determine SMPS mode.
+	 */
+	if (mld_vif->ps_disabled == !enable)
+		return;
+
+	mld_vif->ps_disabled = !enable;
+
+	iwl_mld_update_device_power(mld, false);
+}
+
 static
 void iwl_mld_mac80211_vif_cfg_changed(struct ieee80211_hw *hw,
 				      struct ieee80211_vif *vif,
@@ -1364,8 +1406,10 @@ void iwl_mld_mac80211_vif_cfg_changed(struct ieee80211_hw *hw,
 		}
 	}
 
-	if (changes & BSS_CHANGED_PS)
+	if (changes & BSS_CHANGED_PS) {
+		iwl_mld_smps_wa(mld, vif, vif->cfg.ps);
 		iwl_mld_update_mac_power(mld, vif, false);
+	}
 
 	/* TODO: task=MLO BSS_CHANGED_MLD_VALID_LINKS/CHANGED_MLD_TTLM */
 }
@@ -1434,6 +1478,30 @@ iwl_mld_mac80211_sched_scan_stop(struct ieee80211_hw *hw,
 }
 
 static void
+iwl_mld_restart_complete_vif(void *data, u8 *mac, struct ieee80211_vif *vif)
+{
+	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
+	struct ieee80211_bss_conf *link_conf;
+	struct iwl_mld *mld = data;
+	int link_id;
+
+	for_each_vif_active_link(vif, link_conf, link_id) {
+		enum ieee80211_sta_rx_bandwidth bw;
+		struct iwl_mld_link *mld_link;
+
+		mld_link = wiphy_dereference(mld->wiphy,
+					     mld_vif->link[link_id]);
+
+		if (WARN_ON_ONCE(!mld_link))
+			continue;
+
+		bw = mld_link->rx_omi.bw_in_progress;
+		if (bw)
+			iwl_mld_change_link_omi_bw(mld, link_conf, bw);
+	}
+}
+
+static void
 iwl_mld_mac80211_reconfig_complete(struct ieee80211_hw *hw,
 				   enum ieee80211_reconfig_type reconfig_type)
 {
@@ -1443,6 +1511,11 @@ iwl_mld_mac80211_reconfig_complete(struct ieee80211_hw *hw,
 	case IEEE80211_RECONFIG_TYPE_RESTART:
 		mld->fw_status.in_hw_restart = false;
 		iwl_mld_send_recovery_cmd(mld, ERROR_RECOVERY_END_OF_RECOVERY);
+
+		ieee80211_iterate_interfaces(mld->hw,
+					     IEEE80211_IFACE_ITER_NORMAL,
+					     iwl_mld_restart_complete_vif, mld);
+
 		iwl_trans_finish_sw_reset(mld->trans);
 		/* no need to lock, adding in parallel would schedule too */
 		if (!list_empty(&mld->txqs_to_add))
@@ -1666,6 +1739,18 @@ static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
 				return -EBUSY;
 		}
 
+		/*
+		 * If this is the first STA (i.e. the AP) it won't do
+		 * anything, otherwise must leave for any new STA on
+		 * any other interface, or for TDLS, etc.
+		 * Need to call this _before_ adding the STA so it can
+		 * look up the one STA to use to ask mac80211 to leave
+		 * OMI; in the unlikely event that adding the new STA
+		 * then fails we'll just re-enter OMI later (via the
+		 * statistics notification handling.)
+		 */
+		iwl_mld_leave_omi_bw_reduction(mld);
+
 		ret = iwl_mld_add_sta(mld, sta, vif, STATION_TYPE_PEER);
 		if (ret)
 			return ret;
@@ -1715,6 +1800,8 @@ static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
 		return ret;
 	} else if (old_state == IEEE80211_STA_ASSOC &&
 		   new_state == IEEE80211_STA_AUTHORIZED) {
+		ret = 0;
+
 		if (!sta->tdls) {
 			mld_vif->authorized = true;
 
@@ -1737,6 +1824,7 @@ static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
 						    FW_CTXT_ACTION_MODIFY);
 			if (ret)
 				return ret;
+			iwl_mld_smps_wa(mld, vif, vif->cfg.ps);
 		}
 
 		/* MFP is set by default before the station is authorized.
@@ -1776,8 +1864,11 @@ static int iwl_mld_move_sta_state_down(struct iwl_mld *mld,
 			wiphy_delayed_work_cancel(mld->wiphy,
 						  &mld_vif->emlsr.tmp_non_bss_done_wk);
 			wiphy_work_cancel(mld->wiphy, &mld_vif->emlsr.unblock_tpt_wk);
+			wiphy_delayed_work_cancel(mld->wiphy,
+						  &mld_vif->emlsr.check_tpt_wk);
 
 			iwl_mld_reset_cca_40mhz_workaround(mld, vif);
+			iwl_mld_smps_wa(mld, vif, true);
 		}
 
 		/* once we move into assoc state, need to update the FW to
@@ -1840,26 +1931,6 @@ static void iwl_mld_mac80211_flush(struct ieee80211_hw *hw,
 				   u32 queues, bool drop)
 {
 	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
-
-	if (!drop && vif) {
-		int link_id = vif->active_links ? __ffs(vif->active_links) : 0;
-		struct ieee80211_bss_conf *link_conf;
-		struct iwl_mld_link *mld_link;
-
-		link_conf = link_conf_dereference_protected(vif, link_id);
-		if (WARN_ON(!link_conf))
-			return;
-
-		mld_link = iwl_mld_link_from_mac80211(link_conf);
-		if (WARN_ON(!mld_link))
-			return;
-
-		if (link_conf->csa_active &&
-		    mld_link->csa_blocks_tx) {
-			WARN_ON(hweight16(vif->active_links) > 1);
-			drop = true;
-		}
-	}
 
 	/* Make sure we're done with the deferred traffic before flushing */
 	iwl_mld_add_txq_list(mld);
@@ -2226,6 +2297,8 @@ iwl_mld_pre_channel_switch(struct ieee80211_hw *hw,
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct iwl_mld_link *mld_link =
 		iwl_mld_link_dereference_check(mld_vif, chsw->link_id);
+	u8 primary;
+	int selected;
 
 	lockdep_assert_wiphy(mld->wiphy);
 
@@ -2234,9 +2307,32 @@ iwl_mld_pre_channel_switch(struct ieee80211_hw *hw,
 
 	IWL_DEBUG_MAC80211(mld, "pre CSA to freq %d\n",
 			   chsw->chandef.center_freq1);
-	mld_link->csa_blocks_tx = chsw->block_tx;
 
-	/* TODO: choose primary link for esr (task=esr) */
+	if (!iwl_mld_emlsr_active(vif))
+		return 0;
+
+	primary = iwl_mld_get_primary_link(vif);
+
+	/* stay on the primary link unless it is undergoing a CSA with quiet */
+	if (chsw->link_id == primary && chsw->block_tx)
+		selected = iwl_mld_get_other_link(vif, primary);
+	else
+		selected = primary;
+
+	/* Remember to tell the firmware that this link can't tx
+	 * Note that this logic seems to be unrelated to emlsr, but it
+	 * really is needed only when emlsr is active. When we have a
+	 * single link, the firmware will handle all this on its own.
+	 * In multi-link scenarios, we can learn about the CSA from
+	 * another link and this logic is too complex for the firmware
+	 * to track.
+	 * Since we want to de-activate the link that got a CSA with mode=1,
+	 * we need to tell the firmware not to send any frame on that link
+	 * as the firmware may not be aware that link is under a CSA
+	 * with mode=1 (no Tx allowed).
+	 */
+	mld_link->silent_deactivation = chsw->block_tx;
+	iwl_mld_exit_emlsr(mld, vif, IWL_MLD_EMLSR_EXIT_CSA, selected);
 
 	return 0;
 }
@@ -2268,7 +2364,7 @@ iwl_mld_post_channel_switch(struct ieee80211_hw *hw,
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	mld_link->csa_blocks_tx = false;
+	WARN_ON(mld_link->silent_deactivation);
 
 	return 0;
 }
@@ -2283,7 +2379,7 @@ iwl_mld_abort_channel_switch(struct ieee80211_hw *hw,
 
 	IWL_DEBUG_MAC80211(mld,
 			   "abort channel switch op\n");
-	mld_link->csa_blocks_tx = false;
+	mld_link->silent_deactivation = false;
 }
 
 static int
@@ -2563,7 +2659,7 @@ static void iwl_mld_vif_iter_emlsr_block_tmp_non_bss(void *_data, u8 *mac,
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	int ret;
 
-	if (!iwl_mld_vif_has_emlsr(vif))
+	if (!iwl_mld_vif_has_emlsr_cap(vif))
 		return;
 
 	ret = iwl_mld_block_emlsr_sync(mld_vif->mld, vif,
@@ -2593,6 +2689,33 @@ static void iwl_mld_prep_add_interface(struct ieee80211_hw *hw,
 						IEEE80211_IFACE_ITER_NORMAL,
 						iwl_mld_vif_iter_emlsr_block_tmp_non_bss,
 						NULL);
+}
+
+static int iwl_mld_set_hw_timestamp(struct ieee80211_hw *hw,
+				    struct ieee80211_vif *vif,
+				    struct cfg80211_set_hw_timestamp *hwts)
+{
+	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
+	u32 protocols = 0;
+
+	/* HW timestamping is only supported for a specific station */
+	if (!hwts->macaddr)
+		return -EOPNOTSUPP;
+
+	if (hwts->enable)
+		protocols =
+			IWL_TIME_SYNC_PROTOCOL_TM | IWL_TIME_SYNC_PROTOCOL_FTM;
+
+	return iwl_mld_time_sync_config(mld, hwts->macaddr, protocols);
+}
+
+static int iwl_mld_start_pmsr(struct ieee80211_hw *hw,
+			      struct ieee80211_vif *vif,
+			      struct cfg80211_pmsr_request *request)
+{
+	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
+
+	return iwl_mld_ftm_start(mld, vif, request);
 }
 
 const struct ieee80211_ops iwl_mld_hw_ops = {
@@ -2662,4 +2785,6 @@ const struct ieee80211_ops iwl_mld_hw_ops = {
 	.leave_ibss = iwl_mld_mac80211_leave_ibss,
 	.tx_last_beacon = iwl_mld_mac80211_tx_last_beacon,
 	.prep_add_interface = iwl_mld_prep_add_interface,
+	.set_hw_timestamp = iwl_mld_set_hw_timestamp,
+	.start_pmsr = iwl_mld_start_pmsr,
 };
