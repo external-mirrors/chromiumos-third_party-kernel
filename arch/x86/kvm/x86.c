@@ -8680,13 +8680,16 @@ kvm_vcpu_dont_preempt(struct kvm_vcpu *vcpu)
 	if (!vcpu->arch.preempt_count.enabled)
 		return 0;
 
+	vcpu->srcu_idx = srcu_read_lock(&vcpu->kvm->srcu);
 	pagefault_disable();
 	ret = kvm_read_guest_cached(vcpu->kvm, &vcpu->arch.preempt_count.data,
-	    &count, sizeof(int));
+				    &count, sizeof(int));
 	pagefault_enable();
+	srcu_read_unlock(&vcpu->kvm->srcu, vcpu->srcu_idx);
+
 	if (likely(!ret))
-		return count & ~PREEMPT_NEED_RESCHED || !(kvm_get_rflags(vcpu) &
-		   X86_EFLAGS_IF);
+		return count & ~PREEMPT_NEED_RESCHED ||
+			!(kvm_get_rflags(vcpu) & X86_EFLAGS_IF);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_dont_preempt);

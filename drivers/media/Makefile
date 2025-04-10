@@ -25,12 +25,9 @@ obj-y += rc/
 
 obj-$(CONFIG_CEC_CORE) += cec/
 
-obj-$(CONFIG_VIRTIO_VIDEO)  += virtio/
-
 #
 # Finally, merge the drivers that require the core
 #
 
 obj-y += common/ platform/ pci/ usb/ mmc/ firewire/ spi/
 obj-$(CONFIG_VIDEO_DEV) += radio/
-

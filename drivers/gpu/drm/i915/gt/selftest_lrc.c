@@ -2221,9 +2221,9 @@ static struct i915_request *dummy_request(struct intel_engine_cs *engine)
 
 	rq->engine = engine;
 
-	spin_lock_init(&rq->lock);
+	spin_lock_init(&rq->__lock);
 	INIT_LIST_HEAD(&rq->fence.cb_list);
-	rq->fence.lock = &rq->lock;
+	rq->fence.lock = &rq->__lock;
 	rq->fence.ops = &i915_fence_ops;
 
 	i915_sched_node_init(&rq->sched);
@@ -2237,8 +2237,8 @@ static struct i915_request *dummy_request(struct intel_engine_cs *engine)
 	i915_sw_fence_init(&rq->submit, dummy_notify);
 	set_bit(I915_FENCE_FLAG_ACTIVE, &rq->fence.flags);
 
-	spin_lock_init(&rq->lock);
-	rq->fence.lock = &rq->lock;
+	spin_lock_init(&rq->__lock);
+	rq->fence.lock = &rq->__lock;
 	INIT_LIST_HEAD(&rq->fence.cb_list);
 
 	return rq;

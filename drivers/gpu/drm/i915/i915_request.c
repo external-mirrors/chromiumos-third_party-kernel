@@ -152,7 +152,7 @@ static void __notify_execute_cb(struct i915_request *rq)
 {
 	struct execute_cb *cb;
 
-	lockdep_assert_held(&rq->lock);
+	i915_lockdep_assert_held(rq);
 
 	if (list_empty(&rq->execute_cb))
 		return;
@@ -274,7 +274,7 @@ bool i915_request_retire(struct i915_request *rq)
 	 */
 	remove_from_engine(rq);
 
-	spin_lock_irq(&rq->lock);
+	i915_request_lock_irq(rq);
 	i915_request_mark_complete(rq);
 	if (!i915_request_signaled(rq))
 		dma_fence_signal_locked(&rq->fence);
@@ -289,7 +289,7 @@ bool i915_request_retire(struct i915_request *rq)
 		__notify_execute_cb(rq);
 	}
 	GEM_BUG_ON(!list_empty(&rq->execute_cb));
-	spin_unlock_irq(&rq->lock);
+	i915_request_unlock_irq(rq);
 
 	remove_from_client(rq);
 	list_del_rcu(&rq->link);
@@ -347,7 +347,7 @@ __await_execution(struct i915_request *rq,
 		cb->work.func = irq_execute_cb_hook;
 	}
 
-	spin_lock_irq(&signal->lock);
+	i915_request_lock_irq(signal);
 	if (i915_request_is_active(signal)) {
 		if (hook) {
 			hook(rq, &signal->fence);
@@ -358,7 +358,7 @@ __await_execution(struct i915_request *rq,
 	} else {
 		list_add_tail(&cb->link, &signal->execute_cb);
 	}
-	spin_unlock_irq(&signal->lock);
+	i915_request_unlock_irq(signal);
 
 	/* Copy across semaphore status as we need the same behaviour */
 	rq->sched.flags |= signal->sched.flags;
@@ -471,7 +471,7 @@ bool __i915_request_submit(struct i915_request *request)
 	result = true;
 
 xfer:	/* We may be recursing from the signal callback of another i915 fence */
-	spin_lock_nested(&request->lock, SINGLE_DEPTH_NESTING);
+	i915_request_nested_lock(request);
 
 	if (!test_and_set_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags)) {
 		list_move_tail(&request->sched.link, &engine->active.requests);
@@ -485,7 +485,7 @@ xfer:	/* We may be recursing from the signal callback of another i915 fence */
 
 	__notify_execute_cb(request);
 
-	spin_unlock(&request->lock);
+	i915_request_nested_unlock(request);
 
 	return result;
 }
@@ -518,7 +518,7 @@ void __i915_request_unsubmit(struct i915_request *request)
 	 */
 
 	/* We may be recursing from the signal callback of another i915 fence */
-	spin_lock_nested(&request->lock, SINGLE_DEPTH_NESTING);
+	i915_request_nested_lock(request);
 
 	if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &request->fence.flags))
 		i915_request_cancel_breadcrumb(request);
@@ -526,7 +526,7 @@ void __i915_request_unsubmit(struct i915_request *request)
 	GEM_BUG_ON(!test_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags));
 	clear_bit(I915_FENCE_FLAG_ACTIVE, &request->fence.flags);
 
-	spin_unlock(&request->lock);
+	i915_request_nested_unlock(request);
 
 	/* We've already spun, don't charge on resubmitting. */
 	if (request->sched.semaphores && i915_request_started(request)) {
@@ -665,7 +665,9 @@ static void __i915_request_ctor(void *arg)
 {
 	struct i915_request *rq = arg;
 
-	spin_lock_init(&rq->lock);
+	spin_lock_init(&rq->__lock);
+	rq->lock_owner = NULL;
+	rq->lock_flags = 0;
 	i915_sched_node_init(&rq->sched);
 	i915_sw_fence_init(&rq->submit, submit_notify);
 	i915_sw_fence_init(&rq->semaphore, semaphore_notify);
@@ -737,7 +739,7 @@ __i915_request_create(struct intel_context *ce, gfp_t gfp)
 	if (ret)
 		goto err_free;
 
-	dma_fence_init(&rq->fence, &i915_fence_ops, &rq->lock,
+	dma_fence_init(&rq->fence, &i915_fence_ops, &rq->__lock,
 		       tl->fence_context, seqno);
 
 	RCU_INIT_POINTER(rq->timeline, tl);
@@ -852,7 +854,7 @@ i915_request_await_start(struct i915_request *rq, struct i915_request *signal)
 
 	fence = NULL;
 	rcu_read_lock();
-	spin_lock_irq(&signal->lock);
+	i915_request_lock_irq(signal);
 	do {
 		struct list_head *pos = READ_ONCE(signal->link.prev);
 		struct i915_request *prev;
@@ -883,7 +885,7 @@ i915_request_await_start(struct i915_request *rq, struct i915_request *signal)
 
 		fence = &prev->fence;
 	} while (0);
-	spin_unlock_irq(&signal->lock);
+	i915_request_unlock_irq(signal);
 	rcu_read_unlock();
 	if (!fence)
 		return 0;
@@ -1631,7 +1633,7 @@ long i915_request_wait(struct i915_request *rq,
 	might_sleep();
 	GEM_BUG_ON(timeout < 0);
 
-	if (dma_fence_is_signaled(&rq->fence))
+	if (i915_request_fence_is_signaled(rq))
 		return timeout;
 
 	if (!timeout)
@@ -1672,7 +1674,7 @@ long i915_request_wait(struct i915_request *rq,
 	 */
 	if (IS_ACTIVE(CONFIG_DRM_I915_MAX_REQUEST_BUSYWAIT) &&
 	    __i915_spin_request(rq, state)) {
-		dma_fence_signal(&rq->fence);
+		i915_request_fence_signal(rq);
 		goto out;
 	}
 
@@ -1703,7 +1705,7 @@ long i915_request_wait(struct i915_request *rq,
 		set_current_state(state);
 
 		if (i915_request_completed(rq)) {
-			dma_fence_signal(&rq->fence);
+			i915_request_fence_signal(rq);
 			break;
 		}
 

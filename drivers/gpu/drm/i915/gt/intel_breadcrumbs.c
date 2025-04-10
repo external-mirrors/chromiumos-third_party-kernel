@@ -205,11 +205,11 @@ static void signal_irq_work(struct irq_work *work)
 			list_entry(pos, typeof(*rq), signal_link);
 		struct list_head cb_list;
 
-		spin_lock(&rq->lock);
+		i915_request_lock(rq);
 		list_replace(&rq->fence.cb_list, &cb_list);
 		__dma_fence_signal__timestamp(&rq->fence, timestamp);
 		__dma_fence_signal__notify(&rq->fence, &cb_list);
-		spin_unlock(&rq->lock);
+		i915_request_unlock(rq);
 
 		i915_request_put(rq);
 	}
@@ -280,7 +280,7 @@ void intel_engine_fini_breadcrumbs(struct intel_engine_cs *engine)
 
 bool i915_request_enable_breadcrumb(struct i915_request *rq)
 {
-	lockdep_assert_held(&rq->lock);
+	i915_lockdep_assert_held(rq);
 
 	if (test_bit(I915_FENCE_FLAG_ACTIVE, &rq->fence.flags)) {
 		struct intel_breadcrumbs *b = &rq->engine->breadcrumbs;
@@ -331,7 +331,7 @@ void i915_request_cancel_breadcrumb(struct i915_request *rq)
 {
 	struct intel_breadcrumbs *b = &rq->engine->breadcrumbs;
 
-	lockdep_assert_held(&rq->lock);
+	i915_lockdep_assert_held(rq);
 
 	/*
 	 * We must wait for b->irq_lock so that we know the interrupt handler

@@ -323,17 +323,7 @@ static int cros_ec_uart_probe(struct serdev_device *serdev)
 
 	ec_uart->serdev = serdev;
 
-	/* Open the serial device */
-	ret = devm_serdev_device_open(dev, ec_uart->serdev);
-	if (ret) {
-		dev_err(dev, "Unable to open UART device %s",
-			dev_name(&serdev->dev));
-		return ret;
-	}
-
 	serdev_device_set_drvdata(serdev, ec_dev);
-
-	serdev_device_set_client_ops(serdev, &cros_ec_uart_client_ops);
 
 	/* Initialize wait queue */
 	init_waitqueue_head(&ec_uart->response.wait_queue);
@@ -343,16 +333,6 @@ static int cros_ec_uart_probe(struct serdev_device *serdev)
 		dev_err(dev, "Failed to get ACPI info (%d)", ret);
 		return ret;
 	}
-
-	/* Set baud rate of serial device */
-	ret = serdev_device_set_baudrate(serdev, ec_uart->baudrate);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set up host baud rate (%d)", ret);
-		return ret;
-	}
-
-	/* Set flow control of serial device */
-	serdev_device_set_flow_control(serdev, ec_uart->flowcontrol);
 
 	/* Initialize ec_dev for cros_ec  */
 	ec_dev->phys_name = dev_name(&ec_uart->serdev->dev);
@@ -364,6 +344,22 @@ static int cros_ec_uart_probe(struct serdev_device *serdev)
 	ec_dev->din_size = sizeof(struct ec_host_response) +
 			   sizeof(struct ec_response_get_protocol_info);
 	ec_dev->dout_size = sizeof(struct ec_host_request);
+
+	serdev_device_set_client_ops(serdev, &cros_ec_uart_client_ops);
+
+	ret = devm_serdev_device_open(dev, serdev);
+	if (ret) {
+		dev_err(dev, "Unable to open UART device");
+		return ret;
+	}
+
+	ret = serdev_device_set_baudrate(serdev, ec_uart->baudrate);
+	if (ret < 0) {
+		dev_err(dev, "Failed to set up host baud rate (%d)", ret);
+		return ret;
+	}
+
+	serdev_device_set_flow_control(serdev, ec_uart->flowcontrol);
 
 	/* Register a new cros_ec device */
 	return cros_ec_register(ec_dev);

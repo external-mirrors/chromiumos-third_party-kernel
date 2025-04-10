@@ -1161,10 +1161,9 @@ __unwind_incomplete_requests(struct intel_engine_cs *engine)
 			 */
 			if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
 				     &rq->fence.flags)) {
-				spin_lock_nested(&rq->lock,
-						 SINGLE_DEPTH_NESTING);
+				i915_request_nested_lock(rq);
 				i915_request_cancel_breadcrumb(rq);
-				spin_unlock(&rq->lock);
+				i915_request_nested_unlock(rq);
 			}
 			rq->engine = owner;
 			owner->submit_request(rq);
@@ -1668,7 +1667,7 @@ assert_pending_valid(const struct intel_engine_execlists *execlists,
 		}
 
 		/* Hold tightly onto the lock to prevent concurrent retires! */
-		if (!spin_trylock_irqsave(&rq->lock, flags))
+		if (!i915_request_trylock_irqsave(rq, flags))
 			continue;
 
 		if (i915_request_completed(rq))
@@ -1703,7 +1702,7 @@ assert_pending_valid(const struct intel_engine_execlists *execlists,
 		}
 
 unlock:
-		spin_unlock_irqrestore(&rq->lock, flags);
+		i915_request_unlock_irqrestore(rq, flags);
 		if (!ok)
 			return false;
 	}

@@ -210,4 +210,6 @@ enum mutex_trylock_recursive_enum {
 extern /* __deprecated */ __must_check enum mutex_trylock_recursive_enum
 mutex_trylock_recursive(struct mutex *lock);
 
+extern unsigned long mutex_get_owner(struct mutex *lock);
+
 #endif /* __LINUX_MUTEX_H */
