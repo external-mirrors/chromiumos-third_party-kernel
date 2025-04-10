@@ -309,9 +309,12 @@ struct fuse_args {
 	bool may_block:1;
 	bool is_ext:1;
 	bool is_pinned:1;
+	bool invalidate_vmap:1;
 	struct fuse_in_arg in_args[3];
 	struct fuse_arg out_args[2];
 	void (*end)(struct fuse_mount *fm, struct fuse_args *args, int error);
+	/* Used for kvec iter backed by vmalloc address */
+	void *vmap_base;
 };
 
 struct fuse_args_pages {
@@ -435,6 +438,9 @@ struct fuse_req {
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
+
+	/** When (in jiffies) the request was created */
+	unsigned long create_time;
 };
 
 struct fuse_iqueue;
@@ -857,6 +863,9 @@ struct fuse_conn {
 	/** Passthrough support for read/write IO */
 	unsigned int passthrough:1;
 
+	/* Use pages instead of pointer for kernel I/O */
+	unsigned int use_pages_for_kvec_io:1;
+
 	/** Maximum stack depth for passthrough backing files */
 	int max_stack_depth;
 
@@ -914,6 +923,8 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+
+	struct task_struct *watchdog;
 };
 
 /*
@@ -1174,6 +1185,8 @@ void fuse_request_end(struct fuse_req *req);
 /* Abort all requests */
 void fuse_abort_conn(struct fuse_conn *fc);
 void fuse_wait_aborted(struct fuse_conn *fc);
+void init_fuse_watchdog(struct fuse_conn *fc);
+void terminate_fuse_watchdog(struct fuse_conn *fc);
 
 /**
  * Invalidate inode attributes

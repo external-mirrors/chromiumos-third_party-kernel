@@ -245,7 +245,7 @@ int chromiumos_update_inode_security_policy(
 	if (IS_ERR(sbm))
 		return PTR_ERR(sbm);
 
-	mutex_lock(&sbm->fsn_group->mark_mutex);
+	fsnotify_group_lock(sbm->fsn_group);
 
 	mark = fsnotify_find_mark(inode, FSNOTIFY_OBJ_TYPE_INODE, sbm->fsn_group);
 	if (mark) {
@@ -270,7 +270,7 @@ int chromiumos_update_inode_security_policy(
 		ret = chromiumos_inode_mark_create(sbm, inode, type, policy);
 	}
 
-	mutex_unlock(&sbm->fsn_group->mark_mutex);
+	fsnotify_group_unlock(sbm->fsn_group);
 	chromiumos_super_block_put(sbm);
 
 	/* This must happen after dropping the mark mutex. */

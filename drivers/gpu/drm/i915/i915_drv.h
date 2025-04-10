@@ -382,6 +382,14 @@ static inline struct intel_gt *to_gt(const struct drm_i915_private *i915)
 	return i915->gt[0];
 }
 
+#define PRELIM_DRM_IOCTL_DEF_DRV(ioctl, _func, _flags)			\
+	[DRM_IOCTL_NR(PRELIM_DRM_IOCTL_##ioctl) - DRM_COMMAND_BASE] = {	\
+		.cmd = PRELIM_DRM_IOCTL_##ioctl,			\
+		.func = _func,						\
+		.flags = _flags,					\
+		.name = #ioctl						\
+	}
+
 #define rb_to_uabi_engine(rb) \
 	rb_entry_safe(rb, struct intel_engine_cs, uabi_node)
 
@@ -696,6 +704,9 @@ IS_SUBPLATFORM(const struct drm_i915_private *i915,
 #define HAS_RC6pp(i915)		 (false) /* HW was never validated */
 
 #define HAS_RPS(i915)	(INTEL_INFO(i915)->has_rps)
+
+#define HAS_PXP(i915) \
+	(IS_ENABLED(CONFIG_DRM_I915_PXP) && INTEL_INFO(i915)->has_pxp)
 
 #define HAS_HECI_PXP(i915) \
 	(INTEL_INFO(i915)->has_heci_pxp)
