@@ -6261,27 +6261,6 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
-	for_each_of_graph_port(np, port) {
-		if (i >= DP_ENCODER_NUM)
-			break;
-
-		dev_dbg(dev, "[DPTX] port:%pOF\n", port);
-
-		mtk_dp->mtk_bridge[i] = devm_kzalloc(dev, sizeof(struct mtk_dp_bridge), GFP_KERNEL);
-		if (!mtk_dp->mtk_bridge[i])
-			return -ENOMEM;
-
-		mtk_dp->mtk_bridge[i]->bridge.funcs = &mtk_dp_bridge_funcs;
-		mtk_dp->mtk_bridge[i]->bridge.of_node = port;
-		mtk_dp->mtk_bridge[i]->bridge.type = mtk_dp->data->bridge_type;
-		drm_bridge_add(&mtk_dp->mtk_bridge[i]->bridge);
-
-		mtk_dp->mtk_bridge[i]->mtk_dp = mtk_dp;
-		mtk_dp->mtk_bridge[i]->encoder_id = i;
-
-		i++;
-	}
-
 	mutex_init(&mtk_dp->hdcp_mutex);
 	mutex_init(&mtk_dp->mst_mutex);
 	init_waitqueue_head(&mtk_dp->hdcp_info.hdcp2_info.cp_irq_queue);
@@ -6316,6 +6295,27 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	ret = register_pm_notifier(&mtk_dp->notifier);
 	if (ret)
 		dev_err(mtk_dp->dev, "[DPTX] register pm notifier failed %d", ret);
+
+	for_each_of_graph_port(np, port) {
+		if (i >= DP_ENCODER_NUM)
+			break;
+
+		dev_dbg(dev, "[DPTX] port:%pOF\n", port);
+
+		mtk_dp->mtk_bridge[i] = devm_kzalloc(dev, sizeof(struct mtk_dp_bridge), GFP_KERNEL);
+		if (!mtk_dp->mtk_bridge[i])
+			return -ENOMEM;
+
+		mtk_dp->mtk_bridge[i]->bridge.funcs = &mtk_dp_bridge_funcs;
+		mtk_dp->mtk_bridge[i]->bridge.of_node = port;
+		mtk_dp->mtk_bridge[i]->bridge.type = mtk_dp->data->bridge_type;
+		drm_bridge_add(&mtk_dp->mtk_bridge[i]->bridge);
+
+		mtk_dp->mtk_bridge[i]->mtk_dp = mtk_dp;
+		mtk_dp->mtk_bridge[i]->encoder_id = i;
+
+		i++;
+	}
 
 	atomic_set(&mtk_dp->refcount, 0);
 
