@@ -8,6 +8,7 @@ config MTK_APUSYS_SUPPORT
 	select MTK_APU_MBOX
 	select MTK_SCP
 	select PM_DEVFREQ
+	select DEVFREQ_GOV_MTKEB
 	help
 	  Enable Mediatek APUSYS feature for centralize control.
 	  Middleware and APU scheduler will control memory,

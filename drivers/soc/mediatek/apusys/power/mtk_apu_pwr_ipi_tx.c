@@ -163,7 +163,7 @@ static int mtk_apu_get_dev_status(struct device *dev, struct devfreq_dev_status 
 
 static struct devfreq_dev_profile devfreq_dev_profile = {
 	.initial_freq = 1800000000,
-	.polling_ms = 0,
+	.polling_ms = 1000,
 	.target = mtk_apu_freq_target,
 	.get_dev_status = mtk_apu_get_dev_status,
 	.get_cur_freq = mtk_apu_get_cur_freq,
@@ -192,7 +192,7 @@ static int mtk_apu_pwr_tx_probe(struct rpmsg_device *rpdev)
 	if (ret)
 		dev_err(dev, "%s: failed to add opp table (%d)\n", __func__, ret);
 
-	devfreq = devm_devfreq_add_device(dev, &devfreq_dev_profile, DEVFREQ_GOV_PERFORMANCE,
+	devfreq = devm_devfreq_add_device(dev, &devfreq_dev_profile, DEVFREQ_GOV_MTKEB,
 					  NULL);
 	if (IS_ERR(devfreq))
 		dev_err(dev, "%s: failed to register devfreq (%ld)\n", __func__, PTR_ERR(devfreq));
