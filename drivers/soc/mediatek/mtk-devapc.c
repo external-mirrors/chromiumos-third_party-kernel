@@ -8,12 +8,14 @@
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 
 #define VIO_MOD_TO_REG_IND(m)	((m) / 32)
 #define VIO_MOD_TO_REG_OFF(m)	((m) % 32)
+
+#define MAX_VIO_NUM 20
 
 struct mtk_devapc_vio_dbgs {
 	union {
@@ -194,7 +196,7 @@ static void devapc_extract_vio_dbg(struct mtk_devapc_context *ctx)
 	vio_dbgs.vio_dbg1 = readl(vio_dbg1_reg);
 	if (ctx->data->version >= 2U)
 		vio_dbgs.vio_dbg2 = readl(vio_dbg2_reg);
-	if (ctx->data->version >= 3U)
+	if (ctx->data->version == 3U)
 		vio_dbgs.vio_dbg3 = readl(vio_dbg3_reg);
 
 	if (ctx->data->version == 1U) {
@@ -234,11 +236,12 @@ static void devapc_extract_vio_dbg(struct mtk_devapc_context *ctx)
  */
 static irqreturn_t devapc_violation_irq(int irq_number, void *data)
 {
+	unsigned int vio_num = 0;
 	struct mtk_devapc_context *ctx = data;
 
 	mask_module_irq(ctx, true);
 
-	while (devapc_sync_vio_dbg(ctx))
+	for (vio_num = 0; (vio_num < MAX_VIO_NUM) && (devapc_sync_vio_dbg(ctx)); ++vio_num)
 		devapc_extract_vio_dbg(ctx);
 
 	clear_vio_status(ctx);
@@ -253,10 +256,10 @@ static irqreturn_t devapc_violation_irq(int irq_number, void *data)
  */
 static void start_devapc(struct mtk_devapc_context *ctx)
 {
-	writel(BIT(31), ctx->base + ctx->data->regs_ofs->apc_con_offset);
-
 	devapc_violation_irq(0, ctx);
 	dev_info(ctx->dev, "%s: Clear pending violation done...\n", __func__);
+
+	writel(BIT(31), ctx->base + ctx->data->regs_ofs->apc_con_offset);
 
 	mask_module_irq(ctx, false);
 }
@@ -276,10 +279,10 @@ static const struct mtk_devapc_regs_ofs devapc_regs_ofs_mt6779 = {
 	.vio_sta_offset = 0x400,
 	.vio_dbg0_offset = 0x900,
 	.vio_dbg1_offset = 0x904,
-	.apc_con_offset = 0xF00,
-	.vio_shift_sta_offset = 0xF10,
-	.vio_shift_sel_offset = 0xF14,
-	.vio_shift_con_offset = 0xF20,
+	.apc_con_offset = 0xf00,
+	.vio_shift_sta_offset = 0xf10,
+	.vio_shift_sel_offset = 0xf14,
+	.vio_shift_con_offset = 0xf20,
 };
 
 static const struct mtk_devapc_regs_ofs devapc_regs_ofs_mt8196 = {
@@ -288,19 +291,21 @@ static const struct mtk_devapc_regs_ofs devapc_regs_ofs_mt8196 = {
 	.vio_dbg0_offset = 0x900,
 	.vio_dbg1_offset = 0x904,
 	.vio_dbg2_offset = 0x908,
-	.vio_dbg3_offset = 0x90C,
-	.apc_con_offset = 0xF00,
-	.vio_shift_sta_offset = 0xF20,
-	.vio_shift_sel_offset = 0xF30,
-	.vio_shift_con_offset = 0xF10,
+	.vio_dbg3_offset = 0x90c,
+	.apc_con_offset = 0xf00,
+	.vio_shift_sta_offset = 0xf20,
+	.vio_shift_sel_offset = 0xf30,
+	.vio_shift_con_offset = 0xf10,
 };
 
 static const struct mtk_devapc_data devapc_mt6779 = {
+	.version = 1,
 	.default_vio_idx_num = 511,
 	.regs_ofs = &devapc_regs_ofs_mt6779,
 };
 
 static const struct mtk_devapc_data devapc_mt8186 = {
+	.version = 1,
 	.default_vio_idx_num = 519,
 	.regs_ofs = &devapc_regs_ofs_mt6779,
 };
@@ -368,20 +373,18 @@ static int mtk_devapc_probe(struct platform_device *pdev)
 	 * making it unnecessary to provide the clock control driver.
 	 */
 	ctx->infra_clk = devm_clk_get_optional(&pdev->dev, "devapc-infra-clock");
-	if (!ctx->infra_clk) {
-		if (clk_prepare_enable(ctx->infra_clk)) {
-			ret = -EINVAL;
-			goto err;
-		}
-	} else {
+	if (IS_ERR(ctx->infra_clk)) {
 		dev_dbg(ctx->dev, "Cannot get devapc clock from CCF\n");
+		ctx->infra_clk = NULL;
+	} else {
+		if (clk_prepare_enable(ctx->infra_clk))
+			return -EINVAL;
 	}
 
 	ret = devm_request_irq(&pdev->dev, devapc_irq, devapc_violation_irq,
 			       IRQF_TRIGGER_NONE | IRQF_SHARED, "devapc", ctx);
 	if (ret) {
-		if (!ctx->infra_clk)
-			clk_disable_unprepare(ctx->infra_clk);
+		clk_disable_unprepare(ctx->infra_clk);
 		goto err;
 	}
 
@@ -402,8 +405,7 @@ static void mtk_devapc_remove(struct platform_device *pdev)
 
 	stop_devapc(ctx);
 
-	if (!ctx->infra_clk)
-		clk_disable_unprepare(ctx->infra_clk);
+	clk_disable_unprepare(ctx->infra_clk);
 
 	iounmap(ctx->base);
 }
