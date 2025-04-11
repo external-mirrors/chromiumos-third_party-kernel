@@ -4037,7 +4037,7 @@
 		video_codec: video@36000000 {
 			compatible = "mediatek,mt8196-vcodec-dec";
 			mediatek,vcp = <&vcp>;
-			iommus = <&mm_smmu 177>;
+			iommus = <&mm_smmu 179>;
 			#address-cells = <2>;
 			#size-cells = <2>;
 			reg = <0 0x36000000 0 0x1000>,
