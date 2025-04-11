@@ -610,7 +610,7 @@ static int mtk_vdec_s_ctrl(struct v4l2_ctrl *ctrl)
 		return ret;
 	}
 
-	if (!ctx->is_10bit_bitstream)
+	if ((!ctx->is_10bit_bitstream) || (ctx->state >= MTK_STATE_HEADER))
 		return ret;
 
 	for (i = 0; i < *dec_pdata->num_formats; i++) {
