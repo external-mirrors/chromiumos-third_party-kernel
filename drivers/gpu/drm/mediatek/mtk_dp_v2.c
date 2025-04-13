@@ -3706,14 +3706,11 @@ static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	struct dp_timing_parameter *dp_timing = &mtk_dp->info[encoder_id].dp_output_timing;
 	struct videomode vm = {0};
 	int con_id;
-	u8 data;
 
 	if (!mtk_dp->dp_ready) {
 		dev_err(mtk_dp->dev, "[DPTX] %s, DP is not ready\n", __func__);
 		return;
 	}
-
-	data = mtk_dp->dsc_enable[encoder_id];
 
 	mtk_dp_mn_overwrite_v2(mtk_dp, encoder_id, false, 0x0, 0x8000);
 
@@ -4715,7 +4712,6 @@ static void mtk_dp_con_early_unregister_v2(struct drm_connector *connector)
 }
 
 static const struct drm_connector_funcs mtk_dp_con_funcs = {
-	.reset = drm_atomic_helper_connector_reset,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.detect = mtk_dp_con_detect_v2,
 	.destroy = mtk_dp_con_destroy_v2,
