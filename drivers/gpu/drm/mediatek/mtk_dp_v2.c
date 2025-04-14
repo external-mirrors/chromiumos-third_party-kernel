@@ -58,6 +58,7 @@
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
+#include <linux/jiffies.h>
 
 #include <sound/hdmi-codec.h>
 #include <uapi/drm/mediatek_drm.h>
@@ -4621,7 +4622,8 @@ static enum drm_connector_status mtk_dp_con_detect_v2
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
 
-	if (!mtk_dp->training_info.cable_plug_in)
+	if (!mtk_dp->training_info.cable_plug_in ||
+	    !mtk_dp->dp_ready)
 		goto end;
 
 	if (mtk_dp->data->mst_support) {
@@ -5816,6 +5818,9 @@ static irqreturn_t mtk_dp_hpd_event_thread_v2(int hpd, void *dev)
 	unsigned long flags;
 	u16 phy_status;
 	int i;
+	bool wait_done[DP_ENCODER_NUM] = {false};
+	u8 wait_done_count = 0;
+	unsigned long timeout = 0;
 
 	if (mtk_dp->need_debounce && mtk_dp->training_info.cable_plug_in) {
 		msleep(HPD_DEBOUNCE);
@@ -5839,6 +5844,39 @@ static irqreturn_t mtk_dp_hpd_event_thread_v2(int hpd, void *dev)
 			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD_DISCON\n");
 			mtk_dp_hotplug_uevent_v2(mtk_dp);
 			mtk_dp_disconnect_release_v2(mtk_dp);
+
+			/* Wait until crtc of current encoder is disabled */
+			timeout = jiffies + msecs_to_jiffies(2000);
+			while (time_before(jiffies, timeout)) {
+				for (i = 0; i < DP_ENCODER_NUM; i++) {
+					if (wait_done[i])
+						continue;
+
+					if (mtk_dp->mtk_con[i] && mtk_dp->mtk_con[i]->encoder &&
+					    mtk_dp->mtk_con[i]->encoder->crtc &&
+					    mtk_dp->mtk_con[i]->encoder->crtc->state->enable)
+						continue;
+
+					wait_done[i] = true;
+					wait_done_count++;
+					drm_dbg_kms(mtk_dp->drm_dev,
+						    "[DPTX] con[%d] crtc is disabled in HPD low\n",
+						    i);
+				}
+
+				if (wait_done_count == DP_ENCODER_NUM)
+					break;
+
+				msleep(100);
+			}
+
+			for (i = 0; i < DP_ENCODER_NUM; i++) {
+				if (wait_done[i])
+					continue;
+
+				dev_err(mtk_dp->dev,
+					"[DPTX] connector[%d] crtc is not disabled in HPD low\n", i);
+			}
 		} else {
 			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] HPD_CON\n");
 			mtk_dp_init_property_v2(mtk_dp);
