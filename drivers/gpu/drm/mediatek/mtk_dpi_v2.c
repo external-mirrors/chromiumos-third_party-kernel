@@ -271,7 +271,9 @@ static void mtk_dpi_config_pol_v2(struct mtk_dpi *dpi,
 	unsigned int mask;
 
 	mask = HSYNC_POL | VSYNC_POL;
-	if (!dpi->conf->pol_positive_default)
+
+	/* TODO (b:401139318,b:402400555): tentative workaround for HDMI timing */
+	if (dpi->mode.hdisplay != 1280 || dpi->mode.vdisplay != 1024)
 		pol = (dpi_pol->hsync_pol == MTK_DPI_POLARITY_RISING ? 0 : HSYNC_POL) |
 		      (dpi_pol->vsync_pol == MTK_DPI_POLARITY_RISING ? 0 : VSYNC_POL);
 	if (dpi->conf->is_ck_de_pol) {
