@@ -579,11 +579,6 @@ ddp_cmdq_cb_out:
 
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
-	if (mtk_crtc->sec_cmdq_working) {
-		mtk_crtc->sec_cmdq_working = false;
-		wake_up(&mtk_crtc->sec_cb_blocking_queue);
-	}
-
 	if (is_secure) {
 		mtk_drm_cmdq_pkt_destroy(data->pkt);
 		kfree(data->pkt);
@@ -591,6 +586,12 @@ ddp_cmdq_cb_out:
 
 	mtk_crtc->cmdq_vblank_cnt = 0;
 	wake_up(&mtk_crtc->cb_blocking_queue);
+
+	/* Make sure sec_cb_blocking queue is waked later than cb_blocking_queue */
+	if (mtk_crtc->sec_cmdq_working) {
+		mtk_crtc->sec_cmdq_working = false;
+		wake_up(&mtk_crtc->sec_cb_blocking_queue);
+	}
 }
 #endif
 
