@@ -524,7 +524,10 @@ bottom:
 
 int rtw89_regd_setup(struct rtw89_dev *rtwdev)
 {
+	struct rtw89_regulatory_info *regulatory = &rtwdev->regulatory;
 	struct wiphy *wiphy = rtwdev->hw->wiphy;
+
+	regulatory->txpwr_uk_follow_etsi = true;
 
 	if (!wiphy)
 		return -EINVAL;
