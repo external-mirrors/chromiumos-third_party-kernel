@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-obiwan.dtsi"
+
+/ {
+	model = "Google Quigon sku196608/196611 unprovisioned board";
+	compatible = "google,obiwan-sku196608", "google,obiwan-sku196611",
+		     "google,obiwan-sku2147483647", "google,obiwan",
+		     "mediatek,mt8189";
+};
+
+&cros_ec {
+	keyboard-backlight {
+		compatible = "google,cros-kbd-led-backlight";
+	};
+};
