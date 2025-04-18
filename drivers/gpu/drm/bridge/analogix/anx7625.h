@@ -527,7 +527,6 @@ struct anx7625_data {
 	int dp_en;
 	int hdcp_cp;
 	u32 support_maximum_pixel_clock;
-	bool hdcp_key_exist;
 	bool hdcp_1_4;
 	bool dsc_en;
 	/* Lock for work queue */

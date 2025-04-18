@@ -865,64 +865,6 @@ static int anx7625_dpi_config(struct anx7625_data *ctx)
 	return ret;
 }
 
-static int anx7625_read_flash_status(struct anx7625_data *ctx)
-{
-	return anx7625_reg_read(ctx, ctx->i2c.rx_p0_client, R_RAM_CTRL);
-}
-
-static int anx7625_hdcp_key_probe(struct anx7625_data *ctx)
-{
-	int ret, val;
-	struct device *dev = ctx->dev;
-	u8 ident[FLASH_BUF_LEN];
-
-	ctx->hdcp_key_exist = false;
-
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				FLASH_ADDR_HIGH, 0x91);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 FLASH_ADDR_LOW, 0xA0);
-	if (ret < 0) {
-		dev_err(dev, "IO error : set key flash address.\n");
-		return ret;
-	}
-
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				FLASH_LEN_HIGH, (FLASH_BUF_LEN - 1) >> 8);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 FLASH_LEN_LOW, (FLASH_BUF_LEN - 1) & 0xFF);
-	if (ret < 0) {
-		dev_err(dev, "IO error : set key flash len.\n");
-		return ret;
-	}
-
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				R_FLASH_RW_CTRL, FLASH_READ);
-	ret |= readx_poll_timeout(anx7625_read_flash_status,
-				  ctx, val,
-				  ((val & FLASH_DONE) || (val < 0)),
-				  2000,
-				  2000 * 15);
-	if (ret) {
-		dev_err(dev, "flash read access fail!\n");
-		return -EIO;
-	}
-
-	ret = anx7625_reg_block_read(ctx, ctx->i2c.rx_p0_client,
-				     FLASH_BUF_BASE_ADDR,
-				     FLASH_BUF_LEN, ident);
-	if (ret < 0) {
-		dev_err(dev, "read flash data fail!\n");
-		return -EIO;
-	}
-
-	if (ident[29] == 0xFF && ident[30] == 0xFF && ident[31] == 0xFF)
-		return -EINVAL;
-
-	ctx->hdcp_key_exist = true;
-	return 0;
-}
-
 static enum anx7625_hdcp_state anx7625_hdcp_get_state(struct anx7625_data *ctx)
 {
 	enum anx7625_hdcp_state state;
@@ -1029,11 +971,6 @@ static int anx7625_hdcp_enable(struct anx7625_data *ctx, int hct)
 	u8 bcap;
 	int ret;
 	struct device *dev = ctx->dev;
-
-	if (!ctx->hdcp_key_exist) {
-		dev_err(dev, "no key found, not to do hdcp\n");
-		return -EIO;
-	}
 
 	if (hct == DRM_MODE_HDCP_CONTENT_TYPE1) {
 		dev_dbg(dev, "use HDCP Content type1");
@@ -2463,7 +2400,6 @@ static int anx7625_connector_atomic_check(struct anx7625_data *ctx,
 
 	dev_dbg(dev, "hdcp state check\n");
 
-	anx7625_hdcp_key_probe(ctx);
 	anx7625_bridge_hdcp_check(&ctx->bridge, state);
 
 	return 0;
