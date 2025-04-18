@@ -227,6 +227,11 @@ static int mtk_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 	unsigned int latency;
 	int ret;
 
+	if (!pdev) {
+		pr_err("cpufreq_get_driver_data returned NULL\n");
+		return -ENODEV;
+	}
+
 	/* Get the bases of cpufreq for domains */
 	ret = mtk_cpu_resources_init(pdev, policy, platform_get_drvdata(pdev));
 	if (ret) {

@@ -265,7 +265,8 @@ static int mtk_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 		latency = CPUFREQ_ETERNAL;
 
 	/* us convert to ns */
-	policy->cpuinfo.transition_latency = latency * POLL_USEC;
+	policy->cpuinfo.transition_latency = (latency == CPUFREQ_ETERNAL) ?
+					     CPUFREQ_ETERNAL : latency * POLL_USEC;
 
 	policy->fast_switch_possible = true;
 
@@ -320,10 +321,10 @@ static void mtk_cpufreq_register_em(struct cpufreq_policy *policy)
 	struct em_data_callback em_cb = EM_DATA_CB(mtk_cpufreq_get_cpu_power);
 	struct cpufreq_mtk *c = policy->driver_data;
 
-	if (!c->nr_opp) {
+	if (!c || !c->nr_opp) {
 		dev_err(get_cpu_device(policy->cpu),
-			 "%s: %d: CPU%d: Get opp failed\n", __func__, __LINE__,
-			 policy->cpu);
+			"%s: %d: CPU%d: Get opp failed\n", __func__, __LINE__,
+			policy->cpu);
 		return;
 	}
 
@@ -477,6 +478,12 @@ static int mtk_per_core_cpu_resources_init(struct platform_device *pdev,
 			dev_err(dev, "no master for control group %d, index %d\n", control_group, index);
 			return -EINVAL;
 		}
+
+		if (master < 0 || master >= ARRAY_SIZE(mtk_freq_domain_map)) {
+			dev_err(dev, "Invalid master index: %d\n", master);
+			return -EINVAL;
+		}
+
 		master_c = mtk_freq_domain_map[master];
 
 		c = devm_kzalloc(dev, sizeof(*c), GFP_KERNEL);
