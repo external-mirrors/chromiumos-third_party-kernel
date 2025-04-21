@@ -4713,13 +4713,22 @@ static int mtk_dp_con_get_modes_v2(struct drm_connector *connector)
 	struct mtk_dp_audio_cfg *audio_caps;
 	struct cea_sad *sads;
 	int encoder_id;
+	unsigned long timeout = 0;
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
 
 	if (!mtk_con->edid) {
 		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] get edid\n");
-		mtk_con->edid = drm_get_edid(connector, &mtk_dp->aux.ddc);
+		timeout = jiffies + msecs_to_jiffies(2000);
+		while (time_before(jiffies, timeout)) {
+			mtk_con->edid = drm_get_edid(connector, &mtk_dp->aux.ddc);
+			if (mtk_con->edid)
+				break;
+
+			msleep(100);
+		}
+
 		if (!mtk_con->edid) {
 			dev_err(mtk_dp->dev, "[DPTX] Failed to read EDID\n");
 			goto fail;
