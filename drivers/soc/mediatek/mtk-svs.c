@@ -1092,7 +1092,7 @@ static void svs_set_bank_freq_pct_v3(struct svs_platform *svsp, struct svs_bank 
 			 */
 			freq_pct30 = svsb->freq_pct[turn_pt];
 			shift_byte++;
-			j = bdata->opp_count - 7;
+			j = max(bdata->opp_count - 7, 0);
 			for (i = j; i < bdata->opp_count; i++) {
 				b_sft = BITS8 * (shift_byte % REG_BYTES);
 				freq_pct = (shift_byte < REG_BYTES) ?
@@ -1109,7 +1109,7 @@ static void svs_set_bank_freq_pct_v3(struct svs_platform *svsp, struct svs_bank 
 			 */
 			freq_pct30 = svsb->freq_pct[0];
 			shift_byte++;
-			j = turn_pt - 7;
+			j = max(turn_pt - 7, 0);
 			for (i = j; i < turn_pt; i++) {
 				b_sft = BITS8 * (shift_byte % REG_BYTES);
 				freq_pct = (shift_byte < REG_BYTES) ?
@@ -1917,7 +1917,7 @@ static bool svs_common_parse_efuse(struct svs_platform *svsp,
 	const struct svs_fusemap *gfmap = pdata->glb_fuse_map;
 	struct svs_fusemap tfm = { 0, 24 };
 	u32 golden_temp, val;
-	u8 ft_pgm, vmin;
+	u32 ft_pgm, vmin;
 	int i;
 
 	if (!svs_is_available(svsp))
@@ -1944,11 +1944,11 @@ static bool svs_common_parse_efuse(struct svs_platform *svsp,
 		if (ft_pgm == 0)
 			svsb->volt_flags |= SVSB_INIT01_VOLT_IGNORE;
 
-		svsb->mtdes = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MTDES], 8);
-		svsb->bdes = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_BDES], 8);
-		svsb->mdes = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MDES], 8);
-		svsb->dcbdet = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCBDET], 8);
-		svsb->dcmdet = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCMDET], 8);
+		svsb->mtdes = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MTDES], 8);
+		svsb->bdes = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_BDES], 8);
+		svsb->mdes = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MDES], 8);
+		svsb->dcbdet = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCBDET], 8);
+		svsb->dcmdet = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCMDET], 8);
 		svsb->vmax += svsb->dvt_fixed;
 
 		svsb->mts = (svsp->ts_coeff * 2) / 1000;
@@ -1989,11 +1989,11 @@ static bool svs_mt8183_efuse_parsing(struct svs_platform *svsp,
 		if (ft_pgm <= 1)
 			svsb->volt_flags |= SVSB_INIT01_VOLT_IGNORE;
 
-		svsb->mtdes = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MTDES], 8);
-		svsb->bdes = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_BDES], 8);
-		svsb->mdes = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MDES], 8);
-		svsb->dcbdet = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCBDET], 8);
-		svsb->dcmdet = svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCMDET], 8);
+		svsb->mtdes = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MTDES], 8);
+		svsb->bdes = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_BDES], 8);
+		svsb->mdes = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_MDES], 8);
+		svsb->dcbdet = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCBDET], 8);
+		svsb->dcmdet = (u8)svs_get_fuse_val(svsp->efuse, &dfmap[BDEV_DCMDET], 8);
 
 		switch (bdata->sw_id) {
 		case SVSB_SWID_CPU_LITTLE:
