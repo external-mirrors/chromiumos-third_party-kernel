@@ -647,25 +647,22 @@ static u8 dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp,
 }
 
 static bool mtk_dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
-			    u32  dpcd_addr, size_t length, u8 *data)
+				      u32 dpcd_addr, size_t length, u8 *data)
 {
-	u8 reply_status = false;
-	u8 retry_limit = 0x7;
+	u8 reply_status, retry_limit = 8;
 
 	if (!mtk_dp->training_info.cable_plug_in)
 		return false;
 
-	do {
-		reply_status = dp_aux_write_bytes_v2(mtk_dp, cmd,
-						  dpcd_addr, length, data);
-		retry_limit--;
-		if (reply_status) {
-			usleep_range(50, 51);
-			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Retry Num:%d\n", retry_limit);
-		} else {
+	while (--retry_limit) {
+		reply_status = dp_aux_write_bytes_v2(mtk_dp, cmd, dpcd_addr,
+						     length, data);
+		if (reply_status == AUX_REPLY_ACK)
 			return true;
-		}
-	} while (retry_limit > 0);
+
+		usleep_range(50, 51);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Remaining retries: %u\n", retry_limit);
+	}
 
 	dev_err(mtk_dp->dev, "[DPTX] Aux Write Fail, cmd:%d, addr:0x%x, len:%zu\n",
 		cmd, dpcd_addr, length);
@@ -677,39 +674,25 @@ static bool mtk_dp_aux_write_dpcd_v2(struct mtk_dp *mtk_dp, u8 cmd,
 				     u32 dpcd_addr, size_t length, u8 *data)
 {
 	bool ret = true;
-	size_t times = 0;
-	size_t remain = 0;
-	size_t loop = 0;
+	size_t i;
 
-	if (length > DP_AUX_MAX_PAYLOAD_BYTES) {
-		times = length / DP_AUX_MAX_PAYLOAD_BYTES;
-		remain = length % DP_AUX_MAX_PAYLOAD_BYTES;
+	for (i = 0; i + DP_AUX_MAX_PAYLOAD_BYTES <= length; i += DP_AUX_MAX_PAYLOAD_BYTES) {
+		ret &= mtk_dp_aux_write_bytes_v2(mtk_dp, cmd, dpcd_addr + i,
+						DP_AUX_MAX_PAYLOAD_BYTES,
+						data + i);
+	}
 
-		for (loop = 0; loop < times; loop++)
-			ret &= mtk_dp_aux_write_bytes_v2(mtk_dp,
-				cmd,
-				dpcd_addr + (loop * DP_AUX_MAX_PAYLOAD_BYTES),
-				DP_AUX_MAX_PAYLOAD_BYTES,
-				data + (loop * DP_AUX_MAX_PAYLOAD_BYTES));
-
-		if (remain > 0)
-			ret &= mtk_dp_aux_write_bytes_v2(mtk_dp,
-				cmd,
-				dpcd_addr + (times * DP_AUX_MAX_PAYLOAD_BYTES),
-				remain,
-				data + (times * DP_AUX_MAX_PAYLOAD_BYTES));
-	} else {
-		ret &= mtk_dp_aux_write_bytes_v2(mtk_dp,
-				cmd,
-				dpcd_addr,
-				length,
-				data);
+	if (length % DP_AUX_MAX_PAYLOAD_BYTES) {
+		ret &= mtk_dp_aux_write_bytes_v2(mtk_dp, cmd, dpcd_addr + i,
+						length % DP_AUX_MAX_PAYLOAD_BYTES,
+						data + i);
 	}
 
 	dev_dbg(mtk_dp->dev, "Aux write cmd:%d, addr:0x%x, len:%zu, %s\n",
 		cmd, dpcd_addr, length, ret ? "Success" : "Fail");
-	for (loop = 0; loop < length; loop++)
-		dev_dbg(mtk_dp->dev, "DPCD%zx:0x%x", dpcd_addr + loop, data[loop]);
+
+	for (i = 0; i < length; i++)
+		dev_dbg(mtk_dp->dev, "DPCD%zx:0x%x", dpcd_addr + i, data[i]);
 
 	return ret;
 }
@@ -717,24 +700,20 @@ static bool mtk_dp_aux_write_dpcd_v2(struct mtk_dp *mtk_dp, u8 cmd,
 static bool mtk_dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 				     u32 dpcd_addr, size_t length, u8 *data)
 {
-	u8 reply_status = false;
-	u8 retry_limit = 7;
+	u8 reply_status, retry_limit = 8;
 
 	if (!mtk_dp->training_info.cable_plug_in)
 		return false;
 
-	do {
-		reply_status = dp_aux_read_bytes_v2(mtk_dp, cmd,
-						    dpcd_addr, length, data);
-		if (reply_status) {
-			usleep_range(50, 51);
-			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Retry Num:%d\n", retry_limit);
-		} else {
+	while (--retry_limit) {
+		reply_status = dp_aux_read_bytes_v2(mtk_dp, cmd, dpcd_addr,
+						    length, data);
+		if (reply_status == AUX_REPLY_ACK)
 			return true;
-		}
 
-		retry_limit--;
-	} while (retry_limit > 0);
+		usleep_range(50, 51);
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Remaining retries: %u\n", retry_limit);
+	}
 
 	dev_err(mtk_dp->dev, "[DPTX] Aux Read Fail, cmd:%d, addr:0x%x, len:%zu\n",
 		cmd, dpcd_addr, length);
@@ -743,44 +722,30 @@ static bool mtk_dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 }
 
 static bool mtk_dp_aux_read_dpcd_v2(struct mtk_dp *mtk_dp, u8 cmd,
-				    u32 dpcd_addr, size_t length, u8 *rx_buf)
+				    u32 dpcd_addr, size_t length, u8 *data)
 {
 	bool ret = true;
-	size_t times = 0;
-	size_t remain = 0;
-	size_t loop = 0;
+	size_t i;
 
-	memset(rx_buf, 0, length);
+	memset(data, 0, length);
 
-	if (length > DP_AUX_MAX_PAYLOAD_BYTES) {
-		times = length / DP_AUX_MAX_PAYLOAD_BYTES;
-		remain = length % DP_AUX_MAX_PAYLOAD_BYTES;
+	for (i = 0; i + DP_AUX_MAX_PAYLOAD_BYTES <= length; i += DP_AUX_MAX_PAYLOAD_BYTES) {
+		ret &= mtk_dp_aux_read_bytes_v2(mtk_dp, cmd, dpcd_addr + i,
+						DP_AUX_MAX_PAYLOAD_BYTES,
+						data + i);
+	}
 
-		for (loop = 0; loop < times; loop++)
-			ret &= mtk_dp_aux_read_bytes_v2(mtk_dp,
-				cmd,
-				dpcd_addr + (loop * DP_AUX_MAX_PAYLOAD_BYTES),
-				DP_AUX_MAX_PAYLOAD_BYTES,
-				rx_buf + (loop * DP_AUX_MAX_PAYLOAD_BYTES));
-
-		if (remain > 0)
-			ret &= mtk_dp_aux_read_bytes_v2(mtk_dp,
-				cmd,
-				dpcd_addr + (times * DP_AUX_MAX_PAYLOAD_BYTES),
-				remain,
-				rx_buf + (times * DP_AUX_MAX_PAYLOAD_BYTES));
-	} else {
-		ret &= mtk_dp_aux_read_bytes_v2(mtk_dp,
-				cmd,
-				dpcd_addr,
-				length,
-				rx_buf);
+	if (length % DP_AUX_MAX_PAYLOAD_BYTES) {
+		ret &= mtk_dp_aux_read_bytes_v2(mtk_dp, cmd, dpcd_addr + i,
+						length % DP_AUX_MAX_PAYLOAD_BYTES,
+						data + i);
 	}
 
 	dev_dbg(mtk_dp->dev, "Aux Read cmd:%d, addr:0x%x, len:%zu, %s\n",
 		cmd, dpcd_addr, length, ret ? "Success" : "Fail");
-	for (loop = 0; loop < length; loop++)
-		dev_dbg(mtk_dp->dev, "DPCD%zx:0x%x", dpcd_addr + loop, rx_buf[loop]);
+
+	for (i = 0; i < length; i++)
+		dev_dbg(mtk_dp->dev, "DPCD%zx:0x%x", dpcd_addr + i, data[i]);
 
 	return ret;
 }
