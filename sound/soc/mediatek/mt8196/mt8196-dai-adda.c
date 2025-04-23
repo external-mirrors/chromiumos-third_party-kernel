@@ -1751,7 +1751,11 @@ static int mtk_dai_adda_hw_params(struct snd_pcm_substream *substream,
 	unsigned int mtkaif_rate = 0;
 #endif
 	int id = dai->id;
-	struct mtk_afe_adda_priv *adda_priv = afe_priv->dai_priv[id];
+	struct mtk_afe_adda_priv *adda_priv;
+
+	if (id >= MT8196_DAI_NUM || id < 0)
+		return -EINVAL;
+	adda_priv = afe_priv->dai_priv[id];
 
 	dev_info(afe->dev, "%s(), id %d, stream %d, rate %d\n",
 		 __func__,

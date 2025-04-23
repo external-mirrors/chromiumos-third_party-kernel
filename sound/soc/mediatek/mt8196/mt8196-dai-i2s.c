@@ -3593,7 +3593,7 @@ static int mtk_dai_i2s_config(struct mtk_base_afe *afe,
 			      int i2s_id)
 {
 	struct mt8196_afe_private *afe_priv = afe->platform_priv;
-	struct mtk_afe_i2s_priv *i2s_priv = afe_priv->dai_priv[i2s_id];
+	struct mtk_afe_i2s_priv *i2s_priv;
 	struct mtk_afe_i2s_priv *i2sin_priv = NULL;
 	int id = i2s_id - MT8196_DAI_I2S_IN0; //47
 	struct mtk_base_etdm_data etdm_data;
@@ -3606,6 +3606,16 @@ static int mtk_dai_i2s_config(struct mtk_base_afe *afe,
 	int ret = 0;
 	int pad_top = 0;
 
+	if (i2s_id >= MT8196_DAI_NUM || i2s_id < 0)
+		return -EINVAL;
+	i2s_priv = afe_priv->dai_priv[i2s_id];
+
+	if (!i2s_priv) {
+		AUDIO_AEE("i2s_priv == NULL");
+		return -EINVAL;
+	}
+	i2s_priv->rate = rate;
+
 	dev_info(afe->dev, "%s(), id %d, rate %d, pcm_format %d, format %d\n",
 		 __func__, i2s_id, rate, format, i2s_priv->format);
 
@@ -3614,11 +3624,6 @@ static int mtk_dai_i2s_config(struct mtk_base_afe *afe,
 		return -EINVAL;
 	}
 	etdm_data = mtk_etdm_data[id];
-
-	if (i2s_priv)
-		i2s_priv->rate = rate;
-	else
-		AUDIO_AEE("i2s_priv == NULL");
 
 	if (is_etdm_in_pad_top(id))
 		pad_top = 0x3;
@@ -3877,9 +3882,13 @@ static int mtk_dai_i2s_set_sysclk(struct snd_soc_dai *dai,
 {
 	struct mtk_base_afe *afe = dev_get_drvdata(dai->dev);
 	struct mt8196_afe_private *afe_priv = afe->platform_priv;
-	struct mtk_afe_i2s_priv *i2s_priv = afe_priv->dai_priv[dai->id];
+	struct mtk_afe_i2s_priv *i2s_priv;
 	int apll;
 	int apll_rate;
+
+	if (dai->id >= MT8196_DAI_NUM || dai->id < 0)
+		return -EINVAL;
+	i2s_priv = afe_priv->dai_priv[dai->id];
 
 	dev_info(afe->dev, "%s(), enter\n", __func__);
 
@@ -3928,7 +3937,16 @@ static int mtk_dai_i2s_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
 	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
 	struct mt8196_afe_private *afe_priv = afe->platform_priv;
-	struct mtk_afe_i2s_priv *i2s_priv = afe_priv->dai_priv[dai->id];
+	struct mtk_afe_i2s_priv *i2s_priv;
+
+	if (dai->id >= MT8196_DAI_NUM || dai->id < 0)
+		return -EINVAL;
+	i2s_priv = afe_priv->dai_priv[dai->id];
+
+	if (!i2s_priv) {
+		AUDIO_AEE("i2s_priv == NULL");
+		return -EINVAL;
+	}
 
 	dev_info(afe->dev, "%s(), dai->id: %d, fmt: 0x%x\n", __func__, dai->id, fmt);
 

@@ -99,6 +99,8 @@ int mt8196_dai_set_priv(struct mtk_base_afe *afe, int id,
 	if (priv_data)
 		memcpy(temp_data, priv_data, priv_size);
 
+	if (id >= MT8196_DAI_NUM || id < 0)
+		return -EINVAL;
 	afe_priv->dai_priv[id] = temp_data;
 
 	return 0;

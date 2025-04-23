@@ -557,11 +557,20 @@ static int mtk_dai_tdm_hw_params(struct snd_pcm_substream *substream,
 	struct mtk_base_afe *afe = snd_soc_dai_get_drvdata(dai);
 	struct mt8196_afe_private *afe_priv = afe->platform_priv;
 	int tdm_id = dai->id;
-	struct mtk_afe_tdm_priv *tdm_priv = afe_priv->dai_priv[tdm_id];
+	struct mtk_afe_tdm_priv *tdm_priv;
 	unsigned int rate = params_rate(params);
 	unsigned int channels = params_channels(params);
 	snd_pcm_format_t format = params_format(params);
 	unsigned int tdm_con = 0;
+
+	if (tdm_id >= MT8196_DAI_NUM || tdm_id < 0)
+		return -EINVAL;
+	tdm_priv = afe_priv->dai_priv[tdm_id];
+
+	if (!tdm_priv) {
+		AUDIO_AEE("tdm_priv == NULL");
+		return -EINVAL;
+	}
 
 	/* calculate mclk_rate, if not set explicitly */
 	if (!tdm_priv->mclk_rate) {
@@ -708,7 +717,11 @@ static int mtk_dai_tdm_set_sysclk(struct snd_soc_dai *dai,
 {
 	struct mtk_base_afe *afe = dev_get_drvdata(dai->dev);
 	struct mt8196_afe_private *afe_priv = afe->platform_priv;
-	struct mtk_afe_tdm_priv *tdm_priv = afe_priv->dai_priv[dai->id];
+	struct mtk_afe_tdm_priv *tdm_priv;
+
+	if (dai->id >= MT8196_DAI_NUM || dai->id < 0)
+		return -EINVAL;
+	tdm_priv = afe_priv->dai_priv[dai->id];
 
 	if (!tdm_priv) {
 		AUDIO_AEE("tdm_priv == NULL");

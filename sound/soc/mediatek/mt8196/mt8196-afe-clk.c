@@ -57,6 +57,8 @@ int mt8196_set_audio_int_bus_parent(struct mtk_base_afe *afe,
 	struct clk *clk;
 	int ret;
 
+	if (clk_id >= CLK_NUM || clk_id < 0)
+		return -EINVAL;
 	clk = int_bus ? afe_priv->clk[CLK_VLP_MUX_AUDIOINTBUS] :
 			afe_priv->clk[CLK_VLP_MUX_AUDIO_H];
 	ret = clk_set_parent(clk, afe_priv->clk[clk_id]);
@@ -572,6 +574,8 @@ int mt8196_mck_enable(struct mtk_base_afe *afe, int mck_id, int rate)
 
 	dev_dbg(afe->dev, "%s(), mck_id: %d\n", __func__, mck_id);
 
+	if (mck_id >= MT8196_MCK_NUM || mck_id < 0)
+		return -EINVAL;
 	m_sel_id = mck_div[mck_id].m_sel_id;
 	div_clk_id = mck_div[mck_id].div_clk_id;
 
