@@ -472,7 +472,7 @@ static u8 dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 			 AUX_TX_REQUEST_READY_AUX_TX_P0_FLDMASK);
 
 	while (--wait_reply_count) {
-		aux_irq_status = READ_BYTE(mtk_dp, REG_3640_AUX_TX_P0) & GENMASK(6,0);
+		aux_irq_status = READ_BYTE(mtk_dp, REG_3640_AUX_TX_P0);
 
 		if (aux_irq_status & AUX_RX_AUX_RECV_COMPLETE_IRQ_AUX_TX_P0_FLDMASK) {
 			dev_dbg(mtk_dp->dev, "[AUX] Read Complete irq\n");
