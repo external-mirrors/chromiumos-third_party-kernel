@@ -491,6 +491,7 @@ static u8 dp_aux_read_bytes_v2(struct mtk_dp *mtk_dp, u8 cmd,
 			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] (AUX Read)HW Timeout 400us irq");
 			break;
 		}
+		udelay(1);
 	}
 
 	if (wait_reply_count == 0x0) {
