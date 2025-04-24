@@ -1493,6 +1493,7 @@ void ged_dvfs_gpu_clock_switch_notify(enum ged_gpu_power_state power_state)
 				ns_to_ktime(GED_DVFS_TIMER_TIMEOUT), HRTIMER_MODE_REL);
 			ged_log_buf_print(ghLogBuf_DVFS,
 				"[GED_K] HW Start Timer");
+			ged_dvfs_run(0, GED_DVFS_TIMER_BACKUP, 0, GED_DVFS_SET_BOTTOM_COMMIT);
 			timer_switch(true);
 		}
 	} else if (power_state == GED_POWER_OFF ||

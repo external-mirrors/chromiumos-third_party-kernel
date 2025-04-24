@@ -16,6 +16,6 @@ void ged_clk_rate_trace_notifier_unregister(void *notifier_handle,
 					    struct notifier_block *nb);
 unsigned int ged_clk_rate_trace_get_default_freq(void);
 struct srcu_notifier_head *ged_get_notifier_handle(void);
-void ged_clk_rate_change_notify(void);
+void ged_clk_rate_change_notify(unsigned int freq_new);
 
 #endif

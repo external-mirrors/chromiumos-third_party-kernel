@@ -10,6 +10,7 @@
 #include "mtk_gpu_utility.h"
 #include "mtk_platform_common.h"
 #include "mtk_platform_dvfs.h"
+#include "ged_clk_rate_trace.h"
 
 void mtk_common_ged_dvfs_commit(unsigned long ui32NewFreqID,
 					GED_DVFS_COMMIT_TYPE eCommitType,
@@ -90,6 +91,8 @@ void MTKGPUFreq_change_notify(u32 clk_idx, u32 gpufreq)
 
 	if (mtk_common_rate_change_notify_fp && !IS_ERR_OR_NULL(kbdev))
 		mtk_common_rate_change_notify_fp(kbdev, clk_idx, gpufreq);
+
+	ged_clk_rate_change_notify(gpufreq);
 }
 
 int mtk_set_core_mask(u64 core_mask)
