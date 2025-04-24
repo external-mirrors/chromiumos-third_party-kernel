@@ -2710,6 +2710,9 @@ static bool ged_dvfs_policy(
 	int loading_mode;
 	int minfreq_idx;
 
+	ged_log_buf_print(ghLogBuf_DVFS,
+			"[GED_K1][POLICY] GPUFreqIdx: %d", ui32GPUFreq);
+
 	if (ui32GPUFreq < 0 || ui32GPUFreq > ged_get_min_oppidx())
 		return GED_FALSE;
 
@@ -3723,7 +3726,8 @@ void ged_dvfs_run(
 			prev_policy_state = ged_get_prev_policy_state();
 
 			// commit new frequency
-			if (freq_change_flag || policy_state != prev_policy_state) {
+			if (freq_change_flag || policy_state != prev_policy_state ||
+			    eCommitType == GED_DVFS_SET_BOTTOM_COMMIT) {
 				// correct eCommitType in case fallback is triggered in LB
 				if (policy_state == POLICY_STATE_LB ||
 						policy_state == POLICY_STATE_FORCE_LB)
@@ -3734,17 +3738,27 @@ void ged_dvfs_run(
 				else
 					eCommitType = GED_DVFS_FALLBACK_COMMIT;
 
-				if (g_async_ratio_support)
+				if (g_async_ratio_support) {
 					ged_dvfs_gpu_freq_dual_commit(
 						g_ui32FreqIDFromPolicy,
 						ged_get_freq_by_idx(g_ui32FreqIDFromPolicy),
 						eCommitType,
 						g_ui32FreqIDFromPolicy >= g_async_opp_diff ?
 						g_ui32FreqIDFromPolicy - g_async_opp_diff : 0);
-				else
+
+					ged_log_buf_print(ghLogBuf_DVFS,
+							  "[GED_K]async freq dual commit: id=%u",
+							  g_ui32FreqIDFromPolicy);
+
+				} else {
 					ged_dvfs_gpu_freq_commit(g_ui32FreqIDFromPolicy,
 						ged_get_freq_by_idx(g_ui32FreqIDFromPolicy),
 						eCommitType);
+
+					ged_log_buf_print(ghLogBuf_DVFS,
+							  "[GED_K]freq commit: id=%u",
+							  g_ui32FreqIDFromPolicy);
+				}
 
 			}
 		}
@@ -3757,7 +3771,6 @@ void ged_dvfs_run(
 
 EXIT_ged_dvfs_run:
 	mutex_unlock(&gsDVFSLock);
-	ged_clk_rate_change_notify();
 }
 
 void ged_dvfs_sw_vsync_query_data(struct GED_DVFS_UM_QUERY_PACK *psQueryData)
@@ -4073,7 +4086,6 @@ int ged_dvfs_get_fallback_tuning(void)
 
 void ged_dvfs_notify_power_off(void)
 {
-	ged_clk_rate_change_notify();
 	if (g_last_commit_type == GED_DVFS_FALLBACK_COMMIT)
 		g_fallback_idle++;
 }

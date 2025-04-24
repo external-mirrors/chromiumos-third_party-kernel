@@ -116,7 +116,7 @@ void ged_clk_rate_trace_exit(void)
 }
 EXPORT_SYMBOL(ged_clk_rate_trace_exit);
 
-void ged_clk_rate_change_notify(void)
+void ged_clk_rate_change_notify(unsigned int freq_new)
 {
 	void *notifier;
 	unsigned int old_rate, new_rate;
@@ -129,13 +129,6 @@ void ged_clk_rate_change_notify(void)
 
 	mutex_lock(&lock);
 
-	new_rate = get_current_freq();
-	if (!new_rate) {
-		mutex_unlock(&lock);
-		dev_err(ged_dev, "%s: get current frequency fail", __func__);
-		return;
-	}
-
 	old_rate = get_last_freq();
 	if (!old_rate) {
 		mutex_unlock(&lock);
@@ -143,6 +136,7 @@ void ged_clk_rate_change_notify(void)
 		return;
 	}
 
+	new_rate = KHZ_TO_HZ(freq_new);
 	if (new_rate != old_rate) {
 		struct kbase_gpu_clk_notifier_data data;
 		data.gpu_clk_handle = notifier;
