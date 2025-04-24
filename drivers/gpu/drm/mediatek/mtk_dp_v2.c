@@ -607,7 +607,7 @@ static u8 dp_aux_write_bytes_v2(struct mtk_dp *mtk_dp,
 			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] (AUX write)HW Timeout 400us irq");
 			break;
 		}
-		usleep_range(1, 2);
+		udelay(1);
 	}
 
 	if (wait_reply_count == 0x0) {
@@ -4067,14 +4067,14 @@ static void mtk_dp_digital_sw_reset_v2(struct mtk_dp *mtk_dp)
 static void mtk_dp_analog_power_on_v2(struct mtk_dp *mtk_dp)
 {
 	WRITE_BYTE_MASK(mtk_dp, DP_TX_TOP_RESET_AND_PROBE, 0, BIT(4));
-	usleep_range(10, 11);
+	udelay(10);
 	WRITE_BYTE_MASK(mtk_dp, DP_TX_TOP_RESET_AND_PROBE, BIT(4), BIT(4));
 	WRITE_2BYTE(mtk_dp, TOP_OFFSET, 0x0);
 }
 
 static void mtk_dp_analog_power_off_v2(struct mtk_dp *mtk_dp)
 {
-	usleep_range(10, 11);
+	udelay(10);
 	PHY_WRITE_2BYTE(mtk_dp, 0x0034, 0x4aa);
 	PHY_WRITE_2BYTE(mtk_dp, 0x1040, 0x0);
 	PHY_WRITE_2BYTE(mtk_dp, 0x0038, 0x555);
