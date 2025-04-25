@@ -385,6 +385,7 @@ struct mtk_dp {
 	struct clk *pclk;
 	struct clk *pclk_src;
 	atomic_t refcount;
+	int irq;
 
 	struct device *genpd_dp_tx;
 	struct device *genpd_dp_phy;
