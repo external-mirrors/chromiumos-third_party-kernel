@@ -4858,6 +4858,8 @@ static int mtk_dp_bridge_attach_v2(struct drm_bridge *bridge,
 	mtk_dp_create_connector_v2(mtk_dp);
 
 	mtk_dp_init_port_v2(mtk_dp);
+
+	enable_irq(mtk_dp->irq);
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, true);
 
 	return 0;
@@ -4866,6 +4868,7 @@ static int mtk_dp_bridge_attach_v2(struct drm_bridge *bridge,
 static void mtk_dp_resouce_free(struct mtk_dp *mtk_dp)
 {
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, false);
+	disable_irq(mtk_dp->irq);
 
 	mtk_dp_disconnect_release_v2(mtk_dp);
 
@@ -6201,7 +6204,6 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	struct device_node *np = dev->of_node;
 	int ret;
 	struct mtk_drm_private *mtk_priv = dev_get_drvdata(dev);
-	int irq_num = 0;
 	int i = 0;
 
 	mtk_dp = devm_kzalloc(dev, sizeof(*mtk_dp), GFP_KERNEL);
@@ -6224,8 +6226,8 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] pm_runtime_get_sync\n");
 	pm_runtime_get_sync(mtk_dp->dev);
 
-	irq_num = platform_get_irq(pdev, 0);
-	if (irq_num < 0) {
+	mtk_dp->irq = platform_get_irq(pdev, 0);
+	if (mtk_dp->irq < 0) {
 		dev_err(mtk_dp->dev, "[DPTX] failed to request dp irq resource\n");
 		return -EPROBE_DEFER;
 	}
@@ -6248,13 +6250,12 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 		}
 	}
 
-	dev_dbg(mtk_dp->dev, "irq:%d\n", irq_num);
+	dev_dbg(mtk_dp->dev, "irq:%d\n", mtk_dp->irq);
 	spin_lock_init(&mtk_dp->irq_thread_lock);
 
-	irq_set_status_flags(irq_num, IRQ_TYPE_LEVEL_HIGH);
-	ret = devm_request_threaded_irq(&pdev->dev, irq_num, mtk_dp_hpd_event_v2,
+	ret = devm_request_threaded_irq(&pdev->dev, mtk_dp->irq, mtk_dp_hpd_event_v2,
 					mtk_dp_hpd_event_thread_v2,
-					IRQ_TYPE_LEVEL_HIGH, dev_name(&pdev->dev),
+					IRQF_NO_AUTOEN, dev_name(&pdev->dev),
 					mtk_dp);
 	if (ret) {
 		dev_err(mtk_dp->dev, "[DPTX] failed to request mediatek dp irq\n");
