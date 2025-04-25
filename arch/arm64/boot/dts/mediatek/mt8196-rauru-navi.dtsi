@@ -63,6 +63,10 @@
 	};
 };
 
+&cros_ec_fp {
+	spi-cs-setup-delay-ns = <40>;
+};
+
 &i2c3 {
 	/delete-node/ audio-codec@1a;
 
