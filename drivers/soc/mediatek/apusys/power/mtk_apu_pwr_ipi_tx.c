@@ -122,7 +122,13 @@ static int mtk_apu_freq_target(struct device *dev, unsigned long *freq, u32 flag
 {
 	struct dev_pm_opp *opp;
 	unsigned long rate;
+	static unsigned long prev_freq;
 
+	/*
+	 * TODO: Currently, we are not using devfreq_suspend_device &
+	 * devfreq_resume_device. Also, we need to integrate this devfreq driver
+	 * with the APU rproc driver.
+	 */
 	flags |= DEVFREQ_FLAG_LEAST_UPPER_BOUND;
 
 	opp = devfreq_recommended_opp(dev, freq, flags);
@@ -132,6 +138,10 @@ static int mtk_apu_freq_target(struct device *dev, unsigned long *freq, u32 flag
 	}
 	dev_pm_opp_put(opp);
 
+	if (prev_freq == *freq)
+		return 0;
+
+	prev_freq = *freq;
 	rate = *freq / 1000; /* to KHz */
 
 	return mtk_apu_set_limit_freq(dev, rate);
@@ -139,8 +149,23 @@ static int mtk_apu_freq_target(struct device *dev, unsigned long *freq, u32 flag
 
 static int mtk_apu_get_cur_freq(struct device *dev, unsigned long *freq)
 {
-	int ret;
+	int ret, status;
 	struct mtk_apu_pwr_rpmsg *power_rpmsg = dev_get_drvdata(dev);
+
+	/*
+	 * TODO: Currently, we are not using devfreq_suspend_device &
+	 * devfreq_resume_device. Also, we need to integrate this devfreq driver
+	 * with the APU rproc driver.
+	 */
+	status = mtk_apu_get_rpc_pwr_status(power_rpmsg->apu->power_pdev);
+	if (status < 0) {
+		dev_err(dev, "Failed to get APU power status, ret = %d\n", status);
+		return -EINVAL;
+	} else if (status == 0) {
+		/* NPU powered off, just return */
+		*freq = 0;
+		return 0;
+	}
 
 	ret = mtk_apu_get_remote_freq(dev);
 
@@ -168,9 +193,7 @@ static int mtk_apu_get_dev_status(struct device *dev, struct devfreq_dev_status 
 	if (status < 0) {
 		dev_err(dev, "Failed to get APU power status, ret = %d\n", status);
 		return -EINVAL;
-	}
-
-	if (status & 1) {
+	} else if (status == 1) {
 		stat->busy_time = 1;
 		ret = mtk_apu_get_cur_freq(dev, &freq);
 		if (ret)

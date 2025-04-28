@@ -325,7 +325,7 @@ static int mt8196_get_rpc_pwr_status(struct platform_device *pdev)
 {
 	struct mtk_apu_power *apupw = dev_get_drvdata(&pdev->dev);
 
-	return readl(apupw->regs[RPC] + MTK_APU_RPC_INTF_PWR_RDY);
+	return (readl(apupw->regs[RPC] + MTK_APU_RPC_INTF_PWR_RDY) & 1);
 }
 
 const struct apupwr_plat_data mt8196_plat_data = {
