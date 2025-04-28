@@ -85,6 +85,8 @@ static int hw_logger_buf_alloc(struct mtk_apu_hw_logger *hw_logger_data)
 		goto out;
 	}
 
+	hw_logger_data->hw_log_lbc_size = HWLOG_LBC_SIZE;
+
 	dev_dbg(hw_logger_data->dev, "local_log_buf = %p\n", hw_logger_data->local_log_buf);
 	dev_dbg(hw_logger_data->dev, "hw_log_buf = %pK, hw_log_buf_dma_addr = %pad\n",
 		hw_logger_data->hw_log_buf.hw_log_buf,

@@ -30,6 +30,7 @@ struct mtk_apu;
 
 #define HWLOG_LOG_SIZE		(1024 * 1024)
 #define LOCAL_LOG_SIZE		(1024 * 1024)
+#define HWLOG_LBC_SIZE		(HWLOG_LOG_SIZE / 2)
 
 #define HW_LOG_INTR_THRESHOLD	(10)
 #define MAX_SMC_OP_NUM		(0x3)
