@@ -660,6 +660,10 @@
 	status = "disabled";
 };
 
+&ufshci {
+	/delete-property/ mediatek,ufs-rtff-mtcmos;
+};
+
 &usb_c1 {
 	ports {
 		#address-cells = <1>;
