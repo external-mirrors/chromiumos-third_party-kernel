@@ -1285,7 +1285,8 @@ static void ucsi_handle_connector_change(struct work_struct *work)
 	if (con->status.change & UCSI_CONSTAT_CAM_CHANGE)
 		ucsi_partner_task(con, ucsi_check_altmodes, 1, HZ);
 
-	if (con->status.change & UCSI_CONSTAT_BC_CHANGE)
+	if (con->status.change & UCSI_CONSTAT_BC_CHANGE ||
+	    con->status.change & UCSI_CONSTAT_SINK_PATH_CHANGE)
 		ucsi_port_psy_changed(con);
 
 out_unlock:
