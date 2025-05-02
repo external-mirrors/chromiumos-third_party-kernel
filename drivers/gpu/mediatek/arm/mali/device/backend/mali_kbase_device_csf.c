@@ -357,6 +357,14 @@ static const struct kbase_device_init dev_init[] = {
 	{ kbase_debug_coresight_csf_init, kbase_debug_coresight_csf_term,
 	  "Coresight initialization failed" },
 #endif /* IS_ENABLED(CONFIG_MALI_MTK_CORESIGHT) */
+#ifdef MALI_MTK_COMMON
+	/* For business considerations, the GPU has 11 cores, but different platforms will have
+	 * different core masks. The core mask settings need to be configured during GPU
+	 * initialization.
+	 */
+	{ mtk_common_platform_coremask_init, NULL,
+	  "MTK platform coremask initialization failed" },
+#endif /* MALI_MTK_COMMON */
 };
 
 static void kbase_device_term_partial(struct kbase_device *kbdev, unsigned int i)
