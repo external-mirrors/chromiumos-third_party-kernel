@@ -35,6 +35,7 @@ void mtk_common_device_term(struct kbase_device *kbdev);
 void mtk_common_debugfs_init(struct kbase_device *kbdev);
 #endif /* MALI_MTK_DEBUG_FS */
 
+int mtk_common_platform_coremask_init(struct kbase_device *kbdev);
 int mtk_platform_pm_init(struct kbase_device *kbdev);
 void mtk_platform_pm_term(struct kbase_device *kbdev);
 

@@ -123,6 +123,7 @@
 #ifdef MALI_MTK_DEBUG_FS
 #include "mtk_platform_common.h"
 #endif /* MALI_MTK_DEBUG_FS */
+#include "mtk_gpufreq.h"
 
 #define KERNEL_SIDE_DDK_VERSION_STRING "K:" MALI_RELEASE_NAME "(GPL)"
 
@@ -2325,6 +2326,9 @@ static ssize_t core_mask_show(struct device *dev, struct device_attribute *attr,
 #if !MALI_USE_CSF
 	size_t i;
 #endif
+#if IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+	u32 shader_present;
+#endif
 
 	CSTD_UNUSED(attr);
 
@@ -2353,8 +2357,20 @@ static ssize_t core_mask_show(struct device *dev, struct device_attribute *attr,
 	}
 #endif /* MALI_USE_CSF */
 
+#if IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+	shader_present = gpufreq_get_shader_present();
+	if (shader_present)
+		ret += scnprintf(buf + ret, (size_t)(PAGE_SIZE - ret),
+				 "Available core mask : %#X\n", shader_present);
+	else
+		ret += scnprintf(buf + ret, (size_t)(PAGE_SIZE - ret),
+				 "Available core mask : %#llX\n",
+				 kbdev->gpu_props.shader_present);
+#else
 	ret += scnprintf(buf + ret, (size_t)(PAGE_SIZE - ret), "Available core mask : 0x%llX\n",
 			 kbdev->gpu_props.shader_present);
+#endif/*CONFIG_MTK_GPUFREQ_V2*/
+
 #if !MALI_USE_CSF
 out_unlock:
 #endif
@@ -2390,7 +2406,13 @@ static int core_mask_set(struct kbase_device *kbdev, struct kbase_core_mask *con
 	kbase_pm_lock(kbdev);
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 
+#if IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+	shader_present = gpufreq_get_shader_present();
+	if (!shader_present)
+		shader_present = kbdev->gpu_props.shader_present;
+#else
 	shader_present = kbdev->gpu_props.shader_present;
+#endif/*CONFIG_MTK_GPUFREQ_V2*/
 
 	if ((new_core_mask & shader_present) != new_core_mask) {
 		dev_err(kbdev->dev,

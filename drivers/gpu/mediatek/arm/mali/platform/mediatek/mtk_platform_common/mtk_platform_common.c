@@ -5,18 +5,18 @@
 
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
-#include <linux/sysfs.h>
 #include <linux/string.h>
-#include <mali_kbase.h>
-#include <backend/gpu/mali_kbase_pm_internal.h>
-#include "mtk_platform_common.h"
-#include "mtk_gpufreq.h"
+#include <linux/sysfs.h>
 #include "ged_dvfs.h"
 #include "ged_base.h"
 #include "ged_type.h"
-
+#include "mali_kbase.h"
+#include "mali_kbase_hwaccess_gpuprops.h"
+#include "mali_kbase_gpuprops_private_types.h"
+#include "mali_kbase_pm_internal.h"
+#include "mtk_platform_common.h"
 #include "mtk_platform_dvfs.h"
-
+#include "mtk_gpufreq.h"
 #ifdef MALI_MTK_DEVFREQ_GOVERNOR
 #include "mtk_platform_devfreq_governor.h"
 #endif /* MALI_MTK_DEVFREQ_GOVERNOR */
@@ -323,6 +323,34 @@ void mtk_common_debugfs_init(struct kbase_device *kbdev)
 	mtk_debug_sleep_mode_debugfs_init(kbdev);
 }
 #endif /* MALI_MTK_DEBUG_FS */
+
+int mtk_common_platform_coremask_init(struct kbase_device *kbdev)
+{
+	int ret = 0;
+#if IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+	u32 shader_present;
+	struct kbasep_gpuprops_regdump regdump;
+
+	shader_present = gpufreq_get_shader_present();
+	if (shader_present) {
+		if (!(ret = kbase_backend_gpuprops_get(kbdev, &regdump))) {
+			/* To check whether the platform shader_present is reasonable.
+			 * If the check fails, it indicates that the IC is problematic
+			 * and cannot be used.
+			 */
+			if ((regdump.shader_present | shader_present) !=
+			    regdump.shader_present) {
+				dev_alert(kbdev->dev,
+					  "@%s: illegal shader present (HW: %#llX, SW: %#X)",
+					  __func__, regdump.shader_present, shader_present);
+				return -EINVAL;
+			}
+			kbase_devfreq_set_core_mask(kbdev, shader_present);
+		}
+	}
+#endif /* CONFIG_MTK_GPUFREQ_V2*/
+	return ret;
+}
 
 int mtk_common_device_init(struct kbase_device *kbdev)
 {

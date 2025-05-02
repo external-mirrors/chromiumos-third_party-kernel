@@ -43,7 +43,7 @@
 #include <backend/gpu/mali_kbase_devfreq.h>
 #include <mali_kbase_dummy_job_wa.h>
 #include <backend/gpu/mali_kbase_irq_internal.h>
-
+#include "mtk_gpufreq.h"
 
 static void kbase_pm_gpu_poweroff_wait_wq(struct work_struct *data);
 static void kbase_pm_hwcnt_disable_worker(struct work_struct *data);
@@ -707,6 +707,9 @@ int kbase_hwaccess_pm_powerup(struct kbase_device *kbdev, unsigned int flags)
 {
 	unsigned long irq_flags;
 	int ret;
+#if IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+	u32 shader_present;
+#endif
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 
@@ -724,7 +727,16 @@ int kbase_hwaccess_pm_powerup(struct kbase_device *kbdev, unsigned int flags)
 		return ret;
 	}
 #if MALI_USE_CSF
+
+#if IS_ENABLED(CONFIG_MTK_GPUFREQ_V2)
+	shader_present = gpufreq_get_shader_present();
+	if (shader_present)
+		kbdev->pm.debug_core_mask = gpufreq_get_shader_present();
+	else
+		kbdev->pm.debug_core_mask = kbdev->gpu_props.shader_present;
+#else
 	kbdev->pm.debug_core_mask = kbdev->gpu_props.shader_present;
+#endif/*CONFIG_MTK_GPUFREQ_V2*/
 	spin_lock_irqsave(&kbdev->hwaccess_lock, irq_flags);
 	/* Set the initial value for 'shaders_avail'. It would be later
 	 * modified only from the MCU state machine, when the shader core
