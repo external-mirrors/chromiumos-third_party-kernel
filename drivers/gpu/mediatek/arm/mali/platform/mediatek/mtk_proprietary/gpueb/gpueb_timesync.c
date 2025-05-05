@@ -110,12 +110,12 @@ void gpueb_timesync_update(void)
 {
 	unsigned long irq_flags = 0;
 
+	spin_lock_irqsave(&timesync_ctx.lock, irq_flags);
 	if (need_sync) {
-		spin_lock_irqsave(&timesync_ctx.lock, irq_flags);
 		gpueb_ts_update(latest_freeze, latest_tick, latest_ts);
 		need_sync = false;
-		spin_unlock_irqrestore(&timesync_ctx.lock, irq_flags);
 	}
+	spin_unlock_irqrestore(&timesync_ctx.lock, irq_flags);
 }
 EXPORT_SYMBOL(gpueb_timesync_update);
 
