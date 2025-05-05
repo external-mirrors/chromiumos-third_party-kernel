@@ -477,6 +477,12 @@ unsigned int ged_get_cur_stack_freq(void)
 		else
 			oppidx = g_min_working_oppidx + i;
 
+		/* g_max_working_oppidx <= oppidx <= g_min_working_oppidx */
+		if (oppidx > g_min_working_oppidx)
+			oppidx = g_min_working_oppidx;
+		else if (oppidx < g_max_working_oppidx)
+			oppidx = g_max_working_oppidx;
+
 		return ged_get_freq_by_idx(oppidx);
 	}else
 		return cur_stack_freq;
