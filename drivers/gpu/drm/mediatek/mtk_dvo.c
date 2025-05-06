@@ -107,7 +107,7 @@ struct mtk_dvo_gs_info {
 
 struct mtk_dvo {
 	struct mtk_ddp_comp ddp_comp;
-	struct drm_encoder encoder;
+	struct mtk_encoder mtk_encoder;
 	struct drm_bridge bridge;
 	struct drm_bridge *next_bridge;
 	struct drm_connector *connector;
@@ -138,6 +138,11 @@ struct mtk_dvo {
 static inline struct mtk_dvo *bridge_to_dvo(struct drm_bridge *b)
 {
 	return container_of(b, struct mtk_dvo, bridge);
+}
+
+static inline struct mtk_dvo *encoder_to_dvo(struct drm_encoder *e)
+{
+	return container_of(e, struct mtk_dvo, mtk_encoder.encoder);
 }
 
 enum mtk_dvo_polarity {
@@ -793,7 +798,7 @@ void mtk_dvo_get_hrt_bw_by_datarate(struct device *dev, unsigned int *bw_base)
 unsigned int mtk_dvo_encoder_index(struct device *dev)
 {
 	struct mtk_dvo *dvo = dev_get_drvdata(dev);
-	unsigned int encoder_index = drm_encoder_index(&dvo->encoder);
+	unsigned int encoder_index = drm_encoder_index(&dvo->mtk_encoder.encoder);
 
 	dev_dbg(dev, "encoder index:%d\n", encoder_index);
 	return encoder_index;
@@ -807,33 +812,33 @@ static int mtk_dvo_bind(struct device *dev, struct device *master, void *data)
 	int ret;
 
 	dvo->mmsys_dev = priv->mmsys_dev;
-	ret = drm_simple_encoder_init(drm_dev, &dvo->encoder,
+	ret = drm_simple_encoder_init(drm_dev, &dvo->mtk_encoder.encoder,
 				      DRM_MODE_ENCODER_TMDS);
 	if (ret) {
 		dev_err(dev, "Failed to initialize decoder: %d\n", ret);
 		return ret;
 	}
-	dvo->encoder.possible_crtcs = mtk_find_possible_crtcs(drm_dev, dvo->dev);
+	dvo->mtk_encoder.encoder.possible_crtcs = mtk_find_possible_crtcs(drm_dev, dvo->dev);
 
-	ret = drm_bridge_attach(&dvo->encoder, &dvo->bridge, NULL,
+	ret = drm_bridge_attach(&dvo->mtk_encoder.encoder, &dvo->bridge, NULL,
 				dvo->conf->is_dp ? 0 : DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret)
 		goto err_cleanup;
 
 	if (!dvo->conf->is_dp) {
-		dvo->connector = drm_bridge_connector_init(drm_dev, &dvo->encoder);
+		dvo->connector = drm_bridge_connector_init(drm_dev, &dvo->mtk_encoder.encoder);
 		if (IS_ERR(dvo->connector)) {
 			dev_err(dev, "Unable to create bridge connector\n");
 			ret = PTR_ERR(dvo->connector);
 			goto err_cleanup;
 		}
-		drm_connector_attach_encoder(dvo->connector, &dvo->encoder);
+		drm_connector_attach_encoder(dvo->connector, &dvo->mtk_encoder.encoder);
 	}
 
 	return 0;
 
 err_cleanup:
-	drm_encoder_cleanup(&dvo->encoder);
+	drm_encoder_cleanup(&dvo->mtk_encoder.encoder);
 	return ret;
 }
 
@@ -842,7 +847,7 @@ static void mtk_dvo_unbind(struct device *dev, struct device *master,
 {
 	struct mtk_dvo *dvo = dev_get_drvdata(dev);
 
-	drm_encoder_cleanup(&dvo->encoder);
+	drm_encoder_cleanup(&dvo->mtk_encoder.encoder);
 }
 
 static const struct component_ops mtk_dvo_component_ops = {
