@@ -446,3 +446,7 @@
 		};
 	};
 };
+
+&ufshci {
+	/delete-property/ mediatek,ufs-rtff-mtcmos;
+};
