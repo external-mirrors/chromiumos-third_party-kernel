@@ -299,7 +299,7 @@
 &therm_intf {
 	mediatek,init-ttj-cpu = <105000>;
 	mediatek,init-ttj-gpu = <105000>;
-	mediatek,init-ttj-npu = <75000>;
+	mediatek,init-ttj-npu = <105000>;
 };
 
 &thermal_zones {
@@ -311,7 +311,7 @@
 
 		trips {
 			bulk_threshold: trip-point@0 {
-				temperature = <45000>; /* switch on temperature */
+				temperature = <40000>; /* switch on temperature */
 				hysteresis = <2000>;
 				type = "passive";
 			};
@@ -351,6 +351,12 @@
 				cooling-device =
 					<&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 				contribution = <1024>;
+			};
+			map4 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&apu_top_rpmsg THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				contribution = <384>;
 			};
 		};
 	};
