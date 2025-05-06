@@ -57,8 +57,10 @@ static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 		return;
 
 	if (timer_pending(&apu->power_off_timer)) {
+		mutex_lock(&apu->power_lock);
 		apu->ipi_pwr_ref_cnt[MTK_APU_IPI_MIDDLEWARE]--;
 		apu->local_pwr_ref_cnt--;
+		mutex_unlock(&apu->power_lock);
 	}
 
 	power_dtime = msecs_to_jiffies(apu->cur_dtime_ts - ts);
