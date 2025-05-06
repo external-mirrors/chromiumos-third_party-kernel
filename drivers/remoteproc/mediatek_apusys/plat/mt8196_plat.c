@@ -155,8 +155,10 @@ static int mt8196_cold_boot_power_on(struct mtk_apu *apu)
 		return -EINVAL;
 	}
 
+	mutex_lock(&apu->power_lock);
 	apu->ipi_pwr_ref_cnt[MTK_APU_IPI_INIT]++;
 	apu->local_pwr_ref_cnt++;
+	mutex_unlock(&apu->power_lock);
 
 	ret = mtk_apu_rv_smc_call(dev, MTK_APUSYS_KERNEL_OP_APUSYS_COLD_BOOT_CLR_MBOX_DUMMY, 0);
 	if (ret) {
