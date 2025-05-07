@@ -4114,12 +4114,14 @@ static void mtk_dp_disconnect_release_v2(struct mtk_dp *mtk_dp)
 		mtk_dp_video_mute_v2(mtk_dp, DP_SST_ENCODER_PORT, true);
 		mtk_dp_audio_mute_v2(mtk_dp, DP_SST_ENCODER_PORT, true);
 		mtk_dp_video_disable_v2(mtk_dp, DP_SST_ENCODER_PORT);
-
-		kfree(mtk_dp->mtk_con[DP_FIRST_CON]->edid);
-		mtk_dp->mtk_con[DP_FIRST_CON]->edid = NULL;
-
 		mtk_dp->mtk_con[DP_FIRST_CON]->video_enable = false;
 	}
+
+	memset(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd, 0,
+	       sizeof(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd));
+	mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap = 0;
+	kfree(mtk_dp->mtk_con[DP_FIRST_CON]->edid);
+	mtk_dp->mtk_con[DP_FIRST_CON]->edid = NULL;
 
 	mtk_dp_hdcp_disable(mtk_dp);
 
