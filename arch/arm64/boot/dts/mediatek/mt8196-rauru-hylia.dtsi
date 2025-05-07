@@ -679,3 +679,60 @@
 	};
 };
 
+&thermal_zones {
+	reg-5v-thermal {
+		polling-delay = <0>;
+		polling-delay-passive = <0>;
+		thermal-sensors = <&cros_ec 0>;
+
+		trips {
+			reg_5v_trip0: trip-point@0 {
+				temperature = <65000>;
+				hysteresis = <2000>;
+				type = "hot";
+			};
+		};
+	};
+
+	cpu-board-thermal {
+		polling-delay = <0>;
+		polling-delay-passive = <0>;
+		thermal-sensors = <&cros_ec 1>;
+
+		trips {
+			cpu_board_trip0: trip-point@0 {
+				temperature = <75000>;
+				hysteresis = <2000>;
+				type = "hot";
+			};
+		};
+	};
+
+	charger-thermal {
+		polling-delay = <0>;
+		polling-delay-passive = <0>;
+		thermal-sensors = <&cros_ec 2>;
+
+		trips {
+			charger_trip0: trip-point@0 {
+				temperature = <75000>;
+				hysteresis = <2000>;
+				type = "hot";
+			};
+		};
+	};
+
+	ambient-thermal {
+		polling-delay = <0>;
+		polling-delay-passive = <0>;
+		thermal-sensors = <&cros_ec 3>;
+
+		trips {
+			ambient_trip0: trip-point@0 {
+				temperature = <55000>;
+				hysteresis = <2000>;
+				type = "hot";
+			};
+		};
+	};
+};
