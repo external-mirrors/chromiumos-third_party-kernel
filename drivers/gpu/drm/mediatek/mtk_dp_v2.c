@@ -683,7 +683,7 @@ static bool mtk_dp_aux_write_dpcd_v2(struct mtk_dp *mtk_dp, u8 cmd,
 						data + i);
 	}
 
-	if (length % DP_AUX_MAX_PAYLOAD_BYTES) {
+	if (length % DP_AUX_MAX_PAYLOAD_BYTES || length == 0) {
 		ret &= mtk_dp_aux_write_bytes_v2(mtk_dp, cmd, dpcd_addr + i,
 						length % DP_AUX_MAX_PAYLOAD_BYTES,
 						data + i);
@@ -736,7 +736,7 @@ static bool mtk_dp_aux_read_dpcd_v2(struct mtk_dp *mtk_dp, u8 cmd,
 						data + i);
 	}
 
-	if (length % DP_AUX_MAX_PAYLOAD_BYTES) {
+	if (length % DP_AUX_MAX_PAYLOAD_BYTES || length == 0) {
 		ret &= mtk_dp_aux_read_bytes_v2(mtk_dp, cmd, dpcd_addr + i,
 						length % DP_AUX_MAX_PAYLOAD_BYTES,
 						data + i);
