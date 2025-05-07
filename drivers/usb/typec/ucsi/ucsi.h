@@ -13,7 +13,7 @@
 #include <asm/unaligned.h>
 
 /* -------------------------------------------------------------------------- */
-
+struct ucsi_connector;
 struct ucsi;
 struct ucsi_altmode;
 struct dentry;
