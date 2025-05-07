@@ -1293,6 +1293,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&ec_int_pin>;
 		spi-max-frequency = <3000000>;
+		#thermal-sensor-cells = <1>;
+		#cooling-cells = <2>;
 
 		i2c_tunnel: i2c-tunnel {
 			compatible = "google,cros-ec-i2c-tunnel";
