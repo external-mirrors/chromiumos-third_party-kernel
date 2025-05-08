@@ -46,6 +46,31 @@ static int cros_ec_sensorhub_allocate_sensor(struct device *parent,
 					pdev);
 }
 
+static bool cros_ec_sensorhub_check_all_sensors(struct device *dev,
+				      struct cros_ec_sensorhub *sensorhub)
+{
+	struct cros_ec_command *msg = sensorhub->msg;
+	struct cros_ec_dev *ec = sensorhub->ec;
+	int ret, i;
+
+	msg->version = 1;
+	msg->insize = sizeof(struct ec_response_motion_sense);
+	msg->outsize = sizeof(struct ec_params_motion_sense);
+
+	for (i = 0; i < sensorhub->sensor_num; i++) {
+		sensorhub->params->cmd = MOTIONSENSE_CMD_INFO;
+		sensorhub->params->info.sensor_num = i;
+
+		ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
+		if (ret < 0) {
+			dev_warn(dev, "EC sensor %d : %d not ready %d\n",
+				 i, ret, msg->result);
+			return false;
+		}
+	}
+	return true;
+}
+
 static int cros_ec_sensorhub_register(struct device *dev,
 				      struct cros_ec_sensorhub *sensorhub)
 {
@@ -66,7 +91,7 @@ static int cros_ec_sensorhub_register(struct device *dev,
 
 		ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 		if (ret < 0) {
-			dev_warn(dev, "no info for EC sensor %d : %d/%d\n",
+			dev_err(dev, "no info for EC sensor %d : %d/%d\n",
 				 i, ret, msg->result);
 			continue;
 		}
@@ -171,6 +196,14 @@ static int cros_ec_sensorhub_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 		data->sensor_num = sensor_num;
+
+		/*
+		 * Some EC are starting at boot time, sensors may not be fully powered up
+		 * and ready.
+		 * Defer until all sensors are ready.
+		 */
+		if (!cros_ec_sensorhub_check_all_sensors(dev, data))
+			return -EPROBE_DEFER;
 
 		/*
 		 * Prepare the ring handler before enumering the
