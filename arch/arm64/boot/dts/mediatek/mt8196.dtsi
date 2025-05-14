@@ -967,7 +967,7 @@
 		};
 
 		gpu_fdvfs: gpu-fdvfs@13f800 {
-			compatible = "mediatek,gpu_fdvfs";
+			compatible = "mediatek,gpu-fdvfs";
 			reg = <0 0x13f800 0 0x800>;
 			gpu-freq-notify-support;
 		};
