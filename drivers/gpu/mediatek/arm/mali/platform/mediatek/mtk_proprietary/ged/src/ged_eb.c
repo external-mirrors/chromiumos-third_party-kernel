@@ -1580,7 +1580,7 @@ void fdvfs_init(void)
 
 	/* init sysram for debug */
 	mtk_gpueb_dvfs_sysram_base_addr =
-		_gpu_fastdvfs_of_ioremap("mediatek,gpu_fdvfs");
+		_gpu_fastdvfs_of_ioremap("mediatek,gpu-fdvfs");
 
 	if (mtk_gpueb_dvfs_sysram_base_addr == NULL) {
 		GPUFDVFS_LOGE("can't find fdvfs sysram");

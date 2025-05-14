@@ -567,7 +567,7 @@ GED_ERROR check_eb_config(void)
 		g_ged_gpueb_support = of_property_read_bool(gpueb_node, "gpueb-support");
 	}
 
-	fdvfs_node = of_find_compatible_node(NULL, NULL, "mediatek,gpu_fdvfs");
+	fdvfs_node = of_find_compatible_node(NULL, NULL, "mediatek,gpu-fdvfs");
 	if (!fdvfs_node) {
 		GED_LOGE("No fdvfs node.");
 		g_ged_fdvfs_support = false;
