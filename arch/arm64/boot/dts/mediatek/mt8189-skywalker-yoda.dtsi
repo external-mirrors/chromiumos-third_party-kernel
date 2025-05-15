@@ -1,0 +1,325 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker.dtsi"
+
+/ {
+	rt1019p: audio-codec {
+		compatible = "realtek,rt1019p";
+		label = "rt1019p";
+		#sound-dai-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_spk_en_pins>;
+		sdb-gpios = <&pio 5 GPIO_ACTIVE_HIGH>;
+	};
+
+	pp1800_trackpad: regulator-pp1800-trackpad {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_trackpad";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		gpio = <&pio 3 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pwr_pins>;
+		vin-supply = <&pp3300_z1>;
+	};
+
+	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_tchscr_report_disable";
+		pinctrl-names = "default";
+		regulator-boot-on;
+		pinctrl-0 = <&touch_pin_report>;
+		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)		/* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)		/* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)		/* T13 */
+		MATRIX_KEY(0x00, 0x0b, 0)		/* T14 */
+	>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_PLAYPAUSE)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_MICMUTE)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_MUTE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_VOLUMEDOWN)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEUP)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_ACCESSIBILITY)	/* T13 */
+		MATRIX_KEY(0x00, 0x0b, KEY_DICTATE)		/* T14 */
+	>;
+};
+
+&i2c2 {
+	/delete-node/ audio-codec@1a;
+
+	rt5682s: audio-codec@1a {
+		compatible = "realtek,rt5682s";
+		reg = <0x1a>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		#sound-dai-cells = <0>;
+
+		AVDD-supply = <&mt6359_vio18_ldo_reg>;
+		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
+		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
+		MICVDD-supply = <&pp3300_z1>;
+		realtek,jd-src = <1>;
+		status = "okay";
+	};
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5682s-sound";
+	model = "mt8189_1019_rt5682s";
+	status = "okay";
+
+	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
+			"I2SOUT0", "ETDMIN_HP_PIN",
+			"I2SOUT0", "ETDMOUT_HP_PIN",
+			"I2SIN0", "ETDMIN_HP_PIN",
+			"I2SIN0", "ETDMOUT_HP_PIN",
+			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
+			"AP DMIC Capture", "AP_DMIC0_PIN",
+			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
+
+	dai-link-0 {
+		link-name = "I2SOUT1_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt1019p>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682s>;
+		};
+	};
+
+	dai-link-2 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682s>;
+		};
+	};
+
+	dai-link-3 {
+		link-name = "TDM_DPTX_BE";
+
+		codec {
+			sound-dai = <&dp_tx>;
+		};
+	};
+};
+
+&pio{
+	trackpad_pwr_pins: trackpad-pwr-pins {
+		pins-pwr {
+			pinmux = <PINMUX_GPIO3__FUNC_GPIO3>;
+			output-low;
+		};
+	};
+
+	touch_pin_report: pin-report-pins {
+		pins-touch-en {
+			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
+			output-low;
+		};
+	};
+};
+
+&ap_i2c_tchpad  {
+	/delete-node/ trackpad@15;
+
+	trackpad_elan: trackpad@15 {
+		compatible = "elan,ekth3000";
+		reg = <0x15>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		vcc-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
+
+	trackpad_goodix: trackpad@2c {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		/*
+		 * The power supply V3.3 and V1.8 for touchpads on
+		 * yoda are controlled by HW and always on for now.
+		 * The delay is no needed and commentted in dts.
+		 */
+		/* post-power-on-delay-ms = <10>; */
+		hid-descr-addr = <0x0020>;
+		vdd-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
+
+	trackpad_focal: trackpad@38 {
+		compatible = "hid-over-i2c";
+		reg = <0x38>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		/*
+		 * The power supply V3.3 and V1.8 for touchpads on
+		 * yoda are controlled by HW and always on for now.
+		 * The delay is no needed and commentted in dts.
+		 */
+		/* post-power-on-delay-ms = <40>; */
+		hid-descr-addr = <0x0020>;
+		vdd-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
+};
+
+&ap_i2c_tchscr {
+	/delete-node/ touchscreen@41;
+
+	/* elan touchscreen */
+	touchscreen@10 {
+		compatible = "ilitek,ili2901";
+		reg = <0x10>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+
+	/* goodix touchscreen */
+	touchscreen@5d {
+		compatible = "goodix,gt7986u", "goodix,gt7375p";
+		reg = <0x5d>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&pp3300_tchscr_x>;
+		status = "fail-needs-probe";
+	};
+};
+
+&touchscreen_pins {
+	/delete-node/ pins-touch-en;
+};
+
+&u3phy0 {
+	status = "okay";
+};
+
+/* USB hub port 1 */
+&usb_hub_dsp1_hs {
+	remote-endpoint = <&usb_a0_hs>;
+};
+
+&usb_a0_hs {
+	remote-endpoint = <&usb_hub_dsp1_hs>;
+};
+
+&usb_hub_dsp1_ss {
+	remote-endpoint = <&usb_a0_ss>;
+};
+
+&usb_a0_ss {
+	remote-endpoint = <&usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 2 */
+&usb_hub_dsp2_hs {
+	remote-endpoint = <&usb_c0_hs>;
+};
+
+&usb_c0_hs {
+	remote-endpoint = <&usb_hub_dsp2_hs>;
+};
+
+&usb_hub_dsp2_ss {
+	remote-endpoint = <&usb_c0_ss>;
+};
+
+&usb_c0_ss {
+	remote-endpoint = <&usb_hub_dsp2_ss>;
+};
+
+/* USB hub port 3 */
+&usb_hub_dsp3_hs {
+	remote-endpoint = <&usb_c1_hs>;
+};
+
+&usb_c1_hs {
+	remote-endpoint = <&usb_hub_dsp3_hs>;
+};
+
+&usb_hub_dsp3_ss {
+	remote-endpoint = <&usb_c1_ss>;
+};
+
+&usb_c1_ss {
+	remote-endpoint = <&usb_hub_dsp3_ss>;
+};
+
+/* USB hub port 4 */
+&usb_hub_dsp4_hs {
+	remote-endpoint = <&usb_a1_hs>;
+};
+
+&usb_a1_hs {
+	remote-endpoint = <&usb_hub_dsp4_hs>;
+};
+
+&usb_hub_dsp4_ss {
+	remote-endpoint = <&usb_a1_ss>;
+};
+
+&usb_a1_ss {
+	remote-endpoint = <&usb_hub_dsp4_ss>;
+};
+
+&xhci0 {
+	status = "okay";
+};

@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-yoda.dtsi"
+
+/ {
+	model = "Google Yoda sku4 board";
+	compatible = "google,yoda-sku4", "google,yoda-sku5", "google,yoda-sku6",
+		     "google,yoda-sku7", "google,yoda-sku12", "google,yoda-sku13", "google,yoda-sku14",
+		     "google,yoda-sku15", "google,yoda", "mediatek,mt8189";
+};
+
+&i2c2 {
+	/delete-node/ audio-codec@1a;
+
+	rt5682i: audio-codec@1a {
+		compatible = "realtek,rt5682i";
+		reg = <0x1a>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		#sound-dai-cells = <0>;
+
+		AVDD-supply = <&mt6359_vio18_ldo_reg>;
+		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
+		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
+		MICVDD-supply = <&pp3300_z1>;
+		realtek,jd-src = <1>;
+		status = "okay";
+	};
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5682i-sound";
+	model = "mt8189_1019_rt5682i";
+	status = "okay";
+
+	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
+			"I2SOUT0", "ETDMIN_HP_PIN",
+			"I2SOUT0", "ETDMOUT_HP_PIN",
+			"I2SIN0", "ETDMIN_HP_PIN",
+			"I2SIN0", "ETDMOUT_HP_PIN",
+			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
+			"AP DMIC Capture", "AP_DMIC0_PIN",
+			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
+
+	dai-link-0 {
+		link-name = "I2SOUT1_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt1019p>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682i>;
+		};
+	};
+
+	dai-link-2 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682i>;
+		};
+	};
+
+	dai-link-3 {
+		link-name = "TDM_DPTX_BE";
+
+		codec {
+			sound-dai = <&dp_tx>;
+		};
+	};
+};

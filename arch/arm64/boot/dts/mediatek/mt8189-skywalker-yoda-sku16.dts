@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-yoda.dtsi"
+
+/ {
+	model = "Google Yoda sku16 board";
+	compatible = "google,yoda-sku16", "google,yoda-sku17", "google,yoda-sku18", "google,yoda-sku19",
+		     "google,yoda-sku24", "google,yoda-sku25", "google,yoda-sku26", "google,yoda-sku27",
+		     "google,yoda", "mediatek,mt8189";
+};
+
+&xhci0 {
+	status = "disabled";
+};
