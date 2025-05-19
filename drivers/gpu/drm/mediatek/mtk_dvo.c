@@ -7,9 +7,11 @@
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/media-bus-format.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/of_graph.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
@@ -136,6 +138,7 @@ struct mtk_dvo {
 	u32 output_fmt;
 	int refcount;
 	enum mtk_dvo_golden_setting_level gs_level;
+	struct cmdq_client_reg cmdq_reg;
 };
 
 static inline struct mtk_dvo *bridge_to_dvo(struct drm_bridge *b)
@@ -436,7 +439,7 @@ static void mtk_dvo_config_vsync(struct mtk_dvo *dvo,
 		     dvo->conf->dimension_mask << VFP);
 	mtk_dvo_mask(dvo, porch_addr,
 		     (sync->back_porch + sync->sync_width) << VSYNC2ACT,
-	     dvo->conf->dimension_mask << VSYNC2ACT);
+		     dvo->conf->dimension_mask << VSYNC2ACT);
 	mtk_dvo_mask(dvo, DVO_MUTEX_VSYNC_SET,
 		     INT_SOF_DLY << INT_SOF_DLY_SHIFT,
 		     INT_SOF_DLY_MASK);
@@ -832,6 +835,89 @@ unsigned int mtk_dvo_encoder_index(struct device *dev)
 	return encoder_index;
 }
 
+static bool mtk_dvo_is_seamless_switch(struct drm_encoder *encoder,
+				       struct drm_connector *connector,
+				       struct drm_crtc_state *crtc_state)
+{
+	struct mtk_dvo *dvo = encoder_to_dvo(encoder);
+	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
+	struct drm_display_mode *old_mode = &dvo->mode;
+	const struct drm_display_info *info = &connector->display_info;
+
+	/* Only allow vfp/vbp change */
+	if (old_mode->hdisplay    == new_mode->hdisplay &&
+	    old_mode->vdisplay    == new_mode->vdisplay &&
+	    old_mode->htotal      == new_mode->htotal &&
+	    old_mode->hskew       == new_mode->hskew &&
+	    old_mode->hsync_start == new_mode->hsync_start &&
+	    old_mode->hsync_end   == new_mode->hsync_end &&
+	    old_mode->vscan       == new_mode->vscan &&
+	    info->monitor_range.min_vfreq != 0 &&
+	    info->monitor_range.max_vfreq != 0 &&
+	    (old_mode->vsync_end - old_mode->vsync_start) ==
+	    (new_mode->vsync_end - new_mode->vsync_start) &&
+	    ((old_mode->vtotal      != new_mode->vtotal) ||
+	     (old_mode->clock      != new_mode->clock)))
+		return true;
+
+	return false;
+}
+
+static int mtk_dvo_check_config(struct drm_encoder *encoder,
+				struct drm_crtc_state *crtc_state,
+				struct drm_connector_state *conn_state)
+{
+	struct mtk_dvo *dvo = encoder_to_dvo(encoder);
+	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
+	struct videomode new_vm = { 0 };
+	struct videomode old_vm = { 0 };
+
+	drm_display_mode_to_videomode(new_mode, &new_vm);
+	drm_display_mode_to_videomode(&dvo->mode, &old_vm);
+
+	if (new_vm.vfront_porch != old_vm.vfront_porch)
+		dev_dbg(dvo->dev, "Change vfp from %u to %u\n",
+			old_vm.vfront_porch, new_vm.vfront_porch);
+
+	if (new_vm.vback_porch != old_vm.vback_porch)
+		dev_dbg(dvo->dev, "Change vbp from %u to %u\n",
+			old_vm.vback_porch, new_vm.vback_porch);
+
+	return 0;
+}
+
+static int mtk_dvo_update_config(struct drm_encoder *encoder,
+				 struct drm_crtc_state *crtc_state,
+				 void *cmdq_pkt)
+{
+	struct mtk_dvo *dvo = encoder_to_dvo(encoder);
+	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
+	struct videomode new_vm = { 0 };
+	struct videomode old_vm = { 0 };
+	int vtotal_diff;
+	int tmp;
+
+	drm_display_mode_to_videomode(new_mode, &new_vm);
+	drm_display_mode_to_videomode(&dvo->mode, &old_vm);
+
+	vtotal_diff = new_mode->vtotal - dvo->mode.vtotal;
+	tmp = (vtotal_diff > 0) ? new_vm.vfront_porch + vtotal_diff : new_vm.vfront_porch;
+
+	if (new_mode->clock != dvo->mode.clock || new_mode->vtotal != dvo->mode.vtotal) {
+		/* A vbp change is absorbed into VFP too, so DVO_TGEN_V1 stays untouched */
+		if (new_vm.vfront_porch != old_vm.vfront_porch ||
+		    new_vm.vback_porch != old_vm.vback_porch) {
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+			mtk_ddp_write_mask(cmdq_pkt, tmp << VFP, &dvo->cmdq_reg, dvo->regs,
+					   DVO_TGEN_V0, dvo->conf->dimension_mask << VFP);
+#endif
+		}
+		drm_mode_copy(&dvo->mode, new_mode);
+	}
+
+	return 0;
+}
+
 static int mtk_dvo_bind(struct device *dev, struct device *master, void *data)
 {
 	struct mtk_dvo *dvo = dev_get_drvdata(dev);
@@ -840,6 +926,9 @@ static int mtk_dvo_bind(struct device *dev, struct device *master, void *data)
 	int ret;
 
 	dvo->mmsys_dev = priv->mmsys_dev;
+	dvo->mtk_encoder.compute_config = mtk_dvo_check_config;
+	dvo->mtk_encoder.update_config = mtk_dvo_update_config;
+	dvo->mtk_encoder.is_seamless_switch = mtk_dvo_is_seamless_switch;
 	ret = drm_simple_encoder_init(drm_dev, &dvo->mtk_encoder.encoder,
 				      DRM_MODE_ENCODER_TMDS);
 	if (ret) {
@@ -993,6 +1082,11 @@ static int mtk_dvo_probe(struct platform_device *pdev)
 		}
 	}
 
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	ret = cmdq_dev_get_client_reg(dev, &dvo->cmdq_reg, 0);
+	if (ret)
+		dev_dbg(dev, "No mediatek,gce-client-reg\n");
+#endif
 	platform_set_drvdata(pdev, dvo);
 
 	if (!dvo->conf->is_dp) {
