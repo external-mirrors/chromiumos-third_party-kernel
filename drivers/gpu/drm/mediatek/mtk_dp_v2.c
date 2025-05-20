@@ -5709,11 +5709,27 @@ static bool mtk_dp_hpd_event_handler_v2(struct mtk_dp *mtk_dp)
 
 	sink_cnt = mtk_dp_get_sink_count_v2(mtk_dp);
 
-	if (sink_cnt == 0 || sink_cnt != mtk_dp->training_info.sink_count) {
+	if (sink_cnt != mtk_dp->training_info.sink_count) {
 		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] sink count change:%d\n", sink_cnt);
-		mtk_dp->dp_ready = false;
-		mdelay(200);
-		return false;
+
+		/* Connection Map:
+		 * DPTX -> (*1) Branch (*2) -> RX (dprx/hdmirx/others)
+		 *
+		 * After sink count changed (0 -> 1),
+		 * (downstream branch device plug-in cable *2),
+		 * some branch devices seems to output nothing (RX no signal),
+		 * we try to do link training again (*1),
+		 * and then branch device display fine (*2).
+		 */
+		if (sink_cnt) {
+			mtk_dp->dp_ready = false;
+			mtk_dp_check_sink_cap_v2(mtk_dp);
+			mtk_dp_training_handle_v2(mtk_dp);
+		}
+
+		/* we need to notify user the sink count changed */
+		mtk_dp->training_info.sink_count = sink_cnt;
+		mtk_dp_hotplug_uevent_v2(mtk_dp);
 	}
 
 	mtk_dp_check_device_service_irq_v2(mtk_dp);
