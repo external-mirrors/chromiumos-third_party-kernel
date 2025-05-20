@@ -1626,7 +1626,7 @@ static int _anx7625_hpd_polling(struct anx7625_data *ctx,
 	anx7625_start_dp_work(ctx);
 
 	if (!ctx->pdata.panel_bridge && ctx->bridge_attached)
-		drm_helper_hpd_irq_event(ctx->bridge.dev);
+		drm_kms_helper_hotplug_event(ctx->bridge.dev);
 
 	return 0;
 }
@@ -1741,7 +1741,7 @@ static void anx7625_work_func(struct work_struct *work)
 		return;
 
 	if (ctx->bridge_attached)
-		drm_helper_hpd_irq_event(ctx->bridge.dev);
+		drm_kms_helper_hotplug_event(ctx->bridge.dev);
 }
 
 static irqreturn_t anx7625_intr_hpd_isr(int irq, void *data)
@@ -2357,6 +2357,9 @@ static int anx7625_bridge_hdcp_check(struct drm_bridge *bridge,
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
 	struct device *dev = ctx->dev;
 	int cp = conn_state->content_protection;
+
+	if (cp == ctx->hdcp_cp)
+		return 0;
 
 	if (cp == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
 		if (anx7625_hdcp_enable(ctx, conn_state->hdcp_content_type)) {
