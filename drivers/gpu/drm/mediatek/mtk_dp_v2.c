@@ -3158,9 +3158,12 @@ static bool mtk_dp_ssc_check_v2(struct mtk_dp *mtk_dp, bool *p_enable)
 	u8 status = 0;
 	int ret = 0;
 
-	*p_enable = mtk_dp->training_info.sink_ssc_en;
-	/* write DPCD_00107 = BIT4 when SSC enable */
+	if (mtk_dp->data->ssc_support)
+		*p_enable = mtk_dp->training_info.sink_ssc_en;
+	else
+		*p_enable = false;
 
+	/* write DPCD_00107 = BIT4 when SSC enable */
 	status = *p_enable ? BIT(4) : 0;
 	ret = drm_dp_dpcd_write(&mtk_dp->aux, DPCD_00107, &status, 0x1);
 

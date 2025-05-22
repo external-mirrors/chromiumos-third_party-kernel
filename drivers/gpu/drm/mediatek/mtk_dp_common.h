@@ -263,6 +263,7 @@ struct mtk_dp_data {
 	bool audio_supported;
 	bool audio_pkt_in_hblank_area;
 	u16 audio_m_div2_bit;
+	bool ssc_support;
 	bool dsc_support;
 	bool mst_support;
 	u16 max_hdisplay;
