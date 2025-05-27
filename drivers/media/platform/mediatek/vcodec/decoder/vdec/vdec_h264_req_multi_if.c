@@ -937,6 +937,7 @@ static int vdec_h264_slice_lat_decode_ex(void *h_vdec, struct mtk_vcodec_mem *bs
 	mtk_vdec_debug(inst->ctx, "dec num: %d lat crc: 0x%x 0x%x 0x%x", inst->slice_dec_num,
 		       inst->vsi_ex->dec.crc[0], inst->vsi_ex->dec.crc[1],
 		       inst->vsi_ex->dec.crc[2]);
+	wait_event(inst->ctx->dev->sync_decode, inst->ctx->dev->sync_dec_done);
 
 	inst->slice_dec_num++;
 	return 0;
