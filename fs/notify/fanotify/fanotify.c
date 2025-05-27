@@ -945,8 +945,10 @@ static int fanotify_handle_event(struct fsnotify_group *group, u32 mask,
 	if (FAN_GROUP_FLAG(group, FANOTIFY_FID_BITS)) {
 		fsid = fanotify_get_fsid(iter_info);
 		/* Racing with mark destruction or creation? */
-		if (!fsid.val[0] && !fsid.val[1])
-			return 0;
+		if (!fsid.val[0] && !fsid.val[1]) {
+			ret = 0;
+			goto finish;
+		}
 	}
 
 	event = fanotify_alloc_event(group, mask, data, data_type, dir,
