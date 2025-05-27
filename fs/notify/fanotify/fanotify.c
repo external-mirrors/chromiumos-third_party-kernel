@@ -435,8 +435,10 @@ static int fanotify_handle_event(struct fsnotify_group *group,
 	if (FAN_GROUP_FLAG(group, FAN_REPORT_FID)) {
 		fsid = fanotify_get_fsid(iter_info);
 		/* Racing with mark destruction or creation? */
-		if (!fsid.val[0] && !fsid.val[1])
-			return 0;
+		if (!fsid.val[0] && !fsid.val[1]) {
+			ret = 0;
+			goto finish;
+		}
 	}
 
 	event = fanotify_alloc_event(group, inode, mask, data, data_type,
