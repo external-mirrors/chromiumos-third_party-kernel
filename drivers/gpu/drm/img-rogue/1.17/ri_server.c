@@ -123,7 +123,7 @@ typedef IMG_UINT64 _RI_BASE_T;
                                         "[Physical: 0x%010" IMG_UINT64_FMTSPECx ", %" IMG_UINT64_FMTSPEC "K]\n"
 #define RI_PMR_SUM_BUF_SIZE (sizeof(RI_PMR_SUM_FRMT)+(20+40))
 
-#define RI_PMR_ENTRY_FRMT      "%%sPID:%%-5d <%%p>\t%%-%ds\t0x%%010" IMG_UINT64_FMTSPECx "\t[0x%%010" IMG_UINT64_FMTSPECx "]\t%%c"
+#define RI_PMR_ENTRY_FRMT      "%%sPID:%%-5d <%%016" IMG_UINT64_FMTSPECx ">\t%%-%ds\t0x%%010" IMG_UINT64_FMTSPECx "\t[0x%%010" IMG_UINT64_FMTSPECx "]\t%%c"
 #define RI_PMR_ENTRY_BUF_SIZE  (sizeof(RI_PMR_ENTRY_FRMT)+(3+5+16+PVR_ANNOTATION_MAX_LEN+10+10))
 #define RI_PMR_ENTRY_FRMT_SIZE (sizeof(RI_PMR_ENTRY_FRMT))
 
@@ -141,7 +141,7 @@ static IMG_CHAR g_szSysAllocImport[RI_SYS_ALLOC_IMPORT_FRMT_SIZE];
 #define RI_MEMDESC_ENTRY_UNPINNED_FRMT     "{Unpinned}"
 #define RI_MEMDESC_ENTRY_UNPINNED_BUF_SIZE (sizeof(RI_MEMDESC_ENTRY_UNPINNED_FRMT))
 
-#define RI_MEMDESC_ENTRY_FRMT      "%%sPID:%%-5d 0x%%010" IMG_UINT64_FMTSPECx "\t%%-%ds %%s\t0x%%010" IMG_UINT64_FMTSPECx "\t<%%p> %%s%%s%%s%%c"
+#define RI_MEMDESC_ENTRY_FRMT      "%%sPID:%%-5d 0x%%010" IMG_UINT64_FMTSPECx "\t%%-%ds %%s\t0x%%010" IMG_UINT64_FMTSPECx "\t<%%016" IMG_UINT64_FMTSPECx "> %%s%%s%%s%%c"
 #define RI_MEMDESC_ENTRY_BUF_SIZE  (sizeof(RI_MEMDESC_ENTRY_FRMT)+(3+5+10+PVR_ANNOTATION_MAX_LEN+RI_MEMDESC_ENTRY_PROC_BUF_SIZE+16+\
                                                RI_MEMDESC_ENTRY_IMPORT_BUF_SIZE+RI_SYS_ALLOC_IMPORT_FRMT_SIZE+RI_MEMDESC_ENTRY_UNPINNED_BUF_SIZE))
 #define RI_MEMDESC_ENTRY_FRMT_SIZE (sizeof(RI_MEMDESC_ENTRY_FRMT))
@@ -1501,7 +1501,7 @@ static void _GenerateMEMDESCEntryString(RI_SUBLIST_ENTRY *psRISubEntry,
 				   pszAnnotationText,
 				   (bDebugFs ? "" : (char *)szProc),
 				   psRISubEntry->ui64Size,
-				   psRIPMR,
+				   psRISubEntry->psRI != NULL ? PMRGetSerialNum(psRISubEntry->psRI->psPMR) : 0,
 				   (psRISubEntry->bIsImport ? (char *)&szImport : ""),
 				   (!psRISubEntry->bIsImport && (ui32RIPMRFlags & RI_FLAG_SYSALLOC_PMR) && (psRISubEntry->pid != PVR_SYS_ALLOC_PID)) ? g_szSysAllocImport : "",
 				   (psRIPMR && PMR_IsUnpinned(psRIPMR)) ? RI_MEMDESC_ENTRY_UNPINNED_FRMT : "",
@@ -1537,7 +1537,7 @@ static void _GeneratePMREntryString(RI_LIST_ENTRY *psRIEntry,
 	           szEntryFormat,
 	           (bDebugFs ? "" : "   "),
 	           psRIEntry->pid,
-	           (void*)psRIEntry->psPMR,
+	           PMRGetSerialNum(psRIEntry->psPMR),
 	           pszAnnotationText,
 	           uiLogicalSize,
 	           uiPhysicalSize,

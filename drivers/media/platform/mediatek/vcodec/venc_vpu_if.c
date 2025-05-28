@@ -44,19 +44,49 @@ static void handle_enc_encode_msg(struct venc_vpu_inst *vpu, const void *data)
 	vpu->is_key_frm = msg->is_key_frm;
 }
 
+static bool vpu_enc_check_ap_inst(struct mtk_vcodec_dev *enc_dev, struct venc_vpu_inst *vpu)
+{
+	struct mtk_vcodec_ctx *ctx;
+	int ret = false;
+
+	mutex_lock(&enc_dev->dev_ctx_lock);
+	list_for_each_entry(ctx, &enc_dev->ctx_list, list) {
+		if (!IS_ERR_OR_NULL(ctx) && ctx->vpu_inst == vpu) {
+			ret = true;
+			break;
+		}
+	}
+	mutex_unlock(&enc_dev->dev_ctx_lock);
+
+	return ret;
+}
+
 static void vpu_enc_ipi_handler(void *data, unsigned int len, void *priv)
 {
+	struct mtk_vcodec_dev *enc_dev;
 	const struct venc_vpu_ipi_msg_common *msg = data;
-	struct venc_vpu_inst *vpu =
-		(struct venc_vpu_inst *)(unsigned long)msg->venc_inst;
+	struct venc_vpu_inst *vpu;
 
-	mtk_vcodec_debug(vpu, "msg_id %x inst %p status %d",
-			 msg->msg_id, vpu, msg->status);
+	enc_dev = (struct mtk_vcodec_dev *)priv;
+	vpu = (struct venc_vpu_inst *)(unsigned long)msg->venc_inst;
+	if (!priv || !vpu) {
+		pr_err("venc_inst is NULL, did the SCP hang or crash?");
+		return;
+	}
 
-	vpu->signaled = 1;
+	mtk_vcodec_debug(vpu, "msg_id %x inst %p status %d", msg->msg_id, vpu, msg->status);
+	if (!vpu_enc_check_ap_inst(enc_dev, vpu) || msg->msg_id < VPU_IPIMSG_ENC_INIT_DONE ||
+	    msg->msg_id > VPU_IPIMSG_ENC_DEINIT_DONE) {
+		mtk_vcodec_err(vpu, "venc msg id not correctly => 0x%x", msg->msg_id);
+		vpu->failure = -EINVAL;
+		goto error;
+	}
+
 	vpu->failure = (msg->status != VENC_IPI_MSG_STATUS_OK);
-	if (vpu->failure)
-		goto failure;
+	if (vpu->failure) {
+		mtk_vcodec_err(vpu, "vpu enc status failure %d", vpu->failure);
+		goto error;
+	}
 
 	switch (msg->msg_id) {
 	case VPU_IPIMSG_ENC_INIT_DONE:
@@ -74,8 +104,8 @@ static void vpu_enc_ipi_handler(void *data, unsigned int len, void *priv)
 		break;
 	}
 
-failure:
-	mtk_vcodec_debug_leave(vpu);
+error:
+	vpu->signaled = 1;
 }
 
 static int vpu_enc_send_msg(struct venc_vpu_inst *vpu, void *msg,
@@ -115,9 +145,11 @@ int vpu_enc_init(struct venc_vpu_inst *vpu)
 	init_waitqueue_head(&vpu->wq_hd);
 	vpu->signaled = 0;
 	vpu->failure = 0;
+	vpu->ctx->vpu_inst = vpu;
 
 	status = mtk_vcodec_fw_ipi_register(vpu->ctx->dev->fw_handler, vpu->id,
-					    vpu_enc_ipi_handler, "venc", NULL);
+					    vpu_enc_ipi_handler, "venc",
+					    vpu->ctx->dev);
 
 	if (status) {
 		mtk_vcodec_err(vpu, "vpu_ipi_register fail %d", status);
@@ -129,6 +161,11 @@ int vpu_enc_init(struct venc_vpu_inst *vpu)
 	out.venc_inst = (unsigned long)vpu;
 	if (vpu_enc_send_msg(vpu, &out, sizeof(out))) {
 		mtk_vcodec_err(vpu, "AP_IPIMSG_ENC_INIT fail");
+		return -EINVAL;
+	}
+
+	if (IS_ERR_OR_NULL(vpu->vsi)) {
+		mtk_vcodec_err(vpu, "invalid venc vsi");
 		return -EINVAL;
 	}
 

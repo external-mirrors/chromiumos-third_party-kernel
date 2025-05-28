@@ -159,7 +159,6 @@ typedef struct _CACHEOP_WORK_QUEUE_
 	IMG_UINT32 uiLineSize;
 	IMG_UINT32 uiLineShift;
 	IMG_UINT32 uiPageShift;
-	OS_CACHE_OP_ADDR_TYPE uiCacheOpAddrType;
 	PMR *psInfoPagePMR;
 	IMG_UINT32 *pui32InfoPage;
 
@@ -895,6 +894,9 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 	PVRSRV_ERROR eError = PVRSRV_OK;
 	IMG_BYTE *pbCpuVirtAddr = NULL;
 	IMG_BOOL *pbValid = abValid;
+	OS_CACHE_OP_ADDR_TYPE eCacheOpAddrType;
+
+	eCacheOpAddrType = OSCPUCacheOpAddressType(PhysHeapGetType(PMR_PhysHeap(psPMR)));
 
 	if (uiCacheOp == PVRSRV_CACHE_OP_NONE || uiCacheOp == PVRSRV_CACHE_OP_TIMELINE)
 	{
@@ -929,7 +931,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 	{
 		pvAddress = pbCpuVirtAddr;
 
-		if (pvAddress && gsCwq.uiCacheOpAddrType == OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
+		if (pvAddress && eCacheOpAddrType == OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
 		{
 			CacheOpExecRangeBasedVA(PMR_DeviceNode(psPMR), pvAddress, uiSize, uiCacheOp);
 
@@ -963,7 +965,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 		 */
 		CACHEOP_PVR_ASSERT(pbCpuVirtAddr == NULL);
 
-		if (gsCwq.uiCacheOpAddrType == OS_CACHE_OP_ADDR_TYPE_PHYSICAL)
+		if (eCacheOpAddrType == OS_CACHE_OP_ADDR_TYPE_PHYSICAL)
 		{
 			PVR_DPF((PVR_DBG_WARNING,
 					"%s: Invalid vaddress 0x%p in CPU d-cache maint. op, using paddress",
@@ -1013,7 +1015,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 				eError = PMRReleaseKernelMappingData(psPMR, hPrivOut);
 				PVR_LOG_GOTO_WITH_ERROR("PMRReleaseKernelMappingData", eError, PVRSRV_ERROR_INVALID_CPU_ADDR, e0);
 			}
-			else if (gsCwq.uiCacheOpAddrType == OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
+			else if (eCacheOpAddrType == OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
 			{
 				PVR_DPF((PVR_DBG_WARNING,
 						"%s: Bad vaddress 0x%p in CPU d-cache maint. op, using reacquired vaddress 0x%p",
@@ -1087,7 +1089,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 		{
 			pbValid = abValid;
 		}
-		else if (gsCwq.uiCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
+		else if (eCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
 		{
 			psCpuPhyAddr = OSAllocZMem(ui32NumOfPages * sizeof(IMG_CPU_PHYADDR));
 			if (! psCpuPhyAddr)
@@ -1104,7 +1106,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 	   dynamic buffer has been allocated to satisfy requests outside limits */
 	if (ui32NumOfPages <= PMR_MAX_TRANSLATION_STACK_ALLOC || pbValid != abValid)
 	{
-		if (gsCwq.uiCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
+		if (eCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
 		{
 			/* Look-up PMR CpuPhyAddr once, if possible */
 			eError = PMR_CpuPhysAddr(psPMR,
@@ -1141,7 +1143,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 			/* Never cross page boundary without looking up corresponding PMR page physical
 			   address and/or page validity if these were not looked-up, in bulk, up-front */
 			ui32PageIndex = 0;
-			if (gsCwq.uiCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
+			if (eCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL)
 			{
 				eError = PMR_CpuPhysAddr(psPMR,
 										 gsCwq.uiPageShift,
@@ -1176,7 +1178,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 				(void *)(uintptr_t)((uintptr_t)pvAddress + (uintptr_t)(uiPgAlignedOffset-uiPgAlignedStartOffset));
 		}
 		/* Skip CpuVA acquire if CacheOp can be maintained entirely using CpuPA */
-		else if (gsCwq.uiCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_PHYSICAL)
+		else if (eCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_PHYSICAL)
 		{
 			if (bPMRIsSparse)
 			{
@@ -1206,7 +1208,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 		CacheOpExecRangeBased(psDevNode,
 							uiCacheOp,
 							pbCpuVirtAddr,
-							(gsCwq.uiCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL) ?
+							(eCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_VIRTUAL) ?
 								psCpuPhyAddr[ui32PageIndex] : psCpuPhyAddr[0],
 							uiPgAlignedOffset,
 							uiCLAlignedStartOffset,
@@ -1215,7 +1217,7 @@ static PVRSRV_ERROR CacheOpPMRExec (PMR *psPMR,
 		if (! pvAddress)
 		{
 			/* The caller has not supplied either a KM/UM CpuVA, release mapping */
-			if (gsCwq.uiCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_PHYSICAL)
+			if (eCacheOpAddrType != OS_CACHE_OP_ADDR_TYPE_PHYSICAL)
 			{
 				eError = PMRReleaseKernelMappingData(psPMR, hPrivOut);
 				PVR_LOG_IF_ERROR(eError, "PMRReleaseKernelMappingData");
@@ -1598,7 +1600,6 @@ PVRSRV_ERROR CacheOpInit (void)
 	gsCwq.uiLineSize = OSCPUCacheAttributeSize(OS_CPU_CACHE_ATTRIBUTE_LINE_SIZE);
 	gsCwq.uiLineShift = ExactLog2(gsCwq.uiLineSize);
 	PVR_LOG_RETURN_IF_FALSE((gsCwq.uiLineSize && gsCwq.uiPageSize && gsCwq.uiPageShift), "", PVRSRV_ERROR_INIT_FAILURE);
-	gsCwq.uiCacheOpAddrType = OSCPUCacheOpAddressType();
 
 #if defined(CACHEOP_DEBUG)
 	/* debugfs file read-out is not concurrent, so lock protects against this */

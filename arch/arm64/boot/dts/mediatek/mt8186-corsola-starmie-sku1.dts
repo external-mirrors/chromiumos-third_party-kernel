@@ -12,7 +12,8 @@
 / {
 	model = "Google Starmie sku1/4/unprovisioned board";
 	compatible = "google,starmie-sku1", "google,starmie-sku2147483642",
-		     "google,starmie-sku4", "google,starmie", "mediatek,mt8186";
+		     "google,starmie-sku4", "google,starmie-sku5", "google,starmie",
+		     "mediatek,mt8186";
 };
 
 &panel {

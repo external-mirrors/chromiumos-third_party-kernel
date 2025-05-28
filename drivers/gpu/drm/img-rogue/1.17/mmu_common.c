@@ -1246,7 +1246,8 @@ static INLINE PVRSRV_ERROR _SetupPTE(MMU_CONTEXT *psMMUContext,
                                      const IMG_CHAR *pszSymbolicAddr,
                                      IMG_DEVMEM_OFFSET_T uiSymbolicAddrOffset,
 #endif
-                                     IMG_UINT64 uiProtFlags)
+                                     IMG_UINT64 uiProtFlags,
+                                     MMU_PTE_REMAP_POLICY eRemapPolicy)
 {
 	MMU_MEMORY_DESC *psMemDesc = &psLevel->sMemDesc;
 	IMG_UINT64 ui64PxE64;
@@ -1274,6 +1275,14 @@ static INLINE PVRSRV_ERROR _SetupPTE(MMU_CONTEXT *psMMUContext,
 	{
 		IMG_UINT64 *pui64Px = psMemDesc->pvCpuVAddr; /* Give the virtual base address of Px */
 
+		if (eRemapPolicy == MMU_PTE_REMAP_POLICY_BLOCK &&
+		    pui64Px[uiIndex] & psConfig->uiValidEnMask &&
+		    (uiProtFlags & psConfig->uiValidEnMask))
+		{
+			/* Don't remap */
+			return  PVRSRV_ERROR_MMU_REMAP_BLOCKED;
+		}
+
 		pui64Px[uiIndex] = ui64PxE64;
 	}
 	else if (psConfig->uiBytesPerEntry == 4)
@@ -1283,6 +1292,14 @@ static INLINE PVRSRV_ERROR _SetupPTE(MMU_CONTEXT *psMMUContext,
 		/* assert that the result fits into 32 bits before writing
 		   it into the 32-bit array with a cast */
 		PVR_ASSERT(ui64PxE64 == (ui64PxE64 & 0xffffffffU));
+
+		if (eRemapPolicy == MMU_PTE_REMAP_POLICY_BLOCK &&
+		    pui32Px[uiIndex] & (IMG_UINT32)psConfig->uiValidEnMask &&
+		    (uiProtFlags & (IMG_UINT32)psConfig->uiValidEnMask))
+		{
+			/* Don't remap */
+			return  PVRSRV_ERROR_MMU_REMAP_BLOCKED;
+		}
 
 		pui32Px[uiIndex] = (IMG_UINT32) ui64PxE64;
 	}
@@ -3384,7 +3401,8 @@ MMU_MapPages(MMU_CONTEXT *psMMUContext,
 			                          ((bValid)?aszSymbolicAddress:((bZeroBacking)?DEV_ZERO_PAGE:DUMMY_PAGE)),
 			                          (bValid)?uiSymbolicAddrOffset:0,
 #endif /*PDUMP*/
-			                    uiDefProtFlags);
+			                    uiDefProtFlags,
+			                    MMU_PTE_REMAP_POLICY_ALLOW);
 			PVR_LOG_GOTO_IF_ERROR(eError, "_SetupPTE", e4);
 
 			if (bValid)
@@ -3598,7 +3616,8 @@ MMU_UnmapPagesUnlocked(MMU_CONTEXT *psMMUContext,
 		                   (bDummyBacking)? pcBackingPageName: NULL,
 		                   0U,
 #endif
-		                   (bZeroBacking)? uiProtFlagsReadOnly: uiProtFlags);
+		                   (bZeroBacking)? uiProtFlagsReadOnly: uiProtFlags,
+			               MMU_PTE_REMAP_POLICY_ALLOW);
 		PVR_GOTO_IF_ERROR(eError, e0);
 
 		/* Check we haven't wrapped around */
@@ -3667,7 +3686,8 @@ MMU_MapPMRFast (MMU_CONTEXT *psMMUContext,
                 PMR *psPMR,
                 IMG_DEVMEM_SIZE_T uiSizeBytes,
                 PVRSRV_MEMALLOCFLAGS_T uiMappingFlags,
-                IMG_UINT32 uiLog2HeapPageSize)
+                IMG_UINT32 uiLog2HeapPageSize,
+                MMU_PTE_REMAP_POLICY eRemapPolicy)
 {
 	PVRSRV_ERROR eError = PVRSRV_OK;
 	IMG_UINT32 uiCount, i;
@@ -3823,7 +3843,8 @@ MMU_MapPMRFast (MMU_CONTEXT *psMMUContext,
 		                   aszSymbolicAddress,
 		                   uiSymbolicAddrOffset,
 #endif /*PDUMP*/
-		                   uiProtFlags);
+		                   uiProtFlags,
+		                   eRemapPolicy);
 		PVR_GOTO_IF_ERROR(eError, unlock_mmu_context);
 
 		sDevVAddr.uiAddr += uiPageSize;
@@ -3880,11 +3901,14 @@ MMU_MapPMRFast (MMU_CONTEXT *psMMUContext,
 	return PVRSRV_OK;
 
 unlock_mmu_context:
-	/* Unmap starting from the address passed as an argument. */
-	(void) MMU_UnmapPMRFastUnlocked(psMMUContext,
-	                                sDevVAddrBase,
-	                                uiSizeBytes >> uiLog2HeapPageSize,
-	                                uiLog2HeapPageSize);
+	if (eError != PVRSRV_ERROR_MMU_REMAP_BLOCKED)
+	{
+		/* Unmap starting from the address passed as an argument. */
+		(void) MMU_UnmapPMRFastUnlocked(psMMUContext,
+		                                sDevVAddrBase,
+		                                uiSizeBytes >> uiLog2HeapPageSize,
+		                                uiLog2HeapPageSize);
+	}
 	OSLockRelease(psMMUContext->hLock);
 
 put_mmu_context:

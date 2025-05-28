@@ -176,6 +176,10 @@ struct mt7921_vif {
 	struct ewma_rssi rssi;
 
 	struct ieee80211_tx_queue_params queue_params[IEEE80211_NUM_ACS];
+
+	struct work_struct csa_work;
+	struct timer_list csa_timer;
+
 };
 
 struct mib_stats {
@@ -299,6 +303,8 @@ struct mt7921_dev {
 	struct mt7921_phy phy;
 	struct tasklet_struct irq_tasklet;
 
+	struct mac_address macaddr_list[8];
+
 	struct work_struct reset_work;
 	bool hw_full_reset:1;
 	bool hw_init_done:1;
@@ -323,6 +329,8 @@ struct mt7921_dev {
 	struct sk_buff_head ipv6_ns_list;
 
 	enum environment_cap country_ie_env;
+
+	struct ieee80211_chanctx_conf *new_ctx;
 };
 
 enum {
@@ -514,6 +522,8 @@ int mt7921_mcu_uni_rx_ba(struct mt7921_dev *dev,
 void mt7921_scan_work(struct work_struct *work);
 void mt7921_roc_work(struct work_struct *work);
 void mt7921_roc_timer(struct timer_list *timer);
+void mt7921_csa_work(struct work_struct *work);
+void mt7921_csa_timer(struct timer_list *timer);
 int mt7921_mcu_uni_bss_ps(struct mt7921_dev *dev, struct ieee80211_vif *vif);
 int mt7921_mcu_drv_pmctrl(struct mt7921_dev *dev);
 int mt7921_mcu_fw_pmctrl(struct mt7921_dev *dev);
@@ -620,4 +630,5 @@ int mt7921_mcu_abort_roc(struct mt7921_phy *phy, struct mt7921_vif *vif,
 			 u8 token_id);
 void mt7921_roc_abort_sync(struct mt7921_dev *dev);
 u8 mt7921_check_offload_capability(struct device *dev, const char *fw_wm);
+void mt7921_config_mac_addr_list(struct mt7921_dev *dev);
 #endif

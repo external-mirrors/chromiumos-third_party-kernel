@@ -346,8 +346,10 @@ extern struct wb_domain global_wb_domain;
 /* These are exported to sysctl. */
 extern int dirty_background_ratio;
 extern unsigned long dirty_background_bytes;
+extern unsigned long dirty_background_ratio_max_bytes;
 extern int vm_dirty_ratio;
 extern unsigned long vm_dirty_bytes;
+extern unsigned long dirty_ratio_max_bytes;
 extern unsigned int dirty_writeback_interval;
 extern unsigned int dirty_expire_interval;
 extern unsigned int dirtytime_expire_interval;
@@ -358,10 +360,14 @@ int dirty_background_ratio_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
 int dirty_background_bytes_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
+int dirty_background_ratio_max_bytes_handler(struct ctl_table *table,
+		int write, void *buffer, size_t *lenp, loff_t *ppos);
 int dirty_ratio_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
 int dirty_bytes_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
+int dirty_max_bytes_handler(struct ctl_table *table,
+		int write, void *buffer, size_t *lenp, loff_t *ppos);
 int dirtytime_interval_handler(struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos);
 int dirty_writeback_centisecs_handler(struct ctl_table *table, int write,

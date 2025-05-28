@@ -578,7 +578,6 @@
 	cap-sdio-irq;
 	no-mmc;
 	no-sd;
-	non-removable;
 	vmmc-supply = <&mmc1_fixed_power>;
 	vqmmc-supply = <&mmc1_fixed_io>;
 	mmc-pwrseq = <&wifi_pwrseq>;
