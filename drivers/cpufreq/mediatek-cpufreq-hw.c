@@ -62,7 +62,7 @@ mtk_cpufreq_get_cpu_power(struct device *cpu_dev, unsigned long *uW,
 
 	policy = cpufreq_cpu_get_raw(cpu_dev->id);
 	if (!policy)
-		return 0;
+		return -EINVAL;
 
 	data = policy->driver_data;
 
@@ -226,6 +226,11 @@ static int mtk_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 	struct mtk_cpufreq_data *data;
 	unsigned int latency;
 	int ret;
+
+	if (!pdev) {
+		pr_err("cpufreq_get_driver_data returned NULL\n");
+		return -ENODEV;
+	}
 
 	/* Get the bases of cpufreq for domains */
 	ret = mtk_cpu_resources_init(pdev, policy, platform_get_drvdata(pdev));

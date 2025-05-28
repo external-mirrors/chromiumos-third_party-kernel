@@ -21,5 +21,9 @@ mtk-vcodec-dec-y := vdec/vdec_h264_if.o \
 		mtk_vcodec_dec_stateful.o \
 		mtk_vcodec_dec_stateless.o \
 		mtk_vcodec_dec_pm.o \
+		mtk_vcodec_dec_pm_plat.o \
+		mtk_vcodec_dec_dvfs.o
+
+mtk-vcodec-dec-$(CONFIG_VIDEO_MEDIATEK_VCODEC_TEE) += mtk_vcodec_dec_optee.o
 
 mtk-vcodec-dec-hw-y := mtk_vcodec_dec_hw.o

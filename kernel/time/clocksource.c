@@ -147,6 +147,20 @@ static int watchdog_running;
 static atomic_t watchdog_reset_pending;
 static int64_t watchdog_max_interval;
 
+static long cs_watchdog_tolerate_skew;
+
+static int __init set_watchdog_tolerate_skew(char *str)
+{
+	if (!str)
+		return 0;
+
+	if (kstrtol(str, 0, &cs_watchdog_tolerate_skew))
+		return -EINVAL;
+
+	return 1;
+}
+__setup("cs_watchdog_tolerate_skew=", set_watchdog_tolerate_skew);
+
 static inline void clocksource_watchdog_lock(unsigned long *flags)
 {
 	spin_lock_irqsave(&watchdog_lock, *flags);
@@ -246,7 +260,8 @@ static enum wd_read_status cs_watchdog_read(struct clocksource *cs, u64 *csnow, 
 
 		wd_delay = cycles_to_nsec_safe(watchdog, *wdnow, wd_end);
 		if (wd_delay <= WATCHDOG_MAX_SKEW) {
-			if (nretries > 1 && nretries >= max_retries) {
+			if ((cs_watchdog_tolerate_skew && nretries) ||
+			    (nretries > 1 && nretries >= max_retries)) {
 				pr_warn("timekeeping watchdog on CPU%d: %s retried %d times before success\n",
 					smp_processor_id(), watchdog->name, nretries);
 			}
@@ -516,10 +531,18 @@ static void clocksource_watchdog(struct timer_list *unused)
 				pr_warn("                      '%s' (not '%s') is current clocksource.\n", curr_clocksource->name, cs->name);
 			else
 				pr_warn("                      No current clocksource.\n");
+
+			if (cs_watchdog_tolerate_skew) {
+				pr_info("DBG: not really marking as unstable due to cs_watchdog_tolerate_skew parameter\n");
+				if (cs_watchdog_tolerate_skew > 0)
+					cs_watchdog_tolerate_skew--;
+				goto not_marking_unstable;
+			}
 			__clocksource_unstable(cs);
 			continue;
 		}
 
+not_marking_unstable:
 		if (cs == curr_clocksource && cs->tick_stable)
 			cs->tick_stable(cs);
 

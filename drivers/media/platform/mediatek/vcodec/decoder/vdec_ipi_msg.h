@@ -72,6 +72,7 @@ struct vdec_ap_ipi_init {
 	uint32_t msg_id;
 	u32 codec_type;
 	uint64_t ap_inst_addr;
+	uint64_t shared_iova;
 };
 
 /**

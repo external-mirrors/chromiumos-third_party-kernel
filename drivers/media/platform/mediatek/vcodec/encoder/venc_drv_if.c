@@ -20,14 +20,16 @@ int venc_if_init(struct mtk_vcodec_enc_ctx *ctx, unsigned int fourcc)
 {
 	int ret = 0;
 
-	switch (fourcc) {
-	case V4L2_PIX_FMT_VP8:
-		ctx->enc_if = &venc_vp8_if;
-		break;
-	case V4L2_PIX_FMT_H264:
+	if (MTK_ENC_DRV_IS_COMM(ctx)) {
+		if (fourcc == V4L2_PIX_FMT_H264)
+			ctx->enc_if = &venc_if;
+		else
+			return -EINVAL;
+	} else if (fourcc == V4L2_PIX_FMT_H264) {
 		ctx->enc_if = &venc_h264_if;
-		break;
-	default:
+	} else if (fourcc == V4L2_PIX_FMT_VP8) {
+		ctx->enc_if = &venc_vp8_if;
+	} else {
 		return -EINVAL;
 	}
 
@@ -64,20 +66,19 @@ int venc_if_encode(struct mtk_vcodec_enc_ctx *ctx,
 	ctx->dev->curr_ctx = ctx;
 	spin_unlock_irqrestore(&ctx->dev->irqlock, flags);
 
-	ret = mtk_vcodec_enc_pw_on(&ctx->dev->pm);
+	ret = mtk_vcodec_enc_enable_hardware(ctx);
 	if (ret)
-		goto venc_if_encode_pw_on_err;
-	mtk_vcodec_enc_clock_on(&ctx->dev->pm);
+		goto venc_enable_hw_err;
+	mtk_vcodec_enc_pm_frame_req(ctx);
 	ret = ctx->enc_if->encode(ctx->drv_handle, opt, frm_buf,
 				  bs_buf, result);
-	mtk_vcodec_enc_clock_off(&ctx->dev->pm);
-	mtk_vcodec_enc_pw_off(&ctx->dev->pm);
+	mtk_vcodec_enc_disable_hardware(ctx);
 
 	spin_lock_irqsave(&ctx->dev->irqlock, flags);
 	ctx->dev->curr_ctx = NULL;
 	spin_unlock_irqrestore(&ctx->dev->irqlock, flags);
 
-venc_if_encode_pw_on_err:
+venc_enable_hw_err:
 	mtk_venc_unlock(ctx);
 	return ret;
 }

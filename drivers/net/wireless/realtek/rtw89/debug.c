@@ -575,6 +575,7 @@ static int __print_txpwr_map(struct seq_file *m, struct rtw89_dev *rtwdev,
 static void __print_regd(struct seq_file *m, struct rtw89_dev *rtwdev,
 			 const struct rtw89_chan *chan)
 {
+	const struct rtw89_regulatory_info *regulatory = &rtwdev->regulatory;
 	u8 band = chan->band_type;
 	u8 regd = rtw89_regd_get(rtwdev, band);
 
@@ -596,6 +597,9 @@ static void __print_regd(struct seq_file *m, struct rtw89_dev *rtwdev,
 	case_REGD(UKRAINE);
 	case_REGD(CN);
 	}
+
+	seq_printf(m, "\t(txpwr UK follow ETSI: %s)\n",
+		   str_yes_no(regulatory->txpwr_uk_follow_etsi));
 }
 
 #undef case_REGD

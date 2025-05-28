@@ -9,6 +9,7 @@
 #include <linux/pm_runtime.h>
 
 #include "mtk_vcodec_enc_drv.h"
+#include "mtk_vcodec_enc_dvfs.h"
 #include "mtk_vcodec_enc_pm.h"
 
 int mtk_vcodec_init_enc_clk(struct mtk_vcodec_enc_dev *mtkdev)
@@ -58,7 +59,7 @@ int mtk_vcodec_init_enc_clk(struct mtk_vcodec_enc_dev *mtkdev)
 	return 0;
 }
 
-int mtk_vcodec_enc_pw_on(struct mtk_vcodec_pm *pm)
+static int mtk_vcodec_enc_pw_on(struct mtk_vcodec_pm *pm)
 {
 	int ret;
 
@@ -69,7 +70,7 @@ int mtk_vcodec_enc_pw_on(struct mtk_vcodec_pm *pm)
 	return ret;
 }
 
-void mtk_vcodec_enc_pw_off(struct mtk_vcodec_pm *pm)
+static void mtk_vcodec_enc_pw_off(struct mtk_vcodec_pm *pm)
 {
 	int ret;
 
@@ -78,7 +79,7 @@ void mtk_vcodec_enc_pw_off(struct mtk_vcodec_pm *pm)
 		dev_err(pm->dev, "pm_runtime_put fail %d", ret);
 }
 
-void mtk_vcodec_enc_clock_on(struct mtk_vcodec_pm *pm)
+static int mtk_vcodec_enc_clock_on(struct mtk_vcodec_pm *pm)
 {
 	struct mtk_vcodec_clk *enc_clk = &pm->venc_clk;
 	int ret, i = 0;
@@ -92,18 +93,61 @@ void mtk_vcodec_enc_clock_on(struct mtk_vcodec_pm *pm)
 		}
 	}
 
-	return;
+	return ret;
 
 clkerr:
 	for (i -= 1; i >= 0; i--)
 		clk_disable_unprepare(enc_clk->clk_info[i].vcodec_clk);
+
+	return ret;
 }
 
-void mtk_vcodec_enc_clock_off(struct mtk_vcodec_pm *pm)
+static void mtk_vcodec_enc_clock_off(struct mtk_vcodec_pm *pm)
 {
 	struct mtk_vcodec_clk *enc_clk = &pm->venc_clk;
 	int i = 0;
 
 	for (i = enc_clk->clk_num - 1; i >= 0; i--)
 		clk_disable_unprepare(enc_clk->clk_info[i].vcodec_clk);
+}
+
+int mtk_vcodec_enc_enable_hardware(struct mtk_vcodec_enc_ctx *ctx)
+{
+	int ret;
+	struct mtk_vcodec_pm *pm = &ctx->dev->pm;
+
+	ret = mtk_vcodec_enc_pw_on(pm);
+	if (ret) {
+		dev_err(pm->dev, "venc power on fail: %d", ret);
+		return ret;
+	}
+
+	ret = mtk_vcodec_enc_clock_on(pm);
+	if (ret) {
+		dev_err(pm->dev, "venc clock on fail: %d", ret);
+		goto clk_on_fail;
+	}
+
+	return ret;
+
+clk_on_fail:
+	mtk_vcodec_enc_pw_off(pm);
+	return ret;
+}
+
+void mtk_vcodec_enc_disable_hardware(struct mtk_vcodec_enc_ctx *ctx)
+{
+	struct mtk_vcodec_pm *pm = &ctx->dev->pm;
+
+	mtk_vcodec_enc_clock_off(pm);
+	mtk_vcodec_enc_pw_off(pm);
+}
+
+void mtk_vcodec_enc_pm_frame_req(struct mtk_vcodec_enc_ctx *ctx)
+{
+#if IS_ENABLED(CONFIG_MTK_MMDVFS)
+	mutex_lock(&ctx->dev->dvfs_mux);
+	mtk_venc_pmqos_begin_frame(ctx);
+	mutex_unlock(&ctx->dev->dvfs_mux);
+#endif
 }

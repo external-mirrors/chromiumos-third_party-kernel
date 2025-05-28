@@ -909,6 +909,13 @@ static int vb2ops_venc_start_streaming(struct vb2_queue *q, unsigned int count)
 		ctx->state = MTK_STATE_HEADER;
 	}
 
+#if IS_ENABLED(CONFIG_MTK_MMDVFS)
+	mutex_lock(&ctx->dev->dvfs_mux);
+	mtk_venc_dvfs_begin_inst(ctx);
+	mtk_venc_pmqos_begin_inst(ctx);
+	mutex_unlock(&ctx->dev->dvfs_mux);
+#endif
+
 	return 0;
 
 err_start_stream:
@@ -992,6 +999,13 @@ static void vb2ops_venc_stop_streaming(struct vb2_queue *q)
 	ret = venc_if_deinit(ctx);
 	if (ret)
 		mtk_v4l2_venc_err(ctx, "venc_if_deinit failed=%d", ret);
+
+#if IS_ENABLED(CONFIG_MTK_MMDVFS)
+	mutex_lock(&ctx->dev->dvfs_mux);
+	mtk_venc_dvfs_end_inst(ctx);
+	mtk_venc_pmqos_end_inst(ctx);
+	mutex_unlock(&ctx->dev->dvfs_mux);
+#endif
 
 	ctx->state = MTK_STATE_FREE;
 }
@@ -1186,6 +1200,8 @@ static void mtk_venc_worker(struct work_struct *work)
 				(size_t)src_buf->vb2_buf.planes[i].length -
 			src_buf->planes[i].data_offset;
 	}
+	frm_buf.num_planes = src_buf->vb2_buf.num_planes;
+
 	bs_buf.va = vb2_plane_vaddr(&dst_buf->vb2_buf, 0);
 	bs_buf.dma_addr = vb2_dma_contig_plane_dma_addr(&dst_buf->vb2_buf, 0);
 	bs_buf.size = (size_t)dst_buf->vb2_buf.planes[0].length;

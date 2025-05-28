@@ -275,7 +275,11 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 	if (ret) {
 		dev_err(cpu_dev,
 			"cpu%d: failed to scale cpu clock rate!\n", policy->cpu);
-		clk_set_parent(cpu_clk, armpll);
+		ret = clk_set_parent(cpu_clk, armpll);
+		if (ret)
+			dev_err(cpu_dev,
+				"cpu%d: failed to set parent armpll!\n", policy->cpu);
+
 		mtk_cpufreq_set_voltage(info, pre_vproc);
 		goto out;
 	}
@@ -298,9 +302,24 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 		if (ret) {
 			dev_err(cpu_dev,
 				"cpu%d: failed to scale down voltage!\n", policy->cpu);
-			clk_set_parent(cpu_clk, info->inter_clk);
-			clk_set_rate(armpll, pre_freq_hz);
-			clk_set_parent(cpu_clk, armpll);
+			ret = clk_set_parent(cpu_clk, info->inter_clk);
+			if (ret) {
+				dev_err(cpu_dev,
+					"cpu%d: failed to set parent to inter_clk!\n",
+					policy->cpu);
+				goto out;
+			}
+			ret = clk_set_rate(armpll, pre_freq_hz);
+			if (ret)
+				dev_err(cpu_dev,
+					"cpu%d: failed to set armpll rate!\n", policy->cpu);
+			ret = clk_set_parent(cpu_clk, armpll);
+			if (ret) {
+				dev_err(cpu_dev,
+					"cpu%d: failed to set parent back to armpll!\n",
+					policy->cpu);
+				goto out;
+			}
 			goto out;
 		}
 	}
@@ -573,7 +592,7 @@ static void mtk_cpu_dvfs_info_release(struct mtk_cpu_dvfs_info *info)
 static int mtk_cpufreq_init(struct cpufreq_policy *policy)
 {
 	struct mtk_cpu_dvfs_info *info;
-	struct cpufreq_frequency_table *freq_table;
+	struct cpufreq_frequency_table *freq_table = NULL;
 	int ret;
 
 	info = mtk_cpu_dvfs_info_lookup(policy->cpu);

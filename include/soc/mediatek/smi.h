@@ -25,6 +25,12 @@ struct mtk_smi_larb_iommu {
 	unsigned char  bank[32];
 };
 
+/* 0: successful; Others: fail. */
+int mtk_smi_larb_bw_set(struct device *larbdev, const u8 port, const u8 val);
+int mtk_smi_common_bw_set(struct device *larbdev, const u8 larbid, bool hard_limit, const u32 grant_val);
+int mtk_smi_common_ostdl_set(struct device *larbdev, const u8 larbid, bool is_write, const u32 limit_val);
+int mtk_smi_set_hrt_perm(struct device *larbdev, const u8 port, bool is_hrt);
+
 #endif
 
 #endif

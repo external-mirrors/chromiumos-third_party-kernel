@@ -73,6 +73,15 @@ config DEVFREQ_GOV_PASSIVE
 	  through sysfs entries. The passive governor recommends that
 	  devfreq device uses the OPP table to get the frequency/voltage.
 
+config DEVFREQ_GOV_MTKEB
+	tristate "MTKEB"
+	help
+	  Let MTK EB hardware control the frequency by itself, and start
+	  the devfreq monitor to update the frequency and statistics
+	  periodically. This governor always returns UINT_MAX as
+	  frequency. The device should set the floor frequency as upper
+	  limit and returns the current frequency.
+
 comment "DEVFREQ Drivers"
 
 config ARM_EXYNOS_BUS_DEVFREQ

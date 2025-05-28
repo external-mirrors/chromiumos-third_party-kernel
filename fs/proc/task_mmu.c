@@ -1522,7 +1522,7 @@ static int pagemap_pmd_range(pmd_t *pmdp, unsigned long addr, unsigned long end,
 			flags |= PM_FILE;
 
 		for (; addr != end; addr += PAGE_SIZE, idx++) {
-			unsigned long cur_flags = flags;
+			u64 cur_flags = flags;
 			pagemap_entry_t pme;
 
 			if (page && (flags & PM_PRESENT) &&
@@ -1976,7 +1976,6 @@ regular_page:
 		if (++batch_count == SWAP_CLUSTER_MAX) {
 			batch_count = 0;
 			if (need_resched()) {
-				arch_leave_lazy_mmu_mode();
 				pte_unmap_unlock(orig_pte, ptl);
 				cond_resched();
 				goto regular_page;

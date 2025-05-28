@@ -218,9 +218,19 @@ struct drm_gem_object *mtk_gem_prime_import_sg_table(struct drm_device *dev,
 			struct dma_buf_attachment *attach, struct sg_table *sg)
 {
 	struct mtk_gem_obj *mtk_gem;
+	struct mtk_drm_private *priv = dev->dev_private;
+	bool is_secure = false;
+
+	if (priv && priv->data && priv->data->secure_heap && attach->dmabuf->exp_name) {
+		int len = strlen(attach->dmabuf->exp_name);
+
+		if (len > 0 && len == strlen(priv->data->secure_heap) &&
+		    !strncmp(attach->dmabuf->exp_name, priv->data->secure_heap, len))
+			is_secure = true;
+	}
 
 	/* check if the entries in the sg_table are contiguous */
-	if (drm_prime_get_contiguous_size(sg) < attach->dmabuf->size) {
+	if (!is_secure && drm_prime_get_contiguous_size(sg) < attach->dmabuf->size) {
 		DRM_ERROR("sg_table is not contiguous");
 		return ERR_PTR(-EINVAL);
 	}
@@ -229,7 +239,9 @@ struct drm_gem_object *mtk_gem_prime_import_sg_table(struct drm_device *dev,
 	if (IS_ERR(mtk_gem))
 		return ERR_CAST(mtk_gem);
 
-	mtk_gem->dma_addr = sg_dma_address(sg->sgl);
+	mtk_gem->secure = is_secure;
+	mtk_gem->dma_addr = (is_secure) ? sg_phys(sg->sgl) : sg_dma_address(sg->sgl);
+	mtk_gem->size = attach->dmabuf->size;
 	mtk_gem->sg = sg;
 
 	return &mtk_gem->base;

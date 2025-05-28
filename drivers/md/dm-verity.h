@@ -123,6 +123,8 @@ struct dm_verity_error_state {
 	sector_t hash_dev_len;
 	struct block_device *hash_dev;
 
+	bool system_shutting_down;
+
 	/* Final behavior after all notifications are completed. */
 	int behavior;
 };

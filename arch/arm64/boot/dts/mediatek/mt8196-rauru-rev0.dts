@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2024 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8196-rauru.dtsi"
+
+/ {
+	model = "Google Rauru board";
+	compatible = "google,rauru", "mediatek,mt8196";
+};
+
+&nau8318 {
+	status = "okay";
+};
+
+&nau8825 {
+	status = "okay";
+};
+
+&afe {
+	/* Only for ETDM in/out 4 */
+	etdm-out-ch = <2>;
+	etdm-in-ch = <2>;
+	etdm-out-sync = <0>; /* 0: disable; 1: enable */
+	etdm-in-sync = <0>; /* 0: disable; 1: enable */
+	etdm-ip-mode = <0>; /* 0: One IP multi-channel 1: Multi-IP 2-channel */
+	status = "okay";
+};
+
+&sound {
+	compatible = "mediatek,mt8196-nau8825-sound";
+	model = "mt8196_nau8318_8825";
+	mediatek,adsp = <&adsp>;
+	status = "okay";
+
+	dai-link-0 {
+		link-name = "I2SOUT6_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&nau8825>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN6_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&nau8825>;
+		};
+	};
+
+	dai-link-2 {
+		link-name = "I2SOUT4_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&nau8318>;
+		};
+	};
+
+	dai-link-3 {
+		link-name = "TDM_DPTX_BE";
+		codec {
+			sound-dai = <&dp_tx>;
+		};
+	};
+
+	dai-link-4 {
+		link-name = "AP_DMIC_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
+		};
+	};
+
+	dai-link-5 {
+		link-name = "AP_DMIC_CH34_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
+		};
+	};
+};
+
+&trackpad_synaptics {
+	status = "disabled";
+};
+
+&keyboard_controller {
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)	/* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)	/* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)	/* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)	/* T4 */
+		MATRIX_KEY(0x03, 0x04, 0)	/* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)	/* T7 */
+		MATRIX_KEY(0x02, 0x09, 0)	/* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)	/* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)	/* T10 */
+	>;
+
+	linux,keymap = <
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)
+		MATRIX_KEY(0x03, 0x04, KEY_SYSRQ)
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)
+		MATRIX_KEY(0x02, 0x09, KEY_MUTE)
+		MATRIX_KEY(0x01, 0x09, KEY_VOLUMEDOWN)
+		MATRIX_KEY(0x00, 0x04, KEY_VOLUMEUP)
+		CROS_STD_MAIN_KEYMAP
+	>;
+};

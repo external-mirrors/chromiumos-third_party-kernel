@@ -1,0 +1,496 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2021 MediaTek Inc.
+ * Author: Seiya Wang <seiya.wang@mediatek.com>
+ */
+/dts-v1/;
+#include "mt8196.dtsi"
+#include "mt6316.dtsi"
+#include "mt6363.dtsi"
+#include "mt6373.dtsi"
+#include "mt6685.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "MediaTek MT8196 evaluation board";
+	compatible = "mediatek,mt8196-evb", "mediatek,mt8196";
+
+	backlight_lcd0: backlight-lcd0 {
+		compatible = "pwm-backlight";
+		brightness-levels = <0 1023>;
+		default-brightness-level = <576>;
+		enable-gpios = <&pio 32 GPIO_ACTIVE_HIGH>;
+		num-interpolated-steps = <1023>;
+		pwms = <&disp_pwm1 0 500000>;
+	};
+
+	/* chosen */
+	chosen: chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	panel: panel {
+		compatible = "lg,lp120up1";
+		pinctrl-names = "default";
+		pinctrl-0 = <&panel_fixed_pins>;
+		backlight = <&backlight_lcd0>;
+
+		port {
+			panel_edp_in: endpoint {
+				remote-endpoint = <&edptx_out>;
+			};
+		};
+	};
+
+	usb_p0_vbus: regulator@0 {
+		compatible = "regulator-fixed";
+		regulator-name = "vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&pio 20 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+};
+
+&dp_intf0 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			disp1_dp_intf0_out: endpoint {
+				remote-endpoint = <&dptx_in0>;
+			};
+		};
+	};
+};
+
+&dp_intf1 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			disp1_dp_intf1_out: endpoint {
+				remote-endpoint = <&dptx_in1>;
+			};
+		};
+	};
+};
+
+&dp_tx {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dptx_pin>;
+	#sound-dai-cells = <0>;
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			dptx_in0: endpoint {
+				remote-endpoint = <&disp1_dp_intf0_out>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+
+			dptx_in1: endpoint {
+				remote-endpoint = <&disp1_dp_intf1_out>;
+			};
+		};
+
+		port@2 {
+			reg = <2>;
+
+			dptx_out: endpoint {
+				data-lanes = <0 1 2 3>;
+			};
+		};
+	};
+};
+
+&main_pmic {
+	pmic-lvsys-notify {
+		compatible = "mediatek,mt6363-lvsys-notify";
+	};
+};
+
+&mmc1 {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cd-gpios = <&pio 41 GPIO_ACTIVE_LOW>;
+	max-frequency = <200000000>;
+	no-mmc;
+	no-sdio;
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&mmc1_default_pins>;
+	pinctrl-1 = <&mmc1_state_uhs_pins>;
+	sd-uhs-sdr12;
+	sd-uhs-sdr25;
+	sd-uhs-sdr50;
+	sd-uhs-sdr104;
+	sd-uhs-ddr50;
+	vmmc-supply = <&mt6373_vmch_eint_high>;
+	vqmmc-supply = <&mt6373_vmc>;
+
+	status = "okay";
+};
+
+&mt6363_vbuck1 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck2 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck4 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck5 {
+	regulator-always-on;
+};
+
+&mt6363_vbuck6 {
+	regulator-always-on;
+};
+
+&mt6363_vsram_digrf {
+	regulator-always-on;
+};
+
+&mt6363_vsram_modem {
+	regulator-always-on;
+};
+
+&mt6363_vsram_cpub {
+	regulator-always-on;
+};
+
+&mt6363_vsram_cpul {
+	regulator-always-on;
+};
+
+&mt6363_vsram_apu {
+	regulator-always-on;
+};
+
+&mt6363_vsram_mdfe {
+	regulator-always-on;
+};
+
+&mt6363_vcn15 {
+	regulator-always-on;
+};
+
+&mt6363_vemc {
+	regulator-always-on;
+};
+
+&mt6363_vufs12 {
+	regulator-always-on;
+};
+
+&mt6363_vufs18 {
+	regulator-always-on;
+};
+
+&mt6363_vm18 {
+	regulator-always-on;
+};
+
+&mt6363_vrf12 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck2 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck4 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck5 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck6 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck7 {
+	regulator-always-on;
+};
+
+&mt6373_vbuck0 {
+	/delete-property/ regulator-always-on;
+};
+
+&mt6373_vbuck8 {
+	/delete-property/ regulator-always-on;
+};
+
+&mt6373_vbuck4_ufs {
+	status = "disabled";
+};
+
+&mt6373_vmc {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <3100000>;
+	status = "okay";
+};
+
+&mt6373_vmch_eint_high {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <3100000>;
+	status = "okay";
+};
+
+&mt6373_vrfio18_aif {
+	regulator-always-on;
+};
+
+&mt6685_rtc {
+	status = "okay";
+};
+
+&mt6363_vbuck1_sshub {
+	status = "disabled";
+};
+
+&mt6363_vbuck2_sshub {
+	status = "disabled";
+};
+
+&mt6363_vbuck4_sshub {
+	status = "disabled";
+};
+
+&mt6373_vmch_eint_low {
+	status = "disabled";
+};
+
+&mt6373_vmch {
+	status = "disabled";
+};
+
+
+&nor_flash {
+	pinctrl-names = "default";
+	pinctrl-0 = <&nor_pins_default>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <52000000>;
+	};
+};
+
+&pcie0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_pins_default>;
+	status = "okay";
+};
+
+&pcie1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie1_pins_default>;
+	status = "okay";
+};
+
+&pciephy0 {
+	status = "okay";
+};
+
+&pciephy1 {
+	status = "okay";
+};
+
+&pio {
+	dptx_pin: dptx-default-pins {
+		pins-hpd {
+			pinmux = <PINMUX_GPIO32__FUNC_DP_TX_HPD>;
+		};
+	};
+
+	mmc1_state_uhs_pins:
+	mmc1_default_pins: mmc1-default-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO126__FUNC_MSDC1_CMD>,
+				 <PINMUX_GPIO127__FUNC_MSDC1_DAT0>,
+				 <PINMUX_GPIO128__FUNC_MSDC1_DAT1>,
+				 <PINMUX_GPIO129__FUNC_MSDC1_DAT2>,
+				 <PINMUX_GPIO130__FUNC_MSDC1_DAT3>;
+			input-enable;
+			drive-strength = <6>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+
+		pins-clk {
+			pinmux = <PINMUX_GPIO125__FUNC_MSDC1_CLK>;
+			drive-strength = <6>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+
+		pins-insert {
+			pinmux = <PINMUX_GPIO41__FUNC_GPIO41>;
+			bias-pull-up;
+		};
+	};
+
+	nor_pins_default: nor-default-pins {
+		pins0 {
+			pinmux = <PINMUX_GPIO102__FUNC_SF_CK>;
+			bias-pull-down = <MTK_PULL_SET_RSEL_000>;
+			mediatek,drive-strength-adv = <0>;
+			drive-strength = <14>;
+		};
+
+		pins1 {
+			pinmux = <PINMUX_GPIO101__FUNC_SF_CS>;
+			bias-pull-up = <MTK_PULL_SET_RSEL_000>;
+			mediatek,drive-strength-adv = <0>;
+			drive-strength = <14>;
+		};
+
+		pins2 {
+			pinmux = <PINMUX_GPIO91__FUNC_SF_D0>,
+				 <PINMUX_GPIO92__FUNC_SF_D1>;
+			bias-pull-down;
+			drive-strength = <14>;
+		};
+	};
+
+	xhci0_pins_default: xhci0-default-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO72__FUNC_GPIO72>;
+			output-high;
+		};
+	};
+
+	pcie0_pins_default: pcie0-default {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO241__FUNC_PCIE_PERSTN>,
+				 <PINMUX_GPIO242__FUNC_PCIE_WAKEN>,
+				 <PINMUX_GPIO243__FUNC_PCIE_CLKREQN>;
+			bias-pull-up;
+		};
+	};
+
+	pcie1_pins_default: pcie1-default {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO145__FUNC_PCIE_WAKEN_1P>,
+				 <PINMUX_GPIO146__FUNC_PCIE_PERSTN_1P>,
+				 <PINMUX_GPIO147__FUNC_PCIE_CLKREQN_1P>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+	};
+};
+
+&xhci0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&xhci0_pins_default>;
+	vbus-supply = <&usb_p0_vbus>;
+	status = "okay";
+};
+
+&u2phy0 {
+	status = "okay";
+};
+
+&u3phy0 {
+	status = "okay";
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&disp_dvo0 {
+	status = "okay";
+
+	port {
+		disp_dvo0_out: endpoint {
+			remote-endpoint = <&edptx_in>;
+		};
+	};
+};
+
+&edp_tx {
+	pinctrl-names = "default";
+	pinctrl-0 = <&edp_hpd_pins>;
+	max-lane-count = <4>;
+	max-linkrate-mhz = <8100>;
+	use-edid;
+
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+
+			edptx_in: endpoint {
+				remote-endpoint = <&disp_dvo0_out>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+
+			edptx_out: endpoint {
+				remote-endpoint = <&panel_edp_in>;
+			};
+		};
+	};
+};
+
+&disp_pwm1 {
+	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&disp_pwm1_pin_default>;
+};
+
+&pio {
+	edp_hpd_pins: edp-hpd-pins {
+		pins1 {
+			pinmux = <PINMUX_GPIO13__FUNC_EDP_TX_HPD>;
+			bias-pull-up;
+		};
+	};
+
+	disp_pwm1_pin_default: disp-pwm1-default-pins {
+		pins-disp-pwm {
+			pinmux = <PINMUX_GPIO4__FUNC_DISP_PWM1>;
+		};
+	};
+
+	panel_fixed_pins: panel-fixed-pins {
+		pins1 {
+			pinmux = <PINMUX_GPIO26__FUNC_GPIO26>,
+			<PINMUX_GPIO33__FUNC_GPIO33>;
+			bias-pull-up;
+			output-high;
+		};
+	};
+};
+

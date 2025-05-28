@@ -14,6 +14,8 @@ struct mtk_vcodec_fw {
 	struct platform_device *pdev;
 	struct mtk_scp *scp;
 	enum mtk_vcodec_fw_use fw_use;
+
+	struct mtk_vcp *vcp;
 };
 
 struct mtk_vcodec_fw_ops {
@@ -27,6 +29,7 @@ struct mtk_vcodec_fw_ops {
 	int (*ipi_send)(struct mtk_vcodec_fw *fw, int id, void *buf,
 			unsigned int len, unsigned int wait);
 	void (*release)(struct mtk_vcodec_fw *fw);
+	struct device *(*get_io_dev)(struct mtk_vcodec_fw *fw);
 };
 
 #if IS_ENABLED(CONFIG_VIDEO_MEDIATEK_VCODEC_VPU)

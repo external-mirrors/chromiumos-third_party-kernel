@@ -228,8 +228,6 @@ static const struct vb2_ops cx18_vb2_qops = {
 	.buf_prepare		= cx18_buf_prepare,
 	.start_streaming	= cx18_start_streaming,
 	.stop_streaming		= cx18_stop_streaming,
-	.wait_prepare		= vb2_ops_wait_prepare,
-	.wait_finish		= vb2_ops_wait_finish,
 };
 
 static int cx18_stream_init(struct cx18 *cx, int type)
@@ -286,7 +284,7 @@ static int cx18_stream_init(struct cx18 *cx, int type)
 		s->vidq.ops = &cx18_vb2_qops;
 		s->vidq.mem_ops = &vb2_vmalloc_memops;
 		s->vidq.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-		s->vidq.min_buffers_needed = 2;
+		s->vidq.min_queued_buffers = 2;
 		s->vidq.gfp_flags = GFP_DMA32;
 		s->vidq.dev = &cx->pci_dev->dev;
 		s->vidq.lock = &cx->serialize_lock;

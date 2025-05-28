@@ -11,6 +11,7 @@
 
 #include "mtk_vcodec_dec_hw.h"
 #include "mtk_vcodec_dec_pm.h"
+#include "mtk_vcodec_dec_dvfs.h"
 
 int mtk_vcodec_init_dec_clk(struct platform_device *pdev, struct mtk_vcodec_pm *pm)
 {
@@ -53,6 +54,34 @@ int mtk_vcodec_init_dec_clk(struct platform_device *pdev, struct mtk_vcodec_pm *
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_init_dec_clk);
+
+static void mtk_vcodec_load_racing_info(struct mtk_vcodec_dec_ctx *ctx)
+{
+	void __iomem *vdec_racing_addr;
+	int j;
+
+	mutex_lock(&ctx->dev->dec_racing_info_mutex);
+	if (atomic_inc_return(&ctx->dev->dec_active_cnt) == 1) {
+		vdec_racing_addr = ctx->dev->reg_base[VDEC_MISC] + 0x100;
+		for (j = 0; j < 132; j++)
+			writel(ctx->dev->vdec_racing_info[j], vdec_racing_addr + j * 4);
+	}
+	mutex_unlock(&ctx->dev->dec_racing_info_mutex);
+}
+
+static void mtk_vcodec_record_racing_info(struct mtk_vcodec_dec_ctx *ctx)
+{
+	void __iomem *vdec_racing_addr;
+	int j;
+
+	mutex_lock(&ctx->dev->dec_racing_info_mutex);
+	if (atomic_dec_and_test(&ctx->dev->dec_active_cnt)) {
+		vdec_racing_addr = ctx->dev->reg_base[VDEC_MISC] + 0x100;
+			for (j = 0; j < 132; j++)
+			ctx->dev->vdec_racing_info[j] = readl(vdec_racing_addr + j * 4);
+	}
+	mutex_unlock(&ctx->dev->dec_racing_info_mutex);
+}
 
 static int mtk_vcodec_dec_pw_on(struct mtk_vcodec_pm *pm)
 {
@@ -141,34 +170,6 @@ static void mtk_vcodec_dec_disable_irq(struct mtk_vcodec_dec_dev *vdec_dev, int 
 	}
 }
 
-static void mtk_vcodec_load_racing_info(struct mtk_vcodec_dec_ctx *ctx)
-{
-	void __iomem *vdec_racing_addr;
-	int j;
-
-	mutex_lock(&ctx->dev->dec_racing_info_mutex);
-	if (atomic_inc_return(&ctx->dev->dec_active_cnt) == 1) {
-		vdec_racing_addr = ctx->dev->reg_base[VDEC_MISC] + 0x100;
-		for (j = 0; j < 132; j++)
-			writel(ctx->dev->vdec_racing_info[j], vdec_racing_addr + j * 4);
-	}
-	mutex_unlock(&ctx->dev->dec_racing_info_mutex);
-}
-
-static void mtk_vcodec_record_racing_info(struct mtk_vcodec_dec_ctx *ctx)
-{
-	void __iomem *vdec_racing_addr;
-	int j;
-
-	mutex_lock(&ctx->dev->dec_racing_info_mutex);
-	if (atomic_dec_and_test(&ctx->dev->dec_active_cnt)) {
-		vdec_racing_addr = ctx->dev->reg_base[VDEC_MISC] + 0x100;
-		for (j = 0; j < 132; j++)
-			ctx->dev->vdec_racing_info[j] = readl(vdec_racing_addr + j * 4);
-	}
-	mutex_unlock(&ctx->dev->dec_racing_info_mutex);
-}
-
 static struct mtk_vcodec_pm *mtk_vcodec_dec_get_pm(struct mtk_vcodec_dec_dev *vdec_dev,
 						   int hw_idx)
 {
@@ -229,34 +230,92 @@ static void mtk_vcodec_dec_child_dev_off(struct mtk_vcodec_dec_dev *vdec_dev,
 	}
 }
 
-void mtk_vcodec_dec_enable_hardware(struct mtk_vcodec_dec_ctx *ctx, int hw_idx)
+void mtk_vcodec_dec_enable_dvfs(struct mtk_vcodec_dec_ctx *ctx, int hw_idx)
+{
+	mtk_vdec_dvfs_begin_inst(ctx, hw_idx);
+	vcodec_pmqos_helper_update(ctx, hw_idx);
+}
+
+void mtk_vcodec_dec_disable_dvfs(struct mtk_vcodec_dec_ctx *ctx, int hw_idx)
+{
+	mtk_vdec_dvfs_end_inst(ctx, hw_idx);
+	vcodec_pmqos_helper_update(ctx, hw_idx);
+}
+
+void mtk_vcodec_dec_lock_ctx(struct mtk_vcodec_dec_ctx *ctx, int hw_idx)
+{
+	mutex_lock(&ctx->dev->dec_mutex[hw_idx]);
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_dec_lock_ctx);
+
+void mtk_vcodec_dec_unlock_ctx(struct mtk_vcodec_dec_ctx *ctx, int hw_idx)
+{
+	mutex_unlock(&ctx->dev->dec_mutex[hw_idx]);
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_dec_unlock_ctx);
+
+void mtk_vcodec_dec_lock_hardware(struct mtk_vcodec_dec_ctx *ctx, int hw_idx, bool mmpc_enable)
 {
 	mutex_lock(&ctx->dev->dec_mutex[hw_idx]);
 
-	if (IS_VDEC_LAT_ARCH(ctx->dev->vdec_pdata->hw_arch) &&
-	    hw_idx == MTK_VDEC_CORE)
+	if (IS_VDEC_LAT_ARCH(ctx->dev->vdec_pdata->hw_arch) && hw_idx == MTK_VDEC_CORE)
 		mtk_vcodec_dec_child_dev_on(ctx->dev, MTK_VDEC_LAT0);
 	mtk_vcodec_dec_child_dev_on(ctx->dev, hw_idx);
 
-	mtk_vcodec_dec_enable_irq(ctx->dev, hw_idx);
+	if (!ctx->is_secure_playback)
+		mtk_vcodec_dec_enable_irq(ctx->dev, hw_idx);
 
 	if (IS_VDEC_INNER_RACING(ctx->dev->dec_capability))
 		mtk_vcodec_load_racing_info(ctx);
-}
-EXPORT_SYMBOL_GPL(mtk_vcodec_dec_enable_hardware);
 
-void mtk_vcodec_dec_disable_hardware(struct mtk_vcodec_dec_ctx *ctx, int hw_idx)
+	vcodec_dvfs_helper_set_opp(ctx, hw_idx);
+
+	if (mmpc_enable && ctx->update_mmpc) {
+		mtk_vdec_mmpc_update(ctx, hw_idx);
+		ctx->update_mmpc = false;
+	}
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_dec_lock_hardware);
+
+void mtk_vcodec_dec_unlock_hardware(struct mtk_vcodec_dec_ctx *ctx, int hw_idx, bool mmpc_enable)
 {
 	if (IS_VDEC_INNER_RACING(ctx->dev->dec_capability))
 		mtk_vcodec_record_racing_info(ctx);
 
-	mtk_vcodec_dec_disable_irq(ctx->dev, hw_idx);
+	if (mmpc_enable)
+		mtk_vdec_mmpc_update(ctx, hw_idx);
+
+	vcodec_dvfs_helper_set_opp(ctx, hw_idx);
+
+	if (!ctx->is_secure_playback)
+		mtk_vcodec_dec_disable_irq(ctx->dev, hw_idx);
 
 	mtk_vcodec_dec_child_dev_off(ctx->dev, hw_idx);
-	if (IS_VDEC_LAT_ARCH(ctx->dev->vdec_pdata->hw_arch) &&
-	    hw_idx == MTK_VDEC_CORE)
+	if (IS_VDEC_LAT_ARCH(ctx->dev->vdec_pdata->hw_arch) && hw_idx == MTK_VDEC_CORE)
 		mtk_vcodec_dec_child_dev_off(ctx->dev, MTK_VDEC_LAT0);
 
 	mutex_unlock(&ctx->dev->dec_mutex[hw_idx]);
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_dec_unlock_hardware);
+
+void mtk_vcodec_dec_enable_hardware(struct mtk_vcodec_dec_ctx *ctx)
+{
+	mutex_lock(&ctx->dev->dvfs_mux);
+
+	mtk_vcodec_dec_enable_dvfs(ctx, MTK_VDEC_LAT0);
+	mtk_vcodec_dec_enable_dvfs(ctx, MTK_VDEC_CORE);
+
+	mutex_unlock(&ctx->dev->dvfs_mux);
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_dec_enable_hardware);
+
+void mtk_vcodec_dec_disable_hardware(struct mtk_vcodec_dec_ctx *ctx)
+{
+	mutex_lock(&ctx->dev->dvfs_mux);
+
+	mtk_vcodec_dec_disable_dvfs(ctx, MTK_VDEC_LAT0);
+	mtk_vcodec_dec_disable_dvfs(ctx, MTK_VDEC_CORE);
+
+	mutex_unlock(&ctx->dev->dvfs_mux);
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_dec_disable_hardware);

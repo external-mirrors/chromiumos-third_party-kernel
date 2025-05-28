@@ -1,0 +1,25 @@
+config MTK_CM_IPI
+	tristate "MTK CM use IPI"
+	depends on MTK_TINYSYS_SCMI
+	help
+	  This kernel config can be used to enable CM IPI. When enable
+	  this option, we will use ipi on system buffer to improve
+	  performance and power.
+	  If unsure, say N.
+
+config MTK_CM_MGR
+	tristate "MTK CPU Memory Latency Management"
+	help
+	  This kernel config can be used to enable CM_MGR. When enable
+	  this option, dram OPP level will be changed which will depended
+	  on power table.
+	  If unsure, say N.
+
+config MTK_CM_MGR_MT8196
+	tristate "MTK CM_MGR for MT8196"
+	depends on MTK_CM_MGR
+	help
+	  This kernel config can be used to enable CM_MGR MT8196. When enable
+	  this option, dram OPP level will be changed which will depended
+	  on power table.
+	  If unsure, say N.

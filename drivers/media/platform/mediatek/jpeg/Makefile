@@ -8,3 +8,6 @@ mtk_jpeg-y := mtk_jpeg_core.o \
 
 mtk-jpeg-enc-hw-y := mtk_jpeg_enc_hw.o
 mtk-jpeg-dec-hw-y := mtk_jpeg_dec_hw.o
+
+ccflags-y += -I$(srctree)/drivers/media/platform/mtk-jpeg
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/iommu/arm/arm-smmu-v3

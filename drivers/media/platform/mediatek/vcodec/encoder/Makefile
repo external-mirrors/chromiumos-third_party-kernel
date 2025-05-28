@@ -4,8 +4,13 @@ obj-$(CONFIG_VIDEO_MEDIATEK_VCODEC) += mtk-vcodec-enc.o
 
 mtk-vcodec-enc-y := venc/venc_vp8_if.o \
 		venc/venc_h264_if.o \
+		venc/venc_common_if.o \
 		mtk_vcodec_enc.o \
 		mtk_vcodec_enc_drv.o \
 		mtk_vcodec_enc_pm.o \
 		venc_drv_if.o \
 		venc_vpu_if.o \
+
+mtk-vcodec-enc-$(CONFIG_MTK_MMDVFS) += mtk_vcodec_enc_pm_plat.o \
+		    mtk_vcodec_enc_dvfs.o
+

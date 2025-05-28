@@ -3,6 +3,24 @@
 #include "../decoder/mtk_vcodec_dec_drv.h"
 #include "../encoder/mtk_vcodec_enc_drv.h"
 #include "mtk_vcodec_fw_priv.h"
+#include "mtk_vcodec_fw_vcp.h"
+
+int mtk_vcodec_fw_get_ipi_id(enum mtk_vcodec_fw_type type, int hw_id, bool is_secure)
+{
+	if (is_secure)
+		return (hw_id == MTK_VDEC_LAT0) ? SCP_IPI_VDEC_LAT : SCP_IPI_VDEC_CORE;
+
+	switch (type) {
+	case VPU:
+	case SCP:
+		return (hw_id == MTK_VDEC_LAT0) ? SCP_IPI_VDEC_LAT : SCP_IPI_VDEC_CORE;
+	case VCP:
+		return (hw_id == MTK_VDEC_LAT0) ? VCP_IPI_LAT_DECODER : VCP_IPI_CORE_DECODER;
+	default:
+		return -EINVAL;
+	}
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_fw_get_ipi_id);
 
 struct mtk_vcodec_fw *mtk_vcodec_fw_select(void *priv, enum mtk_vcodec_fw_type type,
 					   enum mtk_vcodec_fw_use fw_use)
@@ -19,6 +37,8 @@ struct mtk_vcodec_fw *mtk_vcodec_fw_select(void *priv, enum mtk_vcodec_fw_type t
 		return mtk_vcodec_fw_vpu_init(priv, fw_use);
 	case SCP:
 		return mtk_vcodec_fw_scp_init(priv, fw_use);
+	case VCP:
+		return mtk_vcodec_fw_vcp_init(priv, fw_use);
 	default:
 		dev_err(&plat_dev->dev, "Invalid vcodec fw type");
 		return ERR_PTR(-EINVAL);
@@ -76,3 +96,9 @@ int mtk_vcodec_fw_get_type(struct mtk_vcodec_fw *fw)
 	return fw->type;
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_fw_get_type);
+
+struct device *mtk_vcodec_fw_get_io_dev(struct mtk_vcodec_fw *fw)
+{
+	return fw->ops->get_io_dev(fw);
+}
+EXPORT_SYMBOL_GPL(mtk_vcodec_fw_get_io_dev);

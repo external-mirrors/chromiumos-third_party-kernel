@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <soc/mediatek/mtk_clk_user.h>
 
 #include "reset.h"
 
@@ -19,6 +20,17 @@
 #define INVALID_MUX_GATE_BIT	(MAX_MUX_GATE_BIT + 1)
 
 #define MHZ (1000 * 1000)
+
+/* hw voter timeout configures */
+#define MTK_WAIT_HWV_PREPARE_CNT	200000
+#define MTK_WAIT_HWV_PREPARE_US		1
+#define MTK_WAIT_HWV_DONE_CNT		5000000
+#define MTK_WAIT_HWV_DONE_US		1
+#define MTK_WAIT_FENC_DONE_CNT		5000000
+#define MTK_WAIT_FENC_DONE_US		1
+
+#define CLK_USE_HW_VOTER		BIT(30)
+#define CLK_FENC_ENABLE			BIT(31)
 
 struct platform_device;
 
@@ -245,5 +257,4 @@ int mtk_clk_pdev_probe(struct platform_device *pdev);
 void mtk_clk_pdev_remove(struct platform_device *pdev);
 int mtk_clk_simple_probe(struct platform_device *pdev);
 void mtk_clk_simple_remove(struct platform_device *pdev);
-
 #endif /* __DRV_CLK_MTK_H */

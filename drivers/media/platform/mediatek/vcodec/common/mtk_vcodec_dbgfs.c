@@ -8,6 +8,7 @@
 
 #include "mtk_vcodec_dbgfs.h"
 #include "../decoder/mtk_vcodec_dec_drv.h"
+#include "../decoder/mtk_vcodec_dec_dvfs.h"
 #include "../encoder/mtk_vcodec_enc_drv.h"
 #include "mtk_vcodec_util.h"
 
@@ -122,9 +123,10 @@ static ssize_t mtk_vdec_dbgfs_read(struct file *filp, char __user *ubuf,
 
 		if (dbgfs_index[MTK_VDEC_DBGFS_PICINFO]) {
 			curr_len = snprintf(buf + used_len, total_len - used_len,
-					    "\treal(%dx%d)=>align(%dx%d)\n",
+					    "\treal(%dx%d)=>align(%dx%d) svp(%d) 10bit(%d)\n",
 					    ctx->picinfo.pic_w, ctx->picinfo.pic_h,
-					    ctx->picinfo.buf_w, ctx->picinfo.buf_h);
+					    ctx->picinfo.buf_w, ctx->picinfo.buf_h,
+					    ctx->is_secure_playback, ctx->is_10bit_bitstream);
 			used_len += curr_len;
 		}
 
@@ -189,6 +191,7 @@ static void mtk_vcodec_dbgfs_vdec_init(struct mtk_vcodec_dec_dev *vcodec_dev)
 	vcodec_root = vcodec_dev->dbgfs.vcodec_root;
 	debugfs_create_x32("mtk_v4l2_dbg_level", 0644, vcodec_root, &mtk_v4l2_dbg_level);
 	debugfs_create_x32("mtk_vcodec_dbg", 0644, vcodec_root, &mtk_vcodec_dbg);
+	debugfs_create_x32("mtk_mmdvfs_level", 0644, vcodec_root, &mtk_mmdvfs_level);
 
 	vcodec_dev->dbgfs.inst_count = 0;
 	INIT_LIST_HEAD(&vcodec_dev->dbgfs.dbgfs_head);

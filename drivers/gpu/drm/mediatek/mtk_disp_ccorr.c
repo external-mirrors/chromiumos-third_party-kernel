@@ -31,11 +31,13 @@
 
 struct mtk_disp_ccorr_data {
 	u32 matrix_bits;
+	enum mtk_ddp_comp_id mandatory_ccorr;
 };
 
 struct mtk_disp_ccorr {
 	struct clk *clk;
 	void __iomem *regs;
+	struct mtk_ddp_comp ddp_comp;
 	struct cmdq_client_reg cmdq_reg;
 	const struct mtk_disp_ccorr_data	*data;
 };
@@ -104,6 +106,7 @@ static u16 mtk_ctm_s31_32_to_s1_n(u64 in, u32 n)
 void mtk_ccorr_ctm_set(struct device *dev, struct drm_crtc_state *state)
 {
 	struct mtk_disp_ccorr *ccorr = dev_get_drvdata(dev);
+	struct mtk_ddp_comp *comp = &ccorr->ddp_comp;
 	struct drm_property_blob *blob = state->ctm;
 	struct drm_color_ctm *ctm;
 	const u64 *input;
@@ -115,11 +118,29 @@ void mtk_ccorr_ctm_set(struct device *dev, struct drm_crtc_state *state)
 	if (!blob)
 		return;
 
+	if (comp->id != ccorr->data->mandatory_ccorr)
+		return;
+
 	ctm = (struct drm_color_ctm *)blob->data;
 	input = ctm->matrix;
 
 	for (i = 0; i < ARRAY_SIZE(coeffs); i++)
 		coeffs[i] = mtk_ctm_s31_32_to_s1_n(input[i], matrix_bits);
+
+	for (i = 0; i < ARRAY_SIZE(coeffs); i++) {
+		/*
+		 * Adjusts the coefficient to fit within the hardware's expected format.
+		 * If the sign bit (matrix_bits + 1) is set, indicating a negative value:
+		 * Steps:
+		 * 1. Mask the coefficient to keep only the lower 'matrix_bits' bits.
+		 * 2. Invert coefficient.
+		 * 3. Add 1 to the inverted coefficient to perform two's complement negation.
+		 * 4. Mask the result to ensure it fits within 'matrix_bits + 1' bits.
+		 */
+		if (coeffs[i] & BIT(matrix_bits + 1))
+			coeffs[i] = (~(coeffs[i] & GENMASK(matrix_bits, 0)) + 1)
+					& GENMASK(matrix_bits + 1, 0);
+	}
 
 	mtk_ddp_write(cmdq_pkt, coeffs[0] << 16 | coeffs[1],
 		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_0);
@@ -155,6 +176,7 @@ static int mtk_disp_ccorr_probe(struct platform_device *pdev)
 	struct mtk_disp_ccorr *priv;
 	struct resource *res;
 	int ret;
+	enum mtk_ddp_comp_id comp_id;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -173,6 +195,17 @@ static int mtk_disp_ccorr_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->regs);
 	}
 
+	comp_id = mtk_ddp_comp_get_id(dev->of_node, MTK_DISP_CCORR);
+	if (comp_id < 0) {
+		dev_err(dev, "Failed to identify by alias: %d\n", comp_id);
+		return comp_id;
+	}
+
+	ret = mtk_ddp_comp_init(dev->of_node, &priv->ddp_comp, comp_id);
+	if (ret) {
+		dev_err(dev, "Failed to initialize component: %d\n", ret);
+		return ret;
+	}
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	ret = cmdq_dev_get_client_reg(dev, &priv->cmdq_reg, 0);
 	if (ret)
@@ -196,10 +229,17 @@ static void mtk_disp_ccorr_remove(struct platform_device *pdev)
 
 static const struct mtk_disp_ccorr_data mt8183_ccorr_driver_data = {
 	.matrix_bits = 10,
+	.mandatory_ccorr = DDP_COMPONENT_CCORR0,
 };
 
 static const struct mtk_disp_ccorr_data mt8192_ccorr_driver_data = {
 	.matrix_bits = 11,
+	.mandatory_ccorr = DDP_COMPONENT_CCORR0,
+};
+
+static const struct mtk_disp_ccorr_data mt8196_ccorr_driver_data = {
+	.matrix_bits = 11,
+	.mandatory_ccorr = DDP_COMPONENT_CCORR0,
 };
 
 static const struct of_device_id mtk_disp_ccorr_driver_dt_match[] = {
@@ -207,6 +247,8 @@ static const struct of_device_id mtk_disp_ccorr_driver_dt_match[] = {
 	  .data = &mt8183_ccorr_driver_data},
 	{ .compatible = "mediatek,mt8192-disp-ccorr",
 	  .data = &mt8192_ccorr_driver_data},
+	{ .compatible = "mediatek,mt8196-disp-ccorr",
+	  .data = &mt8196_ccorr_driver_data},
 	{},
 };
 MODULE_DEVICE_TABLE(of, mtk_disp_ccorr_driver_dt_match);

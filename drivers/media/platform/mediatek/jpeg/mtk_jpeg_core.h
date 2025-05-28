@@ -11,14 +11,25 @@
 
 #include <linux/clk.h>
 #include <linux/interrupt.h>
+#include <linux/mfd/syscon.h>
+#include <linux/pm_opp.h>
+#include <linux/regulator/consumer.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-fh.h>
 #include <media/videobuf2-v4l2.h>
+#if IS_ENABLED(CONFIG_MTK_MMDVFS)
+#include <soc/mediatek/mmdvfs_v3.h>
+#endif
+#include <soc/mediatek/mtk-interconnect.h>
+#include <soc/mediatek/smi.h>
 
 #include "mtk_jpeg_dec_hw.h"
 
 #define MTK_JPEG_NAME		"mtk-jpeg"
+
+#define MTK_JPEG_MAX_FREQ		8
+#define MTK_JPEG_MAX_LARB_COUNT		2
 
 #define MTK_JPEG_FMT_FLAG_OUTPUT	BIT(0)
 #define MTK_JPEG_FMT_FLAG_CAPTURE	BIT(1)
@@ -33,6 +44,14 @@
 #define MTK_JPEG_HW_TIMEOUT_MSEC 1000
 
 #define MTK_JPEG_MAX_EXIF_SIZE	(64 * 1024)
+
+#define JPEG_DEC_SMMU_SID				0
+#define JPEG_ENC_SMMU_SID				0
+#define JPG_REG_GUSER_ID_MASK				0x7
+#define JPG_REG_GUSER_ID_DEC_SID			0x4
+#define JPG_REG_GUSER_ID_ENC_SID			0x5
+#define JPG_REG_DEC_GUSER_ID_SHIFT			8
+#define JPG_REG_ENC_GUSER_ID_SHIFT			4
 
 /**
  * enum mtk_jpeg_ctx_state - states of the context state machine
@@ -62,6 +81,8 @@ enum mtk_jpeg_ctx_state {
  * @cap_q_default_fourcc:	capture queue default fourcc
  * @multi_core:		mark jpeg hw is multi_core or not
  * @jpeg_worker:		jpeg dec or enc worker
+ * @support_34bit:	flag to check if support dma_address 34bit
+ * @support_smmu:	flag to check if support smmu
  */
 struct mtk_jpeg_variant {
 	struct clk_bulk_data *clks;
@@ -77,14 +98,17 @@ struct mtk_jpeg_variant {
 	u32 out_q_default_fourcc;
 	u32 cap_q_default_fourcc;
 	bool multi_core;
+	u32 max_hw_count;
 	void (*jpeg_worker)(struct work_struct *work);
+	bool support_34bit;
+	bool support_smmu;
 };
 
 struct mtk_jpeg_src_buf {
-	u32 frame_num;
 	struct vb2_v4l2_buffer b;
 	struct list_head list;
 	u32 bs_size;
+	u32 frame_num;
 	struct mtk_jpeg_dec_param dec_param;
 
 	struct mtk_jpeg_ctx *curr_ctx;
@@ -147,6 +171,18 @@ struct mtk_jpegdec_clk {
  * @hw_rdy:		record hw ready
  * @hw_state:		record hw state
  * @hw_lock:		spinlock protecting the hw device resource
+ * @smmu_regmap:	SMMU registers mapping
+ * @path_y_rdma:	record output the panel's addr of y
+ * @path_c_rdma:	record output the panel's addr of uv
+ * @path_qtbl:		record q table's addr
+ * @path_bsdma: 	record bs buffer dma addr
+ * @jpeg_reg: 		jpeg encoder vcore node
+ * @jpeg_mmdvfs_clk:	jpeg encode mmdvfs clock
+ * @freq_cnt:		jpeg encode mmdvfs frequency num
+ * @freqs:		jpeg encode mmdvfs frequency array
+ * @irq_done_task:	record irq done task
+ * @irq_done:		record irq done atomic parm
+ * @irq_queue:		record irq handler queue
  */
 struct mtk_jpegenc_comp_dev {
 	struct device *dev;
@@ -160,6 +196,19 @@ struct mtk_jpegenc_comp_dev {
 	enum mtk_jpeg_hw_state hw_state;
 	/* spinlock protecting the hw device resource */
 	spinlock_t hw_lock;
+	struct regmap *smmu_regmap;
+
+	struct icc_path *path_y_rdma;
+	struct icc_path *path_c_rdma;
+	struct icc_path *path_qtbl;
+	struct icc_path *path_bsdma;
+	struct regulator *jpeg_reg;
+	struct clk *jpeg_mmdvfs_clk;
+	int freq_cnt;
+	unsigned long freqs[MTK_JPEG_MAX_FREQ];
+	struct task_struct *irq_done_task;
+	atomic_t irq_done;
+	wait_queue_head_t irq_queue;
 };
 
 /**
@@ -174,6 +223,17 @@ struct mtk_jpegenc_comp_dev {
  * @hw_param:			jpeg decode hw parameters
  * @hw_state:			record hw state
  * @hw_lock:			spinlock protecting hw
+ * @smmu_regmap:		SMMU registers mapping
+ * @jpeg_path_wdma:		record input buffer's addr
+ * @jpeg_path_bsdma:		record bs buffer's addr
+ * @jpeg_path_huff_offset:	huffman table's addr
+ * @jpeg_reg: 			jpeg decoder vcore node
+ * @jpeg_mmdvfs_clk:		jpeg decode mmdvfs clock
+ * @freq_cnt:	    		jpeg decode mmdvfs frequency num
+ * @freqs:       	        jpeg decode mmdvfs frequency array
+ * @irq_done_task:		record irq done task
+ * @irq_done:			record irq done atomic parm
+ * @irq_queue:			record irq handler queue
  */
 struct mtk_jpegdec_comp_dev {
 	struct device *dev;
@@ -187,6 +247,18 @@ struct mtk_jpegdec_comp_dev {
 	enum mtk_jpeg_hw_state hw_state;
 	/* spinlock protecting the hw device resource */
 	spinlock_t hw_lock;
+	struct regmap *smmu_regmap;
+
+	struct icc_path *jpeg_path_wdma;
+	struct icc_path *jpeg_path_bsdma;
+	struct icc_path *jpeg_path_huff_offset;
+	struct regulator *jpeg_reg;
+	struct clk *jpeg_mmdvfs_clk;
+	int freq_cnt;
+	unsigned long freqs[MTK_JPEG_MAX_FREQ];
+	struct task_struct *irq_done_task;
+	atomic_t irq_done;
+	wait_queue_head_t irq_queue;
 };
 
 /**
@@ -301,6 +373,7 @@ struct mtk_jpeg_ctx {
 	/* spinlock protecting the encode done buffer */
 	spinlock_t done_queue_lock;
 	u32 last_done_frame_num;
+	atomic_t buf_list_cnt;
 };
 
 #endif /* _MTK_JPEG_CORE_H */

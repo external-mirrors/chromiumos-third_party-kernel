@@ -523,8 +523,6 @@ static const struct vb2_ops tw68_video_qops = {
 	.buf_finish	= tw68_buf_finish,
 	.start_streaming = tw68_start_streaming,
 	.stop_streaming = tw68_stop_streaming,
-	.wait_prepare	= vb2_ops_wait_prepare,
-	.wait_finish	= vb2_ops_wait_finish,
 };
 
 /* ------------------------------------------------------------------ */
@@ -951,7 +949,7 @@ int tw68_video_init2(struct tw68_dev *dev, int video_nr)
 	dev->vidq.gfp_flags = __GFP_DMA32 | __GFP_KSWAPD_RECLAIM;
 	dev->vidq.buf_struct_size = sizeof(struct tw68_buf);
 	dev->vidq.lock = &dev->lock;
-	dev->vidq.min_buffers_needed = 2;
+	dev->vidq.min_queued_buffers = 2;
 	dev->vidq.dev = &dev->pci->dev;
 	ret = vb2_queue_init(&dev->vidq);
 	if (ret)

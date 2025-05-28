@@ -1,0 +1,477 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2024 Google LLC
+ */
+
+/dts-v1/;
+#include "mt8196-rauru.dtsi"
+#include <dt-bindings/thermal/thermal.h>
+
+/ {
+	pp3300_edp_x: regulator-pp3300-edp-x {
+		compatible = "regulator-fixed";
+		regulator-name = "pp3300_edp_x";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		gpio = <&pio 172 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp3300_edp_pin>;
+		vin-supply = <&pp3300_z1>;
+	};
+
+	pp1000_dpbrdg: regulator-pp1000-dpbrdg {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1000_dpbrdg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp1000_dpbrdg_pin>;
+		enable-active-high;
+		regulator-boot-on;
+		gpio = <&pio 82 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&pp3300_z1>;
+	};
+
+	pp1800_dpbrdg: regulator-pp1800-dpbrdg-dx {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_dpbrdg_dx";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp1800_dpbrdg_pin>;
+		enable-active-high;
+		regulator-boot-on;
+		gpio = <&pio 84 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&mt6363_vio18>;
+	};
+
+	pp3300_dpbrdg: regulator-pp3300-dp-dx {
+		compatible = "regulator-fixed";
+		regulator-name = "pp3300_dpbrdg";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp3300_dpbrdg_pin>;
+		enable-active-high;
+		regulator-boot-on;
+		gpio = <&pio 83 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&pp3300_z1>;
+	};
+};
+
+&cros_ec {
+	keyboard-backlight {
+		compatible = "google,cros-kbd-led-backlight";
+	};
+};
+
+&cros_ec_fp {
+	spi-cs-setup-delay-ns = <40>;
+};
+
+&i2c3 {
+	/delete-node/ audio-codec@1a;
+
+	rt5682s: audio-codec@1a {
+		compatible = "realtek,rt5682s";
+		reg = <0x1a>;
+		interrupt-parent = <&pio>;
+		interrupts = <10 IRQ_TYPE_EDGE_BOTH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&nau8825_pins>;
+		realtek,jd-src = <1>;
+		#sound-dai-cells = <0>;
+	};
+
+	quad_tas2563: speaker-codec@4d {
+		compatible = "ti,tas2563";
+		reg = <0x4d>, /* Woffer Left */
+		      <0x4f>, /* Tweeter Left */
+		      <0x4c>, /* Woffer Right */
+		      <0x4e>; /* Tweeter Right */
+
+		#sound-dai-cells = <0>;
+		reset-gpios = <&pio 174 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 9 IRQ_TYPE_LEVEL_LOW>;
+	};
+};
+
+&i2c4 {
+	anx_bridge: anx7625@58 {
+		compatible = "analogix,anx7625";
+		reg = <0x58>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&anx7625_pins>;
+		enable-gpios = <&pio 81 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 86 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 14 IRQ_TYPE_LEVEL_LOW>;
+		vdd10-supply = <&pp1000_dpbrdg>;
+		vdd18-supply = <&pp1800_dpbrdg>;
+		vdd33-supply = <&pp3300_dpbrdg>;
+		analogix,audio-enable;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		#sound-dai-cells = <0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				anx7625_dp_in: endpoint {
+					remote-endpoint = <&dsi_out>;
+				};
+			};
+		};
+
+		switches {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			switch@0 {
+				compatible = "typec-switch";
+				reg = <0>;
+				mode-switch;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					port@0 {
+						reg = <0>;
+						anx_typec0: endpoint {
+							remote-endpoint = <&typec_port0>;
+						};
+					};
+				};
+			};
+		};
+	};
+};
+
+&dsi0 {
+	status = "okay";
+
+	port {
+		dsi_out: endpoint {
+			remote-endpoint = <&anx7625_dp_in>;
+		};
+	};
+};
+
+&usb_c0 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+
+			typec_port0: endpoint {
+				remote-endpoint = <&anx_typec0>;
+			};
+		};
+	};
+};
+
+&i2c2 {
+	/delete-node/ touchscreen@41;
+
+	/* goodix touchscreen */
+	touchscreen@14 {
+		compatible = "goodix,gt7986u", "goodix,gt7375p";
+		reg = <0x14>;
+		interrupts-extended = <&pio 7 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 31 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&mt6373_vtp>;
+	};
+};
+
+&i2c0 {
+	/* focal trackpad */
+	trackpad@38 {
+		compatible = "hid-over-i2c";
+		reg = <0x38>;
+		interrupts-extended = <&pio 8 IRQ_TYPE_LEVEL_LOW>;
+		hid-descr-addr = <0x0020>;
+		vdd-supply = <&mt6373_vcn33_2>;
+		wakeup-source;
+	};
+};
+
+&mt6373_vfp {
+	compatible = "regulator-fixed";
+	regulator-name = "pp1800_vfp";
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+
+	/* TODO: b/394494941 fix after elan driver ready*/
+	regulator-always-on;
+};
+
+&backlight {
+	status = "disabled";
+};
+
+&panel {
+	compatible = "samsung,atna33xc20";
+	enable-gpios = <&pio 216 GPIO_ACTIVE_HIGH>;
+	power-supply = <&pp3300_edp_x>;
+	/delete-property/ backlight;
+};
+
+&edp_tx {
+	swing-level = <3>;
+};
+
+&mt6373_vcn33_3 {
+	status = "disabled";
+};
+
+&afe {
+	/* Only for ETDM in/out 4 */
+	etdm-out-ch = <2>;
+	etdm-in-ch = <2>;
+	etdm-out-sync = <0>; /* 0: disable; 1: enable */
+	etdm-in-sync = <0>; /* 0: disable; 1: enable */
+	etdm-ip-mode = <0>; /* 0: One IP multi-channel 1: Multi-IP 2-channel */
+	status = "okay";
+};
+
+&sound {
+	compatible = "mediatek,mt8196-rt5682s-sound";
+	model = "mt8196_tas2563_5682";
+	mediatek,adsp = <&adsp>;
+	status = "okay";
+
+	dai-link-0 {
+		link-name = "I2SOUT6_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682s>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN6_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5682s>;
+		};
+	};
+
+	dai-link-2 {
+		link-name = "I2SOUT4_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&quad_tas2563>;
+		};
+	};
+
+	dai-link-3 {
+		link-name = "TDM_DPTX_BE";
+
+		codec {
+			sound-dai = <&dp_tx>;
+		};
+	};
+
+	dai-link-4 {
+		link-name = "I2SOUT3_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&anx_bridge>;
+		};
+	};
+
+	dai-link-5 {
+		link-name = "AP_DMIC_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
+		};
+	};
+};
+
+&therm_intf {
+	mediatek,init-ttj-cpu = <105000>;
+	mediatek,init-ttj-gpu = <105000>;
+	mediatek,init-ttj-npu = <105000>;
+};
+
+&thermal_zones {
+	bulk-board-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <1000>;
+		thermal-sensors = <&cros_ec 0>;
+		sustainable-power = <3350>; /* estimated sustainable power when saturated */
+
+		trips {
+			bulk_threshold: trip-point@0 {
+				temperature = <40000>; /* switch on temperature */
+				hysteresis = <2000>;
+				type = "passive";
+			};
+			bulk_target: trip-point@1 {
+				temperature = <50000>; /* desired temperature */
+				hysteresis = <2000>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+					<&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+					<&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+					<&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				contribution = <2048>;
+			};
+			map1 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+					<&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+					<&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				contribution = <1024>;
+			};
+			map2 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				contribution = <768>;
+			};
+			map3 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				contribution = <1024>;
+			};
+			map4 {
+				trip = <&bulk_target>;
+				cooling-device =
+					<&apu_top_rpmsg THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				contribution = <384>;
+			};
+		};
+	};
+
+	cpu-board-thermal {
+		polling-delay = <0>;
+		polling-delay-passive = <0>;
+		thermal-sensors = <&cros_ec 1>;
+
+		trips {
+			cpu_board_trip0: trip-point@0 {
+				temperature = <80000>;
+				hysteresis = <2000>;
+				type = "hot";
+			};
+		};
+	};
+
+	charger-thermal {
+		polling-delay = <0>;
+		polling-delay-passive = <0>;
+		thermal-sensors = <&cros_ec 2>;
+
+		trips {
+			charger_trip0: trip-point@0 {
+				temperature = <80000>;
+				hysteresis = <2000>;
+				type = "hot";
+			};
+		};
+	};
+};
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)		/* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)		/* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)		/* T13 */
+		MATRIX_KEY(0x00, 0x0b, 0)		/* T14 */
+	>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_KBDILLUMTOGGLE)	/* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_MICMUTE)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_MUTE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_VOLUMEDOWN)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEUP)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_ACCESSIBILITY)	/* T13 */
+		MATRIX_KEY(0x00, 0x0b, KEY_DICTATE)		/* T14 */
+	>;
+};
+
+&pio {
+	anx7625_pins: anx7625-pins {
+		pins-bus {
+			pinmux = <PINMUX_GPIO81__FUNC_GPIO81>,
+				 <PINMUX_GPIO86__FUNC_GPIO86>;
+			output-low;
+		};
+
+		pins-in {
+			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
+
+	pp3300_edp_pin: pp3300-edp-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO172__FUNC_GPIO172>;
+			output-high;
+		};
+	};
+
+	pp1000_dpbrdg_pin: pp1000-dpbrdg-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO82__FUNC_GPIO82>;
+			output-low;
+		};
+	};
+
+	pp1800_dpbrdg_pin: pp1800-dpbrdg-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO84__FUNC_GPIO84>;
+			output-low;
+		};
+	};
+
+	pp3300_dpbrdg_pin: en-pp3300-dpbrdg-pins {
+		pins-en {
+			pinmux = <PINMUX_GPIO83__FUNC_GPIO83>;
+			output-low;
+		};
+	};
+};
+
+&ufshci {
+	/delete-property/ mediatek,ufs-rtff-mtcmos;
+};

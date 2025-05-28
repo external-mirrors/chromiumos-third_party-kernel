@@ -294,6 +294,9 @@ extern struct device_node *of_get_parent(const struct device_node *node);
 extern struct device_node *of_get_next_parent(struct device_node *node);
 extern struct device_node *of_get_next_child(const struct device_node *node,
 					     struct device_node *prev);
+extern struct device_node *of_get_next_child_with_prefix(const struct device_node *node,
+							 struct device_node *prev,
+							 const char *prefix);
 extern struct device_node *of_get_next_available_child(
 	const struct device_node *node, struct device_node *prev);
 
@@ -423,11 +426,9 @@ extern int of_detach_node(struct device_node *);
 #define of_match_ptr(_ptr)	(_ptr)
 
 /*
- * struct property *prop;
- * const __be32 *p;
  * u32 u;
  *
- * of_property_for_each_u32(np, "propname", prop, p, u)
+ * of_property_for_each_u32(np, "propname", u)
  *         printk("U32 value: %x\n", u);
  */
 const __be32 *of_prop_next_u32(struct property *prop, const __be32 *cur,
@@ -1399,11 +1400,12 @@ static inline int of_property_read_s32(const struct device_node *np,
 	     err == 0;							\
 	     err = of_phandle_iterator_next(it))
 
-#define of_property_for_each_u32(np, propname, prop, p, u)	\
-	for (prop = of_find_property(np, propname, NULL),	\
-		p = of_prop_next_u32(prop, NULL, &u);		\
-		p;						\
-		p = of_prop_next_u32(prop, p, &u))
+#define of_property_for_each_u32(np, propname, u)			\
+	for (struct {struct property *prop; const __be32 *item; } _it =	\
+		{of_find_property(np, propname, NULL),			\
+		 of_prop_next_u32(_it.prop, NULL, &u)};			\
+	     _it.item;							\
+	     _it.item = of_prop_next_u32(_it.prop, _it.item, &u))
 
 #define of_property_for_each_string(np, propname, prop, s)	\
 	for (prop = of_find_property(np, propname, NULL),	\
@@ -1436,6 +1438,12 @@ static inline int of_property_read_s32(const struct device_node *np,
 	     of_get_next_child(parent, NULL);				\
 	     child != NULL;						\
 	     child = of_get_next_child(parent, child))
+
+#define for_each_child_of_node_with_prefix(parent, child, prefix)	\
+	for (struct device_node *child __free(device_node) =		\
+	     of_get_next_child_with_prefix(parent, NULL, prefix);	\
+	     child != NULL;						\
+	     child = of_get_next_child_with_prefix(parent, child, prefix))
 
 #define for_each_available_child_of_node(parent, child) \
 	for (child = of_get_next_available_child(parent, NULL); child != NULL; \
@@ -1616,6 +1624,13 @@ static inline int of_changeset_add_prop_u32(struct of_changeset *ocs,
 {
 	return of_changeset_add_prop_u32_array(ocs, np, prop_name, &val, 1);
 }
+
+int of_changeset_update_prop_string(struct of_changeset *ocs,
+				    struct device_node *np,
+				    const char *prop_name, const char *str);
+
+int of_changeset_add_prop_bool(struct of_changeset *ocs, struct device_node *np,
+			       const char *prop_name);
 
 #else /* CONFIG_OF_DYNAMIC */
 static inline int of_reconfig_notifier_register(struct notifier_block *nb)

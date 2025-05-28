@@ -595,8 +595,8 @@ static void imx219_update_pad_format(struct imx219 *imx219,
 	fmt->xfer_func = V4L2_XFER_FUNC_NONE;
 }
 
-static int imx219_init_cfg(struct v4l2_subdev *sd,
-			   struct v4l2_subdev_state *state)
+static int imx219_init_state(struct v4l2_subdev *sd,
+			     struct v4l2_subdev_state *state)
 {
 	struct imx219 *imx219 = to_imx219(sd);
 	struct v4l2_mbus_framefmt *format;
@@ -1038,7 +1038,6 @@ static const struct v4l2_subdev_video_ops imx219_video_ops = {
 };
 
 static const struct v4l2_subdev_pad_ops imx219_pad_ops = {
-	.init_cfg = imx219_init_cfg,
 	.enum_mbus_code = imx219_enum_mbus_code,
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = imx219_set_pad_format,
@@ -1052,6 +1051,9 @@ static const struct v4l2_subdev_ops imx219_subdev_ops = {
 	.pad = &imx219_pad_ops,
 };
 
+static const struct v4l2_subdev_internal_ops imx219_internal_ops = {
+	.init_state = imx219_init_state,
+};
 
 static unsigned long imx219_get_pixel_rate(struct imx219 *imx219)
 {
@@ -1239,6 +1241,7 @@ static int imx219_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	v4l2_i2c_subdev_init(&imx219->sd, client, &imx219_subdev_ops);
+	imx219->sd.internal_ops = &imx219_internal_ops;
 
 	/* Check the hardware configuration in device tree */
 	if (imx219_check_hwcfg(dev, imx219))
