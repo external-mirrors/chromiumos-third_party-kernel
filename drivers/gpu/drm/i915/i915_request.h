@@ -138,6 +138,9 @@ enum {
 	I915_FENCE_FLAG_BOOST,
 };
 
+#define I915_LOCK_FLAGS_REQ_RECURSION	BIT(0)
+#define I915_LOCK_FLAGS_IN_FENCE_SIGNAL	BIT(1)
+
 /**
  * Request queue structure.
  *
@@ -160,7 +163,9 @@ enum {
  */
 struct i915_request {
 	struct dma_fence fence;
-	spinlock_t lock;
+	spinlock_t __lock;
+	struct task_struct *lock_owner;
+	u32 lock_flags;
 
 	/**
 	 * Context and ring buffer related to this request
@@ -294,6 +299,107 @@ struct i915_request {
 		unsigned long delay;
 	} mock;)
 };
+
+#define i915_lockdep_assert_held(r)	lockdep_assert_held(&(r)->__lock)
+
+static inline void __i915_lock_acquire(struct i915_request *rq)
+{
+	i915_lockdep_assert_held(rq);
+	WARN_ON_ONCE(rq->lock_owner != NULL);
+	rq->lock_owner = current;
+}
+
+static inline void __i915_lock_release(struct i915_request *rq)
+{
+	i915_lockdep_assert_held(rq);
+	rq->lock_owner = NULL;
+}
+
+static inline void i915_request_nested_lock(struct i915_request *rq)
+{
+	WARN_ON_ONCE(rq->lock_flags & I915_LOCK_FLAGS_REQ_RECURSION);
+
+	/*
+	 * This looks racy, but in fact it's totally fine.  Under no
+	 * circumstances current can concurrently become an owner of
+	 * this lock, nor can current unlock this req on some other
+	 * CPU.  And we only need to know if current is already owns
+	 * this lock (which would require __i915_lock_acquire()) or
+	 * not.
+	 */
+	if (rq->lock_owner == current) {
+		rq->lock_flags |= I915_LOCK_FLAGS_REQ_RECURSION;
+		return;
+	}
+
+	spin_lock_nested(&rq->__lock, SINGLE_DEPTH_NESTING);
+}
+
+static inline void i915_request_nested_unlock(struct i915_request *rq)
+{
+	if (rq->lock_flags & I915_LOCK_FLAGS_REQ_RECURSION) {
+		rq->lock_flags &= ~I915_LOCK_FLAGS_REQ_RECURSION;
+		return;
+	}
+
+	spin_unlock(&rq->__lock);
+}
+
+static inline void i915_request_lock(struct i915_request *rq)
+{
+	spin_lock(&rq->__lock);
+	__i915_lock_acquire(rq);
+}
+
+static inline void i915_request_unlock(struct i915_request *rq)
+{
+	__i915_lock_release(rq);
+	spin_unlock(&rq->__lock);
+}
+
+#define i915_request_lock_irqsave(rq, f)				\
+	do {								\
+		spin_lock_irqsave(&(rq)->__lock, (f));			\
+		__i915_lock_acquire((rq));				\
+	} while (0)
+
+#define i915_request_trylock_irqsave(rq, f)				\
+({									\
+	int __locked;							\
+	__locked = spin_trylock_irqsave(&(rq)->__lock, (f));		\
+	if (__locked)							\
+		__i915_lock_acquire((rq));				\
+	__locked;							\
+})
+
+static inline void i915_request_unlock_irqrestore(struct i915_request *rq,
+						  unsigned long flags)
+{
+	__i915_lock_release(rq);
+	spin_unlock_irqrestore(&rq->__lock, flags);
+}
+
+static inline void i915_request_lock_irq(struct i915_request *rq)
+{
+	spin_lock_irq(&rq->__lock);
+	__i915_lock_acquire(rq);
+}
+
+static inline void i915_request_unlock_irq(struct i915_request *rq)
+{
+	__i915_lock_release(rq);
+	spin_unlock_irq(&rq->__lock);
+}
+
+unsigned long i915_request_fence_signal_begin(struct i915_request *rq);
+void i915_request_fence_signal(struct i915_request *rq);
+bool i915_request_fence_is_signaled(struct i915_request *rq);
+void i915_request_fence_signal_end(struct i915_request *rq,
+				   unsigned long flags);
+
+unsigned long i915_request_virtengine_lock(struct i915_request *rq);
+void i915_request_virtengine_unlock(struct i915_request *rq,
+				    unsigned long flags);
 
 #define I915_FENCE_GFP (GFP_KERNEL | __GFP_RETRY_MAYFAIL | __GFP_NOWARN)
 

@@ -101,6 +101,14 @@ static inline unsigned long __owner_flags(unsigned long owner)
 	return owner & MUTEX_FLAGS;
 }
 
+/* Do not use the return value as a pointer directly. */
+unsigned long mutex_get_owner(struct mutex *lock)
+{
+	unsigned long owner = atomic_long_read(&lock->owner);
+
+	return (unsigned long)__owner_task(owner);
+}
+
 /*
  * Trylock variant that retuns the owning task on failure.
  */
@@ -208,6 +216,9 @@ static void
 __mutex_add_waiter(struct mutex *lock, struct mutex_waiter *waiter,
 		   struct list_head *list)
 {
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+	WRITE_ONCE(current->blocker_mutex, lock);
+#endif
 	debug_mutex_add_waiter(lock, waiter, current);
 
 	list_add_tail(&waiter->list, list);
@@ -223,6 +234,9 @@ __mutex_remove_waiter(struct mutex *lock, struct mutex_waiter *waiter)
 		__mutex_clear_flag(lock, MUTEX_FLAGS);
 
 	debug_mutex_remove_waiter(lock, waiter, current);
+#ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
+	WRITE_ONCE(current->blocker_mutex, NULL);
+#endif
 }
 
 /*

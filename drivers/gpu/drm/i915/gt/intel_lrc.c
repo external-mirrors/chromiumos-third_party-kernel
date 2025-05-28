@@ -1161,10 +1161,9 @@ __unwind_incomplete_requests(struct intel_engine_cs *engine)
 			 */
 			if (test_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
 				     &rq->fence.flags)) {
-				spin_lock_nested(&rq->lock,
-						 SINGLE_DEPTH_NESTING);
+				i915_request_nested_lock(rq);
 				i915_request_cancel_breadcrumb(rq);
-				spin_unlock(&rq->lock);
+				i915_request_nested_unlock(rq);
 			}
 			rq->engine = owner;
 			owner->submit_request(rq);
@@ -1668,7 +1667,7 @@ assert_pending_valid(const struct intel_engine_execlists *execlists,
 		}
 
 		/* Hold tightly onto the lock to prevent concurrent retires! */
-		if (!spin_trylock_irqsave(&rq->lock, flags))
+		if (!i915_request_trylock_irqsave(rq, flags))
 			continue;
 
 		if (i915_request_completed(rq))
@@ -1703,7 +1702,7 @@ assert_pending_valid(const struct intel_engine_execlists *execlists,
 		}
 
 unlock:
-		spin_unlock_irqrestore(&rq->lock, flags);
+		i915_request_unlock_irqrestore(rq, flags);
 		if (!ok)
 			return false;
 	}
@@ -5571,19 +5570,16 @@ submit_engine:
 	local_irq_enable();
 }
 
-static void virtual_submit_request(struct i915_request *rq)
+static void virtual_submit_request_locked(struct i915_request *rq)
 {
 	struct virtual_engine *ve = to_virtual_engine(rq->engine);
 	struct i915_request *old;
-	unsigned long flags;
 
 	ENGINE_TRACE(&ve->base, "rq=%llx:%lld\n",
 		     rq->fence.context,
 		     rq->fence.seqno);
 
-	GEM_BUG_ON(ve->base.submit_request != virtual_submit_request);
-
-	spin_lock_irqsave(&ve->base.active.lock, flags);
+	lockdep_assert_held(&ve->base.active.lock);
 
 	old = ve->request;
 	if (old) { /* background completion event from preempt-to-busy */
@@ -5606,6 +5602,33 @@ static void virtual_submit_request(struct i915_request *rq)
 
 		tasklet_schedule(&ve->base.execlists.tasklet);
 	}
+}
+
+static void virtual_submit_request(struct i915_request *rq)
+{
+	struct virtual_engine *ve = to_virtual_engine(rq->engine);
+	unsigned long flags;
+
+	GEM_BUG_ON(ve->base.submit_request != virtual_submit_request);
+
+	spin_lock_irqsave(&ve->base.active.lock, flags);
+	virtual_submit_request_locked(rq);
+	spin_unlock_irqrestore(&ve->base.active.lock, flags);
+}
+
+unsigned long i915_request_virtengine_lock(struct i915_request *rq)
+{
+	struct virtual_engine *ve = to_virtual_engine(rq->engine);
+	unsigned long flags;
+
+	spin_lock_irqsave(&ve->base.active.lock, flags);
+	return flags;
+}
+
+void i915_request_virtengine_unlock(struct i915_request *rq,
+				    unsigned long flags)
+{
+	struct virtual_engine *ve = to_virtual_engine(rq->engine);
 
 	spin_unlock_irqrestore(&ve->base.active.lock, flags);
 }
@@ -5701,6 +5724,7 @@ intel_execlists_create_virtual(struct intel_engine_cs **siblings,
 
 	ve->base.schedule = i915_schedule;
 	ve->base.submit_request = virtual_submit_request;
+	ve->base.submit_request_locked = virtual_submit_request_locked;
 	ve->base.bond_execute = virtual_bond_execute;
 
 	INIT_LIST_HEAD(virtual_queue(ve));

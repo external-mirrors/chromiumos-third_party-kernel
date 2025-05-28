@@ -934,13 +934,13 @@ void i915_request_add_active_barriers(struct i915_request *rq)
 	 * that the parent i915_active will be released when this request
 	 * is retired.
 	 */
-	spin_lock_irqsave(&rq->lock, flags);
+	i915_request_lock_irqsave(rq, flags);
 	llist_for_each_safe(node, next, node) {
 		/* serialise with reuse_idle_barrier */
 		smp_store_mb(*ll_to_fence_slot(node), &rq->fence);
 		list_add_tail((struct list_head *)node, &rq->fence.cb_list);
 	}
-	spin_unlock_irqrestore(&rq->lock, flags);
+	i915_request_unlock_irqrestore(rq, flags);
 }
 
 /*

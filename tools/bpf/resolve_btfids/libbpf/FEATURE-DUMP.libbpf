@@ -1,0 +1,3 @@
+feature-libelf=1
+feature-zlib=1
+feature-bpf=1

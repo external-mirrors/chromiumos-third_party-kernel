@@ -900,7 +900,7 @@ void intel_rps_boost(struct i915_request *rq)
 		return;
 
 	/* Serializes with i915_request_retire() */
-	spin_lock_irqsave(&rq->lock, flags);
+	i915_request_lock_irqsave(rq, flags);
 	if (!i915_request_has_waitboost(rq) &&
 	    !dma_fence_is_signaled_locked(&rq->fence)) {
 		set_bit(I915_FENCE_FLAG_BOOST, &rq->fence.flags);
@@ -914,7 +914,7 @@ void intel_rps_boost(struct i915_request *rq)
 
 		atomic_inc(&rps->boosts);
 	}
-	spin_unlock_irqrestore(&rq->lock, flags);
+	i915_request_unlock_irqrestore(rq, flags);
 }
 
 int intel_rps_set(struct intel_rps *rps, u8 val)
