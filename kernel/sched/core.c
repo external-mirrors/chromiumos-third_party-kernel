@@ -1252,9 +1252,9 @@ static void nohz_csd_func(void *info)
 	WARN_ON(!(flags & NOHZ_KICK_MASK));
 
 	rq->idle_balance = idle_cpu(cpu);
-	if (rq->idle_balance && !need_resched()) {
+	if (rq->idle_balance) {
 		rq->nohz_idle_balance = flags;
-		raise_softirq_irqoff(SCHED_SOFTIRQ);
+		__raise_softirq_irqoff(SCHED_SOFTIRQ);
 	}
 }
 
@@ -1310,7 +1310,7 @@ bool sched_can_stop_tick(struct rq *rq)
 	if (scx_enabled() && !scx_can_stop_tick(rq))
 		return false;
 
-	if (rq->cfs.nr_running > 1)
+	if (rq->cfs.h_nr_running > 1)
 		return false;
 
 	/*
@@ -2034,10 +2034,10 @@ void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	uclamp_rq_inc(rq, p);
 
-	if (!(flags & ENQUEUE_RESTORE)) {
+	psi_enqueue(p, flags);
+
+	if (!(flags & ENQUEUE_RESTORE))
 		sched_info_enqueue(rq, p);
-		psi_enqueue(p, flags & ENQUEUE_MIGRATED);
-	}
 
 	if (sched_core_enabled(rq))
 		sched_core_enqueue(rq, p);
@@ -2054,10 +2054,10 @@ inline bool dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	if (!(flags & DEQUEUE_NOCLOCK))
 		update_rq_clock(rq);
 
-	if (!(flags & DEQUEUE_SAVE)) {
+	if (!(flags & DEQUEUE_SAVE))
 		sched_info_dequeue(rq, p);
-		psi_dequeue(p, !(flags & DEQUEUE_SLEEP));
-	}
+
+	psi_dequeue(p, flags);
 
 	/*
 	 * Must be before ->dequeue_task() because ->dequeue_task() can 'fail'
@@ -4434,7 +4434,8 @@ int wake_up_state(struct task_struct *p, unsigned int state)
  * Perform scheduler related setup for a newly forked process p.
  * p is forked by current.
  *
- * __sched_fork() is basic setup used by init_idle() too:
+ * __sched_fork() is basic setup which is also used by sched_init() to
+ * initialize the boot CPU's idle task.
  */
 static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
@@ -4705,6 +4706,10 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 		set_load_weight(p, false);
 		p->se.custom_slice = 0;
 		p->se.slice = sysctl_sched_base_slice;
+
+#ifdef CONFIG_PROC_LATSENSE
+		p->proc_latency_sensitive = 0;
+#endif
 
 		/*
 		 * We don't need the reset flag anymore after the fork. It has
@@ -6517,6 +6522,45 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 #define SM_RTLOCK_WAIT		2
 
 /*
+ * Helper function for __schedule()
+ *
+ * If a task does not have signals pending, deactivate it
+ * Otherwise marks the task's __state as RUNNING
+ */
+static bool try_to_block_task(struct rq *rq, struct task_struct *p,
+			      unsigned long task_state)
+{
+	int flags = DEQUEUE_NOCLOCK;
+
+	if (signal_pending_state(task_state, p)) {
+		WRITE_ONCE(p->__state, TASK_RUNNING);
+		return false;
+	}
+
+	p->sched_contributes_to_load =
+		(task_state & TASK_UNINTERRUPTIBLE) &&
+		!(task_state & TASK_NOLOAD) &&
+		!(task_state & TASK_FROZEN);
+
+	if (unlikely(is_special_task_state(task_state)))
+		flags |= DEQUEUE_SPECIAL;
+
+	/*
+	 * __schedule()			ttwu()
+	 *   prev_state = prev->state;    if (p->on_rq && ...)
+	 *   if (prev_state)		    goto out;
+	 *     p->on_rq = 0;		  smp_acquire__after_ctrl_dep();
+	 *				  p->state = TASK_WAKING
+	 *
+	 * Where __schedule() and ttwu() have matching control dependencies.
+	 *
+	 * After this, schedule() must not care about p->state any more.
+	 */
+	block_task(rq, p, flags);
+	return true;
+}
+
+/*
  * __schedule() is the main scheduler function.
  *
  * The main means of driving the scheduler and thus entering this function are:
@@ -6563,7 +6607,6 @@ static void __sched notrace __schedule(int sched_mode)
 	 * as a preemption by schedule_debug() and RCU.
 	 */
 	bool preempt = sched_mode > SM_NONE;
-	bool block = false;
 	unsigned long *switch_count;
 	unsigned long prev_state;
 	struct rq_flags rf;
@@ -6624,33 +6667,7 @@ static void __sched notrace __schedule(int sched_mode)
 			goto picked;
 		}
 	} else if (!preempt && prev_state) {
-		if (signal_pending_state(prev_state, prev)) {
-			WRITE_ONCE(prev->__state, TASK_RUNNING);
-		} else {
-			int flags = DEQUEUE_NOCLOCK;
-
-			prev->sched_contributes_to_load =
-				(prev_state & TASK_UNINTERRUPTIBLE) &&
-				!(prev_state & TASK_NOLOAD) &&
-				!(prev_state & TASK_FROZEN);
-
-			if (unlikely(is_special_task_state(prev_state)))
-				flags |= DEQUEUE_SPECIAL;
-
-			/*
-			 * __schedule()			ttwu()
-			 *   prev_state = prev->state;    if (p->on_rq && ...)
-			 *   if (prev_state)		    goto out;
-			 *     p->on_rq = 0;		  smp_acquire__after_ctrl_dep();
-			 *				  p->state = TASK_WAKING
-			 *
-			 * Where __schedule() and ttwu() have matching control dependencies.
-			 *
-			 * After this, schedule() must not care about p->state any more.
-			 */
-			block_task(rq, prev, flags);
-			block = true;
-		}
+		try_to_block_task(rq, prev, prev_state);
 		switch_count = &prev->nvcsw;
 	}
 
@@ -6695,7 +6712,8 @@ picked:
 
 		migrate_disable_switch(rq, prev);
 		psi_account_irqtime(rq, prev, next);
-		psi_sched_switch(prev, next, block);
+		psi_sched_switch(prev, next, !task_on_rq_queued(prev) ||
+					     prev->se.sched_delayed);
 
 		trace_sched_switch(preempt, prev, next, prev_state);
 
@@ -7712,8 +7730,6 @@ void __init init_idle(struct task_struct *idle, int cpu)
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long flags;
 
-	__sched_fork(0, idle);
-
 	raw_spin_lock_irqsave(&idle->pi_lock, flags);
 	raw_spin_rq_lock(rq);
 
@@ -7728,10 +7744,8 @@ void __init init_idle(struct task_struct *idle, int cpu)
 
 #ifdef CONFIG_SMP
 	/*
-	 * It's possible that init_idle() gets called multiple times on a task,
-	 * in that case do_set_cpus_allowed() will not do the right thing.
-	 *
-	 * And since this is boot we can forgo the serialization.
+	 * No validation and serialization required at boot time and for
+	 * setting up the idle tasks of not yet online CPUs.
 	 */
 	set_cpus_allowed_common(idle, &ac);
 #endif
@@ -8575,6 +8589,7 @@ void __init sched_init(void)
 	 * but because we are the idle thread, we just pick up running again
 	 * when this runqueue becomes "idle".
 	 */
+	__sched_fork(0, current);
 	init_idle(current, smp_processor_id());
 
 	calc_load_update = jiffies + LOAD_FREQ;
@@ -9281,6 +9296,27 @@ static int cpu_uclamp_max_show(struct seq_file *sf, void *v)
 	cpu_uclamp_print(sf, UCLAMP_MAX);
 	return 0;
 }
+
+static int cpu_uclamp_ls_write_u64(struct cgroup_subsys_state *css,
+				   struct cftype *cftype, u64 ls)
+{
+	struct task_group *tg;
+
+	if (ls > 1)
+		return -EINVAL;
+	tg = css_tg(css);
+	tg->latency_sensitive = (unsigned int) ls;
+
+	return 0;
+}
+
+static u64 cpu_uclamp_ls_read_u64(struct cgroup_subsys_state *css,
+				  struct cftype *cft)
+{
+	struct task_group *tg = css_tg(css);
+
+	return (u64) tg->latency_sensitive;
+}
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
 
 #ifdef CONFIG_GROUP_SCHED_WEIGHT
@@ -9767,6 +9803,12 @@ static struct cftype cpu_legacy_files[] = {
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
 	},
+	{
+		.name = "uclamp.latency_sensitive",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_uclamp_ls_read_u64,
+		.write_u64 = cpu_uclamp_ls_write_u64,
+	},
 #endif
 	{ }	/* Terminate */
 };
@@ -9983,6 +10025,12 @@ static struct cftype cpu_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = cpu_uclamp_max_show,
 		.write = cpu_uclamp_max_write,
+	},
+	{
+		.name = "uclamp.latency_sensitive",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = cpu_uclamp_ls_read_u64,
+		.write_u64 = cpu_uclamp_ls_write_u64,
 	},
 #endif
 	{ }	/* terminate */

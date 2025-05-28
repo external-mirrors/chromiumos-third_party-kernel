@@ -61,6 +61,19 @@ config MD_BITMAP_FILE
 	  various kernel APIs and can only work with files on a file system not
 	  actually sitting on the MD device.
 
+config MD_LINEAR
+	tristate "Linear (append) mode"
+	depends on BLK_DEV_MD
+	help
+	  If you say Y here, then your multiple devices driver will be able to
+	  use the so-called linear mode, i.e. it will combine the hard disk
+	  partitions by simply appending one to the other.
+
+	  To compile this as a module, choose M here: the module
+	  will be called linear.
+
+	  If unsure, say Y.
+
 config MD_RAID0
 	tristate "RAID-0 (striping) mode"
 	depends on BLK_DEV_MD
@@ -279,6 +292,27 @@ config DM_VERITY_CHROMEOS
 	  when non-transient error occurs (followed by a panic).
 
 	  If unsure, say N.
+
+config DM_DEFAULT_KEY
+	tristate "Default-key target support"
+	depends on BLK_DEV_DM
+	depends on BLK_INLINE_ENCRYPTION
+	# dm-default-key doesn't require -o inlinecrypt, but it does currently
+	# rely on the inline encryption hooks being built into the kernel.
+	depends on FS_ENCRYPTION_INLINE_CRYPT
+	help
+	  This device-mapper target allows you to create a device that
+	  assigns a default encryption key to bios that aren't for the
+	  contents of an encrypted file.
+
+	  This ensures that all blocks on-disk will be encrypted with
+	  some key, without the performance hit of file contents being
+	  encrypted twice when fscrypt (File-Based Encryption) is used.
+
+	  It is only appropriate to use dm-default-key when key
+	  configuration is tightly controlled, like it is in Android,
+	  such that all fscrypt keys are at least as hard to compromise
+	  as the default key.
 
 config DM_SNAPSHOT
        tristate "Snapshot target"

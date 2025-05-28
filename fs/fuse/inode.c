@@ -969,6 +969,7 @@ void fuse_conn_put(struct fuse_conn *fc)
 		struct fuse_iqueue *fiq = &fc->iq;
 		struct fuse_sync_bucket *bucket;
 
+		terminate_fuse_watchdog(fc);
 		if (IS_ENABLED(CONFIG_FUSE_DAX))
 			fuse_dax_conn_free(fc);
 		if (fiq->ops->release)
@@ -1372,6 +1373,8 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 	if (!ok) {
 		fc->conn_init = 0;
 		fc->conn_error = 1;
+	} else {
+		init_fuse_watchdog(fc);
 	}
 
 	fuse_set_initialized(fc);

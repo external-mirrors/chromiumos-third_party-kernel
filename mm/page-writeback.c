@@ -74,6 +74,12 @@ static long ratelimit_pages = 32;
 static int dirty_background_ratio = 10;
 
 /*
+ * dirty_background_ratio_max_bytes limits the maximum amount of background
+ * dirty data (dirty_background_ratio)
+ */
+static unsigned long dirty_background_ratio_max_bytes;
+
+/*
  * dirty_background_bytes starts at 0 (disabled) so that it is a function of
  * dirty_background_ratio * the amount of dirtyable memory
  */
@@ -89,6 +95,12 @@ static int vm_highmem_is_dirtyable;
  * The generator of dirty data starts writeback at this percentage
  */
 static int vm_dirty_ratio = 20;
+
+/*
+ * dirty_ratio_max_bytes limits the maximum amount of dirty data
+ * (vm_dirty_ratio)
+ */
+static unsigned long dirty_ratio_max_bytes;
 
 /*
  * vm_dirty_bytes starts at 0 (disabled) so that it is a function of
@@ -383,14 +395,21 @@ static void domain_dirty_limits(struct dirty_throttle_control *dtc)
 	/* convert ratios to per-PAGE_SIZE for higher precision */
 	unsigned long ratio = (vm_dirty_ratio * PAGE_SIZE) / 100;
 	unsigned long bg_ratio = (dirty_background_ratio * PAGE_SIZE) / 100;
+	unsigned long bg_max_pages, max_pages;
 	unsigned long thresh;
 	unsigned long bg_thresh;
 	struct task_struct *tsk;
 
+
+	max_pages = DIV_ROUND_UP(dirty_ratio_max_bytes, PAGE_SIZE);
+	bg_max_pages = DIV_ROUND_UP(dirty_background_ratio_max_bytes,
+				    PAGE_SIZE);
+
 	/* gdtc is !NULL iff @dtc is for memcg domain */
 	if (gdtc) {
 		unsigned long global_avail = gdtc->avail;
-
+		unsigned long scale = DIV_ROUND_UP(PAGE_SIZE * available_memory,
+				     global_avail);
 		/*
 		 * The byte settings can't be applied directly to memcg
 		 * domains.  Convert them to ratios by scaling against
@@ -404,18 +423,30 @@ static void domain_dirty_limits(struct dirty_throttle_control *dtc)
 		if (bg_bytes)
 			bg_ratio = min(DIV_ROUND_UP(bg_bytes, global_avail),
 				       PAGE_SIZE);
+		if (max_pages)
+			max_pages = DIV_ROUND_UP(scale * max_pages, PAGE_SIZE);
+		if (bg_max_pages)
+			bg_max_pages = DIV_ROUND_UP(scale * bg_max_pages,
+						    PAGE_SIZE);
 		bytes = bg_bytes = 0;
 	}
 
-	if (bytes)
+	if (bytes) {
 		thresh = DIV_ROUND_UP(bytes, PAGE_SIZE);
-	else
+	} else {
 		thresh = (ratio * available_memory) / PAGE_SIZE;
+		if (max_pages)
+			thresh = min_t(unsigned long, thresh, max_pages);
+	}
 
-	if (bg_bytes)
+	if (bg_bytes) {
 		bg_thresh = DIV_ROUND_UP(bg_bytes, PAGE_SIZE);
-	else
+	} else {
 		bg_thresh = (bg_ratio * available_memory) / PAGE_SIZE;
+		if (bg_max_pages)
+			bg_thresh = min_t(unsigned long, bg_thresh,
+					  bg_max_pages);
+	}
 
 	tsk = current;
 	if (rt_or_dl_task(tsk)) {
@@ -471,11 +502,20 @@ static unsigned long node_dirty_limit(struct pglist_data *pgdat)
 	struct task_struct *tsk = current;
 	unsigned long dirty;
 
-	if (vm_dirty_bytes)
+	if (vm_dirty_bytes) {
 		dirty = DIV_ROUND_UP(vm_dirty_bytes, PAGE_SIZE) *
 			node_memory / global_dirtyable_memory();
-	else
+	} else {
 		dirty = vm_dirty_ratio * node_memory / 100;
+
+		if (dirty_ratio_max_bytes) {
+			unsigned long max_bytes =
+				DIV_ROUND_UP(dirty_ratio_max_bytes, PAGE_SIZE) *
+				node_memory / global_dirtyable_memory();
+
+			dirty = min_t(unsigned long, dirty, max_bytes);
+		}
+	}
 
 	if (rt_or_dl_task(tsk))
 		dirty += dirty / 4;
@@ -535,6 +575,23 @@ static int dirty_background_bytes_handler(const struct ctl_table *table, int wri
 	return ret;
 }
 
+static int dirty_background_ratio_max_bytes_handler(const struct ctl_table *table,
+		int write, void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	unsigned long old_bytes = dirty_background_ratio_max_bytes;
+
+	ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret == 0 && write) {
+		if (DIV_ROUND_UP(dirty_background_ratio_max_bytes,
+				 PAGE_SIZE) > UINT_MAX) {
+			dirty_background_ratio_max_bytes = old_bytes;
+			return -ERANGE;
+		}
+	}
+	return ret;
+}
+
 static int dirty_ratio_handler(const struct ctl_table *table, int write, void *buffer,
 		size_t *lenp, loff_t *ppos)
 {
@@ -563,6 +620,23 @@ static int dirty_bytes_handler(const struct ctl_table *table, int write,
 		}
 		writeback_set_ratelimit();
 		vm_dirty_ratio = 0;
+	}
+	return ret;
+}
+
+static int dirty_max_bytes_handler(const struct ctl_table *table,
+		int write, void *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+	unsigned long old_bytes = dirty_ratio_max_bytes;
+
+	ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+	if (ret == 0 && write) {
+		if (DIV_ROUND_UP(dirty_ratio_max_bytes, PAGE_SIZE) > UINT_MAX) {
+			dirty_ratio_max_bytes = old_bytes;
+			return -ERANGE;
+		}
+		writeback_set_ratelimit();
 	}
 	return ret;
 }
@@ -2313,6 +2387,13 @@ static struct ctl_table vm_page_writeback_sysctls[] = {
 		.extra1     = SYSCTL_LONG_ONE,
 	},
 	{
+		.procname   = "dirty_background_ratio_max_bytes",
+		.data       = &dirty_background_ratio_max_bytes,
+		.maxlen     = sizeof(dirty_background_ratio_max_bytes),
+		.mode       = 0644,
+		.proc_handler  = dirty_background_ratio_max_bytes_handler,
+	},
+	{
 		.procname   = "dirty_ratio",
 		.data       = &vm_dirty_ratio,
 		.maxlen     = sizeof(vm_dirty_ratio),
@@ -2328,6 +2409,13 @@ static struct ctl_table vm_page_writeback_sysctls[] = {
 		.mode       = 0644,
 		.proc_handler   = dirty_bytes_handler,
 		.extra1     = (void *)&dirty_bytes_min,
+	},
+	{
+		.procname   = "dirty_ratio_max_bytes",
+		.data       = &dirty_ratio_max_bytes,
+		.maxlen     = sizeof(dirty_ratio_max_bytes),
+		.mode       = 0644,
+		.proc_handler   = dirty_max_bytes_handler,
 	},
 	{
 		.procname   = "dirty_writeback_centisecs",
