@@ -2881,6 +2881,13 @@ static struct ctl_table vm_table[] = {
 		.extra1		= &one_ul,
 	},
 	{
+		.procname	= "dirty_background_ratio_max_bytes",
+		.data		= &dirty_background_ratio_max_bytes,
+		.maxlen		= sizeof(dirty_background_ratio_max_bytes),
+		.mode		= 0644,
+		.proc_handler	= dirty_background_ratio_max_bytes_handler,
+	},
+	{
 		.procname	= "dirty_ratio",
 		.data		= &vm_dirty_ratio,
 		.maxlen		= sizeof(vm_dirty_ratio),
@@ -2896,6 +2903,13 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= dirty_bytes_handler,
 		.extra1		= &dirty_bytes_min,
+	},
+	{
+		.procname	= "dirty_ratio_max_bytes",
+		.data		= &dirty_ratio_max_bytes,
+		.maxlen		= sizeof(dirty_ratio_max_bytes),
+		.mode		= 0644,
+		.proc_handler	= dirty_max_bytes_handler,
 	},
 	{
 		.procname	= "dirty_writeback_centisecs",
