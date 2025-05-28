@@ -257,6 +257,8 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 	struct pglist_data *pgdat;
 	int type = folio_is_file_lru(folio);
 	int delta = folio_nr_pages(folio);
+	unsigned long opposite_min_seq;
+	unsigned long victim_seq;
 
 	unpack_shadow(shadow, &memcg_id, &pgdat, &token, &workingset);
 
@@ -271,6 +273,13 @@ static void lru_gen_refault(struct folio *folio, void *shadow)
 
 	lruvec = mem_cgroup_lruvec(memcg, pgdat);
 	lrugen = &lruvec->lrugen;
+
+	opposite_min_seq = READ_ONCE(lrugen->min_seq[!type]);
+	hist = lru_hist_from_seq(opposite_min_seq);
+	victim_seq = READ_ONCE(lrugen->victim_seq[hist][!type]);
+
+	if ((token >> LRU_REFS_WIDTH) >= (victim_seq & (EVICTION_MASK >> LRU_REFS_WIDTH)))
+		atomic_long_add(delta, &lrugen->refaulted_victims[hist][!type]);
 
 	min_seq = READ_ONCE(lrugen->min_seq[type]);
 	if ((token >> LRU_REFS_WIDTH) != (min_seq & (EVICTION_MASK >> LRU_REFS_WIDTH)))

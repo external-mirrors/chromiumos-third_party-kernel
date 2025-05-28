@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2025 Google LLC
+ *
+ * Panel ID: 0x33 (csot)
+ * Unprovisioned SKU: 0x7FFFFF00UL | 0x33
+ */
+/dts-v1/;
+#include "mt8188-geralt-ciri.dtsi"
+#include "mt8188-ciri-camera-v4l2.dtsi"
+
+/ {
+	model = "Google Ciri sku8/unprovisioned board";
+	compatible = "google,ciri-sku8", "google,ciri-sku2147483443",
+		     "google,ciri", "mediatek,mt8188";
+};
+
+&dsi_panel {
+	compatible = "csot,pna957qt1-1";
+};
+
+&touchscreen {
+	himax,pid = <0x1004>;
+	firmware-name = "himax_i2chid_1004.bin";
+};

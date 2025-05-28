@@ -44,6 +44,9 @@
 #include "internal.h"
 #include "mount.h"
 
+#ifdef __aarch64__
+#include <trace/events/cros_file.h>
+#endif
 /* [Feb-1997 T. Schoebel-Theuer]
  * Fundamental changes in the pathname lookup mechanisms (namei)
  * were necessary because of omirr.  The reason is that omirr needs
@@ -2669,10 +2672,8 @@ static int lookup_one_common(struct user_namespace *mnt_userns,
 	if (!len)
 		return -EACCES;
 
-	if (unlikely(name[0] == '.')) {
-		if (len < 2 || (len == 2 && name[1] == '.'))
-			return -EACCES;
-	}
+	if (is_dot_dotdot(name, len))
+		return -EACCES;
 
 	while (len--) {
 		unsigned int c = *(const unsigned char *)name++;
@@ -4774,12 +4775,20 @@ int vfs_rename(struct renamedata *rd)
 	struct name_snapshot old_name;
 	bool lock_old_subdir, lock_new_subdir;
 
-	if (source == target)
+	if (source == target) {
+#ifdef __aarch64__
+		trace_cros_vfs_rename_exit(rd, 0);
+#endif
 		return 0;
+	}
 
 	error = may_delete(rd->old_mnt_userns, old_dir, old_dentry, is_dir);
-	if (error)
+	if (error) {
+#ifdef __aarch64__
+		trace_cros_vfs_rename_exit(rd, error);
+#endif
 		return error;
+	}
 
 	if (!target) {
 		error = may_create(rd->new_mnt_userns, new_dir, new_dentry);
@@ -4793,11 +4802,19 @@ int vfs_rename(struct renamedata *rd)
 			error = may_delete(rd->new_mnt_userns, new_dir,
 					   new_dentry, new_is_dir);
 	}
-	if (error)
+	if (error) {
+#ifdef __aarch64__
+		trace_cros_vfs_rename_exit(rd, error);
+#endif
 		return error;
+	}
 
-	if (!old_dir->i_op->rename)
+	if (!old_dir->i_op->rename) {
+#ifdef __aarch64__
+		trace_cros_vfs_rename_exit(rd, -EPERM);
+#endif
 		return -EPERM;
+	}
 
 	/*
 	 * If we are going to change the parent - check write permissions,
@@ -4807,21 +4824,33 @@ int vfs_rename(struct renamedata *rd)
 		if (is_dir) {
 			error = inode_permission(rd->old_mnt_userns, source,
 						 MAY_WRITE);
-			if (error)
+			if (error) {
+#ifdef __aarch64__
+				trace_cros_vfs_rename_exit(rd, error);
+#endif
 				return error;
+			}
 		}
 		if ((flags & RENAME_EXCHANGE) && new_is_dir) {
 			error = inode_permission(rd->new_mnt_userns, target,
 						 MAY_WRITE);
-			if (error)
+			if (error) {
+#ifdef __aarch64__
+				trace_cros_vfs_rename_exit(rd, error);
+#endif
 				return error;
+			}
 		}
 	}
 
 	error = security_inode_rename(old_dir, old_dentry, new_dir, new_dentry,
 				      flags);
-	if (error)
+	if (error) {
+#ifdef __aarch64__
+		trace_cros_vfs_rename_exit(rd, error);
+#endif
 		return error;
+	}
 
 	take_dentry_name_snapshot(&old_name, old_dentry);
 	dget(new_dentry);
@@ -4913,7 +4942,9 @@ out:
 		}
 	}
 	release_dentry_name_snapshot(&old_name);
-
+#ifdef __aarch64__
+	trace_cros_vfs_rename_exit(rd, error);
+#endif
 	return error;
 }
 EXPORT_SYMBOL(vfs_rename);

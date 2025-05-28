@@ -24,6 +24,7 @@ config VIDEO_MTK_ISP_71_IMGSYS
 	tristate "Mediatek ISP70 image processing system function"
 	depends on MTK_CMDQ
 	depends on REMOTEPROC
+	depends on MTK_SCP
 	select VIDEO_V4L2_SUBDEV_API
 	select VIDEOBUF2_DMA_CONTIG
 	select VIDEOBUF2_CORE

@@ -405,6 +405,9 @@ struct fuse_req {
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
+
+	/** When (in jiffies) the request was created */
+	unsigned long create_time;
 };
 
 struct fuse_iqueue;
@@ -882,6 +885,8 @@ struct fuse_conn {
 
 	/** Protects passthrough_req */
 	spinlock_t passthrough_req_lock;
+
+	struct task_struct *watchdog;
 };
 
 /*
@@ -1134,6 +1139,8 @@ void fuse_request_end(struct fuse_req *req);
 /* Abort all requests */
 void fuse_abort_conn(struct fuse_conn *fc);
 void fuse_wait_aborted(struct fuse_conn *fc);
+void init_fuse_watchdog(struct fuse_conn *fc);
+void terminate_fuse_watchdog(struct fuse_conn *fc);
 
 /**
  * Invalidate inode attributes
