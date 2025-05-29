@@ -203,6 +203,7 @@
 /* SDC_STS mask */
 #define SDC_STS_SDCBUSY         BIT(0)	/* RW */
 #define SDC_STS_CMDBUSY         BIT(1)	/* RW */
+#define SDC_STS_SPM_RSRELEASE   BIT(3)	/* RW */
 #define SDC_STS_SWR_COMPL       BIT(31)	/* RW */
 
 /* SDC_ADV_CFG0 mask */
@@ -428,6 +429,7 @@ struct mtk_mmc_compatible {
 	bool use_internal_cd;
 	bool support_new_tx;
 	bool support_new_rx;
+	bool support_spm_ack;
 };
 
 struct msdc_tune_para {
@@ -668,6 +670,24 @@ static const struct mtk_mmc_compatible mt8196_compat = {
 	.support_new_rx = true,
 };
 
+static const struct mtk_mmc_compatible mt8189_compat = {
+	.clk_div_bits = 12,
+	.recheck_sdio_irq = false,
+	.hs400_tune = false,
+	.pad_tune_reg = MSDC_PAD_TUNE0,
+	.async_fifo = true,
+	.data_tune = true,
+	.busy_check = true,
+	.stop_clk_fix = true,
+	.stop_dly_sel = 1,
+	.pop_en_cnt = 2,
+	.enhance_rx = true,
+	.support_64g = true,
+	.support_new_tx = true,
+	.support_new_rx = true,
+	.support_spm_ack = true,
+};
+
 static const struct of_device_id msdc_of_ids[] = {
 	{ .compatible = "mediatek,mt2701-mmc", .data = &mt2701_compat},
 	{ .compatible = "mediatek,mt2712-mmc", .data = &mt2712_compat},
@@ -679,6 +699,7 @@ static const struct of_device_id msdc_of_ids[] = {
 	{ .compatible = "mediatek,mt8135-mmc", .data = &mt8135_compat},
 	{ .compatible = "mediatek,mt8173-mmc", .data = &mt8173_compat},
 	{ .compatible = "mediatek,mt8183-mmc", .data = &mt8183_compat},
+	{ .compatible = "mediatek,mt8189-mmc", .data = &mt8189_compat},
 	{ .compatible = "mediatek,mt8196-mmc", .data = &mt8196_compat},
 	{ .compatible = "mediatek,mt8516-mmc", .data = &mt8516_compat},
 
@@ -3204,6 +3225,10 @@ static int __maybe_unused msdc_runtime_suspend(struct device *dev)
 
 		__msdc_enable_sdio_irq(host, 0);
 	}
+
+	if (host->dev_comp->support_spm_ack)
+		sdr_set_bits(host->base + SDC_STS, SDC_STS_SPM_RSRELEASE);
+
 	msdc_gate_clock(host);
 	return 0;
 }
