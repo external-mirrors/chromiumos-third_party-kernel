@@ -1,0 +1,597 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker.dtsi"
+
+/ {
+	pp1800_trackpad: regulator-pp1800-trackpad {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_trackpad";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		gpio = <&pio 3 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pwr_pins>;
+		vin-supply = <&pp3300_z1>;
+	};
+
+	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_tchscr_report_disable";
+		pinctrl-names = "default";
+		regulator-boot-on;
+		pinctrl-0 = <&touch_pin_report>;
+		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
+	};
+
+	tboard_thermistor1: thermal-sensor1 {
+		compatible = "generic-adc-thermal";
+		#thermal-sensor-cells = <0>;
+		io-channels = <&auxadc 0>;
+		io-channel-names = "sensor-channel";
+		temperature-lookup-table = <    (-5000) 1492
+						0 1413
+						5000 1324
+						10000 1227
+						15000 1121
+						20000 1017
+						25000 900
+						30000 797
+						35000 698
+						40000 606
+						45000 522
+						50000 449
+						55000 383
+						60000 327
+						65000 278
+						70000 236
+						75000 201
+						80000 171
+						85000 145
+						90000 163
+						95000 124
+						100000 91
+						105000 78
+						110000 67
+						115000 58
+						120000 50
+						125000 44>;
+	};
+
+	tboard_thermistor2: thermal-sensor2 {
+		compatible = "generic-adc-thermal";
+		#thermal-sensor-cells = <0>;
+		io-channels = <&auxadc 1>;
+		io-channel-names = "sensor-channel";
+		temperature-lookup-table = <    (-5000) 1492
+						0 1413
+						5000 1324
+						10000 1227
+						15000 1121
+						20000 1017
+						25000 900
+						30000 797
+						35000 698
+						40000 606
+						45000 522
+						50000 449
+						55000 383
+						60000 327
+						65000 278
+						70000 236
+						75000 201
+						80000 171
+						85000 145
+						90000 163
+						95000 124
+						100000 91
+						105000 78
+						110000 67
+						115000 58
+						120000 50
+						125000 44>;
+	};
+};
+
+&ap_i2c_aud {
+	/delete-node/ audio-codec@1a;
+
+	rt5650: audio-codec@1a {
+		compatible = "realtek,rt5650";
+		reg = <0x1a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		cbj-sleeve-gpio = <&pio 30 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		#sound-dai-cells = <0>;
+		realtek,dmic1-data-pin = <2>;
+		realtek,jd-mode = <2>;
+		status = "okay";
+	};
+};
+
+&ap_sar_sensor {
+	status = "disabled";
+};
+
+&ap_i2c_tchscr {
+	touchscreen@41 {
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+	};
+};
+
+&audio_codec_pins {
+	pins-en-codec-pwr-soc {
+		pinmux = <PINMUX_GPIO30__FUNC_GPIO30>;
+		output-low;
+	};
+};
+
+&hdmibrdg {
+	ivdd-supply = <&mt6359_vpa_buck_reg>;
+};
+
+&i2c_tunnel {
+	/delete-node/ sbs-battery@b;
+	battery: sbs-battery@f {
+		compatible = "sbs,sbs-battery";
+		reg = <0xf>;
+		sbs,i2c-retry-count = <2>;
+		sbs,poll-retry-count = <1>;
+	};
+};
+
+&mt6359_vpa_buck_reg {
+	regulator-min-microvolt = <1000000>;
+	regulator-max-microvolt = <1000000>;
+};
+
+/* Use PMIC VFE28 for WFC 2.8V AF power supply */
+&mt6359_vfe28_ldo_reg {
+	regulator-always-on;
+};
+
+&pio{
+	/* 182 lines */
+	gpio-line-names =
+		"IMU_INT_SCP_L",		/* 0 */
+		"LID_ACCEL_INT_SCP_L",
+		"ESIM_ERASE",
+		"PP1800_TCHPAD_EN",
+		"HP_INT_ODL",
+		"EN_SPKR",
+		"RST_SPKR_L",
+		"USB3_HUB_RST_L",
+		"SPKR_INT_ODL",
+		"SAR_INT_ODL",
+		"WWAN_RESET_L",			/* 10 */
+		"PEN_EJECT_OD",
+		"TP",
+		"EDP_BL_EN_1V8",
+		"TCHSCR_REPORT_DISABLE",
+		"TCHSCR_INT_1V8_ODL",
+		"AP_FLASH_WP_L",
+		"EC_AP_DPOC_EN_ODL",
+		"",
+		"",
+		"",				/* 20 */
+		"",
+		"",
+		"",
+		"",
+		"EN_PP3300_EDP_X",
+		"",
+		"EC_AP_DP_HPD_L",
+		"EDP_HPD_1V8",
+		"BL_PWM_1V8",
+		"CODEC_PWR_SOC_EN",		/* 30 */
+		"UART_AP_TX_GSC_DBG_RX",
+		"UART_GSC_DBG_TX_AP_RX",
+		"AP_UART1_TXD",
+		"AP_UART1_RXD",
+		"AP_UART2_TXD",
+		"AP_UART2_RXD",
+		"AP_UART3_TXD",
+		"AP_UART3_RXD",
+		"AP_JTAG_TMS",
+		"AP_JTAG_TCK",			/* 40 */
+		"AP_JTAG_TDI",
+		"AP_JTAG_TDO",
+		"AP_JTAG_TRST_L",
+		"AP_KPCOL0",
+		"TP",
+		"TP",
+		"TP",
+		"PCIE_WLAN_WAKE_OBFF_1V8_ODL",
+		"PCIE_WLAN_RST_1V8_L",
+		"PCIE_WLAN_CLKREQ_1V8_ODL",	/* 50 */
+		"SCP_I2C_SENSOR_SCL_1V8",
+		"SCP_I2C_SENSOR_SDA_1V8",
+		"TP",
+		"TP",
+		"AP_I2C_AUD_SCL_1V8",
+		"AP_I2C_AUD_SDA_1V8",
+		"AP_I2C_TPM_SCL_1V8",
+		"AP_I2C_TPM_SDA_1V8",
+		"AP_I2C_TCHSCR_SCL_1V8",
+		"AP_I2C_TCHSCR_SDA_1V8",	/* 60 */
+		"AP_I2C_SAR_SCL_1V8",
+		"AP_I2C_SAR_SDA_1V8",
+		"AP_I2C_HDMI_SCL_1V8",
+		"AP_I2C_HDMI_SDA_1V8",
+		"AP_I2C_TCHPAD_SCL_1V8",
+		"AP_I2C_TCHPAD_SDA_1V8",
+		"TP",
+		"TP",
+		"SPI_AP_CS_EC_L",
+		"SPI_AP_CLK_EC",		/* 70 */
+		"SPI_AP_DO_EC_DI",
+		"SPI_AP_DI_EC_DO",
+		"TP",
+		"TP",
+		"TP",
+		"TP",
+		"",
+		"",
+		"",
+		"",		/* 80 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"PWRAP_SPI_CS_L",
+		"PWRAP_SPI_CK",
+		"PWRAP_SPI_MOSI",		/* 90 */
+		"PWRAP_SPI_MISO",
+		"SRCLKENA0",
+		"SRCLKENA1",
+		"SCP_VREQ_VAO",
+		"AP_RTC_CLK32K",
+		"AP_PMIC_WDTRST_L",
+		"AUD_CLK_MOSI (Strap)",
+		"AUD_SYNC_MOSI (Strap)",
+		"AUD_DAT_MOSI0 (Strap)",
+		"AUD_DAT_MOSI1 (Strap)",	/* 100 */
+		"AUD_DAT_MISO0 (Strap)",
+		"AUD_DAT_MISO1 (Strap)",
+		"TP",
+		"TP",
+		"TP",
+		"I2S_HP_DI",
+		"I2S_HP_MCK",
+		"I2S_HP_BCK",
+		"I2S_HP_LRCK",
+		"I2S_HP_DO",			/* 110 */
+		"I2S_SPKR_MCK",
+		"I2S_SPKR_BCK",
+		"I2S_SPKR_LRCK",
+		"I2S_SPKR_DO",
+		"PCM_HDMI_CLK",
+		"PCM_HDMI_SYNC",
+		"TP",
+		"PCM_HDMI_DO",
+		"DMIC0_CLK",
+		"DMIC0_DATA",			/* 120 */
+		"EN_PP3300_WWAN_X",
+		"DMIC1_CLK",
+		"DMIC1_DATA",
+		"WWAN_SAR_DETECT_L",
+		"TCHPAD_INT_ODL",
+		"TCHSCR_RST_1V8_L",
+		"AP_HDMI_RST_ODL",
+		"HDMI_AP_INT_ODL",
+		"TP",
+		"I2S_SPKR_DI",			/* 130 */
+		"AP_XHCI_INIT_DONE",
+		"EC_AP_INT_ODL",
+		"TP",
+		"TP",
+		"EN_HDMI_PWR",
+		"",
+		"AP_EC_WARM_RST_REQ",
+		"GSC_AP_INT_ODL",
+		"HDMI_HPD_1V8_ODL",
+		"AP_SUSPEND_L ",		/* 140 */
+		"EC_AP_RSVD0_ODL",
+		"EC_AP_RSVD1_ODL",
+		"MT6319B_INT",
+		"MT6319C_INT",
+		"BT_KILL_1V8_L",
+		"WIFI_KILL_1V8_L",
+		"WWAN_PWR_OFF_L",
+		"WWAN_W_DISABLE_L",
+		"",
+		"SPI_AP_CLK_BIOS",		/* 150 */
+		"SPI_AP_CS_BIOS_L",
+		"SPI_AP_DO_BIOS_DI",
+		"SPI_AP_DI_BIOS_DO",
+		"TP",
+		"TP",
+		"",
+		"",
+		"",
+		"",
+		"",				/* 160 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",			/* 170 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"SPMI_SCL",			/* 180 */
+		"SPMI_SDA",
+		"EMI_RESET_N";
+
+	touch_pin_report: pin-report-pins {
+		pins-touch-en {
+			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
+			output-low;
+		};
+	};
+
+	trackpad_pwr_pins: trackpad-pwr-pins {
+		pins-pwr {
+			pinmux = <PINMUX_GPIO3__FUNC_GPIO3>;
+			output-low;
+		};
+	};
+
+	mmc0_pins_default: mmc0-default-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO156__FUNC_MSDC0_DAT7>,
+				 <PINMUX_GPIO157__FUNC_MSDC0_DAT6>,
+				 <PINMUX_GPIO158__FUNC_MSDC0_DAT5>,
+				 <PINMUX_GPIO159__FUNC_MSDC0_DAT4>,
+				 <PINMUX_GPIO161__FUNC_MSDC0_CMD>,
+				 <PINMUX_GPIO163__FUNC_MSDC0_DAT3>,
+				 <PINMUX_GPIO164__FUNC_MSDC0_DAT2>,
+				 <PINMUX_GPIO165__FUNC_MSDC0_DAT1>,
+				 <PINMUX_GPIO166__FUNC_MSDC0_DAT0>;
+			input-enable;
+			drive-strength = <6>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+		pins-clk {
+			pinmux = <PINMUX_GPIO162__FUNC_MSDC0_CLK>;
+			drive-strength = <6>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins-rst {
+			pinmux = <PINMUX_GPIO160__FUNC_MSDC0_RSTB>;
+			drive-strength = <6>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_00>;
+		};
+	};
+
+	mmc0_pins_uhs: mmc0-uhs-pins@0{
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO156__FUNC_MSDC0_DAT7>,
+				 <PINMUX_GPIO157__FUNC_MSDC0_DAT6>,
+				 <PINMUX_GPIO158__FUNC_MSDC0_DAT5>,
+				 <PINMUX_GPIO159__FUNC_MSDC0_DAT4>,
+				 <PINMUX_GPIO161__FUNC_MSDC0_CMD>,
+				 <PINMUX_GPIO163__FUNC_MSDC0_DAT3>,
+				 <PINMUX_GPIO164__FUNC_MSDC0_DAT2>,
+				 <PINMUX_GPIO165__FUNC_MSDC0_DAT1>,
+				 <PINMUX_GPIO166__FUNC_MSDC0_DAT0>;
+			input-enable;
+			drive-strength = <8>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+		pins-clk {
+			pinmux = <PINMUX_GPIO162__FUNC_MSDC0_CLK>;
+			drive-strength = <8>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins-ds {
+			pinmux = <PINMUX_GPIO167__FUNC_MSDC0_DSL>;
+			drive-strength = <8>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins-rst {
+			pinmux = <PINMUX_GPIO160__FUNC_MSDC0_RSTB>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_00>;
+		};
+	};
+};
+
+&pmic {
+	/delete-node/ mt6359codec;
+};
+
+&rt9123 {
+	status = "disabled";
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5650-sound";
+	model = "mt8189_rt5650";
+
+	dai-link-0 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	/delete-node/ dai-link-2;
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&thermal_zones {
+	tboard0-thermal {
+		polling-delay = <0>; /* milliseconds */
+		polling-delay-passive = <0>; /* milliseconds */
+		thermal-sensors = <&tboard_thermistor1>;
+
+		trips {
+			tboard1_temp_crit: tboard1_temp_crit@0 {
+				temperature = <115000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+	};
+
+	tboard1-thermal {
+		polling-delay = <0>; /* milliseconds */
+		polling-delay-passive = <0>; /* milliseconds */
+		thermal-sensors = <&tboard_thermistor2>;
+
+		trips {
+			tboard2_temp_crit: tboard2_temp_crit@0 {
+				temperature = <115000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+	};
+};
+
+&trackpad {
+	vdd-supply = <&pp3300_s3>;
+	vddl-supply = <&pp1800_trackpad>;
+};
+
+&touchscreen_pins {
+	/delete-node/ pins-touch-en;
+};
+
+&u3phy0 {
+	status = "okay";
+};
+
+&ufshci {
+	status = "disabled";
+};
+
+/* USB hub port 1 */
+&usb_hub_dsp1_hs {
+	remote-endpoint = <&usb_c1_hs>;
+};
+
+&usb_c1_hs {
+	remote-endpoint = <&usb_hub_dsp1_hs>;
+};
+
+&usb_hub_dsp1_ss {
+	remote-endpoint = <&usb_c1_ss>;
+};
+
+&usb_c1_ss {
+	remote-endpoint = <&usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 2 */
+&usb_hub_dsp2_hs {
+	remote-endpoint = <&usb_a1_hs>;
+};
+
+&usb_a1_hs {
+	remote-endpoint = <&usb_hub_dsp2_hs>;
+};
+
+&usb_hub_dsp2_ss {
+	remote-endpoint = <&usb_a1_ss>;
+};
+
+&usb_a1_ss {
+	remote-endpoint = <&usb_hub_dsp2_ss>;
+};
+
+/* USB hub port 3 */
+&usb_hub_dsp3_hs {
+	remote-endpoint = <&usb_c0_hs>;
+};
+
+&usb_c0_hs {
+	remote-endpoint = <&usb_hub_dsp3_hs>;
+};
+
+&usb_hub_dsp3_ss {
+	remote-endpoint = <&usb_c0_ss>;
+};
+
+&usb_c0_ss {
+	remote-endpoint = <&usb_hub_dsp3_ss>;
+};
+
+/* USB hub port 4 */
+&usb_hub_dsp4_hs {
+	remote-endpoint = <&usb_a0_hs>;
+};
+
+&usb_a0_hs {
+	remote-endpoint = <&usb_hub_dsp4_hs>;
+};
+
+&usb_hub_dsp4_ss {
+	remote-endpoint = <&usb_a0_ss>;
+};
+
+&usb_a0_ss {
+	remote-endpoint = <&usb_hub_dsp4_ss>;
+};
+
+&mmc0 {
+	status = "okay";
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&mmc0_pins_default>;
+	pinctrl-1 = <&mmc0_pins_uhs>;
+	bus-width = <8>;
+	max-frequency = <200000000>;
+	cap-mmc-highspeed;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	mmc-hs400-enhanced-strobe;
+	supports-cqe;
+	cap-mmc-hw-reset;
+	no-sdio;
+	no-sd;
+	non-removable;
+	hs400-ds-delay = <0x1481b>;
+	mediatek,hs400-ds-dly3 = <0x14>;
+	vmmc-supply = <&mt6359_vemc_1_ldo_reg>;
+	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
+};
+
+&xhci0 {
+	status = "okay";
+};
+
+&xhci2 {
+	/delete-property/ vbus-supply;
+};
