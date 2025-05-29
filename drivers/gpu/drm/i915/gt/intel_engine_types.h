@@ -473,8 +473,6 @@ struct intel_engine_cs {
 	 */
 	void		(*submit_request)(struct i915_request *rq);
 
-	void		(*submit_request_locked)(struct i915_request *rq);
-
 	/*
 	 * Called on signaling of a SUBMIT_FENCE, passing along the signaling
 	 * request down to the bonded pairs.

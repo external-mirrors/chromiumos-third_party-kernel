@@ -578,10 +578,7 @@ submit_notify(struct i915_sw_fence *fence, enum i915_sw_fence_notify state)
 		 * proceeding.
 		 */
 		rcu_read_lock();
-		if (request->lock_flags & I915_LOCK_FLAGS_IN_FENCE_SIGNAL)
-			request->engine->submit_request_locked(request);
-		else
-			request->engine->submit_request(request);
+		request->engine->submit_request(request);
 		rcu_read_unlock();
 		break;
 
@@ -1734,58 +1731,6 @@ out:
 	mutex_release(&rq->engine->gt->reset.mutex.dep_map, 0, _THIS_IP_);
 	trace_i915_request_wait_end(rq);
 	return timeout;
-}
-
-unsigned long i915_request_fence_signal_begin(struct i915_request *rq)
-{
-	unsigned long flags;
-
-	/*
-	 * Do not violate existing lock ordering: we need to lock the engine
-	 * before the request.
-	 */
-	flags = i915_request_virtengine_lock(rq);
-	i915_request_lock(rq);
-
-	WARN_ON_ONCE(rq->lock_flags & I915_LOCK_FLAGS_IN_FENCE_SIGNAL);
-	rq->lock_flags |= I915_LOCK_FLAGS_IN_FENCE_SIGNAL;
-	return flags;
-}
-
-void i915_request_fence_signal_end(struct i915_request *rq, unsigned long flags)
-{
-	WARN_ON_ONCE(!(rq->lock_flags & I915_LOCK_FLAGS_IN_FENCE_SIGNAL));
-
-	rq->lock_flags &= ~I915_LOCK_FLAGS_IN_FENCE_SIGNAL;
-	i915_request_unlock(rq);
-	i915_request_virtengine_unlock(rq, flags);
-}
-
-void i915_request_fence_signal(struct i915_request *rq)
-{
-	unsigned long flags;
-
-	flags = i915_request_fence_signal_begin(rq);
-	/*
-	 * We cannot let dma code lock fence->lock internally because
-	 * fence->lock is basically request->lock, which we need to
-	 * track ownership of.  Workaround by locking (the same)
-	 * lock via request and mark our ownership.
-	 */
-	dma_fence_signal_locked(&rq->fence);
-	i915_request_fence_signal_end(rq, flags);
-}
-
-bool i915_request_fence_is_signaled(struct i915_request *rq)
-{
-	unsigned long flags;
-	bool signaled;
-
-	flags = i915_request_fence_signal_begin(rq);
-	signaled = dma_fence_is_signaled_locked(&rq->fence);
-	i915_request_fence_signal_end(rq, flags);
-
-	return signaled;
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

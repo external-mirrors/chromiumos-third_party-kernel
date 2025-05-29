@@ -204,13 +204,12 @@ static void signal_irq_work(struct irq_work *work)
 		struct i915_request *rq =
 			list_entry(pos, typeof(*rq), signal_link);
 		struct list_head cb_list;
-		unsigned long flags;
 
-		flags = i915_request_fence_signal_begin(rq);
+		i915_request_lock(rq);
 		list_replace(&rq->fence.cb_list, &cb_list);
 		__dma_fence_signal__timestamp(&rq->fence, timestamp);
 		__dma_fence_signal__notify(&rq->fence, &cb_list);
-		i915_request_fence_signal_end(rq, flags);
+		i915_request_unlock(rq);
 
 		i915_request_put(rq);
 	}

@@ -139,7 +139,6 @@ enum {
 };
 
 #define I915_LOCK_FLAGS_REQ_RECURSION	BIT(0)
-#define I915_LOCK_FLAGS_IN_FENCE_SIGNAL	BIT(1)
 
 /**
  * Request queue structure.
@@ -391,15 +390,39 @@ static inline void i915_request_unlock_irq(struct i915_request *rq)
 	spin_unlock_irq(&rq->__lock);
 }
 
-unsigned long i915_request_fence_signal_begin(struct i915_request *rq);
-void i915_request_fence_signal(struct i915_request *rq);
-bool i915_request_fence_is_signaled(struct i915_request *rq);
-void i915_request_fence_signal_end(struct i915_request *rq,
-				   unsigned long flags);
+static inline void i915_request_fence_signal(struct i915_request *rq)
+{
+	unsigned long flags;
 
-unsigned long i915_request_virtengine_lock(struct i915_request *rq);
-void i915_request_virtengine_unlock(struct i915_request *rq,
-				    unsigned long flags);
+	/*
+	 * We cannot let dma code lock fence->lock internally because
+	 * fence->lock is basically request->lock, which we need to
+	 * track ownership of.  Workaround by locking (the same)
+	 * lock via request and mark our ownership.
+	 */
+	i915_request_lock_irqsave(rq, flags);
+	dma_fence_signal_locked(&rq->fence);
+	i915_request_unlock_irqrestore(rq, flags);
+}
+
+static inline bool i915_request_fence_is_signaled(struct i915_request *rq)
+{
+	unsigned long flags;
+	bool signaled;
+
+	/*
+	 * Same as above:
+	 *
+	 * we need to explicitly take the request lock here and cannot let
+	 * dma_fence_is_signaled() handle locking internally because then
+	 * we can re-enter i915 and deadlock on spin-lock recursion.
+	 */
+	i915_request_lock_irqsave(rq, flags);
+	signaled = dma_fence_is_signaled_locked(&rq->fence);
+	i915_request_unlock_irqrestore(rq, flags);
+
+	return signaled;
+}
 
 #define I915_FENCE_GFP (GFP_KERNEL | __GFP_RETRY_MAYFAIL | __GFP_NOWARN)
 
