@@ -1068,8 +1068,6 @@ static int vdec_hevc_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 		       inst->slice_dec_num, inst->vsi->dec.crc[0], inst->vsi->dec.crc[1],
 		       inst->vsi->dec.crc[2], inst->vsi->dec.crc[3], (unsigned int)bs->size);
 
-	wait_event(inst->ctx->dev->sync_decode, inst->ctx->dev->sync_dec_done);
-
 	inst->slice_dec_num++;
 	return 0;
 err_free_fb_out:

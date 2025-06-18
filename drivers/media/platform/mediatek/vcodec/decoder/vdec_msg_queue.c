@@ -270,9 +270,6 @@ static void vdec_msg_queue_core_work(struct work_struct *work)
 	mtk_vcodec_dec_disable_hardware(ctx, MTK_VDEC_CORE);
 	vdec_msg_queue_qbuf(&ctx->msg_queue.lat_ctx, lat_buf);
 
-	ctx->dev->sync_dec_done = true;
-	wake_up(&ctx->dev->sync_decode);
-
 	if (!(ctx->msg_queue.status & CONTEXT_LIST_QUEUED) &&
 	    atomic_read(&msg_queue->core_list_cnt)) {
 		spin_lock(&msg_queue->core_ctx.ready_lock);

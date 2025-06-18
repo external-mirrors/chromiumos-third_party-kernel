@@ -319,9 +319,6 @@ struct mtk_vcodec_dec_dev {
 #if IS_REACHABLE(CONFIG_OPTEE)
 	struct mtk_vdec_optee_private *optee_private;
 #endif
-
-	wait_queue_head_t sync_decode;
-	bool sync_dec_done;
 };
 
 static inline struct mtk_vcodec_dec_ctx *fh_to_dec_ctx(struct v4l2_fh *fh)

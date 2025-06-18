@@ -2172,8 +2172,6 @@ static int vdec_av1_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 		vdec_msg_queue_qbuf(&ctx->msg_queue.core_ctx, lat_buf);
 	memcpy(&instance->slots, &vsi->slots, sizeof(instance->slots));
 
-	wait_event(ctx->dev->sync_decode, ctx->dev->sync_dec_done);
-
 	return 0;
 
 err_free_fb_out:

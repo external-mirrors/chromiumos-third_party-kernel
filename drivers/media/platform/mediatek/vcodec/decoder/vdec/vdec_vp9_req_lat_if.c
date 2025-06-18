@@ -2154,8 +2154,6 @@ static int vdec_vp9_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 	vdec_msg_queue_update_ube_wptr(&ctx->msg_queue, vsi->trans.dma_addr_end);
 	vdec_msg_queue_qbuf(&ctx->msg_queue.core_ctx, lat_buf);
 
-	wait_event(ctx->dev->sync_decode, ctx->dev->sync_dec_done);
-
 	return 0;
 err_free_fb_out:
 	vdec_msg_queue_qbuf(&ctx->msg_queue.lat_ctx, lat_buf);

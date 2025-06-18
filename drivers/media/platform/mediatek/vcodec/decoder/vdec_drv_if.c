@@ -92,7 +92,6 @@ int vdec_if_decode(struct mtk_vcodec_dec_ctx *ctx, struct mtk_vcodec_mem *bs,
 		return -EIO;
 
 	mtk_vcodec_dec_enable_hardware(ctx, ctx->hw_id);
-	ctx->dev->sync_dec_done = false;
 	mtk_vcodec_set_curr_ctx(ctx->dev, ctx, ctx->hw_id);
 	ret = ctx->dec_if->decode(ctx->drv_handle, bs, fb, res_chg);
 	mtk_vcodec_set_curr_ctx(ctx->dev, NULL, ctx->hw_id);
