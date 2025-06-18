@@ -2116,6 +2116,7 @@ static int vdec_vp9_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 	}
 	vdec_vp9_slice_vsi_to_remote(vsi, instance->vsi);
 
+	vdec_msg_queue_wait_core_is_zero(instance->ctx);
 	ret = vpu_dec_start(&instance->vpu, NULL, 0);
 	if (ret) {
 		mtk_vdec_err(ctx, "Failed to dec VP9 ret %d\n", ret);

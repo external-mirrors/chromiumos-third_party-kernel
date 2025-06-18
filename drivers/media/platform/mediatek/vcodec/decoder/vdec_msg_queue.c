@@ -235,6 +235,20 @@ void vdec_msg_queue_deinit(struct vdec_msg_queue *msg_queue,
 		cancel_work_sync(&msg_queue->core_work);
 }
 
+void vdec_msg_queue_wait_core_is_zero(struct mtk_vcodec_dec_ctx *ctx)
+{
+	if (ctx->is_secure_playback)
+		atomic_inc(&ctx->dev->secure_frame_cnt);
+	else
+		atomic_inc(&ctx->dev->normal_frame_cnt);
+
+	if (ctx->is_secure_playback && atomic_read(&ctx->dev->normal_frame_cnt) >= 1)
+		wait_event(ctx->dev->sync_decode, !atomic_read(&ctx->dev->normal_frame_cnt));
+
+	if (!ctx->is_secure_playback && atomic_read(&ctx->dev->secure_frame_cnt) >= 1)
+		wait_event(ctx->dev->sync_decode, !atomic_read(&ctx->dev->secure_frame_cnt));
+}
+
 static void vdec_msg_queue_core_work(struct work_struct *work)
 {
 	struct vdec_msg_queue *msg_queue =
@@ -269,6 +283,14 @@ static void vdec_msg_queue_core_work(struct work_struct *work)
 	mtk_vcodec_set_curr_ctx(dev, NULL, MTK_VDEC_CORE);
 	mtk_vcodec_dec_disable_hardware(ctx, MTK_VDEC_CORE);
 	vdec_msg_queue_qbuf(&ctx->msg_queue.lat_ctx, lat_buf);
+
+	if (ctx->is_secure_playback)
+		atomic_dec(&ctx->dev->secure_frame_cnt);
+	else
+		atomic_dec(&ctx->dev->normal_frame_cnt);
+
+	if (!atomic_read(&ctx->dev->secure_frame_cnt) || !atomic_read(&ctx->dev->normal_frame_cnt))
+		wake_up(&ctx->dev->sync_decode);
 
 	if (!(ctx->msg_queue.status & CONTEXT_LIST_QUEUED) &&
 	    atomic_read(&msg_queue->core_list_cnt)) {

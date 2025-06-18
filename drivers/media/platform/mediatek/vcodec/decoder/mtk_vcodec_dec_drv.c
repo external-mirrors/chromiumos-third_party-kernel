@@ -424,6 +424,10 @@ static int mtk_vcodec_probe(struct platform_device *pdev)
 	mutex_init(&dev->dev_ctx_lock);
 	spin_lock_init(&dev->irqlock);
 
+	init_waitqueue_head(&dev->sync_decode);
+	atomic_set(&dev->normal_frame_cnt, 0);
+	atomic_set(&dev->secure_frame_cnt, 0);
+
 	snprintf(dev->v4l2_dev.name, sizeof(dev->v4l2_dev.name), "%s",
 		"[/MTK_V4L2_VDEC]");
 

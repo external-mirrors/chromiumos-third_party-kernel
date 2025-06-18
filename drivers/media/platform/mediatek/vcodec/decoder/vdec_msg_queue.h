@@ -188,4 +188,10 @@ bool vdec_msg_queue_wait_lat_buf_full(struct vdec_msg_queue *msg_queue);
 void vdec_msg_queue_deinit(struct vdec_msg_queue *msg_queue,
 			   struct mtk_vcodec_dec_ctx *ctx);
 
+/**
+ * vdec_msg_queue_wait_core_is_zero - wait core msg queue isn't buffer to decode.
+ * @ctx: v4l2 ctx
+ */
+void vdec_msg_queue_wait_core_is_zero(struct mtk_vcodec_dec_ctx *ctx);
+
 #endif

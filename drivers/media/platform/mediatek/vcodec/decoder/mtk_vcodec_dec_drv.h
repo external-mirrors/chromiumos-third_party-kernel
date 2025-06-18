@@ -272,6 +272,10 @@ struct mtk_vcodec_dec_ctx {
  * @chip_name: used to distinguish platforms and select the correct codec configuration values
  *
  * @optee_private: optee private data
+ *
+ * @sync_decode: lat and core in sync mode
+ * @normal_frame_cnt: normal frame buffer count to core msg queue list
+ * @secure_frame_cnt: svp frame buffer count to core msg queue list
  */
 struct mtk_vcodec_dec_dev {
 	struct v4l2_device v4l2_dev;
@@ -319,6 +323,10 @@ struct mtk_vcodec_dec_dev {
 #if IS_REACHABLE(CONFIG_OPTEE)
 	struct mtk_vdec_optee_private *optee_private;
 #endif
+
+	wait_queue_head_t sync_decode;
+	atomic_t normal_frame_cnt;
+	atomic_t secure_frame_cnt;
 };
 
 static inline struct mtk_vcodec_dec_ctx *fh_to_dec_ctx(struct v4l2_fh *fh)

@@ -883,6 +883,7 @@ static int vdec_h264_slice_lat_decode_ex(void *h_vdec, struct mtk_vcodec_mem *bs
 		       inst->vsi_ex->slice_bc.dma_addr, (unsigned long)inst->vsi_ex->slice_bc.size,
 		       inst->vsi_ex->trans.dma_addr, inst->vsi_ex->trans.dma_addr_end);
 
+	vdec_msg_queue_wait_core_is_zero(inst->ctx);
 	err = vpu_dec_start(vpu, data, 2);
 	if (err) {
 		mtk_vdec_debug(inst->ctx, "lat decode err: %d", err);
