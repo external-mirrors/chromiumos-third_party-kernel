@@ -620,7 +620,8 @@ static void sfq_perturbation(struct timer_list *t)
 		mod_timer(&q->perturb_timer, jiffies + q->perturb_period);
 }
 
-static int sfq_change(struct Qdisc *sch, struct nlattr *opt)
+static int sfq_change(struct Qdisc *sch, struct nlattr *opt,
+		      struct netlink_ext_ack *extack)
 {
 	struct sfq_sched_data *q = qdisc_priv(sch);
 	struct tc_sfq_qopt *ctl = nla_data(opt);
@@ -653,6 +654,10 @@ static int sfq_change(struct Qdisc *sch, struct nlattr *opt)
 		p = kmalloc(sizeof(*p), GFP_KERNEL);
 		if (!p)
 			return -ENOMEM;
+	}
+	if (ctl->limit == 1) {
+		NL_SET_ERR_MSG_MOD(extack, "invalid limit");
+		return -EINVAL;
 	}
 	sch_tree_lock(sch);
 	if (ctl->quantum) {
@@ -759,7 +764,7 @@ static int sfq_init(struct Qdisc *sch, struct nlattr *opt,
 	get_random_bytes(&q->perturbation, sizeof(q->perturbation));
 
 	if (opt) {
-		int err = sfq_change(sch, opt);
+		int err = sfq_change(sch, opt, extack);
 		if (err)
 			return err;
 	}
