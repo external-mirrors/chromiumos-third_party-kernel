@@ -420,6 +420,7 @@ struct iwl_cfg {
 #define IWL_CFG_MAC_TYPE_PU		0x31
 #define IWL_CFG_MAC_TYPE_TH		0x32
 #define IWL_CFG_MAC_TYPE_QU		0x33
+#define IWL_CFG_MAC_TYPE_CC		0x34
 #define IWL_CFG_MAC_TYPE_QUZ		0x35
 #define IWL_CFG_MAC_TYPE_SO		0x37
 #define IWL_CFG_MAC_TYPE_SOF		0x43

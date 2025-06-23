@@ -235,7 +235,9 @@ static int iwl_dbg_tlv_alloc_region(struct iwl_trans *trans,
 	    (CSR_HW_RFID_TYPE(trans->hw_rf_id) ==
 	     CSR_HW_RFID_TYPE(CSR_HW_RF_ID_TYPE_HR) ||
 	     CSR_HW_RFID_TYPE(trans->hw_rf_id) ==
-	     CSR_HW_RFID_TYPE(CSR_HW_RF_ID_TYPE_GF))) {
+	     CSR_HW_RFID_TYPE(CSR_HW_RF_ID_TYPE_GF) ||
+	     CSR_HW_REV_TYPE(trans->hw_rf_id) ==
+	     IWL_CFG_MAC_TYPE_CC)) {
 		IWL_DEBUG_FW(trans, "WRT: skipping SW-SMEM region\n");
 		return 0;
 	}
