@@ -411,6 +411,7 @@ struct mtk_dp {
 	struct work_struct hdcp_enable_work;
 	struct work_struct hdcp_disable_work;
 	struct work_struct prop_work;
+	struct work_struct audio_work;
 	struct delayed_work check_work;
 	struct workqueue_struct *hdcp_workqueue;
 	struct drm_connector_state con_state[DP_ENCODER_NUM];

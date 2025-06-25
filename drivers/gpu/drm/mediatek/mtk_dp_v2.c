@@ -102,6 +102,7 @@
 #define MAX_PHYD_REG_RANG			0x1500
 #define MST_HPD_EVENT_HANDLE_TIMES		200
 #define MTK_DP_SIP_ATF_VIDEO_UNMUTE		BIT(5)
+#define AUDIO_SRAM_RESET_TIMEOUT_MS		1000
 
 enum aux_reply_cmd {
 	AUX_REPLY_ACK = 0x00,
@@ -2149,9 +2150,6 @@ void mtk_dp_audio_pg_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id e
 	WRITE_2BYTE_MASK(mtk_dp, REG_3088_DP_ENCODER0_P0 + reg_offset,
 			 AUDIO_8CH_SEL_DP_ENCODER0_P0_FLDMASK,
 			 AUDIO_8CH_SEL_DP_ENCODER0_P0_FLDMASK);
-	WRITE_2BYTE_MASK(mtk_dp, REG_3088_DP_ENCODER0_P0 + reg_offset,
-			 AU_EN_DP_ENCODER0_P0_FLDMASK,
-			 AU_EN_DP_ENCODER0_P0_FLDMASK);
 	WRITE_2BYTE_MASK(mtk_dp, REG_3040_DP_ENCODER0_P0 + reg_offset,
 			 AUDIO_16CH_SEL_DP_ENCODER0_P0_FLDMASK,
 			 AUDIO_16CH_SEL_DP_ENCODER0_P0_FLDMASK);
@@ -5343,17 +5341,6 @@ static int mtk_dp_audio_hw_params_v2(struct device *dev, void *data,
 	return 0;
 }
 
-static int mtk_dp_audio_startup_v2(struct device *dev, void *data)
-{
-	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
-	enum dp_encoder_id encoder_id;
-
-	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++)
-		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, false);
-
-	return 0;
-}
-
 static void mtk_dp_audio_shutdown_v2(struct device *dev, void *data)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
@@ -5416,12 +5403,93 @@ static int mtk_dp_audio_hook_plugged_cb_v2(struct device *dev, void *data,
 	return 0;
 }
 
+static void mtk_dp_audio_trigger_work(struct work_struct *work)
+{
+	struct mtk_dp *mtk_dp = container_of(work, struct mtk_dp, audio_work);
+	enum dp_encoder_id encoder_id;
+	u32 reg_offset;
+	u32 audio_sram;
+	bool full, empty;
+	u32 write_0_1;
+	u32 write_2_3;
+	unsigned long timeout;
+
+	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++) {
+		reg_offset = DP_REG_OFFSET(encoder_id);
+
+		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, true);
+
+		timeout = jiffies + msecs_to_jiffies(AUDIO_SRAM_RESET_TIMEOUT_MS);
+		while (time_before(jiffies, timeout)) {
+			WRITE_BYTE_MASK(mtk_dp, REG_3088_DP_ENCODER0_P0 + reg_offset,
+					AU_EN_DP_ENCODER0_P0_FLDMASK, AU_EN_DP_ENCODER0_P0_FLDMASK);
+			udelay(50);
+			WRITE_BYTE_MASK(mtk_dp, REG_3088_DP_ENCODER0_P0 + reg_offset,
+					0x0, AU_EN_DP_ENCODER0_P0_FLDMASK);
+
+			WRITE_2BYTE_MASK(mtk_dp, REG_33EC_DP_ENCODER1_P0 + reg_offset,
+					 AU_SRAM_FULL_CLR_DP_ENCODER1_P0_FLDMASK,
+					 AU_SRAM_FULL_CLR_DP_ENCODER1_P0_FLDMASK);
+			udelay(20);
+			WRITE_2BYTE_MASK(mtk_dp, REG_33EC_DP_ENCODER1_P0 + reg_offset,
+					 0, AU_SRAM_FULL_CLR_DP_ENCODER1_P0_FLDMASK);
+
+			WRITE_2BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + reg_offset,
+					 AU_SRAM_CONTROL_RESET_DP_ENCODER1_P0_FLDMASK,
+					 AU_SRAM_CONTROL_RESET_DP_ENCODER1_P0_FLDMASK);
+			udelay(20);
+			WRITE_2BYTE_MASK(mtk_dp, REG_33F0_DP_ENCODER1_P0 + reg_offset,
+					 0x0, AU_SRAM_CONTROL_RESET_DP_ENCODER1_P0_FLDMASK);
+
+			udelay(200);
+
+			audio_sram = READ_2BYTE(mtk_dp, REG_33EC_DP_ENCODER1_P0 + reg_offset);
+			write_0_1 = READ_2BYTE(mtk_dp, REG_32E8_DP_ENCODER1_P0 + reg_offset) &
+					       AU_SRAM_WRITE_ADDR_0_DP_ENCODER1_P0_FLDMASK;
+			write_2_3 = READ_2BYTE(mtk_dp, REG_32EC_DP_ENCODER1_P0 + reg_offset) &
+					       AU_SRAM_WRITE_ADDR_2_DP_ENCODER1_P0_FLDMASK;
+
+			full = !!(audio_sram & AU_SRAM_FULL_DP_ENCODER1_P0_FLDMASK);
+			empty = !!(audio_sram & AU_SRAM_EMPTY_DP_ENCODER1_P0_FLDMASK);
+
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] Enc[%d] audio SRAM, full:%d, empty:%d, write:0x%x, 0x%x\n",
+				    encoder_id, full, empty, write_0_1, write_2_3);
+
+			if (!full && empty && !write_0_1 && !write_2_3)
+				break;
+
+			usleep_range(1000, 1100);
+		}
+
+		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, false);
+	}
+}
+
+static int mtk_dp_audio_trigger(struct device *dev, int event)
+{
+	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
+
+	/*
+	 * The audio module will send data to the DP only when
+	 * the trigger callback function returns.
+	 * We hope that the audio module can send data to the
+	 * DP module as soon as possible without causing delay
+	 * due to DP reset audio SRAM.
+	 * Therefore, we adopt asynchronous work.
+	 */
+	if (event)
+		schedule_work(&mtk_dp->audio_work);
+
+	return 0;
+}
+
 static const struct hdmi_codec_ops mtk_dp_audio_codec_ops = {
 	.hw_params = mtk_dp_audio_hw_params_v2,
-	.audio_startup = mtk_dp_audio_startup_v2,
 	.audio_shutdown = mtk_dp_audio_shutdown_v2,
 	.get_eld = mtk_dp_audio_get_eld_v2,
 	.hook_plugged_cb = mtk_dp_audio_hook_plugged_cb_v2,
+	.trigger = mtk_dp_audio_trigger,
 	.no_capture_mute = 1,
 };
 
@@ -6205,6 +6273,7 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 	INIT_WORK(&mtk_dp->hdcp_enable_work, mtk_dp_hdcp_enable_handle);
 	INIT_WORK(&mtk_dp->hdcp_disable_work, mtk_dp_hdcp_disable_handle);
 	INIT_WORK(&mtk_dp->prop_work, mtk_dp_hdcp_prop_work);
+	INIT_WORK(&mtk_dp->audio_work, mtk_dp_audio_trigger_work);
 	INIT_DELAYED_WORK(&mtk_dp->check_work, mtk_dp_hdcp_check_work);
 	mtk_dp->hdcp_workqueue = create_workqueue("mtk_dp_hdcp_work");
 	if (!mtk_dp->hdcp_workqueue) {
