@@ -1322,9 +1322,13 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 {
 	int ret;
 	u32 value;
+	u8 cmd_ver;
 	struct iwl_lari_config_change_cmd_v6 cmd = {};
 
 	cmd.config_bitmap = iwl_acpi_get_lari_config_bitmap(&mvm->fwrt);
+
+	cmd_ver = iwl_fw_lookup_cmd_ver(mvm->fw,
+					WIDE_ID(REGULATORY_AND_NVM_GROUP, LARI_CONFIG_CHANGE), 1);
 
 	ret = iwl_acpi_get_dsm_u32(mvm->fwrt.dev, 0, DSM_FUNC_11AX_ENABLEMENT,
 				   &iwl_guid, &value);
@@ -1334,8 +1338,17 @@ static void iwl_mvm_lari_cfg(struct iwl_mvm *mvm)
 	ret = iwl_acpi_get_dsm_u32(mvm->fwrt.dev, 0,
 				   DSM_FUNC_ENABLE_UNII4_CHAN,
 				   &iwl_guid, &value);
-	if (!ret)
+	if (!ret) {
+		value &= DSM_UNII4_ALLOW_BITMAP;
+
+		if (cmd_ver < 9 &&
+		    !fw_has_capa(&mvm->fwrt.fw->ucode_capa,
+				 IWL_UCODE_TLV_CAPA_BIOS_OVERRIDE_5G9_FOR_CA))
+			value &= ~(DSM_VALUE_UNII4_CANADA_OVERRIDE_MSK |
+				   DSM_VALUE_UNII4_CANADA_EN_MSK);
+
 		cmd.oem_unii4_allow_bitmap = cpu_to_le32(value);
+	}
 
 	ret = iwl_acpi_get_dsm_u32(mvm->fwrt.dev, 0,
 				   DSM_FUNC_ACTIVATE_CHANNEL,
