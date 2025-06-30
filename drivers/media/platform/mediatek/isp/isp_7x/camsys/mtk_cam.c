@@ -2896,18 +2896,6 @@ static int mtk_cam_dev_config(struct mtk_cam_ctx *ctx)
 	return 0;
 }
 
-static int __maybe_unused mtk_cam_runtime_suspend(struct device *dev)
-{
-	dev_dbg(dev, "- %s\n", __func__);
-	return 0;
-}
-
-static int __maybe_unused mtk_cam_runtime_resume(struct device *dev)
-{
-	dev_dbg(dev, "- %s\n", __func__);
-	return 0;
-}
-
 static void mtk_cam_ctx_watchdog_worker(struct work_struct *work)
 {
 	struct mtk_cam_ctx *ctx;
@@ -3016,6 +3004,42 @@ struct mtk_cam_ctx *mtk_cam_find_ctx(struct mtk_cam_device *cam,
 	}
 
 	return NULL;
+}
+
+static int __maybe_unused mtk_cam_pm_suspend(struct device *dev)
+{
+	struct mtk_cam_device *cam_dev = dev_get_drvdata(dev);
+	struct mtk_cam_ctx *ctx = cam_dev->ctxs;
+
+	dev_dbg(dev, "- %s\n", __func__);
+
+	mtk_ctx_watchdog_stop(ctx);
+
+	return 0;
+}
+
+static int __maybe_unused mtk_cam_pm_resume(struct device *dev)
+{
+	struct mtk_cam_device *cam_dev = dev_get_drvdata(dev);
+	struct mtk_cam_ctx *ctx = cam_dev->ctxs;
+
+	dev_dbg(dev, "- %s\n", __func__);
+
+	mtk_ctx_watchdog_start(ctx, 4);
+
+	return 0;
+}
+
+static int __maybe_unused mtk_cam_runtime_suspend(struct device *dev)
+{
+	dev_dbg(dev, "- %s\n", __func__);
+	return 0;
+}
+
+static int __maybe_unused mtk_cam_runtime_resume(struct device *dev)
+{
+	dev_dbg(dev, "- %s\n", __func__);
+	return 0;
 }
 
 struct mtk_cam_ctx *mtk_cam_start_ctx(struct mtk_cam_device *cam,
@@ -4120,6 +4144,7 @@ static int mtk_cam_remove(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops mtk_cam_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mtk_cam_pm_suspend, mtk_cam_pm_resume)
 	SET_RUNTIME_PM_OPS(mtk_cam_runtime_suspend, mtk_cam_runtime_resume,
 			   NULL)
 };
