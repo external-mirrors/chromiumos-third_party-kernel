@@ -37,6 +37,7 @@ extern const struct ieee80211_ops rtw89_ops;
 #define BYPASS_CR_DATA 0xbabecafe
 
 #define RTW89_TRACK_WORK_PERIOD	round_jiffies_relative(HZ * 2)
+#define RTW89_TRACK_PS_WORK_PERIOD msecs_to_jiffies(100)
 #define RTW89_FORBID_BA_TIMER round_jiffies_relative(HZ * 4)
 #define CFO_TRACK_MAX_USER 64
 #define MAX_RSSI 110
@@ -1336,6 +1337,11 @@ struct rtw89_btc_wl_smap {
 	u32 emlsr: 1;
 };
 
+enum rtw89_tfc_interval {
+	RTW89_TFC_INTERVAL_100MS,
+	RTW89_TFC_INTERVAL_2SEC,
+};
+
 enum rtw89_tfc_lv {
 	RTW89_TFC_IDLE,
 	RTW89_TFC_ULTRA_LOW,
@@ -1344,7 +1350,6 @@ enum rtw89_tfc_lv {
 	RTW89_TFC_HIGH,
 };
 
-#define RTW89_TP_SHIFT 18 /* bytes/2s --> Mbps */
 DECLARE_EWMA(tp, 10, 2);
 
 struct rtw89_traffic_stats {
@@ -3479,6 +3484,7 @@ struct rtw89_vif {
 	struct rtw89_bssid_cam_entry bssid_cam;
 	struct ieee80211_tx_queue_params tx_params[IEEE80211_NUM_ACS];
 	struct rtw89_traffic_stats stats;
+	struct rtw89_traffic_stats stats_ps;
 	struct rtw89_phy_rate_pattern rate_pattern;
 	struct cfg80211_scan_request *scan_req;
 	struct ieee80211_scan_ies *scan_ies;
@@ -5458,6 +5464,7 @@ struct rtw89_dev {
 	} bbs[RTW89_PHY_NUM];
 
 	struct delayed_work track_work;
+	struct delayed_work track_ps_work;
 	struct delayed_work chanctx_work;
 	struct delayed_work coex_act1_work;
 	struct delayed_work coex_bt_devinfo_work;
@@ -6459,6 +6466,17 @@ static inline bool rtw89_is_rtl885xb(struct rtw89_dev *rtwdev)
 		return true;
 
 	return false;
+}
+
+static inline u32 rtw89_bytes_to_mbps(u64 bytes, enum rtw89_tfc_interval interval)
+{
+	switch (interval) {
+	default:
+	case RTW89_TFC_INTERVAL_2SEC:
+		return bytes >> 18; /* bytes/2s --> Mbps */;
+	case RTW89_TFC_INTERVAL_100MS:
+		return (bytes * 10) >> 17; /* bytes/100ms --> Mbps */
+	}
 }
 
 int rtw89_core_tx_write(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif,
