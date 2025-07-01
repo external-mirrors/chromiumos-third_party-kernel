@@ -1481,6 +1481,7 @@ static int rtw89_ops_suspend(struct ieee80211_hw *hw,
 
 	set_bit(RTW89_FLAG_FORBIDDEN_TRACK_WROK, rtwdev->flags);
 	cancel_delayed_work_sync(&rtwdev->track_work);
+	cancel_delayed_work_sync(&rtwdev->track_ps_work);
 
 	mutex_lock(&rtwdev->mutex);
 	ret = rtw89_wow_suspend(rtwdev, wowlan);
@@ -1509,6 +1510,8 @@ static int rtw89_ops_resume(struct ieee80211_hw *hw)
 	clear_bit(RTW89_FLAG_FORBIDDEN_TRACK_WROK, rtwdev->flags);
 	ieee80211_queue_delayed_work(rtwdev->hw, &rtwdev->track_work,
 				     RTW89_TRACK_WORK_PERIOD);
+	ieee80211_queue_delayed_work(rtwdev->hw, &rtwdev->track_ps_work,
+				     RTW89_TRACK_PS_WORK_PERIOD);
 
 	return ret ? 1 : 0;
 }
