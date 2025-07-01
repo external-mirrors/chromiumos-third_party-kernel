@@ -99,6 +99,17 @@ static const struct chromeos_i2c_probe_data chromeos_i2c_probe_obiwan_touchscree
 	},
 };
 
+static const struct chromeos_i2c_probe_data chromeos_i2c_probe_yoda_touchscreen = {
+	.cfg = &chromeos_i2c_probe_simple_touchscreen_cfg,
+	.opts = &(const struct i2c_of_probe_simple_opts) {
+		.res_node_compatible = "ilitek,ili2901",
+		.supply_name = "vcc33",
+		.gpio_name = "reset",
+		.post_power_on_delay_ms = 10,
+		.post_gpio_config_delay_ms = 100,
+	},
+};
+
 static const struct hw_prober_entry hw_prober_platforms[] = {
 	{
 		.compatible = "google,hana",
@@ -136,7 +147,20 @@ static const struct hw_prober_entry hw_prober_platforms[] = {
 		.compatible = "google,obiwan",
 		.prober = chromeos_i2c_component_prober,
 		.data = &chromeos_i2c_probe_dumb_trackpad,
-	},
+	}, {
+		.compatible = "google,yoda",
+		.prober = chromeos_i2c_component_prober,
+		/*
+		 * Since power sources of yoda's touchpads are
+		 * now controlled by HW and always on (no power-on delay).
+		 * We therefore reuse chromeos_i2c_probe_hana_trackpad.
+		*/
+		.data = &chromeos_i2c_probe_hana_trackpad,
+	}, {
+		.compatible = "google,yoda",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_yoda_touchscreen,
+	}
 };
 
 static int chromeos_of_hw_prober_probe(struct platform_device *pdev)
