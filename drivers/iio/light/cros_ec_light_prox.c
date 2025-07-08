@@ -220,7 +220,7 @@ static int cros_ec_light_prox_write(struct iio_dev *indio_dev,
 			       int val, int val2, long mask)
 {
 	struct cros_ec_light_prox_state *st = iio_priv(indio_dev);
-	int ret, i;
+	int ret, i, frequency;
 	int idx = chan->scan_index;
 
 	mutex_lock(&st->core.cmd_lock);
@@ -301,14 +301,27 @@ static int cros_ec_light_prox_write(struct iio_dev *indio_dev,
 			st->core.range_updated = true;
 		break;
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		ret = cros_ec_sensors_core_write(&st->core, chan, val, val2,
-						 mask);
+		/*
+		 * Send the frequency without calling the core function:
+		 * Due to a bug in the veml3328 EC driver, the ODR change must
+		 * be sent back to back, especially when the sensor is
+		 * suspended.
+		 */
+		frequency = val * 1000 + val2 / 1000;
+		st->core.param.cmd = MOTIONSENSE_CMD_SENSOR_ODR;
+		st->core.param.sensor_odr.data = frequency;
+		st->core.param.sensor_odr.roundup = 1;
+		ret = cros_ec_motion_send_host_cmd(&st->core, 0);
 		/* Repeat the same command to the RGB sensor. */
 		if (!ret && indio_dev->num_channels >
 			    CROS_EC_LIGHT_PROX_MIN_CHANNELS)
 			ret = cros_ec_light_extra_send_host_cmd(
 					&st->core, 1, 0);
-
+		/*
+		 * No need to flush the FIFO, light/proximity sensors are
+		 * on-change sensors, data is sent to the host as soon
+		 * as available.
+		 */
 		break;
 	default:
 		ret = cros_ec_sensors_core_write(&st->core, chan, val, val2,
