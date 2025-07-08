@@ -562,10 +562,8 @@ static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_c
 
 	drm_dp_send_power_updown_phy(&mtk_dp->mgr, mtk_con->port, true);
 
-	if (first_stream) {
-		mtk_dp->mgr.payload_id_table_cleared = false;
+	if (first_stream)
 		drm_dp_mst_topology_queue_probe(&mtk_dp->mgr);
-	}
 
 	ret = drm_dp_add_payload_part1(&mtk_dp->mgr, mst_state, payload);
 	if (ret < 0) {
