@@ -7,6 +7,7 @@
  *	Suman Anna <afd@ti.com>
  */
 
+#include <linux/delay.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -42,12 +43,14 @@ struct ti_syscon_reset_control {
  * @regmap: regmap handle containing the memory-mapped reset registers
  * @controls: array of reset controls
  * @nr_controls: number of controls in control array
+ * @reset_duration_us: time of controller assert reset
  */
 struct ti_syscon_reset_data {
 	struct reset_controller_dev rcdev;
 	struct regmap *regmap;
 	struct ti_syscon_reset_control *controls;
 	unsigned int nr_controls;
+	unsigned int reset_duration_us;
 };
 
 #define to_ti_syscon_reset_data(_rcdev)	\
@@ -150,9 +153,37 @@ static int ti_syscon_reset_status(struct reset_controller_dev *rcdev,
 		!(control->flags & STATUS_SET);
 }
 
+/**
+ * ti_syscon_reset() - perform a full reset cycle on a device
+ * @rcdev: reset controller entity
+ * @id: ID of the reset to be asserted and deasserted
+ *
+ * This function performs a full reset cycle by asserting and then
+ * deasserting the reset signal for a device. It ensures the device
+ * is properly reset and ready for operation.
+ *
+ * Return: 0 for successful request, else a corresponding error value
+ */
+static int ti_syscon_reset(struct reset_controller_dev *rcdev,
+		   unsigned long id)
+{
+	struct ti_syscon_reset_data *data = to_ti_syscon_reset_data(rcdev);
+	int ret;
+
+	ret = ti_syscon_reset_assert(rcdev, id);
+	if (ret)
+		return ret;
+
+	if (data->reset_duration_us)
+		usleep_range(data->reset_duration_us, data->reset_duration_us * 2);
+
+	return ti_syscon_reset_deassert(rcdev, id);
+}
+
 static const struct reset_control_ops ti_syscon_reset_ops = {
 	.assert		= ti_syscon_reset_assert,
 	.deassert	= ti_syscon_reset_deassert,
+	.reset		= ti_syscon_reset,
 	.status		= ti_syscon_reset_status,
 };
 
@@ -195,6 +226,9 @@ static int ti_syscon_reset_probe(struct platform_device *pdev)
 		controls[i].status_bit = be32_to_cpup(list++);
 		controls[i].flags = be32_to_cpup(list++);
 	}
+
+	of_property_read_u32(pdev->dev.of_node, "reset-duration-us",
+			     &data->reset_duration_us);
 
 	data->rcdev.ops = &ti_syscon_reset_ops;
 	data->rcdev.owner = THIS_MODULE;
