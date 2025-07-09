@@ -356,6 +356,11 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_rpl_machines[] = {
 		.sof_tplg_filename = "sof-rpl-nau8318-nau8825.tplg",
 	},
 	{
+		.id = "10508825",
+		.drv_name = "sof_nau8825",
+		.sof_tplg_filename = "sof-rpl-nau8825.tplg",
+	},
+	{
 		.comp_ids = &rpl_rt5682_hp,
 		.drv_name = "rpl_rt1019_rt5682",
 		.machine_quirk = snd_soc_acpi_codec_list,
