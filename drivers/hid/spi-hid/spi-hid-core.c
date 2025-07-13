@@ -44,6 +44,9 @@
 #include "../hid-ids.h"
 #include "spi-hid-core.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/spi_hid.h>
+
 /* quirks to control the device */
 #define SPI_HID_QUIRK_MODE_SWITCH	BIT(0)
 
@@ -181,6 +184,11 @@ static int spi_hid_input_sync(struct spi_hid *shid, void *buf, u16 length,
 	spi_message_init_with_transfers(&shid->input_message,
 					shid->input_transfer, 2);
 
+	trace_spi_hid_input_sync(shid,	shid->input_transfer[0].tx_buf,
+				 shid->input_transfer[0].len,
+				 shid->input_transfer[1].rx_buf,
+				 shid->input_transfer[1].len, 0);
+
 	ret = spi_sync(shid->spi, &shid->input_message);
 	if (ret) {
 		dev_err(dev, "Error starting sync transfer: %d, resetting.",
@@ -206,7 +214,13 @@ static int spi_hid_output(struct spi_hid *shid, const void *buf, u16 length)
 
 	spi_message_init_with_transfers(&message, &transfer, 1);
 
+	trace_spi_hid_output_begin(shid, transfer.tx_buf, transfer.len, NULL,
+				   0, 0);
+
 	ret = spi_sync(shid->spi, &message);
+
+	trace_spi_hid_output_end(shid, transfer.tx_buf, transfer.len, NULL, 0,
+				 ret);
 
 	if (ret) {
 		shid->bus_error_count++;
@@ -405,6 +419,8 @@ static void spi_hid_reset_response_work(struct work_struct *work)
 	};
 	int ret;
 
+	trace_spi_hid_reset_response_work(shid);
+
 	if (shid->ready) {
 		dev_err(dev, "Spontaneous FW reset!");
 		shid->ready = false;
@@ -435,6 +451,8 @@ static int spi_hid_input_report_handler(struct spi_hid *shid,
 	struct spi_hid_input_report r;
 	int error = 0;
 
+	trace_spi_hid_input_report_handler(shid);
+
 	if (!shid->ready || shid->refresh_in_progress || !shid->hid) {
 		dev_err(dev, "HID not ready");
 		return 0;
@@ -458,6 +476,8 @@ static int spi_hid_input_report_handler(struct spi_hid *shid,
 static void spi_hid_response_handler(struct spi_hid *shid,
 				     struct input_report_body_header *body)
 {
+	trace_spi_hid_response_handler(shid);
+
 	shid->response_length = body->content_len;
 	/* completion_done returns 0 if there are waiters, otherwise 1 */
 	if (completion_done(&shid->output_done)) {
@@ -564,6 +584,8 @@ static void spi_hid_create_device_work(struct work_struct *work)
 	u8 prev_state;
 	int ret = 0;
 
+	trace_spi_hid_create_device_work(shid);
+
 	guard(mutex)(&shid->power_lock);
 	prev_state = shid->power_state;
 	if (prev_state == HIDSPI_OFF) {
@@ -591,6 +613,8 @@ static void spi_hid_refresh_device_work(struct work_struct *work)
 	struct hid_device *hid;
 	u32 new_crc32 = 0;
 	int error = 0;
+
+	trace_spi_hid_refresh_device_work(shid);
 
 	guard(mutex)(&shid->power_lock);
 	if (shid->power_state == HIDSPI_OFF) {
@@ -644,6 +668,8 @@ static void spi_hid_process_input_report(struct spi_hid *shid,
 	struct device *dev = &shid->spi->dev;
 	struct hidspi_dev_descriptor *raw;
 	int ret;
+
+	trace_spi_hid_process_input_report(shid);
 
 	spi_hid_populate_input_header(buf->header, &header);
 	spi_hid_populate_input_body(buf->body, &body);
@@ -809,6 +835,9 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 	struct spi_hid_input_header header;
 	int ret = 0;
 
+	trace_spi_hid_dev_irq(shid, irq);
+	trace_spi_hid_header_transfer(shid);
+
 	ret = spi_hid_input_sync(shid, shid->input->header,
 				 sizeof(shid->input->header), true);
 	if (ret) {
@@ -829,6 +858,13 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 		else
 			shid->reset_pending = false;
 	}
+
+	trace_spi_hid_input_header_complete(shid,
+					    shid->input_transfer[0].tx_buf,
+					    shid->input_transfer[0].len,
+					    shid->input_transfer[1].rx_buf,
+					    shid->input_transfer[1].len,
+					    shid->input_message.status);
 
 	if (shid->input_message.status < 0) {
 		dev_warn(dev, "Error reading header: %d.",
@@ -864,6 +900,12 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 		dev_warn(dev, "Device is off after body was received.");
 		goto out;
 	}
+
+	trace_spi_hid_input_body_complete(shid, shid->input_transfer[0].tx_buf,
+					  shid->input_transfer[0].len,
+					  shid->input_transfer[1].rx_buf,
+					  shid->input_transfer[1].len,
+					  shid->input_message.status);
 
 	if (shid->input_message.status < 0) {
 		dev_warn(dev, "Error reading body: %d.",
