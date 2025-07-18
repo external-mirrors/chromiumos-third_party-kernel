@@ -10,7 +10,6 @@
 static int himax_cable_detect_func(struct himax_ts_data *ts, bool force_renew);
 static int himax_chip_init(struct himax_ts_data *ts);
 static int himax_get_data(struct himax_ts_data *ts, u8 *data);
-static int himax_heatmap_data_init(struct himax_ts_data *ts);
 static int himax_platform_init(struct himax_ts_data *ts);
 static int himax_switch_data_type(struct himax_ts_data *ts, u32 type);
 static void himax_self_test(struct work_struct *work);
@@ -4006,11 +4005,8 @@ static void himax_hid_register(struct himax_ts_data *ts)
  * encoded in 12bits, the size of heatmap is 1.5 times of the size of the
  * rx_num * tx_num. Otherwise, the size of heatmap is 2 times of the size of
  * the rx_num * tx_num.
- * If the size of the HID report data is not equal to the previous size, it
- * will free the previous allocated memory and allocate the new memory which
- * size is equal to the final size of touch_data_sz.
- * It will also call the himax_heatmap_data_init() to initialize the heatmap
- * data.
+ * If the size of the HID report data is bigger than size of pre-allocated
+ * transfer buffer, the function bails out with -EINVAL.
  *
  * Return: 0 on success, negative error code on failure
  */
@@ -4026,17 +4022,11 @@ static int himax_hid_report_data_init(struct himax_ts_data *ts)
 	else
 		ts->heatmap_data_size = (ts->ic_data.rx_num * ts->ic_data.tx_num * 2);
 	ts->touch_data_sz += ts->heatmap_data_size;
-	if (ts->touch_data_sz != ts->xfer_buf_sz) {
-		kfree(ts->xfer_buf);
-		ts->xfer_buf_sz = 0;
-		ts->xfer_buf = kzalloc(ts->touch_data_sz, GFP_KERNEL);
-		if (!ts->xfer_buf)
-			return -ENOMEM;
-		ts->xfer_buf_sz = ts->touch_data_sz;
-	}
-	if (himax_heatmap_data_init(ts)) {
-		dev_err(ts->dev, "%s: report data init fail\n", __func__);
-		return -ENOMEM;
+	if (ts->touch_data_sz > ts->xfer_buf_sz) {
+		dev_err(ts->dev,
+			"report size is more than max expected (%d vs %d)\n",
+			ts->touch_data_sz, ts->xfer_buf_sz);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -4244,41 +4234,6 @@ err_load_bin_descriptor:
 }
 
 /**
- * himax_heatmap_data_init() - Initialize the heatmap data
- * @ts: Himax touch screen data
- *
- * The function is used to initialize the heatmap data. It will allocate the
- * memory for the heatmap data. The size of the heatmap data is equal to the
- * rx_num * tx_num * 2 plus the size of the heatmap header and the size of
- * the heatmap ID.
- *
- * Return: 0 on success, negative error code on failure
- */
-static int himax_heatmap_data_init(struct himax_ts_data *ts)
-{
-	ts->heatmap_buf = devm_kzalloc(ts->dev, (ts->ic_data.rx_num * ts->ic_data.tx_num) * 2
-				       + HIMAX_HEAT_MAP_INFO_SZ + HIMAX_HID_ID_SZ, GFP_KERNEL);
-	if (!ts->heatmap_buf)
-		return -ENOMEM;
-
-	return 0;
-}
-
-/**
- * himax_heatmap_data_deinit() - Deinitialize the heatmap data
- * @ts: Himax touch screen data
- *
- * The function is used to deinitialize the heatmap data.
- *
- * Return: None
- */
-static void himax_heatmap_data_deinit(struct himax_ts_data *ts)
-{
-	devm_kfree(ts->dev, ts->heatmap_buf);
-	ts->heatmap_buf = NULL;
-}
-
-/**
  * himax_hid_update() - Update the HID device
  * @work: Work structure
  *
@@ -4294,7 +4249,6 @@ static void himax_hid_update(struct work_struct *work)
 	struct himax_ts_data *ts = container_of(work, struct himax_ts_data, work_hid_update.work);
 
 	himax_int_enable(ts, false);
-	himax_heatmap_data_deinit(ts);
 	if (!ts->hid_req_cfg.input_RD_de) {
 		himax_initial_work(&ts->initial_work.work);
 	} else {
@@ -5135,8 +5089,7 @@ static int himax_get_data(struct himax_ts_data *ts, u8 *data)
  * himax_platform_deinit() - Deinitialize the platform related settings
  * @ts: Pointer to the himax_ts_data structure
  *
- * This function deinitializes the platform related settings, frees the
- * xfer_buf.
+ * This function deinitializes the platform related settings.
  *
  * Return: None
  */
@@ -5144,11 +5097,6 @@ static void himax_platform_deinit(struct himax_ts_data *ts)
 {
 	struct himax_platform_data *pdata = &ts->pdata;
 
-	if (ts->xfer_buf_sz) {
-		kfree(ts->xfer_buf);
-		ts->xfer_buf = NULL;
-		ts->xfer_buf_sz = 0;
-	}
 	himax_power_deconfig(pdata);
 }
 
@@ -5157,8 +5105,7 @@ static void himax_platform_deinit(struct himax_ts_data *ts)
  * @ts: Pointer to the himax_ts_data structure
  *
  * This function initializes the platform related settings.
- * The xfer_buf is used for interrupt data receive. gpio reset pin is set to
- * active and then deactivate to reset the IC.
+ * gpio reset pin is set to active and then deactivate to reset the IC.
  *
  * Return: 0 on success, negative error code on failure
  */
@@ -5166,12 +5113,6 @@ static int himax_platform_init(struct himax_ts_data *ts)
 {
 	int ret;
 	struct himax_platform_data *pdata = &ts->pdata;
-
-	ts->xfer_buf_sz = 0;
-	ts->xfer_buf = kzalloc(HIMAX_HX83102J_FULL_STACK_SZ, GFP_KERNEL);
-	if (!ts->xfer_buf)
-		return -ENOMEM;
-	ts->xfer_buf_sz = HIMAX_HX83102J_FULL_STACK_SZ;
 
 	gpiod_set_value(pdata->gpiod_rst, 1);
 	ret = himax_power_set(ts, true);
@@ -5255,6 +5196,17 @@ static int himax_spi_drv_probe(struct spi_device *spi)
 
 	ts->xfer_tx_data = devm_kzalloc(ts->dev, ts->spi_xfer_max_sz, GFP_KERNEL);
 	if (!ts->xfer_tx_data)
+		return -ENOMEM;
+
+	ts->xfer_buf_sz = HIMAX_HX83102J_FULL_STACK_SZ;
+	ts->xfer_buf = devm_kzalloc(&spi->dev, HIMAX_HX83102J_FULL_STACK_SZ,
+				    GFP_KERNEL);
+	if (!ts->xfer_buf)
+		return -ENOMEM;
+
+	ts->heatmap_buf = devm_kzalloc(&spi->dev, HIMAX_HX83102J_HEATMAP_MAX_SZ,
+				       GFP_KERNEL);
+	if (!ts->heatmap_buf)
 		return -ENOMEM;
 
 	spin_lock_init(&ts->irq_lock);
