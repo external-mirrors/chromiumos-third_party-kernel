@@ -6095,8 +6095,6 @@ void rtw89_hw_scan_complete(struct rtw89_dev *rtwdev, struct ieee80211_vif *vif,
 	if (!vif)
 		return;
 
-	rtw89_set_channel(rtwdev);
-
 	rtw89_chanctx_proceed(rtwdev);
 
 	rtw89_write32_mask(rtwdev,
