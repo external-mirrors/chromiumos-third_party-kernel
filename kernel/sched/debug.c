@@ -347,10 +347,8 @@ static int sched_fair_server_write(long cpu, u64 period, u64 runtime)
 		if (period == rq->fair_server.dl_period && runtime == rq->fair_server.dl_runtime)
 			return 0;
 
-		if (rq->cfs.h_nr_queued) {
-			update_rq_clock(rq);
-			dl_server_stop(&rq->fair_server);
-		}
+		update_rq_clock(rq);
+		dl_server_stop(&rq->fair_server);
 
 		ret = dl_server_apply_params(&rq->fair_server, runtime, period, 0);
 
