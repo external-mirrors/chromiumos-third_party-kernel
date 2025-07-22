@@ -4314,7 +4314,8 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 	enum drm_mode_status ret = MODE_CLOCK_HIGH;
 
 	if ((mtk_dp->data->max_hdisplay != 0 && mode->hdisplay > mtk_dp->data->max_hdisplay) ||
-		(mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay))
+	    (mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay) ||
+	    (mode->htotal - mode->hdisplay < mtk_dp->data->min_hblanking))
 		return MODE_BAD;
 
 	/* This is for temporarily removing the timing. */
@@ -6372,6 +6373,7 @@ static const struct mtk_dp_data mt8196_dp_data = {
 	.mst_support = false,   /* Temporarily disable the MST feature */
 	.max_hdisplay = 3840,
 	.max_vdisplay = 2160,
+	.min_hblanking = 80,
 	.min_hdisplay = 800,
 	.min_vdisplay = 600,
 	.mac_power = mtk_mt8196_dp_mac_power,

@@ -829,7 +829,8 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 	u8 sink_count;
 
 	if ((mtk_dp->data->max_hdisplay != 0 && mode->hdisplay > mtk_dp->data->max_hdisplay) ||
-		(mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay))
+	    (mtk_dp->data->max_vdisplay != 0 && mode->vdisplay > mtk_dp->data->max_vdisplay) ||
+	    (mode->htotal - mode->hdisplay < mtk_dp->data->min_hblanking))
 		return MODE_BAD;
 
 	/* This is for temporarily removing the timing. */

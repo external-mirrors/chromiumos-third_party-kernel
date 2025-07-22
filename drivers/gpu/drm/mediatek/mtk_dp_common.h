@@ -267,6 +267,7 @@ struct mtk_dp_data {
 	bool mst_support;
 	u16 max_hdisplay;
 	u16 max_vdisplay;
+	u16 min_hblanking;
 	u16 min_hdisplay;
 	u16 min_vdisplay;
 	void (*mac_power)(struct mtk_dp *mtk_dp);
