@@ -5312,6 +5312,41 @@ static enum dp_train_stage mtk_dp_training_flow_v2(struct mtk_dp *mtk_dp, u8 lin
 	return res;
 }
 
+static void mtk_dp_phy_param(struct mtk_dp *mtk_dp, enum dp_link_rate link_rate)
+{
+	int i;
+	u32 *phy_settings_param;
+
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Set phy by link rate\n");
+
+	if ((link_rate == DP_LINK_RATE_RBR) || (link_rate == DP_LINK_RATE_HBR)) {
+		phy_settings_param = mtk_dp->phy_settings;
+	} else if (link_rate == DP_LINK_RATE_HBR2) {
+		phy_settings_param = mtk_dp->phy_settings_hbr2;
+	}
+
+	for (i = 0; i < 4; i++) {
+		PHY_WRITE_4BYTE(mtk_dp,
+				mtk_dp->data->phyd_dig_lan_offset[i] + DRIVING_PARAM_3,
+				phy_settings_param[0]);
+		PHY_WRITE_4BYTE(mtk_dp,
+				mtk_dp->data->phyd_dig_lan_offset[i] + DRIVING_PARAM_4,
+				phy_settings_param[1]);
+		PHY_WRITE_4BYTE(mtk_dp,
+				mtk_dp->data->phyd_dig_lan_offset[i] + DRIVING_PARAM_5,
+				phy_settings_param[2]);
+		PHY_WRITE_4BYTE(mtk_dp,
+				mtk_dp->data->phyd_dig_lan_offset[i] + DRIVING_PARAM_6,
+				phy_settings_param[3]);
+		PHY_WRITE_4BYTE(mtk_dp,
+				mtk_dp->data->phyd_dig_lan_offset[i] + DRIVING_PARAM_7,
+				phy_settings_param[4]);
+		PHY_WRITE_4BYTE(mtk_dp,
+				mtk_dp->data->phyd_dig_lan_offset[i] + DRIVING_PARAM_8,
+				phy_settings_param[5]);
+	}
+}
+
 static int mtk_dp_set_training_start_v2(struct mtk_dp *mtk_dp)
 {
 	enum dp_link_rate max_link_rate = mtk_dp->training_info.max_link_rate;
@@ -5368,6 +5403,9 @@ static int mtk_dp_set_training_start_v2(struct mtk_dp *mtk_dp)
 
 		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] training with link rate:0x%x, lane count:%d",
 			link_rate, lane_count);
+
+		if(mtk_dp->phy_by_link_rate)
+			mtk_dp_phy_param(mtk_dp, link_rate);
 
 		mtk_dp_training_flow_v2(mtk_dp, link_rate, lane_count);
 
@@ -6128,16 +6166,30 @@ static int mtk_dp_dt_parse_pdata_v2(struct mtk_dp *mtk_dp,
 	mtk_dp->phy_mux_regs = of_iomap(dev->of_node, 2);
 	mtk_dp->mac_power_regs = of_iomap(dev->of_node, 3);
 
-	ret = of_property_read_u32_array(dev->of_node, "dptx,phy_params",
-					 phy_params_dts, ARRAY_SIZE(phy_params_dts));
-	if (ret) {
-		drm_dbg_kms(mtk_dp->drm_dev,
-			    "[DPTX] get phy_params fail, use default val, ret:%d\n", ret);
-		mtk_dp_phy_param_init_v2(mtk_dp,
-					 phy_params_int, ARRAY_SIZE(phy_params_int));
-	} else {
-		mtk_dp_phy_param_init_v2(mtk_dp,
-					 phy_params_dts, ARRAY_SIZE(phy_params_dts));
+	mtk_dp_phy_param_init_v2(mtk_dp, phy_params_int, ARRAY_SIZE(phy_params_int));
+
+	mtk_dp->phy_by_link_rate = of_property_read_bool(dev->of_node, "phy-by-link-rate");
+
+	if (mtk_dp->phy_by_link_rate) {
+		ret = of_property_read_u32_array(dev->of_node, "phy-params",
+						 phy_params_dts, ARRAY_SIZE(phy_params_dts));
+		if (ret) {
+			memcpy(mtk_dp->phy_settings, phy_params_int, sizeof(phy_params_int));
+			drm_dbg_kms(mtk_dp->drm_dev,
+				    "[DPTX] get phy-params fail, use default val, ret:%d\n", ret);
+		} else {
+			memcpy(mtk_dp->phy_settings, phy_params_dts, sizeof(phy_params_dts));
+		}
+
+		ret = of_property_read_u32_array(dev->of_node, "phy-params-hbr2",
+						 phy_params_dts, ARRAY_SIZE(phy_params_dts));
+		if (ret) {
+			memcpy(mtk_dp->phy_settings_hbr2, phy_params_int, sizeof(phy_params_int));
+			drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] get phy-params-hbr2 fail, use default val, ret:%d\n", ret);
+		} else {
+			memcpy(mtk_dp->phy_settings_hbr2, phy_params_dts, sizeof(phy_params_dts));
+		}
 	}
 
 	vdisp_ao_node = of_parse_phandle(dev->of_node, "mediatek,vdisp-ao", 0);

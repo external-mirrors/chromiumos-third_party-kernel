@@ -435,6 +435,10 @@ struct mtk_dp {
 	struct mtk_drm_private *priv;
 	struct dp_phy_parameter phy_params[DP_PHY_LEVEL_COUNT];
 
+	bool phy_by_link_rate;
+	u32 phy_settings[6];
+	u32 phy_settings_hbr2[6];
+
 	bool swap_enable;
 	bool phy_flip_enable;
 	bool need_debounce;
