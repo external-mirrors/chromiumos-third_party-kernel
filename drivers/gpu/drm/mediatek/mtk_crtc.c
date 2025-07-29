@@ -2256,11 +2256,19 @@ void mtk_crtc_create_crc_cmdq(struct device *dev, struct mtk_crtc_crc *crc)
 			crc_pa += cmdq_get_offset_pa(crc->cmdq_client.chan);
 
 		/* put crc to spr1 register */
-		cmdq_pkt_assign(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
+		if (crc->to_mminfra_out) {
+			cmdq_pkt_assign(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
+				CMDQ_ADDR_HIGH(crc->crc_out));
+			cmdq_pkt_read_s(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
+				CMDQ_ADDR_LOW(crc->ofs[i]),
+				CMDQ_THR_SPR_IDX1);
+		} else {
+			cmdq_pkt_assign(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
 				CMDQ_ADDR_HIGH(crc->cmdq_reg->pa_base));
-		cmdq_pkt_read_s(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
+			cmdq_pkt_read_s(&crc->cmdq_handle, CMDQ_THR_SPR_IDX0,
 				CMDQ_ADDR_LOW(crc->cmdq_reg->offset + crc->ofs[i]),
 				CMDQ_THR_SPR_IDX1);
+		}
 
 		/* copy spr1 register to physical address of the crc */
 		cmdq_pkt_assign(&crc->cmdq_handle, CMDQ_THR_SPR_IDX2,

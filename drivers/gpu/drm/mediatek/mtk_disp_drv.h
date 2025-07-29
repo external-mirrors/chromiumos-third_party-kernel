@@ -257,6 +257,9 @@ void mtk_rdma_layer_config(struct device *dev, unsigned int idx,
 			   struct cmdq_pkt *cmdq_pkt);
 void mtk_rdma_start(struct device *dev);
 void mtk_rdma_stop(struct device *dev);
+size_t mtk_rdma_crc_cnt(struct device *dev);
+u32 *mtk_rdma_crc_entry(struct device *dev);
+void mtk_rdma_crc_read(struct device *dev);
 void mtk_rdma_register_vblank_cb(struct device *dev,
 				 void (*vblank_cb)(void *),
 				 void *vblank_cb_data);
