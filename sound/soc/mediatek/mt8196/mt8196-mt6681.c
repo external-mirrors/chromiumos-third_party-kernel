@@ -55,6 +55,7 @@
 enum mt8196_jacks {
 	MT8196_JACK_HEADSET,
 	MT8196_JACK_DP,
+	MT8196_JACK_DP2,
 	MT8196_JACK_HDMI,
 	MT8196_JACK_MAX,
 };
@@ -62,6 +63,13 @@ enum mt8196_jacks {
 static struct snd_soc_jack_pin mt8196_dp_jack_pins[] = {
 	{
 		.pin = "DP",
+		.mask = SND_JACK_LINEOUT,
+	},
+};
+
+static struct snd_soc_jack_pin mt8196_dp2_jack_pins[] = {
+	{
+		.pin = "DP2",
 		.mask = SND_JACK_LINEOUT,
 	},
 };
@@ -96,6 +104,7 @@ static const struct snd_soc_dapm_widget mt8196_nau8825_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
 	SND_SOC_DAPM_MIC("Headset Mic", NULL),
 	SND_SOC_DAPM_SINK("DP"),
+	SND_SOC_DAPM_SINK("DP2"),
 };
 
 static const struct snd_kcontrol_new mt8196_nau8825_controls[] = {
@@ -309,6 +318,11 @@ SND_SOC_DAILINK_DEFS(tdm_dptx,
 	DAILINK_COMP_ARRAY(COMP_CPU("TDM_DPTX")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
 	DAILINK_COMP_ARRAY(COMP_EMPTY()));
+SND_SOC_DAILINK_DEFS(tdm_dptx2,
+	DAILINK_COMP_ARRAY(COMP_CPU("TDM_DPTX2")),
+	DAILINK_COMP_ARRAY(COMP_CODEC("hdmi-audio-codec",
+				      "i2s-hifi")),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 SND_SOC_DAILINK_DEFS(AFE_SOF_DL_24CH,
 	DAILINK_COMP_ARRAY(COMP_CPU("SOF_DL_24CH")),
 	DAILINK_COMP_ARRAY(COMP_DUMMY()),
@@ -399,6 +413,15 @@ static struct snd_soc_dai_link mt8196_mt6681_dai_links[] = {
 		.dynamic = 1,
 		.dpcm_capture = 1,
 		SND_SOC_DAILINK_REG(capture_cm0),
+	},
+	{
+		.name = "HDMI2_FE",
+		.stream_name = "HDMI2 Playback",
+		.trigger = {SND_SOC_DPCM_TRIGGER_PRE,
+			    SND_SOC_DPCM_TRIGGER_PRE},
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		SND_SOC_DAILINK_REG(playback_hdmi),
 	},
 	{
 		.name = "DL_24CH_FE",
@@ -513,6 +536,17 @@ static struct snd_soc_dai_link mt8196_mt6681_dai_links[] = {
 		SND_SOC_DAILINK_REG(tdm_dptx),
 	},
 	{
+		.name = "TDM_DPTX2_BE",
+		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
+			| SND_SOC_DAIFMT_GATED,
+		.ops = &mt8196_dptx_ops,
+		.be_hw_params_fixup = mt8196_dptx_hw_params_fixup,
+		.no_pcm = 1,
+		.dpcm_playback = 1,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(tdm_dptx2),
+	},
+	{
 		.name = "I2SOUT3_BE",
 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_CBS_CFS
 			| SND_SOC_DAIFMT_GATED,
@@ -556,6 +590,31 @@ static int mt8196_dptx_codec_init(struct snd_soc_pcm_runtime *rtd)
 	ret = snd_soc_card_jack_new_pins(rtd->card, "DP Jack", SND_JACK_LINEOUT,
 					 jack, mt8196_dp_jack_pins,
 					 ARRAY_SIZE(mt8196_dp_jack_pins));
+	if (ret) {
+		dev_err(rtd->dev, "%s, new jack failed: %d\n", __func__, ret);
+		return ret;
+	}
+
+	ret = snd_soc_component_set_jack(component, jack, NULL);
+	if (ret) {
+		dev_err(rtd->dev, "%s, set jack failed on %s (ret=%d)\n",
+			__func__, component->name, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int mt8196_dptx2_codec_init(struct snd_soc_pcm_runtime *rtd)
+{
+	struct mtk_soc_card_data *soc_card_data = snd_soc_card_get_drvdata(rtd->card);
+	struct snd_soc_jack *jack = &soc_card_data->card_data->jacks[MT8196_JACK_DP2];
+	struct snd_soc_component *component = snd_soc_rtd_to_codec(rtd, 0)->component;
+	int ret = 0;
+
+	ret = snd_soc_card_jack_new_pins(rtd->card, "DP2 Jack", SND_JACK_LINEOUT,
+					 jack, mt8196_dp2_jack_pins,
+					 ARRAY_SIZE(mt8196_dp2_jack_pins));
 	if (ret) {
 		dev_err(rtd->dev, "%s, new jack failed: %d\n", __func__, ret);
 		return ret;
@@ -753,6 +812,10 @@ static int mt8196_mt6681_soc_card_probe(struct mtk_soc_card_data *soc_card_data,
 			if (dai_link->num_codecs &&
 			    strcmp(dai_link->codecs->dai_name, "snd-soc-dummy-dai"))
 				dai_link->init = mt8196_dptx_codec_init;
+		} else if (strcmp(dai_link->name, "TDM_DPTX2_BE") == 0) {
+			if (dai_link->num_codecs &&
+			    strcmp(dai_link->codecs->dai_name, "snd-soc-dummy-dai"))
+				dai_link->init = mt8196_dptx2_codec_init;
 		} else if (strcmp(dai_link->name, "I2SOUT3_BE") == 0) {
 			if (dai_link->num_codecs &&
 			    strcmp(dai_link->codecs->dai_name, "snd-soc-dummy-dai"))

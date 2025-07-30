@@ -280,6 +280,16 @@ static SOC_VALUE_ENUM_SINGLE_AUTODISABLE_DECL(dptx_virtual_out_mux_map_enum,
 static const struct snd_kcontrol_new dptx_virtual_out_mux_control =
 	SOC_DAPM_ENUM("DPTX_VIRTUAL_OUT_MUX", dptx_virtual_out_mux_map_enum);
 
+static const char * const dptx_route_demux_texts[] = {
+	"external display 1", "external display 2",
+};
+
+static SOC_ENUM_SINGLE_DECL(dptx_route_demux_enum, SND_SOC_NOPM, 0,
+			    dptx_route_demux_texts);
+
+static const struct snd_kcontrol_new dptx_route_demux_control =
+	SOC_DAPM_ENUM("DPTX Playback Route", dptx_route_demux_enum);
+
 enum {
 	SUPPLY_SEQ_APLL,
 	SUPPLY_SEQ_TDM_MCK_EN,
@@ -372,6 +382,9 @@ static const struct snd_soc_dapm_widget mtk_dai_tdm_widgets[] = {
 			 &hdmi_out_mux_control),
 	SND_SOC_DAPM_MUX("DPTX_OUT_MUX", SND_SOC_NOPM, 0, 0,
 			 &dptx_out_mux_control),
+
+	SND_SOC_DAPM_DEMUX("DPTX Playback Route", SND_SOC_NOPM, 0, 0,
+			   &dptx_route_demux_control),
 
 	SND_SOC_DAPM_SUPPLY_S("TDM_BCK", SUPPLY_SEQ_TDM_BCK_EN,
 			      SND_SOC_NOPM, 0, 0,
@@ -509,8 +522,12 @@ static const struct snd_soc_dapm_route mtk_dai_tdm_routes[] = {
 	{"TDM", NULL, "HDMI_OUT_MUX"},
 	{"TDM", NULL, "TDM_BCK"},
 
-	{"TDM_DPTX", NULL, "DPTX_OUT_MUX"},
+	{"DPTX Playback Route", NULL, "DPTX_OUT_MUX"},
+
+	{"TDM_DPTX", "external display 1", "DPTX Playback Route"},
 	{"TDM_DPTX", NULL, "TDM_DPTX_BCK"},
+	{"TDM_DPTX2", "external display 2", "DPTX Playback Route"},
+	{"TDM_DPTX2", NULL, "TDM_DPTX_BCK"},
 
 	{"TDM_BCK", NULL, "TDM_MCK"},
 	{"TDM_DPTX_BCK", NULL, "TDM_DPTX_MCK"},
@@ -520,6 +537,7 @@ static const struct snd_soc_dapm_route mtk_dai_tdm_routes[] = {
 	{"TDM_DPTX_MCK", NULL, APLL2_W_NAME, mtk_afe_tdm_apll_connect},
 
 	{"DPTX_VIRTUAL_OUT_MUX", "Connect", "TDM_DPTX"},
+	{"DPTX_VIRTUAL_OUT_MUX", "Connect", "TDM_DPTX2"},
 	{"DPTX_VIRTUAL_OUT", NULL, "DPTX_VIRTUAL_OUT_MUX"},
 };
 
@@ -608,7 +626,7 @@ static int mtk_dai_tdm_hw_params(struct snd_pcm_substream *substream,
 	regmap_write(afe->regmap, AFE_TDM_CON1, tdm_con);
 
 	/* set dptx */
-	if (tdm_id == MT8196_DAI_TDM_DPTX) {
+	if (tdm_id == MT8196_DAI_TDM_DPTX || tdm_id == MT8196_DAI_TDM_DPTX2) {
 		regmap_update_bits(afe->regmap, AFE_DPTX_CON,
 				   DPTX_CHANNEL_ENABLE_MASK_SFT,
 				   get_dptx_ch_enable_mask(channels) <<
@@ -679,7 +697,7 @@ static int mtk_dai_tdm_trigger(struct snd_pcm_substream *substream,
 				   0x1 << HDMI_OUT_ON_SFT);
 
 		/* enable dptx */
-		if (tdm_id == MT8196_DAI_TDM_DPTX) {
+		if (tdm_id == MT8196_DAI_TDM_DPTX || tdm_id == MT8196_DAI_TDM_DPTX2) {
 			regmap_update_bits(afe->regmap, AFE_DPTX_CON,
 					   DPTX_ON_MASK_SFT, 0x1 <<
 					   DPTX_ON_SFT);
@@ -696,7 +714,7 @@ static int mtk_dai_tdm_trigger(struct snd_pcm_substream *substream,
 				   TDM_EN_MASK_SFT, 0);
 
 		/* disable dptx */
-		if (tdm_id == MT8196_DAI_TDM_DPTX) {
+		if (tdm_id == MT8196_DAI_TDM_DPTX || tdm_id == MT8196_DAI_TDM_DPTX2) {
 			regmap_update_bits(afe->regmap, AFE_DPTX_CON,
 					   DPTX_ON_MASK_SFT, 0);
 		}
@@ -780,6 +798,18 @@ static struct snd_soc_dai_driver mtk_dai_tdm_driver[] = {
 		},
 		.ops = &mtk_dai_tdm_ops,
 	},
+	{
+		.name = "TDM_DPTX2",
+		.id = MT8196_DAI_TDM_DPTX2,
+		.playback = {
+			.stream_name = "TDM_DPTX2",
+			.channels_min = 2,
+			.channels_max = 8,
+			.rates = MTK_TDM_RATES,
+			.formats = MTK_TDM_FORMATS,
+		},
+		.ops = &mtk_dai_tdm_ops,
+	},
 };
 
 static struct mtk_afe_tdm_priv *init_tdm_priv_data(struct mtk_base_afe *afe,
@@ -835,7 +865,7 @@ int mt8196_dai_tdm_register(struct mtk_base_afe *afe)
 
 	afe_priv->dai_priv[MT8196_DAI_TDM] = tdm_priv;
 	afe_priv->dai_priv[MT8196_DAI_TDM_DPTX] = tdm_dptx_priv;
-
+	afe_priv->dai_priv[MT8196_DAI_TDM_DPTX2] = tdm_dptx_priv;
 	return 0;
 }
 
