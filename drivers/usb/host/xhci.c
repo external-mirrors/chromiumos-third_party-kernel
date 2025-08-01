@@ -238,8 +238,13 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 	if (xhci->quirks & XHCI_INTEL_HOST)
 		udelay(1000);
 
+	/* HACK(crbug.com/35562311,crbug.com/35561696): On Cherryview/Brasswell
+	 * platforms, the reset operation can require more than 10s.
+	 */
+	u64 reset_timeout_us = max(timeout_us, 20 * 1000 * 1000);
+
 	ret = xhci_handshake_check_state(xhci, &xhci->op_regs->command,
-				CMD_RESET, 0, 20 * 1000 * 1000, XHCI_STATE_REMOVING);
+				CMD_RESET, 0, reset_timeout_us, XHCI_STATE_REMOVING);
 	if (ret)
 		return ret;
 
