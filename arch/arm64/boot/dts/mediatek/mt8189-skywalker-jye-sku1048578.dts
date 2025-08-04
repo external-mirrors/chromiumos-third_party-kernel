@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-baze.dtsi"
+
+/ {
+	model = "Google Jye sku1048578/sku1048586 board";
+	compatible = "google,baze-sku1048578", "google,baze-sku1048586",
+	             "google,baze", "mediatek,mt8189";
+	chassis-type = "laptop";
+};
+
+&ap_i2c_tchscr {
+	status = "disabled";
+};
