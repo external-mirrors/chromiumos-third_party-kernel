@@ -242,9 +242,16 @@ static const struct mtk_disp_ccorr_data mt8196_ccorr_driver_data = {
 	.mandatory_ccorr = DDP_COMPONENT_CCORR0,
 };
 
+static const struct mtk_disp_ccorr_data mt8189_ccorr_driver_data = {
+	.matrix_bits = 11,
+	.mandatory_ccorr = DDP_COMPONENT_CCORR0,
+};
+
 static const struct of_device_id mtk_disp_ccorr_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt8183-disp-ccorr",
 	  .data = &mt8183_ccorr_driver_data},
+	{ .compatible = "mediatek,mt8189-disp-ccorr",
+	  .data = &mt8189_ccorr_driver_data},
 	{ .compatible = "mediatek,mt8192-disp-ccorr",
 	  .data = &mt8192_ccorr_driver_data},
 	{ .compatible = "mediatek,mt8196-disp-ccorr",
