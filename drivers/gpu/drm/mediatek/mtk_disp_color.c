@@ -155,6 +155,8 @@ static const struct of_device_id mtk_disp_color_driver_dt_match[] = {
 	  .data = &mt8167_color_driver_data},
 	{ .compatible = "mediatek,mt8173-disp-color",
 	  .data = &mt8173_color_driver_data},
+	{ .compatible = "mediatek,mt8189-disp-color",
+	  .data = &mt8173_color_driver_data},
 	{},
 };
 MODULE_DEVICE_TABLE(of, mtk_disp_color_driver_dt_match);
