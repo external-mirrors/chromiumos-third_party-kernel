@@ -289,7 +289,6 @@ static const u8 tm_if_types_ext_capa_sta[] = {
 	 [7] = WLAN_EXT_CAPA8_OPMODE_NOTIF |
 	       WLAN_EXT_CAPA8_MAX_MSDU_IN_AMSDU_LSB,
 	 [8] = WLAN_EXT_CAPA9_MAX_MSDU_IN_AMSDU_MSB,
-	 [9] = WLAN_EXT_CAPA10_TWT_REQUESTER_SUPPORT,
 };
 
 /* Additional interface types for which extended capabilities are
