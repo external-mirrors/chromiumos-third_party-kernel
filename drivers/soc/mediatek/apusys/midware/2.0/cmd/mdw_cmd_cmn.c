@@ -611,9 +611,9 @@ static void mdw_cmd_release(struct kref *ref)
 		c->del_internal(c);
 	mutex_lock(&mpriv->mdev->mctl_mtx);
 	mdw_cmd_unvoke_map(c);
-	mutex_unlock(&mpriv->mdev->mctl_mtx);
 	mdw_cmd_delete_infos(c->mpriv, c);
 	mdw_mem_put(c->mpriv, c->exec_infos);
+	mutex_unlock(&mpriv->mdev->mctl_mtx);
 	kfree(c->adj_matrix);
 	kfree(c->ksubcmds);
 	kfree(c->subcmds);

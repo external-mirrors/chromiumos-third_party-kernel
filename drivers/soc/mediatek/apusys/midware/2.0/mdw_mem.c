@@ -105,11 +105,11 @@ static void mdw_mem_release(struct mdw_mem *m, bool put_mpriv)
 	mdw_mem_show(m);
 
 	mutex_lock(&mdev->m_mtx);
-	list_del(&m->d_node);
+	list_del_init(&m->d_node);
 	mutex_unlock(&mdev->m_mtx);
 
 	if (m->belong_apu)
-		list_del(&m->u_item);
+		list_del_init(&m->u_item);
 
 	kfree(m);
 
@@ -131,7 +131,6 @@ static void mdw_mem_delete(struct mdw_mem *m)
 static struct mdw_mem *mdw_mem_create(struct mdw_fpriv *mpriv)
 {
 	struct mdw_mem *m = NULL;
-	struct mdw_device *mdev = mpriv->mdev;
 
 	m = kzalloc(sizeof(*m), GFP_KERNEL);
 	if (m) {
@@ -139,14 +138,13 @@ static struct mdw_mem *mdw_mem_create(struct mdw_fpriv *mpriv)
 		m->release = mdw_mem_delete;
 		m->handle = -1;
 		m->pool = NULL;
+		INIT_LIST_HEAD(&m->d_node);
+		INIT_LIST_HEAD(&m->u_item);
 		INIT_LIST_HEAD(&m->p_chunk);
 		mutex_init(&m->mtx);
 		INIT_LIST_HEAD(&m->maps);
 		mdw_mem_show(m);
 		mpriv->get(mpriv);
-		mutex_lock(&mdev->m_mtx);
-		list_add_tail(&m->d_node, &mdev->m_list);
-		mutex_unlock(&mdev->m_mtx);
 	}
 
 	return m;
@@ -216,6 +214,7 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 	uint64_t size, uint64_t align, uint64_t flags, bool need_handle)
 {
 	struct mdw_mem *m = NULL;
+	struct mdw_device *mdev = mpriv->mdev;
 	int ret = -EINVAL;
 
 	mdw_trace_begin("apumdw:mem_alloc|size:%llu align:%llu",
@@ -233,7 +232,6 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 	m->type = type;
 	m->belong_apu = true;
 	m->need_handle = need_handle;
-	list_add_tail(&m->u_item, &mpriv->mems);
 
 	/* alloc mem */
 	ret = mdw_mem_alloc_internal(m);
@@ -249,17 +247,24 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 		if (ret) {
 			mdw_drv_err("generate mem handle fail\n");
 			dma_buf_put(m->dbuf);
-			m = NULL;
-			goto out;
+			goto delete_mem;
 		}
 	}
+	/* insert to list */
+	mutex_lock(&mdev->m_mtx);
+	if (list_empty(&m->d_node)) {
+		list_add_tail(&m->d_node, &mdev->m_list);
+		list_add_tail(&m->u_item, &mpriv->mems);
+	}
+	mutex_unlock(&mdev->m_mtx);
 
 	mdw_mem_show(m);
 	goto out;
 
 delete_mem:
 	/* delete mem struct */
-	mdw_mem_release(m, true);
+	mpriv->put(mpriv);
+	kfree(m);
 	m = NULL;
 out:
 	mdw_trace_end();
@@ -304,8 +309,12 @@ static void mdw_mem_map_release(struct kref *ref)
 	kfree(map);
 	mutex_unlock(&m->mtx);
 
-	/* delete mem struct */
-	if (m->belong_apu == false)
+	/*
+	 * Only free m if it's user memory already in the device list.
+	 * If d_node is empty, m is still being initialized and the caller
+	 * is responsible for cleanup.
+	 */
+	if (m->belong_apu == false && !list_empty(&m->d_node))
 		mdw_mem_release(m, true);
 
 	/* put dma buf ref from map */
@@ -554,8 +563,8 @@ static int mdw_mem_invoke_create(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 
 delete_invoke:
 	list_del(&m_invoke->u_node);
-	map->put(map);
 	dma_buf_put(m->dbuf);
+	map->put(map);
 	kfree(m_invoke);
 out:
 	return ret;
@@ -812,6 +821,12 @@ static int mdw_mem_ioctl_map(struct mdw_fpriv *mpriv,
 			m->flags = flags;
 		}
 	} else {
+		/*
+		 * Safe to drop reference here: mdw_mem_get_by_dbuf() takes a
+		 * dma_buf reference when it finds m, but we already hold one
+		 * from dma_buf_get(handle) above. This put balances the extra
+		 * get, leaving the original reference to keep m valid.
+		 */
 		mdw_mem_put(mpriv, m);
 	}
 
@@ -821,21 +836,32 @@ static int mdw_mem_ioctl_map(struct mdw_fpriv *mpriv,
 		mdw_drv_err("input addr flags(%llx) not match with m->flags(%llx)\n",
 			flags, m->flags);
 		ret = -EINVAL;
-		goto out;
+		goto delete_mem;
 	}
 
 	/* map apu va */
 	ret = mdw_mem_map(mpriv, m);
 	if (ret && m->belong_apu == false) {
 		mdw_drv_err("map dmabuf(%d) fail\n", handle);
-		mdw_mem_release(m, true);
-		m = NULL;
-		goto out;
+		goto delete_mem;
 	}
+	/* insert to mdev m_list */
+	mutex_lock(&mpriv->mdev->m_mtx);
+	if (list_empty(&m->d_node)) {
+		list_add_tail(&m->d_node, &mpriv->mdev->m_list);
+	}
+	mutex_unlock(&mpriv->mdev->m_mtx);
 
 	mdw_mem_show(m);
 	goto out;
 
+delete_mem:
+	/* Only free m if it was newly created and not yet in list */
+	if (list_empty(&m->d_node)) {
+		mpriv->put(mpriv);
+		kfree(m);
+		m = NULL;
+	}
 out:
 	if (m) {
 		args->out.map.device_va = m->device_va;
