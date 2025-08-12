@@ -104,6 +104,9 @@
 #define DP_CHECK_PHY_POLLING_DELAY_TIME		0
 #define DP_CHECK_PHY_POLLING_TIMEOUT		10
 
+#define GET_DP_ENCODER_ID(dev, dp_dev) \
+	((dev) == (dp_dev) ? DP_ENCODER_ID_0 : DP_ENCODER_ID_1)
+
 enum aux_reply_cmd {
 	AUX_REPLY_ACK = 0x00,
 	AUX_DPCD_NACK = BIT(0),
@@ -2420,33 +2423,32 @@ void mtk_dp_audio_update_plugged_status_v2(struct mtk_dp *mtk_dp)
 	if (!mtk_dp->mst_enable) {
 		if (mtk_dp->mtk_con[DP_FIRST_CON]) {
 			plugged = mtk_dp->mtk_con[DP_FIRST_CON]->video_enable &
-				mtk_dp->info[DP_SST_ENCODER_PORT].audio_cur_cfg.detect_monitor;
+				  mtk_dp->info[DP_ENCODER_ID_0].audio_cur_cfg.detect_monitor;
 			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] SST, video enable:%d, detect monitor:%d\n",
 				    mtk_dp->mtk_con[DP_FIRST_CON]->video_enable,
-				    mtk_dp->info[DP_SST_ENCODER_PORT].audio_cur_cfg.detect_monitor);
+				    mtk_dp->info[DP_ENCODER_ID_0].audio_cur_cfg.detect_monitor);
+			if (mtk_dp->plugged_cb && mtk_dp->codec_dev[DP_ENCODER_ID_0])
+				mtk_dp->plugged_cb(mtk_dp->codec_dev[DP_ENCODER_ID_0], plugged);
 		}
 	} else {
 		for (con_id = 0; con_id < ARRAY_SIZE(mtk_dp->mtk_con); con_id++) {
 			if (mst_con_with_encoder(mtk_dp->mtk_con[con_id])) {
 				encoder_id = mtk_dp->mtk_con[con_id]->encoder_id;
 				plugged = mtk_dp->mtk_con[con_id]->video_enable &&
-					mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor;
+					  mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor;
 				drm_dbg_kms(mtk_dp->drm_dev,
 					    "[DPTX] MST, enc[%d] con[%d], video enable:%d, detect monitor:%d\n",
 					    encoder_id, con_id, mtk_dp->mtk_con[con_id]->video_enable,
 					    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor);
 
-				if (plugged)
-					break;
+				if (mtk_dp->plugged_cb && mtk_dp->codec_dev[encoder_id]) {
+					drm_dbg_kms(mtk_dp->drm_dev,
+						    "[DPTX] audio supported:%d, audio enable:%d, plugged:%d\n",
+						    mtk_dp->data->audio_supported, mtk_dp->audio_enable, plugged);
+					mtk_dp->plugged_cb(mtk_dp->codec_dev[encoder_id], plugged);
+				}
 			}
 		}
-	}
-
-	if (mtk_dp->plugged_cb && mtk_dp->codec_dev) {
-		drm_dbg_kms(mtk_dp->drm_dev,
-			    "[DPTX] audio supported:%d, audio enable:%d, plugged:%d\n",
-			    mtk_dp->data->audio_supported, mtk_dp->audio_enable, plugged);
-		mtk_dp->plugged_cb(mtk_dp->codec_dev, plugged);
 	}
 	mutex_unlock(&mtk_dp->update_plugged_status_lock);
 }
@@ -5464,35 +5466,34 @@ static int mtk_dp_audio_hw_params_v2(struct device *dev, void *data,
 				  struct hdmi_codec_daifmt *daifmt,
 				  struct hdmi_codec_params *params)
 {
-	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
-	enum dp_encoder_id encoder_id;
+	struct mtk_dp *mtk_dp = data;
+	enum dp_encoder_id encoder_id = GET_DP_ENCODER_ID(dev, mtk_dp->dev);
 
-	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++) {
-		mtk_dp->info[encoder_id].audio_cur_cfg.channels = params->cea.channels;
-		mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits = params->sample_width;
-		mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate = params->sample_rate;
-
-		mtk_dp_audio_config_v2(mtk_dp, encoder_id);
-	}
+	mtk_dp->info[encoder_id].audio_cur_cfg.channels = params->cea.channels;
+	mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits = params->sample_width;
+	mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate = params->sample_rate;
+	mtk_dp->audio_codec_on[encoder_id] = true;
+	mtk_dp_audio_config_v2(mtk_dp, encoder_id);
 
 	return 0;
 }
 
 static void mtk_dp_audio_shutdown_v2(struct device *dev, void *data)
 {
-	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
-	enum dp_encoder_id encoder_id;
+	struct mtk_dp *mtk_dp = data;
+	enum dp_encoder_id encoder_id = GET_DP_ENCODER_ID(dev, mtk_dp->dev);
 
-	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++)
-		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, true);
+	mtk_dp->audio_codec_on[encoder_id] = false;
+	mtk_dp_audio_mute_v2(mtk_dp, encoder_id, true);
 }
 
 static int mtk_dp_audio_get_eld_v2(struct device *dev, void *data, uint8_t *buf,
 				size_t len)
 {
-	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
+	struct mtk_dp *mtk_dp = data;
 	int con_id = -ENODEV;
 	u8 i, encoder_id;
+	enum dp_encoder_id target_encoder_id = GET_DP_ENCODER_ID(dev, mtk_dp->dev);
 
 	if (!mtk_dp->mst_enable) {
 		con_id = DP_FIRST_CON;
@@ -5506,7 +5507,8 @@ static int mtk_dp_audio_get_eld_v2(struct device *dev, void *data, uint8_t *buf,
 					    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor);
 
 				if (mtk_dp->mtk_con[i]->video_enable &&
-				    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor) {
+				    mtk_dp->info[encoder_id].audio_cur_cfg.detect_monitor &&
+				    encoder_id == target_encoder_id) {
 					con_id = i;
 					break;
 				}
@@ -5529,10 +5531,11 @@ static int mtk_dp_audio_hook_plugged_cb_v2(struct device *dev, void *data,
 					   struct device *codec_dev)
 {
 	struct mtk_dp *mtk_dp = data;
+	enum dp_encoder_id encoder_id = GET_DP_ENCODER_ID(dev, mtk_dp->dev);
 
 	mutex_lock(&mtk_dp->update_plugged_status_lock);
 	mtk_dp->plugged_cb = fn;
-	mtk_dp->codec_dev = codec_dev;
+	mtk_dp->codec_dev[encoder_id] = codec_dev;
 	mutex_unlock(&mtk_dp->update_plugged_status_lock);
 
 	mtk_dp_audio_update_plugged_status_v2(mtk_dp);
@@ -5552,6 +5555,9 @@ static void mtk_dp_audio_trigger_work(struct work_struct *work)
 	unsigned long timeout;
 
 	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++) {
+		if (!mtk_dp->audio_codec_on[encoder_id])
+			continue;
+
 		reg_offset = DP_REG_OFFSET(encoder_id);
 
 		mtk_dp_audio_mute_v2(mtk_dp, encoder_id, true);
@@ -5607,6 +5613,8 @@ static int mtk_dp_audio_trigger(struct device *dev, int event)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
 
+	mtk_dp = mtk_dp ? mtk_dp : dev_get_drvdata(dev->parent);
+
 	/*
 	 * The audio module will send data to the DP only when
 	 * the trigger callback function returns.
@@ -5640,12 +5648,45 @@ static int mtk_dp_register_audio_driver_v2(struct device *dev)
 		.data = mtk_dp,
 	};
 
-	mtk_dp->audio_pdev = platform_device_register_data(dev,
-							   HDMI_CODEC_DRV_NAME,
-							   PLATFORM_DEVID_AUTO,
-							   &codec_data,
-							   sizeof(codec_data));
-	return PTR_ERR_OR_ZERO(mtk_dp->audio_pdev);
+	mtk_dp->audio_pdev[DP_ENCODER_ID_0] =
+		platform_device_register_data(dev,
+					      HDMI_CODEC_DRV_NAME,
+					      PLATFORM_DEVID_AUTO,
+					      &codec_data,
+					      sizeof(codec_data));
+	if (IS_ERR(mtk_dp->audio_pdev[DP_ENCODER_ID_0])) {
+		dev_err(dev, "failed to register audio device\n");
+		return PTR_ERR(mtk_dp->audio_pdev[DP_ENCODER_ID_0]);
+	}
+
+	if (mtk_dp->data->encoder_num == 2) {
+		int ret;
+
+		mtk_dp->pseudo_audio_pdev =
+			platform_device_alloc("pseudo-audio", PLATFORM_DEVID_NONE);
+		if (!mtk_dp->pseudo_audio_pdev) {
+			dev_err(dev, "failed to allocate pseudo-audio device\n");
+			return -ENOMEM;
+		}
+
+		mtk_dp->pseudo_audio_pdev->dev.parent = dev;
+		ret = platform_device_add(mtk_dp->pseudo_audio_pdev);
+		if (ret) {
+			dev_err(dev, "failed to add pseudo-audio device\n");
+			platform_device_put(mtk_dp->pseudo_audio_pdev);
+			return ret;
+		}
+
+		mtk_dp->audio_pdev[DP_ENCODER_ID_1] =
+			platform_device_register_data(&mtk_dp->pseudo_audio_pdev->dev,
+						      HDMI_CODEC_DRV_NAME,
+						      PLATFORM_DEVID_NONE,
+						      &codec_data,
+						      sizeof(codec_data));
+		return PTR_ERR_OR_ZERO(mtk_dp->audio_pdev[DP_ENCODER_ID_1]);
+	}
+
+	return 0;
 }
 
 static bool mtk_dp_link_ok_v2(struct mtk_dp *mtk_dp,
@@ -6504,8 +6545,13 @@ static int mtk_drm_dp_remove_v2(struct platform_device *pdev)
 	clk_disable_unprepare(mtk_dp->pclk);
 	mtk_dp_disable_mac_power_v2(mtk_dp);
 
-	if (mtk_dp->audio_pdev)
-		platform_device_unregister(mtk_dp->audio_pdev);
+	for (i = 0; i < DP_ENCODER_NUM; i++) {
+		if (mtk_dp->audio_pdev[i])
+			platform_device_unregister(mtk_dp->audio_pdev[i]);
+	}
+
+	if (mtk_dp->pseudo_audio_pdev)
+		platform_device_unregister(mtk_dp->pseudo_audio_pdev);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
