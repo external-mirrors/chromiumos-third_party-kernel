@@ -26,8 +26,6 @@
 #include <linux/module.h>
 #include <linux/pm.h>
 #include <linux/uuid.h>
-#include <linux/dmi.h>
-#include <linux/delay.h>
 
 #include "i2c-hid.h"
 
@@ -47,11 +45,6 @@ static const struct acpi_device_id i2c_hid_acpi_blacklist[] = {
 	 * wakeups from suspend.
 	 */
 	{ "IDEA5002" },
-	{ }
-};
-
-static const struct acpi_device_id i2c_hid_acpi_extra_delay_devices[] = {
-	{ "HX121A" },
 	{ }
 };
 
@@ -90,33 +83,6 @@ static void i2c_hid_acpi_shutdown_tail(struct i2chid_ops *ops)
 	acpi_device_set_power(ihid_acpi->adev, ACPI_STATE_D3_COLD);
 }
 
-static const struct dmi_system_id i2c_hid_acpi_dmi_quirks[] = {
-	{
-		.ident = "Google Meliks",
-		.matches = {
-			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Google"),
-			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Meliks"),
-		},
-	},
-	{ }	/* Terminate list */
-};
-
-void init_i2c_hid_acpi_probe_quirks(struct i2c_hid_acpi *ihid_acpi)
-{
-	const struct dmi_system_id *system_id =
-			dmi_first_match(i2c_hid_acpi_dmi_quirks);
-	struct acpi_device *adev = ihid_acpi->adev;
-	acpi_handle handle = acpi_device_handle(adev);
-
-	if (system_id) {
-		if (acpi_match_device_ids(adev, i2c_hid_acpi_extra_delay_devices) == 0) {
-			acpi_handle_debug(handle, "Start Extra Power Up delay\n");
-			msleep(1000);
-			acpi_handle_debug(handle, "End Extra Power Up delay\n");
-		}
-	}
-}
-
 static int i2c_hid_acpi_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -130,8 +96,6 @@ static int i2c_hid_acpi_probe(struct i2c_client *client)
 
 	ihid_acpi->adev = ACPI_COMPANION(dev);
 	ihid_acpi->ops.shutdown_tail = i2c_hid_acpi_shutdown_tail;
-
-	init_i2c_hid_acpi_probe_quirks(ihid_acpi);
 
 	ret = i2c_hid_acpi_get_descriptor(ihid_acpi);
 	if (ret < 0)
