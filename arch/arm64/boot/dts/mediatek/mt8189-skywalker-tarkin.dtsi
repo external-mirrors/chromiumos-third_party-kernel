@@ -1,0 +1,531 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker.dtsi"
+
+/ {
+	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1800_tchscr_report_disable";
+		pinctrl-names = "default";
+		regulator-boot-on;
+		pinctrl-0 = <&touch_pin_report>;
+		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&ap_i2c_aud {
+	/delete-node/ audio-codec@1a;
+
+	rt5650: audio-codec@1a {
+		compatible = "realtek,rt5650";
+		reg = <0x1a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		cbj-sleeve-gpio = <&pio 30 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		#sound-dai-cells = <0>;
+		realtek,dmic1-data-pin = <2>;
+		realtek,jd-mode = <2>;
+		status = "okay";
+	};
+};
+
+&ap_i2c_tchpad {
+	/delete-node/ trackpad@15;
+
+	trackpad_elan: trackpad@15 {
+		compatible = "elan,ekth3000";
+		reg = <0x15>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		vcc-supply = <&pp3300_s3>;
+		status = "okay";
+	};
+};
+
+&ap_i2c_tchscr {
+	/delete-node/ touchscreen@41;
+
+	touchscreen_parade: touchscreen@24 {
+		compatible = "parade,tc3408";
+		reg = <0x24>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "okay";
+	};
+};
+
+&ap_sar_sensor {
+	status = "disabled";
+};
+
+&audio_codec_pins {
+	pins-en-codec-pwr-soc {
+		pinmux = <PINMUX_GPIO30__FUNC_GPIO30>;
+		output-low;
+	};
+};
+
+&cros_ec {
+	spi-max-frequency = <1000000>;
+};
+
+&hdmibrdg {
+	ivdd-supply = <&mt6359_vpa_buck_reg>;
+};
+
+&i2c_tunnel {
+	/delete-node/ sbs-battery@b;
+	battery: sbs-battery@f {
+		compatible = "sbs,sbs-battery";
+		reg = <0xf>;
+		sbs,i2c-retry-count = <2>;
+		sbs,poll-retry-count = <1>;
+	};
+};
+
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)               /* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)               /* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)               /* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)               /* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)               /* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)               /* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)               /* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)               /* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)               /* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)               /* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)               /* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)               /* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)               /* T13 */
+		MATRIX_KEY(0x02, 0x09, 0)               /* 76 */
+	>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_DICTATE)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_ACCESSIBILITY)	/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_PLAYPAUSE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_MICMUTE)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_MUTE)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_VOLUMEDOWN)		/* T13 */
+		MATRIX_KEY(0x02, 0x09, KEY_VOLUMEUP)		/* 76 */
+		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)		/* 42 */
+		MATRIX_KEY(0x04, 0x0a, KEY_FN)			/* 127 */
+		MATRIX_KEY(0x02, 0x07, KEY_102ND)		/* 45 */
+		MATRIX_KEY(0x02, 0x0a, KEY_YEN)			/* 14 */
+	>;
+};
+
+&mmc0 {
+	pinctrl-names = "default", "state_uhs";
+	pinctrl-0 = <&mmc0_pins_default>;
+	pinctrl-1 = <&mmc0_pins_uhs>;
+	bus-width = <8>;
+	max-frequency = <200000000>;
+	cap-mmc-highspeed;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	mmc-hs400-enhanced-strobe;
+	supports-cqe;
+	cap-mmc-hw-reset;
+	no-sdio;
+	no-sd;
+	non-removable;
+	hs400-ds-delay = <0x1481b>;
+	mediatek,hs400-ds-dly3 = <0x14>;
+	vmmc-supply = <&mt6359_vemc_1_ldo_reg>;
+	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
+	status = "okay";
+};
+
+&mt6359_vpa_buck_reg {
+	regulator-min-microvolt = <1000000>;
+	regulator-max-microvolt = <1000000>;
+};
+
+&pio{
+	/* 182 lines */
+	gpio-line-names =
+		"",				/* 0 */
+		"",
+		"AP_SCP_GPIO02",
+		"AP_SCP_GPIO03",
+		"HP_INT_ODL",
+		"",
+		"",
+		"USB3_HUB_RST_L",
+		"",
+		"",
+		"",				/* 10 */
+		"",
+		"TP",
+		"EDP_BL_EN_1V8",
+		"TCHSCR_REPORT_DISABLE",
+		"TCHSCR_INT_1V8_ODL",
+		"AP_FLASH_WP_L",
+		"EC_AP_DPOC_EN_ODL",
+		"",
+		"",
+		"",				/* 20 */
+		"",
+		"",
+		"",
+		"",
+		"EN_PP3300_EDP_X",
+		"",
+		"EC_AP_DP_HPD_L",
+		"EDP_HPD_1V8",
+		"BL_PWM_1V8",
+		"CODEC_PWR_SOC_EN",		/* 30 */
+		"UART_AP_TX_GSC_DBG_RX",
+		"UART_GSC_DBG_TX_AP_RX",
+		"AP_UART1_TXD",
+		"AP_UART1_RXD",
+		"AP_UART2_TXD",
+		"AP_UART2_RXD",
+		"AP_UART3_TXD",
+		"AP_UART3_RXD",
+		"AP_JTAG_TMS",
+		"AP_JTAG_TCK",			/* 40 */
+		"AP_JTAG_TDI",
+		"AP_JTAG_TDO",
+		"AP_JTAG_TRST_L",
+		"AP_KPCOL0",
+		"TP",
+		"TP",
+		"TP",
+		"PCIE_WLAN_WAKE_OBFF_1V8_ODL",
+		"PCIE_WLAN_RST_1V8_L",
+		"PCIE_WLAN_CLKREQ_1V8_ODL",	/* 50 */
+		"",
+		"",
+		"TP",
+		"TP",
+		"AP_I2C_AUD_SCL_1V8",
+		"AP_I2C_AUD_SDA_1V8",
+		"AP_I2C_TPM_SCL_1V8",
+		"AP_I2C_TPM_SDA_1V8",
+		"AP_I2C_TCHSCR_SCL_1V8",
+		"AP_I2C_TCHSCR_SDA_1V8",	/* 60 */
+		"",
+		"",
+		"AP_I2C_HDMI_SCL_1V8",
+		"AP_I2C_HDMI_SDA_1V8",
+		"AP_I2C_TCHPAD_SCL_1V8",
+		"AP_I2C_TCHPAD_SDA_1V8",
+		"TP",
+		"TP",
+		"SPI_AP_CS_EC_L",
+		"SPI_AP_CLK_EC",		/* 70 */
+		"SPI_AP_DO_EC_DI",
+		"SPI_AP_DI_EC_DO",
+		"TP",
+		"TP",
+		"TP",
+		"TP",
+		"",
+		"",
+		"",
+		"",				/* 80 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"PWRAP_SPI_CS_L",
+		"PWRAP_SPI_CK",
+		"PWRAP_SPI_MOSI",		/* 90 */
+		"PWRAP_SPI_MISO",
+		"SRCLKENA0",
+		"SRCLKENA1",
+		"SCP_VREQ_VAO",
+		"AP_RTC_CLK32K",
+		"AP_PMIC_WDTRST_L",
+		"AUD_CLK_MOSI (Strap)",
+		"AUD_SYNC_MOSI (Strap)",
+		"AUD_DAT_MOSI0 (Strap)",
+		"AUD_DAT_MOSI1 (Strap)",	/* 100 */
+		"AUD_DAT_MISO0 (Strap)",
+		"AUD_DAT_MISO1 (Strap)",
+		"TP",
+		"TP",
+		"TP",
+		"I2S_HP_DI",
+		"I2S_HP_MCK",
+		"I2S_HP_BCK",
+		"I2S_HP_LRCK",
+		"I2S_HP_DO",			/* 110 */
+		"",
+		"",
+		"",
+		"",
+		"PCM_HDMI_CLK",
+		"PCM_HDMI_SYNC",
+		"TP",
+		"PCM_HDMI_DO",
+		"DMIC0_CLK",
+		"DMIC0_DATA",			/* 120 */
+		"",
+		"",
+		"",
+		"",
+		"TCHPAD_INT_ODL",
+		"TCHSCR_RST_1V8_L",
+		"AP_HDMI_RST_ODL",
+		"HDMI_AP_INT_ODL",
+		"TP",
+		"",				/* 130 */
+		"AP_XHCI_INIT_DONE",
+		"EC_AP_INT_ODL",
+		"TP",
+		"TP",
+		"EN_HDMI_PWR",
+		"",
+		"AP_EC_WARM_RST_REQ",
+		"GSC_AP_INT_ODL",
+		"HDMI_HPD_1V8_ODL",
+		"AP_SUSPEND_L ",		/* 140 */
+		"EC_AP_RSVD0_ODL",
+		"EC_AP_RSVD1_ODL",
+		"MT6319B_INT",
+		"",
+		"BT_KILL_1V8_L",
+		"WIFI_KILL_1V8_L",
+		"",
+		"",
+		"",
+		"SPI_AP_CLK_BIOS",		/* 150 */
+		"SPI_AP_CS_BIOS_L",
+		"SPI_AP_DO_BIOS_DI",
+		"SPI_AP_DI_BIOS_DO",
+		"TP",
+		"TP",
+		"EMMC_DATA7",
+		"EMMC_DATA6",
+		"EMMC_DATA5",
+		"EMMC_DATA4",
+		"EMMC_RST_L",			/* 160 */
+		"EMMC_CMD",
+		"EMMC_CLK",
+		"EMMC_DATA3",
+		"EMMC_DATA2",
+		"EMMC_DATA1",
+		"EMMC_DATA0",
+		"EMMC_STRB",
+		"",
+		"",
+		"",				/* 170 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"SPMI_SCL",			/* 180 */
+		"SPMI_SDA",
+		"EMI_RESET_N";
+
+	touch_pin_report: pin-report-pins {
+		pins-touch-en {
+			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
+			output-low;
+		};
+	};
+
+	mmc0_pins_default: mmc0-default-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO156__FUNC_MSDC0_DAT7>,
+				 <PINMUX_GPIO157__FUNC_MSDC0_DAT6>,
+				 <PINMUX_GPIO158__FUNC_MSDC0_DAT5>,
+				 <PINMUX_GPIO159__FUNC_MSDC0_DAT4>,
+				 <PINMUX_GPIO161__FUNC_MSDC0_CMD>,
+				 <PINMUX_GPIO163__FUNC_MSDC0_DAT3>,
+				 <PINMUX_GPIO164__FUNC_MSDC0_DAT2>,
+				 <PINMUX_GPIO165__FUNC_MSDC0_DAT1>,
+				 <PINMUX_GPIO166__FUNC_MSDC0_DAT0>;
+			input-enable;
+			drive-strength = <6>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+		pins-clk {
+			pinmux = <PINMUX_GPIO162__FUNC_MSDC0_CLK>;
+			drive-strength = <6>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins-rst {
+			pinmux = <PINMUX_GPIO160__FUNC_MSDC0_RSTB>;
+			drive-strength = <6>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_00>;
+		};
+	};
+
+	mmc0_pins_uhs: mmc0-uhs-pins@0{
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO156__FUNC_MSDC0_DAT7>,
+				 <PINMUX_GPIO157__FUNC_MSDC0_DAT6>,
+				 <PINMUX_GPIO158__FUNC_MSDC0_DAT5>,
+				 <PINMUX_GPIO159__FUNC_MSDC0_DAT4>,
+				 <PINMUX_GPIO161__FUNC_MSDC0_CMD>,
+				 <PINMUX_GPIO163__FUNC_MSDC0_DAT3>,
+				 <PINMUX_GPIO164__FUNC_MSDC0_DAT2>,
+				 <PINMUX_GPIO165__FUNC_MSDC0_DAT1>,
+				 <PINMUX_GPIO166__FUNC_MSDC0_DAT0>;
+			input-enable;
+			drive-strength = <8>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_01>;
+		};
+		pins-clk {
+			pinmux = <PINMUX_GPIO162__FUNC_MSDC0_CLK>;
+			drive-strength = <8>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins-ds {
+			pinmux = <PINMUX_GPIO167__FUNC_MSDC0_DSL>;
+			drive-strength = <8>;
+			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
+		};
+		pins-rst {
+			pinmux = <PINMUX_GPIO160__FUNC_MSDC0_RSTB>;
+			bias-pull-up = <MTK_PUPD_SET_R1R0_00>;
+		};
+	};
+};
+
+&pmic {
+	/delete-node/ mt6359codec;
+};
+
+&rt9123 {
+	status = "disabled";
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5650-sound";
+	model = "mt8189_rt5650";
+
+	dai-link-0 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+	/delete-node/ dai-link-2;
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&touchscreen_pins {
+	/delete-node/ pins-touch-en;
+};
+
+&ufshci {
+        status = "disabled";
+};
+
+/* USB hub port 1 */
+&usb_hub_dsp1_hs {
+	remote-endpoint = <&usb_c1_hs>;
+};
+
+&usb_c1_hs {
+	remote-endpoint = <&usb_hub_dsp1_hs>;
+};
+
+&usb_hub_dsp1_ss {
+	remote-endpoint = <&usb_c1_ss>;
+};
+
+&usb_c1_ss {
+	remote-endpoint = <&usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 2 */
+&usb_hub_dsp2_hs {
+	remote-endpoint = <&usb_a0_hs>;
+};
+
+&usb_a0_hs {
+	remote-endpoint = <&usb_hub_dsp2_hs>;
+};
+
+&usb_hub_dsp2_ss {
+	remote-endpoint = <&usb_a0_ss>;
+};
+
+&usb_a0_ss {
+	remote-endpoint = <&usb_hub_dsp2_ss>;
+};
+
+/* USB hub port 3 */
+&usb_hub_dsp3_hs {
+	remote-endpoint = <&usb_c0_hs>;
+};
+
+&usb_c0_hs {
+	remote-endpoint = <&usb_hub_dsp3_hs>;
+};
+
+&usb_hub_dsp3_ss {
+	remote-endpoint = <&usb_c0_ss>;
+};
+
+&usb_c0_ss {
+	remote-endpoint = <&usb_hub_dsp3_ss>;
+};
+
+/* USB hub port 4 */
+&usb_hub_dsp4_hs {
+	remote-endpoint = <&usb_a1_hs>;
+};
+
+&usb_a1_hs {
+	remote-endpoint = <&usb_hub_dsp4_hs>;
+};
+
+&usb_hub_dsp4_ss {
+	remote-endpoint = <&usb_a1_ss>;
+};
+
+&usb_a1_ss {
+	remote-endpoint = <&usb_hub_dsp4_ss>;
+};
