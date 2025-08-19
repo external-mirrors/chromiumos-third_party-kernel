@@ -2670,6 +2670,7 @@ const struct rtw89_chip_info rtw8922a_chip_info = {
 				  BIT(NL80211_CHAN_WIDTH_80) |
 				  BIT(NL80211_CHAN_WIDTH_160),
 	.support_unii4		= true,
+	.support_noise		= false,
 	.ul_tb_waveform_ctrl	= false,
 	.ul_tb_pwr_diff		= false,
 	.hw_sec_hdr		= true,
@@ -2730,6 +2731,8 @@ const struct rtw89_chip_info rtw8922a_chip_info = {
 	.cfo_hw_comp            = true,
 	.dcfo_comp		= NULL,
 	.dcfo_comp_sft		= 0,
+	.nhm_report		= NULL,
+	.nhm_th			= NULL,
 	.imr_info		= NULL,
 	.imr_dmac_table		= &rtw8922a_imr_dmac_table,
 	.imr_cmac_table		= &rtw8922a_imr_cmac_table,
