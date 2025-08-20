@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include <linux/printk.h>
 #include <linux/reboot.h>
+#include <linux/revocable.h>
 #include <linux/suspend.h>
 
 #include "cros_ec.h"
@@ -639,6 +640,10 @@ static int cros_ec_lpc_probe(struct platform_device *pdev)
 
 	ec_dev = devm_kzalloc(dev, sizeof(*ec_dev), GFP_KERNEL);
 	if (!ec_dev)
+		return -ENOMEM;
+
+	ec_dev->revocable_provider = devm_revocable_provider_alloc(dev, ec_dev);
+	if (!ec_dev->revocable_provider)
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, ec_dev);

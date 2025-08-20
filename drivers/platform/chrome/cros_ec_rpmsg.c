@@ -10,6 +10,7 @@
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
+#include <linux/revocable.h>
 #include <linux/rpmsg.h>
 #include <linux/slab.h>
 
@@ -218,6 +219,10 @@ static int cros_ec_rpmsg_probe(struct rpmsg_device *rpdev)
 
 	ec_dev = devm_kzalloc(dev, sizeof(*ec_dev), GFP_KERNEL);
 	if (!ec_dev)
+		return -ENOMEM;
+
+	ec_dev->revocable_provider = devm_revocable_provider_alloc(dev, ec_dev);
+	if (!ec_dev->revocable_provider)
 		return -ENOMEM;
 
 	ec_rpmsg = devm_kzalloc(dev, sizeof(*ec_rpmsg), GFP_KERNEL);
