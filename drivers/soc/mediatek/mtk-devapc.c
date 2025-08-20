@@ -310,6 +310,11 @@ static const struct mtk_devapc_data devapc_mt8186 = {
 	.regs_ofs = &devapc_regs_ofs_mt6779,
 };
 
+static const struct mtk_devapc_data devapc_mt8189 = {
+	.version = 3,
+	.regs_ofs = &devapc_regs_ofs_mt8196,
+};
+
 static const struct mtk_devapc_data devapc_mt8196 = {
 	.version = 3,
 	.regs_ofs = &devapc_regs_ofs_mt8196,
@@ -322,6 +327,9 @@ static const struct of_device_id mtk_devapc_dt_match[] = {
 	}, {
 		.compatible = "mediatek,mt8186-devapc",
 		.data = &devapc_mt8186,
+	}, {
+		.compatible = "mediatek,mt8189-devapc",
+		.data = &devapc_mt8189,
 	}, {
 		.compatible = "mediatek,mt8196-devapc",
 		.data = &devapc_mt8196,
