@@ -497,7 +497,7 @@ struct mtk_vcodec_dev {
 	int int_cond;
 	int int_type;
 	struct mutex dev_mutex;
-	struct mutex dev_ctx_lock;
+	spinlock_t dev_ctx_lock;
 	wait_queue_head_t queue;
 
 	int dec_irq;
