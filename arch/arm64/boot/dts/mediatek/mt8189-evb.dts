@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 MediaTek Inc.
+ * Author: Sirius Wang <sirius.wang@mediatek.com>
+ */
+/dts-v1/;
+#include "mt8189.dtsi"
+#include "mt6319.dtsi"
+#include "mt6359.dtsi"
+
+/ {
+	model = "MediaTek MT8189 evaluation board";
+	compatible = "mediatek,mt8189-evb", "mediatek,mt8189";
+
+	chosen: chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&scpsys {
+	mfg0-supply = <&mt6359_vproc1_buck_reg>;
+	mfg1-supply = <&mt6359_vsram_proc1_ldo_reg>;
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&ufshci {
+	vcc-supply = <&mt6359_vemc_1_ldo_reg>;
+	vccq-supply = <&mt6359_vio18_ldo_reg>;
+	vccq2-supply = <&mt6359_vufs_ldo_reg>;
+};
