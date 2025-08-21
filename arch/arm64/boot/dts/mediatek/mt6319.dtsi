@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (c) 2025 MediaTek Inc.
+ */
+#include <dt-bindings/iio/mt635x-auxadc.h>
+#include <dt-bindings/spmi/spmi.h>
+
+&spmi {
+	mt6319_7: mt6319@7 {
+		compatible = "mediatek,mt6315-regulator";
+		buck1-modeset-mask = <0x3>;
+		reg = <0x7 SPMI_USID>;
+
+		regulators {
+			mt6319_7_vbuck1: vbuck1 {
+				regulator-name = "vbuck1";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6319_7_vbuck2: vbuck2 {
+				regulator-name = "vbuck2";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6319_7_vbuck3: vbuck3 {
+				regulator-name = "vbuck3";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6319_7_vbuck4: vbuck4 {
+				regulator-name = "vbuck4";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+		};
+	};
+
+	mt6319_8: mt6319@8 {
+		compatible = "mediatek,mt6315-regulator";
+		buck1-modeset-mask = <0xb>;
+		reg = <0x8 SPMI_USID>;
+
+		regulators {
+			mt6319_8_vbuck1: vbuck1 {
+				regulator-name = "vbuck1";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6319_8_vbuck2: vbuck2 {
+				regulator-name = "vbuck2";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6319_8_vbuck3: vbuck3 {
+				regulator-name = "vbuck3";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+			mt6319_8_vbuck4: vbuck4 {
+				regulator-name = "vbuck4";
+				regulator-allowed-modes = <0 1 2>;
+				regulator-always-on;
+			};
+		};
+	};
+};
+
