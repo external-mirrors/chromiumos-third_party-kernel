@@ -296,8 +296,26 @@
 			};
 		};
 
-		mt6359rtc: mt6359rtc {
+		mt6359rtc: rtc {
 			compatible = "mediatek,mt6358-rtc";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			status = "disabled";
+
+			fginit: fginit {
+				reg = <0 0x1>;
+				bits = <0 8>;
+			};
+
+			fgsoc: fgsoc {
+				reg = <1 0x1>;
+				bits = <0 8>;
+			};
+
+			ext32k: ext32k {
+				reg = <2 0x1>;
+				bits = <6 1>;
+			};
 		};
 	};
 };
