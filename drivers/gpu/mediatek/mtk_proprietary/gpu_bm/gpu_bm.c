@@ -22,7 +22,7 @@ static struct v1_data *gpu_info_buf;
 static int gpu_bm_inited;
 static int g_mode_sport_flag;
 static int g_mode_hmlp_flag;
-static DEFINE_MUTEX(g_GPU_BM_lock);
+static DEFINE_SPINLOCK(g_GPU_BM_lock);
 static unsigned int g_mode;
 static unsigned int g_value;
 static unsigned int idx, min_idx, high_idx, low_idx;
@@ -74,6 +74,7 @@ static ssize_t _mgq_proc_write(struct file *file, const char __user *buffer,
 	int mode = -1;
 	char buf[32];
 	unsigned int len;
+	unsigned long flags;
 
 	len = (count < (sizeof(buf) - 1)) ? count : (sizeof(buf) - 1);
 	if (copy_from_user(buf, buffer, len))
@@ -87,7 +88,7 @@ static ssize_t _mgq_proc_write(struct file *file, const char __user *buffer,
 	 * 2010-2300 : apply a ratio for no predict output
 	 */
 
-	mutex_lock(&g_GPU_BM_lock);
+	spin_lock_irqsave(&g_GPU_BM_lock, flags);
 
 	if (!kstrtoint(buf, 10, &mode)) {
 		dev_dbg(ged_dev, "@%s: mode: %d", __func__, mode);
@@ -128,7 +129,7 @@ static ssize_t _mgq_proc_write(struct file *file, const char __user *buffer,
 	else
 		gpu_info_buf->freq = g_mode;
 
-	mutex_unlock(&g_GPU_BM_lock);
+	spin_unlock_irqrestore(&g_GPU_BM_lock, flags);
 
 	return count;
 }
@@ -210,10 +211,11 @@ static void _MTKGPUQoS_setupFW(phys_addr_t phyaddr, size_t size)
 void MTKGPUQoS_mode(int seg_flag)
 {
 	unsigned int loading = 0;
+	unsigned long flags;
 
 	mtk_get_gpu_loading(&loading);
 
-	mutex_lock(&g_GPU_BM_lock);
+	spin_lock_irqsave(&g_GPU_BM_lock, flags);
 
 	idx_freq = gpufreq_get_cur_out_freq(TARGET_DEFAULT);
 	idx = gpufreq_get_cur_oppidx(TARGET_DEFAULT);
@@ -343,12 +345,14 @@ void MTKGPUQoS_mode(int seg_flag)
 	dev_err(ged_dev, "@%s: should not be here; g_mode(%u) is not defined",
 		__func__, g_mode);
 UNLOCK:
-	mutex_unlock(&g_GPU_BM_lock);
+	spin_unlock_irqrestore(&g_GPU_BM_lock, flags);
 }
 EXPORT_SYMBOL(MTKGPUQoS_mode);
 
 void MTKGPUQoS_mode_ratio(int mode)
 {
+	unsigned long flags;
+
 	/* 0         : default bw prediction.
 	 * 1         : sport mode specialized
 	 * 2         : no bw prediction
@@ -357,7 +361,7 @@ void MTKGPUQoS_mode_ratio(int mode)
 	 * 6010-6300 : apply a ratio for mid-low for gpu scernaio bw predict output
 	 */
 
-	mutex_lock(&g_GPU_BM_lock);
+	spin_lock_irqsave(&g_GPU_BM_lock, flags);
 
 	dev_dbg(ged_dev, "@%s: mode: %d\n", __func__, mode);
 
@@ -394,7 +398,7 @@ void MTKGPUQoS_mode_ratio(int mode)
 	else
 		gpu_info_buf->freq = g_mode;
 
-	mutex_unlock(&g_GPU_BM_lock);
+	spin_unlock_irqrestore(&g_GPU_BM_lock, flags);
 }
 EXPORT_SYMBOL(MTKGPUQoS_mode_ratio);
 
