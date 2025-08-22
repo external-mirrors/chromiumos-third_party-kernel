@@ -17,3 +17,4 @@ obj-$(CONFIG_MTK_MBOX) += mtk-mbox.o
 obj-$(CONFIG_MTK_VDISP) += mtk-vdisp.o
 obj-$(CONFIG_MTK_VMM) += mtk-vmm-drv.o
 obj-$(CONFIG_MTK_MMDVFS) += mtk-mmdvfs-v3.o mtk-mmdvfs-v3-user.o
+obj-$(CONFIG_MTK_FSOURCE) += mtk-fsource.o

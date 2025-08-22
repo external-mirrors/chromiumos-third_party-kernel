@@ -180,4 +180,15 @@ config MTK_MMDVFS
 	  driver. The MMDVFS is used to set clk for Mediatek multimedia hardwares
 	  , such as display, camera, mdp and video codec. Say no if your device
 	  does not need to do DVFS for Multimedia hardwares.
+
+config MTK_FSOURCE
+	tristate "MediaTek Fsource Support"
+	depends on MFD_MT6397
+	help
+	  If you say yes to this option, support will be included for the
+	  built-in MTK PMIC chips.
+
+	  Say m here if you want to include fsource support as a module. This
+	  will build a module called "mtk-fsource".
+
 endmenu
