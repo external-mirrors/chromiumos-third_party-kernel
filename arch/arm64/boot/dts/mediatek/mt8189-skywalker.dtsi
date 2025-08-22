@@ -230,6 +230,11 @@
 			};
 		};
 	};
+
+	mtk_fsource: fsource {
+		compatible = "mtk-fsource";
+		vfsource-supply = <&mt6359_vefuse_ldo_reg>;
+	};
 };
 
 /* TODO(treapking): Merge vnc33_*_wifi and vcn33_*_bt and update this. */

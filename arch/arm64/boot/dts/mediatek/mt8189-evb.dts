@@ -62,6 +62,11 @@
 		gpio = <&pio 87 0>;
 		enable-active-high;
 	};
+
+	mtk_fsource: fsource {
+		compatible = "mtk-fsource";
+		vfsource-supply = <&mt6359_vefuse_ldo_reg>;
+	};
 };
 
 &afe{
