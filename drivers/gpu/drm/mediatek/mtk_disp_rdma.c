@@ -50,6 +50,7 @@
 #define RDMA_FIFO_PSEUDO_SIZE(bytes)			(((bytes) / 16) << 16)
 #define RDMA_OUTPUT_VALID_FIFO_THRESHOLD(bytes)		((bytes) / 16)
 #define RDMA_FIFO_SIZE(rdma)			((rdma)->data->fifo_size)
+#define RDMA_THRESHOLD_SIZE(rdma)		((rdma)->data->threshold)
 #define DISP_RDMA_MEM_START_ADDR		0x0f00
 
 #define RDMA_MEM_GMC				0x40402020
@@ -72,6 +73,7 @@ struct mtk_disp_rdma_data {
 	unsigned int fifo_size;
 	const u32 *formats;
 	size_t num_formats;
+	unsigned int threshold;
 };
 
 /*
@@ -206,7 +208,10 @@ void mtk_rdma_config(struct device *dev, unsigned int width,
 	 * output threshold to 70% of max fifo size to make sure the
 	 * threhold will not overflow
 	 */
-	threshold = rdma_fifo_size * 7 / 10;
+	if (RDMA_THRESHOLD_SIZE(rdma))
+		threshold = RDMA_THRESHOLD_SIZE(rdma);
+	else
+		threshold = rdma_fifo_size * 7 / 10;
 	reg = RDMA_FIFO_UNDERFLOW_EN |
 	      RDMA_FIFO_PSEUDO_SIZE(rdma_fifo_size) |
 	      RDMA_OUTPUT_VALID_FIFO_THRESHOLD(threshold);
@@ -410,6 +415,14 @@ static const struct mtk_disp_rdma_data mt8195_rdma_driver_data = {
 	.num_formats = ARRAY_SIZE(mt8173_formats),
 };
 
+
+static const struct mtk_disp_rdma_data mt8189_rdma_driver_data = {
+	.fifo_size = 16 * 2200,
+	.threshold = 4,
+	.formats = mt8173_formats,
+	.num_formats = ARRAY_SIZE(mt8173_formats),
+};
+
 static const struct of_device_id mtk_disp_rdma_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt2701-disp-rdma",
 	  .data = &mt2701_rdma_driver_data},
@@ -418,7 +431,7 @@ static const struct of_device_id mtk_disp_rdma_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt8183-disp-rdma",
 	  .data = &mt8183_rdma_driver_data},
 	{ .compatible = "mediatek,mt8189-disp-rdma",
-	  .data = &mt8195_rdma_driver_data},
+	  .data = &mt8189_rdma_driver_data},
 	{ .compatible = "mediatek,mt8195-disp-rdma",
 	  .data = &mt8195_rdma_driver_data},
 	{},
