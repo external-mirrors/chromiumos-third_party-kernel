@@ -8,7 +8,8 @@
 / {
 	model = "Google Obiwan sku131073/131075 board";
 	compatible = "google,obiwan-sku131073", "google,obiwan-sku131075",
-		     "google,obiwan-sku131076", "google,obiwan", "mediatek,mt8189";
+		     "google,obiwan-sku131076", "google,obiwan-sku131077",
+		     "google,obiwan", "mediatek,mt8189";
 };
 
 &ap_i2c_tchscr {
