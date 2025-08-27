@@ -2547,7 +2547,7 @@
 
 		thermal_zones: thermal-zones {
 			soc_max: soc_max {
-				polling-delay = <1000>; /* milliseconds */
+				polling-delay = <200>; /* milliseconds */
 				polling-delay-passive = <100>; /* milliseconds */
 				thermal-sensors = <&lvts 0>;
 				sustainable-power = <1200>;
