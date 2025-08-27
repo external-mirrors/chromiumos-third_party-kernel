@@ -107,6 +107,8 @@
 	pp3300_edp_x: regulator-pp3300-edp-x {
 		compatible = "regulator-fixed";
 		regulator-name = "pp3300_edp_x";
+		regulator-boot-on;
+		off-on-delay-us = <500000>;
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
@@ -1171,7 +1173,7 @@ ap_i2c_tchpad: &i2c7 {
 	edp_pwr_pins: edp-pwr-pins {
 		pins-pwr {
 			pinmux = <PINMUX_GPIO25__FUNC_GPIO25>;
-			output-low;
+			output-high;
 		};
 	};
 
