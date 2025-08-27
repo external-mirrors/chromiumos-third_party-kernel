@@ -184,7 +184,8 @@
 	};
 
 	usb_a0: connector-0 {
-		compatible = "usb-a-connector";
+		/* HACK(b/431714486):Workaround the resume hang */
+		/* compatbile = "usb-a-connector"; */
 		vbus-supply = <&pp5000_usb>;
 
 		ports {
@@ -203,7 +204,8 @@
 	};
 
 	usb_a1: connector-1 {
-		compatible = "usb-a-connector";
+		/* HACK(b/431714486):Workaround the resume hang */
+		/* compatbile = "usb-a-connector"; */
 		vbus-supply = <&pp5000_usb>;
 
 		ports {
