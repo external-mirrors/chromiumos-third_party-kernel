@@ -6425,7 +6425,7 @@ static int mtk_drm_dp_probe_v2(struct platform_device *pdev)
 
 	ret = devm_request_threaded_irq(&pdev->dev, mtk_dp->irq, mtk_dp_hpd_event_v2,
 					mtk_dp_hpd_event_thread_v2,
-					IRQF_NO_AUTOEN, dev_name(&pdev->dev),
+					IRQF_NO_AUTOEN | IRQF_ONESHOT, dev_name(&pdev->dev),
 					mtk_dp);
 	if (ret) {
 		dev_err(mtk_dp->dev, "[DPTX] failed to request mediatek dp irq\n");
