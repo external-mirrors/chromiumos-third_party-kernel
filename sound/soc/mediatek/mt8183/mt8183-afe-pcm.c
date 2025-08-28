@@ -796,6 +796,12 @@ static int mt8183_afe_pcm_dev_probe(struct platform_device *pdev)
 		afe->preallocate_buffers = true;
 	}
 
+	ret = of_reserved_mem_device_init(dev);
+	if (ret) {
+		dev_info(dev, "no reserved memory found, pre-allocating buffers instead\n");
+		afe->preallocate_buffers = true;
+	}
+
 	/* initial audio related clock */
 	ret = mt8183_init_clock(afe);
 	if (ret) {
