@@ -9,6 +9,9 @@
 #include <drm/drm_atomic_helper.h>
 #include "mtk_dp_common.h"
 
+#define IS_EVEN(x) (((x) & 1) == 0)
+#define IS_MULTIPLE_OF_4(x) (((x) & 3) == 0)
+
 extern const struct drm_encoder_helper_funcs mtk_dp_encoder_helper_funcs;
 
 u32 mtk_dp_read_v2(struct mtk_dp *mtk_dp, u32 offset);
@@ -84,6 +87,24 @@ static inline int encoder_id_to_con_id(struct mtk_dp *mtk_dp,
 
 	dev_err(mtk_dp->dev, "[DPTX] fail to find the connector id by the encoder id\n");
 	return -ENODEV;
+}
+
+static inline bool mtk_dp_timing_alignment_valid(struct mtk_dp *mtk_dp, struct drm_display_mode *mode)
+{
+	u16 hfront_porch, hsync_len, hback_porch;
+
+	hfront_porch = mode->hsync_start - mode->hdisplay;
+	hsync_len = mode->hsync_end - mode->hsync_start;
+	hback_porch = mode->htotal - mode->hsync_end;
+
+	if (!IS_EVEN(mode->hdisplay) || !IS_MULTIPLE_OF_4(hfront_porch) ||
+	    !IS_MULTIPLE_OF_4(hsync_len) || !IS_MULTIPLE_OF_4(hback_porch) ||
+	    !IS_MULTIPLE_OF_4(mode->htotal)) {
+	    dev_err(mtk_dp->dev, "[DPTX] dp timing not meet alignment\n");
+		return false;
+	}
+
+	return true;
 }
 
 static inline bool mst_con_with_encoder(struct mtk_dp_con *mtk_con)

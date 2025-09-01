@@ -4438,6 +4438,9 @@ static enum drm_mode_status mtk_dp_check_mode_v2(struct mtk_dp *mtk_dp,
 	    mode->vdisplay < mtk_dp->data->min_vdisplay)
 		return MODE_BAD;
 
+	if(!mtk_dp_timing_alignment_valid(mtk_dp, mode))
+		return MODE_BAD;
+
 	*dsc = false;
 
 	rate = drm_dp_bw_code_to_link_rate(mtk_dp->training_info.link_rate) *
