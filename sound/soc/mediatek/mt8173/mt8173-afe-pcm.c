@@ -1077,6 +1077,12 @@ static int mt8173_afe_pcm_dev_probe(struct platform_device *pdev)
 		afe->preallocate_buffers = true;
 	}
 
+	ret = of_reserved_mem_device_init(&pdev->dev);
+	if (ret) {
+		dev_info(&pdev->dev, "no reserved memory found, pre-allocating buffers instead\n");
+		afe->preallocate_buffers = true;
+	}
+
 	irq_id = platform_get_irq(pdev, 0);
 	if (irq_id <= 0)
 		return irq_id < 0 ? irq_id : -ENXIO;
