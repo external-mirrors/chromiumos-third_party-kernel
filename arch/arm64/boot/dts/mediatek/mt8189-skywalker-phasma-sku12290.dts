@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-tarkin.dtsi"
+
+/ {
+	model = "Google Phasma sku12290 design";
+	compatible = "google,tarkin-sku12290", "google,tarkin",
+		     "mediatek,mt8189";
+};
+
+&ap_i2c_tchscr {
+	status = "disabled";
+};
+
+&keyboard_controller {
+        keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)               /* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)               /* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)               /* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)               /* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)               /* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)               /* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)               /* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)               /* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)               /* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)               /* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)               /* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)               /* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)               /* T13 */
+		MATRIX_KEY(0x00, 0x0b, 0)               /* T14 */
+                MATRIX_KEY(0x00, 0x0c, 0)               /* T15 */
+	>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_DICTATE)	        /* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_DO_NOT_DISTURB)	/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_ACCESSIBILITY)       /* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_PLAYPAUSE)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_MICMUTE)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_MUTE)		/* T13 */
+		MATRIX_KEY(0x00, 0x0b, KEY_VOLUMEDOWN)		/* T14 */
+		MATRIX_KEY(0x00, 0x0c, KEY_VOLUMEUP)		/* T15 */
+		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)		/* 42 */
+		MATRIX_KEY(0x04, 0x0a, KEY_FN)			/* 127 */
+		MATRIX_KEY(0x02, 0x07, KEY_102ND)		/* 45 */
+		MATRIX_KEY(0x02, 0x0a, KEY_YEN)			/* 14 */
+		MATRIX_KEY(0x00, 0x10, KEY_KPSLASH)             /* 95 */
+		MATRIX_KEY(0x01, 0x10, KEY_KPASTERISK)          /* 100 */
+		MATRIX_KEY(0x02, 0x10, KEY_KPMINUS)             /* 105 */
+		MATRIX_KEY(0x03, 0x11, KEY_KPPLUS)              /* 106 */
+		MATRIX_KEY(0x00, 0x11, KEY_KP7)                 /* 91 */
+		MATRIX_KEY(0x01, 0x11, KEY_KP8)                 /* 96 */
+		MATRIX_KEY(0x02, 0x11, KEY_KP9)                 /* 101 */
+		MATRIX_KEY(0x06, 0x10, KEY_KP4)                 /* 92 */
+		MATRIX_KEY(0x05, 0x10, KEY_KP5)                 /* 97 */
+		MATRIX_KEY(0x03, 0x10, KEY_KP6)                 /* 102 */
+		MATRIX_KEY(0x06, 0x11, KEY_KP1)                 /* 93 */
+		MATRIX_KEY(0x05, 0x11, KEY_KP2)                 /* 98 */
+		MATRIX_KEY(0x04, 0x11, KEY_KP3)                 /* 103 */
+		MATRIX_KEY(0x07, 0x10, KEY_KP0)                 /* 99 */
+		MATRIX_KEY(0x04, 0x10, KEY_KPDOT)               /* 104 */
+		MATRIX_KEY(0x07, 0x11, KEY_KPENTER)             /* 108 */
+	>;
+};

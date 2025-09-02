@@ -6,19 +6,17 @@
 #include "mt8189-skywalker-tarkin.dtsi"
 
 / {
-	model = "Google Tarkin sku4096/unprovisioned design";
-	compatible = "google,tarkin-sku4096", "google,tarkin-sku2147483647",
-		     "google,tarkin", "mediatek,mt8189";
+	model = "Google Tarkin sku8194 design";
+	compatible = "google,tarkin-sku8194", "google,tarkin",
+		     "mediatek,mt8189";
 };
 
-&cros_ec {
-	keyboard-backlight {
-		compatible = "google,cros-kbd-led-backlight";
-	};
+&ap_i2c_tchscr {
+	status = "disabled";
 };
 
 &keyboard_controller {
-	keypad,num-columns = <18>;
+        keypad,num-columns = <18>;
 
 	function-row-physmap = <
 		MATRIX_KEY(0x00, 0x02, 0)               /* T1 */
@@ -48,12 +46,12 @@
 		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
 		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
 		MATRIX_KEY(0x02, 0x0b, KEY_DICTATE)		/* T8 */
-		MATRIX_KEY(0x01, 0x09, KEY_ACCESSIBILITY)	/* T9 */
-		MATRIX_KEY(0x00, 0x04, KEY_PLAYPAUSE)		/* T10 */
-		MATRIX_KEY(0x00, 0x01, KEY_MICMUTE)		/* T11 */
-		MATRIX_KEY(0x01, 0x05, KEY_MUTE)		/* T12 */
-		MATRIX_KEY(0x03, 0x05, KEY_VOLUMEDOWN)		/* T13 */
-		MATRIX_KEY(0x02, 0x09, KEY_VOLUMEUP)		/* 76 */
+		MATRIX_KEY(0x01, 0x09, KEY_PLAYPAUSE)	        /* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_MICMUTE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_MUTE)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEDOWN)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_VOLUMEUP)		/* T13 */
+		MATRIX_KEY(0x02, 0x09, KEY_DELETE)		/* 76 */
 		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)		/* 42 */
 		MATRIX_KEY(0x04, 0x0a, KEY_FN)			/* 127 */
 		MATRIX_KEY(0x02, 0x07, KEY_102ND)		/* 45 */

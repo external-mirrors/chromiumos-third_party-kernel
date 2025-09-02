@@ -15,3 +15,47 @@
 &ap_i2c_tchscr {
 	status = "disabled";
 };
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)               /* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)               /* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)               /* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)               /* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)               /* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)               /* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)               /* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)               /* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)               /* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)               /* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)               /* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)               /* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)               /* T13 */
+		MATRIX_KEY(0x02, 0x09, 0)               /* 76 */
+	>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_DICTATE)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_ACCESSIBILITY)	/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_PLAYPAUSE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_MICMUTE)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_MUTE)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_VOLUMEDOWN)		/* T13 */
+		MATRIX_KEY(0x02, 0x09, KEY_VOLUMEUP)		/* 76 */
+		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)		/* 42 */
+		MATRIX_KEY(0x04, 0x0a, KEY_FN)			/* 127 */
+		MATRIX_KEY(0x02, 0x07, KEY_102ND)		/* 45 */
+		MATRIX_KEY(0x02, 0x0a, KEY_YEN)			/* 14 */
+	>;
+};
