@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+DEFAULT: {}
+
+skywalker:
+  dtb:
+    mt8189-skywalker.dtb:
+      sku: [0x7FFFFFFF]
+
+anakin:
+  dtb:
+    mt8189-skywalker-anakin-rev0-sku0.dtb:
+      rev:
+        max: 1
+      sku: [0x0, 0x3, 0x4, 0x6, 0x7, 0x9, 0xA]
+    mt8189-skywalker-anakin-rev0-sku1.dtb:
+      rev:
+        max: 1
+      sku: [0x1, 0x2, 0x5, 0x8,
+            0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107,
+            0x108, 0x109, 0x10A, 0x10B,
+            0x7FFFFFFF]
+    mt8189-skywalker-anakin-sku0.dtb:
+      rev:
+        min: 2
+      sku: [0x0, 0x3, 0x4, 0x6, 0x7, 0x9, 0xA]
+    mt8189-skywalker-anakin-sku1.dtb:
+      rev:
+        min: 2
+      sku: [0x1, 0x2, 0x5, 0x8,
+            0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107,
+            0x108, 0x109, 0x10A, 0x10B,
+            0x7FFFFFFF]
+
+baze:
+  dtb:
+    mt8189-skywalker-baze-sku0.dtb:
+      sku: [0x0, 0x1, 0x4, 0x5, 0x7FFFFFFF]
+    mt8189-skywalker-baze-sku2.dtb:
+      sku: [0x2, 0x3, 0x6, 0x7]
+    mt8189-skywalker-jye-sku1048576.dtb:
+      sku: [0x100000, 0x100001, 0x100008]
+    mt8189-skywalker-jye-sku1048578.dtb:
+      sku: [0x100002, 0x10000A]
+    mt8189-skywalker-jye-sku1048580.dtb:
+      sku: [0x100004, 0x100005]
+    mt8189-skywalker-jye-sku1048582.dtb:
+      sku: [0x100006, 0x100007]
+    mt8189-skywalker-shaak-sku2097153.dtb:
+      sku: [0x200001]
+    mt8189-skywalker-shaak-sku2097154.dtb:
+      sku: [0x200002]
+
+obiwan:
+  dtb:
+    mt8189-skywalker-obiwan-sku131072.dtb:
+      sku: [0x20000, 0x20002]
+    mt8189-skywalker-obiwan-sku131073.dtb:
+      sku: [0x20001, 0x20003, 0x20004, 0x20005]
+    mt8189-skywalker-obiwan-sku131078.dtb:
+      sku: [0x20006]
+    mt8189-skywalker-quigon-sku196608.dtb:
+      sku: [0x30000, 0x30003, 0x7FFFFFFF]
+    mt8189-skywalker-quigon-sku196609.dtb:
+      sku: [0x30001, 0x30002, 0x30007, 0x30008]
+    mt8189-skywalker-quigon-sku196612.dtb:
+      sku: [0x30004, 0x30005]
+    mt8189-skywalker-quigon-sku196614.dtb:
+      sku: [0x30006]
+    mt8189-skywalker-quigon-sku196617.dtb:
+      sku: [0x30009]
+
+padme:
+  dtb:
+    mt8189-skywalker-padme-sku290.dtb:
+      sku: [0x122]
+    mt8189-skywalker-padme-sku546.dtb:
+      sku: [0x222, 0x422]
+    mt8189-skywalker-padme-sku802.dtb:
+      sku: [0x322, 0x7FFFFF22]
+
+tarkin:
+  dtb:
+    mt8189-skywalker-tarkin-sku4096.dtb:
+      sku: [0x1000]
+    mt8189-skywalker-tarkin-sku4097.dtb:
+      sku: [0x1001, 0x1002, 0x1003, 0x1004, 0x1006]
+    mt8189-skywalker-tarkin-sku4101.dtb:
+      sku: [0x1005, 0x1007, 0x1008]
+    mt8189-skywalker-tarkin-sku8192.dtb:
+      sku: [0x2000]
+    mt8189-skywalker-tarkin-sku8193.dtb:
+      sku: [0x2001]
+    mt8189-skywalker-tarkin-sku8194.dtb:
+      sku: [0x2002]
+    mt8189-skywalker-phasma-sku12288.dtb:
+      sku: [0x3000, 0x3001]
+    mt8189-skywalker-phasma-sku12290.dtb:
+      sku: [0x3002, 0x3003]
+    mt8189-skywalker-tarkin-sku2147483647.dtb:
+      sku: [0x7FFFFFFF]
+
+yoda:
+  dtb:
+    mt8189-skywalker-yoda-sku0.dtb:
+      sku: [0x0, 0x1, 0x2, 0x3,
+            0x8, 0x9, 0xA, 0xB,
+            0x1000, 0x1001, 0x1002, 0x1003,
+            0x1008, 0x1009, 0x100A, 0x100B,
+            0x7FFFFFFF]
+    mt8189-skywalker-yoda-sku4.dtb:
+      sku: [0x4, 0x5, 0x6, 0x7, 0xC, 0xD, 0xE, 0xF]
+    mt8189-skywalker-yoda-sku16.dtb:
+      sku: [0x10, 0x11, 0x12, 0x13,
+            0x18, 0x19, 0x1A, 0x1B,
+            0x1010, 0x1011, 0x1012, 0x1013,
+            0x1018, 0x1019, 0x101A, 0x101B]
