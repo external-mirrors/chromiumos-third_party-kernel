@@ -7,10 +7,12 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/scmi_protocol.h>
 #include <linux/slab.h>
 #include "tinysys-scmi.h"
@@ -37,7 +39,7 @@ struct mtk_mminfra_plat_data {
 
 struct mtk_mminfra_data {
 	struct device				*dev;
-	void __iomem				*base;
+	struct regmap				*regmap;
 	struct clk_bulk_data			clks[MTK_MMINFRA_CLK_NR_MAX];
 	struct notifier_block			pd_nb;
 	int					feature_id;
@@ -121,8 +123,8 @@ static void mtk_mminfra_cg_check(bool is_on, struct mtk_mminfra_data *data)
 	u32 con0_val;
 	u32 con1_val_gce;
 
-	con0_val = readl_relaxed(data->base + MMINFRA_CG_CON0);
-	con1_val_gce = readl_relaxed(data->base + MMINFRA_CG_CON1);
+	regmap_read(data->regmap, MMINFRA_CG_CON0, &con0_val);
+	regmap_read(data->regmap, MMINFRA_CG_CON1, &con1_val_gce);
 	con0_val &= (SMI_CG_BIT | GCEM_CG_BIT | GCED_CG_BIT);
 	con1_val_gce &= GCE26M_CG_BIT;
 
@@ -130,7 +132,7 @@ static void mtk_mminfra_cg_check(bool is_on, struct mtk_mminfra_data *data)
 		/* SMI CG still off */
 		dev_err(data->dev, "%s cg still off, CG_CON0:0x%x CG_CON1:0x%x\n",
 			__func__, con0_val, con1_val_gce);
-	} else if (!con0_val || !con1_val_gce) {
+	} else if (!is_on && (!con0_val || !con1_val_gce)) {
 		/* SMI CG still on */
 		dev_err(data->dev, "%s cg still on, CG_CON0:0x%x CG_CON1:0x%x\n",
 			__func__, con0_val, con1_val_gce);
@@ -155,8 +157,7 @@ static int mtk_mminfra_pd_callback(struct notifier_block *nb,
 
 		if (mminfra_data->plat_data->bkrs_enable) {
 			mtk_do_mminfra_bkrs(true, mminfra_data);
-			val = readl_relaxed(mminfra_data->base +
-					    MMINFRA_AID_REMAP);
+			regmap_read(mminfra_data->regmap, MMINFRA_AID_REMAP, &val);
 			if (val != mminfra_data->backup_val) {
 				dev_err(mminfra_data->dev,
 					"%s: HRE restore fail val:0x%x\n",
@@ -167,8 +168,7 @@ static int mtk_mminfra_pd_callback(struct notifier_block *nb,
 		dev_dbg(mminfra_data->dev, "%s: enable clk\n", __func__);
 		break;
 	case GENPD_NOTIFY_PRE_OFF:
-		mminfra_data->backup_val = readl_relaxed(mminfra_data->base +
-							 MMINFRA_AID_REMAP);
+		regmap_read(mminfra_data->regmap, MMINFRA_AID_REMAP, &mminfra_data->backup_val);
 		if (mminfra_data->plat_data->bkrs_enable)
 			mtk_do_mminfra_bkrs(false, mminfra_data);
 
@@ -218,9 +218,9 @@ static int mtk_mminfra_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	data->base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(data->base))
-		return PTR_ERR(data->base);
+	data->regmap = syscon_regmap_lookup_by_phandle(dev->of_node, "mediatek,mminfra");
+	if (IS_ERR(data->regmap))
+		return PTR_ERR(data->regmap);
 
 	data->pd_nb.notifier_call = mtk_mminfra_pd_callback;
 	ret = dev_pm_genpd_add_notifier(dev, &data->pd_nb);
