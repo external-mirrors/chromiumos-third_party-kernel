@@ -146,15 +146,15 @@ static const struct mtk_clk_desc gce_m_mcd = {
 };
 
 static const struct mtk_gate_regs mminfra_config0_cg_regs = {
-	.set_ofs = 0x04,
-	.clr_ofs = 0x08,
-	.sta_ofs = 0x00,
+	.set_ofs = 0x104,
+	.clr_ofs = 0x108,
+	.sta_ofs = 0x100,
 };
 
 static const struct mtk_gate_regs mminfra_config1_cg_regs = {
-	.set_ofs = 0x14,
-	.clr_ofs = 0x18,
-	.sta_ofs = 0x10,
+	.set_ofs = 0x114,
+	.clr_ofs = 0x118,
+	.sta_ofs = 0x110,
 };
 
 #define GATE_MMINFRA_CONFIG0(_id, _name, _parent, _shift) {	\
