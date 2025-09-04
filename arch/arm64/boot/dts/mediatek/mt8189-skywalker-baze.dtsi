@@ -6,6 +6,10 @@
 #include "mt8189-skywalker.dtsi"
 
 / {
+	connector-hdmi {
+		status = "disabled";
+	};
+
 	rt1019p: audio-codec {
 		compatible = "realtek,rt1019p";
 		#sound-dai-cells = <0>;
@@ -31,6 +35,10 @@
 };
 
 &ap_i2c_hdmi {
+	status = "disabled";
+};
+
+&dsi0 {
 	status = "disabled";
 };
 
@@ -103,6 +111,10 @@
 	bus-width = <8>;
 	max-frequency = <200000000>;
 	cap-mmc-highspeed;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	mmc-hs400-enhanced-strobe;
+	supports-cqe;
 	cap-mmc-hw-reset;
 	no-sdio;
 	no-sd;
@@ -241,7 +253,7 @@
 };
 
 &ufshci {
-        status = "disabled";
+	status = "disabled";
 };
 
 /* USB hub port 1 */
