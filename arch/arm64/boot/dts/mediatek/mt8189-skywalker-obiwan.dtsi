@@ -161,6 +161,13 @@
 	};
 };
 
+&i2c_tunnel {
+	battery: sbs-battery@b {
+		sbs,i2c-retry-count = <2>;
+		sbs,poll-retry-count = <10>;
+	};
+};
+
 &keyboard_controller {
 	keypad,num-columns = <18>;
 
