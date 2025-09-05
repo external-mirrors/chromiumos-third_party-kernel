@@ -51,7 +51,31 @@
 		pinctrl-0 = <&trackpad_pins>;
 		wakeup-source;
 		vcc-supply = <&pp3300_s3>;
-		status = "okay";
+		status = "fail-needs-probe";
+	};
+
+	trackpad_synaptics: trackpad@2c  {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		hid-descr-addr = <0x20>;
+		vdd-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
+
+	trackpad_pixart: trackpad@68 {
+		compatible = "hid-over-i2c";
+		reg = <0x68>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		hid-descr-addr = <0x20>;
+		vdd-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
 	};
 };
 
