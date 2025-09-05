@@ -418,7 +418,7 @@ static const struct mtk_disp_rdma_data mt8195_rdma_driver_data = {
 
 static const struct mtk_disp_rdma_data mt8189_rdma_driver_data = {
 	.fifo_size = 16 * 2200,
-	.threshold = 4,
+	.threshold = 4 * 16,
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
 };
