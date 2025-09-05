@@ -19,6 +19,8 @@
  *
  */
 
+#include <linux/mod_devicetable.h>
+
 /**
  * POWER_MANAGEMENT_CALLBACKS - Power management configuration
  *

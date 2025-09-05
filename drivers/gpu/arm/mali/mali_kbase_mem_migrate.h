@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2022-2023 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2022-2025 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -21,6 +21,14 @@
 #ifndef _KBASE_MEM_MIGRATE_H
 #define _KBASE_MEM_MIGRATE_H
 
+#include "version_compat_defs.h"
+
+#include <linux/types.h>
+
+struct kbase_device;
+struct file;
+struct page;
+
 /**
  * DOC: Base kernel page migration implementation.
  */
@@ -31,7 +39,7 @@
 
 #define PAGE_ISOLATE_SHIFT (7)
 #define PAGE_ISOLATE_MASK ((u8)1 << PAGE_ISOLATE_SHIFT)
-#define PAGE_ISOLATE_SET(status, value)                                                            \
+#define PAGE_ISOLATE_SET(status, value) \
 	((status & ~PAGE_ISOLATE_MASK) | (value << PAGE_ISOLATE_SHIFT))
 #define IS_PAGE_ISOLATED(status) ((bool)(status & PAGE_ISOLATE_MASK))
 
@@ -41,15 +49,6 @@
 #define PAGE_MOVABLE_SET(status) (status | PAGE_MOVABLE_MASK)
 
 #define IS_PAGE_MOVABLE(status) ((bool)(status & PAGE_MOVABLE_MASK))
-
-/* Global integer used to determine if module parameter value has been
- * provided and if page migration feature is enabled.
- */
-#if !IS_ENABLED(CONFIG_PAGE_MIGRATION_SUPPORT)
-extern const int kbase_page_migration_enabled;
-#else
-extern int kbase_page_migration_enabled;
-#endif
 
 /**
  * kbase_alloc_page_metadata - Allocate and initialize page metadata
@@ -102,6 +101,7 @@ void kbase_mem_migrate_set_address_space_ops(struct kbase_device *kbdev, struct 
  *
  * Enables page migration by default based on GPU and setup work queue to
  * defer freeing pages during page migration callbacks.
+ * This function must be called only when a kbase device is initialized.
  */
 void kbase_mem_migrate_init(struct kbase_device *kbdev);
 
@@ -114,5 +114,18 @@ void kbase_mem_migrate_init(struct kbase_device *kbdev);
  * and destroy workqueue associated.
  */
 void kbase_mem_migrate_term(struct kbase_device *kbdev);
+
+#if MALI_UNIT_TEST
+/*
+ * kbase_migrate_page_allocated_mapped - Expose private function to migrate
+ *                                       allocated mapped page for testing purposes.
+ *
+ * @old_page: Existing allocated mapped page to migrate.
+ * @new_page: New page the existing page has to migrate to.
+ *
+ * Return: 0 if successful, otherwise error code.
+ */
+int kbase_migrate_page_allocated_mapped(struct page *old_page, struct page *new_page);
+#endif
 
 #endif /* _KBASE_migrate_H */
