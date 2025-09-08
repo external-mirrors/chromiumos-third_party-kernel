@@ -21,9 +21,21 @@
 	#size-cells = <2>;
 
 	aliases {
+		aal0 = &disp_aal0;
+		aal1 = &disp_aal1;
+		color0 = &disp_color0;
+		color1 = &disp_color1;
+		ccorr0 = &disp_ccorr0;
+		ccorr1 = &disp_ccorr1;
+		ccorr2 = &disp_ccorr2;
+		ccorr3 = &disp_ccorr3;
+		dither0 = &disp_dither0;
+		dither1 = &disp_dither1;
 		dvo0 = &disp_dvo0;
 		dvo1 = &disp_dvo1;
 		dsc0 = &disp_dsc_wrap0;
+		gamma0 = &disp_gamma0;
+		gamma1 = &disp_gamma1;
 		gce0 = &gce;
 		gce1 = &gce_m;
 		i2c0 = &i2c0;
