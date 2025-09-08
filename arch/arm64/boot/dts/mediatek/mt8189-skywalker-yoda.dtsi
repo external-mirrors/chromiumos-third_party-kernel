@@ -248,10 +248,6 @@
 	/delete-node/ pins-touch-en;
 };
 
-&u3phy0 {
-	status = "okay";
-};
-
 /* USB hub port 1 */
 &usb_hub_dsp1_hs {
 	remote-endpoint = <&usb_a0_hs>;
@@ -322,4 +318,16 @@
 
 &xhci0 {
 	status = "okay";
+};
+
+&xhci2 {
+	/delete-property/ vbus-supply;
+	pinctrl-names = "default";
+	pinctrl-0 = <&bt_pins>;
+};
+
+&xhci4 {
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+	vbus-supply = <&pp3300_ucam_x>;
 };
