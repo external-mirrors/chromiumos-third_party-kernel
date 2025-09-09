@@ -87,10 +87,6 @@
 	};
 };
 
-&cros_ec {
-	spi-max-frequency = <1000000>;
-};
-
 &hdmibrdg {
 	ivdd-supply = <&mt6359_vpa_buck_reg>;
 };
@@ -101,7 +97,7 @@
 		compatible = "sbs,sbs-battery";
 		reg = <0xf>;
 		sbs,i2c-retry-count = <2>;
-		sbs,poll-retry-count = <1>;
+		sbs,poll-retry-count = <10>;
 	};
 };
 
