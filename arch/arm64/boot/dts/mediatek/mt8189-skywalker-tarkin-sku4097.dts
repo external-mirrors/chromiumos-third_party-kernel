@@ -8,8 +8,8 @@
 / {
 	model = "Google Tarkin sku4097/4098/4099 design";
 	compatible = "google,tarkin-sku4097", "google,tarkin-sku4098",
-		     "google,tarkin-sku4099","google,tarkin",
-		     "mediatek,mt8189";
+		     "google,tarkin-sku4099", "google,tarkin-sku4100",
+		     "google,tarkin", "mediatek,mt8189";
 };
 
 &ap_i2c_tchscr {
