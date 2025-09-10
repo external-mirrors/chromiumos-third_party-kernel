@@ -361,6 +361,7 @@ config SND_SOC_MT8189_NAU8825
 	select SND_SOC_RT1015P
 	select SND_SOC_RT5682S
 	select SND_SOC_RT5682_I2C
+	select SND_SOC_CS35L41_I2C
 	help
 	  This adds support for ASoC machine driver for MediaTek MT8189
 	  boards with the other I2S audio codecs.

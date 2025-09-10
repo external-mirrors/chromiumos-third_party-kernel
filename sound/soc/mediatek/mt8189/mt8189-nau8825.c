@@ -19,6 +19,7 @@
 #include "mt8189-afe-common.h"
 #include "mt8189-afe-clk.h"
 
+#include "../../codecs/cs35l41.h"
 #include "../../codecs/nau8825.h"
 #include "../../codecs/rt5682s.h"
 #include "../../codecs/rt5682.h"
@@ -47,6 +48,13 @@
  * Rt5682i
  */
 #define RT5682I_CODEC_DAI     "rt5682-aif1"
+
+/*
+ * Cs35l41
+ */
+#define CS35L41_CODEC_DAI     "cs35l41-pcm"
+#define CS35L41_DEV0_NAME     "cs35l41.7-0040"
+#define CS35L41_DEV1_NAME     "cs35l41.7-0042"
 
 enum mt8189_jacks {
 	MT8189_JACK_HEADSET,
@@ -157,6 +165,54 @@ static int mt8189_nau8825_i2s_hw_params(struct snd_pcm_substream *substream,
 
 static const struct snd_soc_ops mt8189_nau8825_i2s_ops = {
 	.hw_params = mt8189_nau8825_i2s_hw_params,
+	.startup = mt8189_common_i2s_startup,
+};
+
+static int mt8189_cs35l41_i2s_hw_params(struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	unsigned int rate = params_rate(params);
+	unsigned int mclk_fs = rate * 128;
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct snd_soc_dai *codec_dai;
+	int clk_freq = rate * 32;
+	int rx_slot[] = {0, 1};
+	int i, ret;
+
+	for_each_rtd_codec_dais(rtd, i, codec_dai) {
+		ret = snd_soc_component_set_sysclk(codec_dai->component,
+						   CS35L41_CLKID_SCLK, 0,
+						   clk_freq, SND_SOC_CLOCK_IN);
+		if (ret < 0) {
+			dev_err(codec_dai->dev, "set component sysclk fail: %d\n",
+				ret);
+			return ret;
+		}
+
+		ret = snd_soc_dai_set_sysclk(codec_dai, CS35L41_CLKID_SCLK,
+					     clk_freq, SND_SOC_CLOCK_IN);
+		if (ret < 0) {
+			dev_err(codec_dai->dev, "set sysclk fail: %d\n",
+				ret);
+			return ret;
+		}
+
+		ret = snd_soc_dai_set_channel_map(codec_dai, 0, NULL,
+						  1, &rx_slot[i]);
+		if (ret < 0) {
+			dev_err(codec_dai->dev, "set channel map fail: %d\n",
+				ret);
+			return ret;
+		}
+	}
+
+	return snd_soc_dai_set_sysclk(cpu_dai,
+				      0, mclk_fs, SND_SOC_CLOCK_OUT);
+}
+
+static const struct snd_soc_ops mt8189_cs35l41_i2s_ops = {
+	.hw_params = mt8189_cs35l41_i2s_hw_params,
 	.startup = mt8189_common_i2s_startup,
 };
 
@@ -928,6 +984,17 @@ static const struct snd_soc_ops mt8189_headset_i2s_ops = {
 	.startup = mt8189_common_i2s_startup,
 };
 
+static struct snd_soc_codec_conf mt8189_cs35l41_codec_conf[] = {
+	{
+		.dlc = COMP_CODEC_CONF(CS35L41_DEV0_NAME),
+		.name_prefix = "Right",
+	},
+	{
+		.dlc = COMP_CODEC_CONF(CS35L41_DEV1_NAME),
+		.name_prefix = "Left",
+	},
+};
+
 static int mt8189_nau8825_soc_card_probe(struct mtk_soc_card_data *soc_card_data, bool legacy)
 {
 	struct snd_soc_card *card = soc_card_data->card_data->card;
@@ -987,6 +1054,12 @@ static int mt8189_nau8825_soc_card_probe(struct mtk_soc_card_data *soc_card_data
 						init_dumb = true;
 					}
 				}
+			}
+		} else if (strcmp(dai_link->name, "I2SOUT1_BE") == 0) {
+			if (!strcmp(dai_link->codecs->dai_name, CS35L41_CODEC_DAI)) {
+				dai_link->ops = &mt8189_cs35l41_i2s_ops;
+				card->num_configs = ARRAY_SIZE(mt8189_cs35l41_codec_conf);
+				card->codec_conf = mt8189_cs35l41_codec_conf;
 			}
 		}
 	}
