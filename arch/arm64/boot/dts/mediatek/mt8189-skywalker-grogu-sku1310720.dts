@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-grogu.dtsi"
+
+/ {
+	model = "Google Grogu sku1310720 board";
+	compatible = "google,grogu-sku1310720", "google,grogu-sku1310721",
+		     "google,grogu-sku1310722", "google,grogu-sku1310723",
+		     "google,grogu-sku1310724", "google,grogu-sku1310725",
+		     "google,grogu-sku1310726", "google,grogu-sku1310727",
+		     "google,grogu-sku1310728", "google,grogu-sku1310729",
+		     "google,grogu-sku1310730", "google,grogu-sku1310731",
+		     "google,grogu-sku1310732", "google,grogu-sku1310733",
+		     "google,grogu-sku1310734", "google,grogu-sku1310735",
+		     "google,grogu", "mediatek,mt8189";
+	chassis-type = "laptop";
+};

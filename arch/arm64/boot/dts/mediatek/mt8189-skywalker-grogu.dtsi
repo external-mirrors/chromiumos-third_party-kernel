@@ -1,0 +1,357 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker.dtsi"
+
+&ap_i2c_aud {
+	/delete-node/ audio-codec@1a;
+
+	rt5650: audio-codec@1a {
+		compatible = "realtek,rt5650";
+		reg = <0x1a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		cbj-sleeve-gpio = <&pio 30 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		#sound-dai-cells = <0>;
+		realtek,dmic1-data-pin = <2>;
+		realtek,jd-mode = <2>;
+		status = "okay";
+	};
+};
+
+&audio_codec_pins {
+	pins-en-codec-pwr-soc {
+		pinmux = <PINMUX_GPIO30__FUNC_GPIO30>;
+		output-low;
+	};
+};
+
+/* Disable support SAR */
+&ap_i2c_sar {
+	status = "disabled";
+};
+
+/* trackpad */
+&ap_i2c_tchpad {
+	/delete-node/ trackpad@15;
+
+	/* elan trackpad */
+	trackpad_elan: trackpad@15 {
+		compatible = "elan,ekth3000";
+		reg = <0x15>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		hid-descr-addr = <0x0001>;
+		vcc-supply = <&pp3300_s3>;
+		status = "okay";
+	};
+};
+
+/* touchscreen */
+&ap_i2c_tchscr {
+	/delete-node/ touchscreen@41;
+};
+
+/* Disable support PEN */
+&gpio_keys {
+	status = "disabled";
+};
+
+/* Same KB for Starros and Grogu. */
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)		/* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)		/* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)		/* T12 */
+	>;
+
+	linux,keymap = <
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_DICTATE)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_PLAYPAUSE)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_MUTE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_VOLUMEDOWN)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEUP)		/* T12 */
+	>;
+};
+
+/* Enable support EMMC */
+&mmc0 {
+	vmmc-supply = <&mt6359_vemc_1_ldo_reg>;
+	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
+
+	status = "okay";
+};
+
+/* Disable support SD card */
+&mmc1 {
+	status = "disabled";
+};
+
+&pio{
+	/* 182 lines */
+	gpio-line-names =
+		"",				/* 0 */
+		"",
+		"AP_SCP_GPIO02",
+		"AP_SCP_GPIO03",
+		"HP_INT_ODL",
+		"",
+		"",
+		"USB3_HUB_RST_L",
+		"",
+		"",
+		"",				/* 10 */
+		"",
+		"",
+		"EDP_BL_EN_1V8",
+		"TCHSCR_REPORT_DISABLE",
+		"TCHSCR_INT_1V8_ODL",
+		"AP_FLASH_WP_L",
+		"EC_AP_DPOC_EN_ODL",
+		"",
+		"",
+		"",				/* 20 */
+		"",
+		"",
+		"",
+		"",
+		"EN_PP3300_EDP_X",
+		"",
+		"EC_AP_DP_HPD_L",
+		"EDP_HPD_1V8",
+		"BL_PWM_1V8",
+		"CODEC_PWR_SOC_EN",		/* 30 */
+		"UART_AP_TX_GSC_DBG_RX",
+		"UART_GSC_DBG_TX_AP_RX",
+		"AP_UART1_TXD",
+		"AP_UART1_RXD",
+		"AP_UART2_TXD",
+		"AP_UART2_RXD",
+		"AP_UART3_TXD",
+		"AP_UART3_RXD",
+		"AP_JTAG_TMS",
+		"AP_JTAG_TCK",			/* 40 */
+		"AP_JTAG_TDI",
+		"AP_JTAG_TDO",
+		"AP_JTAG_TRST_L",
+		"AP_KPCOL0",
+		"TP",
+		"TP",
+		"TP",
+		"PCIE_WLAN_WAKE_OBFF_1V8_ODL",
+		"PCIE_WLAN_RST_1V8_L",
+		"PCIE_WLAN_CLKREQ_1V8_ODL",	/* 50 */
+		"SCP_I2C_SENSOR_SCL_1V8",
+		"SCP_I2C_SENSOR_SDA_1V8",
+		"TP",
+		"TP",
+		"AP_I2C_AUD_SCL_1V8",
+		"AP_I2C_AUD_SDA_1V8",
+		"AP_I2C_TPM_SCL_1V8",
+		"AP_I2C_TPM_SDA_1V8",
+		"AP_I2C_TCHSCR_SCL_1V8",
+		"AP_I2C_TCHSCR_SDA_1V8",	/* 60 */
+		"",
+		"",
+		"",
+		"",
+		"AP_I2C_TCHPAD_SCL_1V8",
+		"AP_I2C_TCHPAD_SDA_1V8",
+		"TP",
+		"TP",
+		"SPI_AP_CS_EC_L",
+		"SPI_AP_CLK_EC",		/* 70 */
+		"SPI_AP_DO_EC_DI",
+		"SPI_AP_DI_EC_DO",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",				/* 80 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"PWRAP_SPI_CS_L",
+		"PWRAP_SPI_CK",
+		"PWRAP_SPI_MOSI",		/* 90 */
+		"PWRAP_SPI_MISO",
+		"SRCLKENA0",
+		"SRCLKENA1",
+		"SCP_VREQ_VAO",
+		"AP_RTC_CLK32K",
+		"AP_PMIC_WDTRST_L",
+		"AUD_CLK_MOSI (Strap)",
+		"AUD_SYNC_MOSI (Strap)",
+		"AUD_DAT_MOSI0 (Strap)",
+		"AUD_DAT_MOSI1 (Strap)",	/* 100 */
+		"AUD_DAT_MISO0 (Strap)",
+		"AUD_DAT_MISO1 (Strap)",
+		"TP",
+		"TP",
+		"TP",
+		"I2S_HP_DI",
+		"I2S_HP_MCK",
+		"I2S_HP_BCK",
+		"I2S_HP_LRCK",
+		"I2S_HP_DO",			/* 110 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"TP",
+		"",
+		"DMIC0_CLK",
+		"DMIC0_DATA",			/* 120 */
+		"",
+		"",
+		"",
+		"",
+		"TCHPAD_INT_ODL",
+		"TCHSCR_RST_1V8_L",
+		"",
+		"",
+		"",
+		"",				/* 130 */
+		"AP_XHCI_INIT_DONE",
+		"EC_AP_INT_ODL",
+		"",
+		"",
+		"",
+		"",
+		"AP_EC_WARM_RST_REQ",
+		"GSC_AP_INT_ODL",
+		"",
+		"AP_SUSPEND_L ",		/* 140 */
+		"EC_AP_RSVD0_ODL",
+		"EC_AP_RSVD1_ODL",
+		"MT6319B_INT",
+		"MT6319C_INT",
+		"BT_KILL_1V8_L",
+		"WIFI_KILL_1V8_L",
+		"",
+		"",
+		"",
+		"SPI_AP_CLK_BIOS",		/* 150 */
+		"SPI_AP_CS_BIOS_L",
+		"SPI_AP_DO_BIOS_DI",
+		"SPI_AP_DI_BIOS_DO",
+		"TP",
+		"TP",
+		"EMMC_DATA7",
+		"EMMC_DATA6",
+		"EMMC_DATA5",
+		"EMMC_DATA4",
+		"EMMC_RSTB",			/* 160 */
+		"EMMC_CMD",
+		"EMMC_CLK",
+		"EMMC_DATA3",
+		"EMMC_DATA2",
+		"EMMC_DATA1",
+		"EMMC_DATA0",
+		"EMMC_DSL",
+		"",
+		"",
+		"",				/* 170 */
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"SPMI_SCL",			/* 180 */
+		"SPMI_SDA",
+		"EMI_RESET_N";
+};
+
+/* Disable due to mt6359.dtsi */
+&pmic {
+	/delete-node/ mt6359codec;
+};
+
+/* Disable due to mt8189-skywlaker.dtsi */
+&rt9123 {
+	status = "disabled";
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5650-sound";
+	model = "mt8189_rt5650";
+
+	dai-link-0 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	/delete-node/ dai-link-2;
+};
+
+/* Disable support Finger print */
+&spi1 {
+	status = "disabled";
+};
+
+/* Support I2C TCHSCR only */
+&spi2 {
+	status = "disabled";
+};
+
+/* Disable WCAM */
+&u2phy1 {
+	status = "disabled";
+};
+
+/* Disable support UFS */
+&ufshci {
+	status = "disabled";
+};
