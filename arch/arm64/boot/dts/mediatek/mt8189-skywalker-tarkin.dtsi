@@ -34,17 +34,20 @@
 };
 
 &ap_i2c_tchpad {
-	/delete-node/ trackpad@15;
+	trackpad_pixart: trackpad@15 {
+		vcc-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
 
-	trackpad_elan: trackpad@15 {
+	trackpad_elan: trackpad@2c {
 		compatible = "elan,ekth3000";
-		reg = <0x15>;
+		reg = <0x2c>;
 		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&trackpad_pins>;
 		wakeup-source;
 		vcc-supply = <&pp3300_s3>;
-		status = "okay";
+		status = "fail-needs-probe";
 	};
 };
 
