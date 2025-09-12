@@ -70,6 +70,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins>;
 		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		panel = <&panel>;
 		vcc33-supply = <&pp3300_tchscr_x>;
 		vccio-supply = <&pp1800_tchscr_report_disable>;
 		status = "fail-needs-probe";
