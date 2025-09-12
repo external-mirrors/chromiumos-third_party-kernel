@@ -44,6 +44,8 @@ from typing import List, Tuple
 
 import libfdt
 
+import cros_fit_lib
+
 
 # Tool extension and the name of the command-line tools
 CompTool = collections.namedtuple("CompTool", "ext,tools")
@@ -117,6 +119,9 @@ def parse_args():
         help="Specifies the (uncompressed) kernel input file (.itk)",
     )
     parser.add_argument(
+        "--dtb-config", type=str, help="Specifies the dtb/dtbo config yaml file"
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
@@ -183,18 +188,18 @@ def finish_fit(fsw: libfdt.FdtSw, entries: List[Tuple]):
         entries: List of configurations:
             str: Description of model
             str: Compatible stringlist
+            list of str: List of fdt node names
     """
     fsw.end_node()
     seq = 0
     with fsw.add_node("configurations"):
-        for model, compat, files in entries:
+        for model, compat, nodes in entries:
             seq += 1
             with fsw.add_node(f"conf-{seq}"):
                 fsw.property("compatible", bytes(compat))
                 fsw.property_string("description", model)
                 fsw.property(
-                    "fdt",
-                    bytes("".join(f"fdt-{x}\x00" for x in files), "ascii"),
+                    "fdt", bytes("".join(f"{x}\x00" for x in nodes), "ascii")
                 )
                 fsw.property_string("kernel", "kernel")
     fsw.end_node()
@@ -235,18 +240,18 @@ def compress_data(inf: io.IOBase, compress: str) -> bytes:
 
 
 def output_dtb(
-    fsw: libfdt.FdtSw, seq: int, fname: str, arch: str, compress: str
+    fsw: libfdt.FdtSw, node_name: str, fname: str, arch: str, compress: str
 ):
     """Write out a single devicetree to the FIT
 
     Args:
         fsw: Object to use for writing
-        seq: Sequence number (1 for first)
+        node_name: FDT image node name
         fname: Filename containing the DTB
         arch: FIT architecture, e.g. 'arm64'
         compress: Compressed algorithm, e.g. 'gzip'
     """
-    with fsw.add_node(f"fdt-{seq}"):
+    with fsw.add_node(node_name):
         fsw.property_string("description", os.path.basename(fname))
         fsw.property_string("type", "flat_dt")
         fsw.property_string("arch", arch)
@@ -324,23 +329,35 @@ def build_fit(args: argparse.Namespace) -> Tuple[bytes, int, int]:
     size += os.path.getsize(args.kernel)
     write_kernel(fsw, comp_data, args)
 
-    for fname in args.dtbs:
-        # Ignore non-DTB (*.dtb) files
-        if os.path.splitext(fname)[1] != ".dtb":
-            continue
+    if args.dtb_config:
+        if args.dtbs:
+            raise ValueError("List of dtbs incompatible with --dtb-config")
+        fdt_nodes, config_nodes = cros_fit_lib.process_dtb_config(
+            args.dtb_config,
+        )
+        for node in fdt_nodes:
+            output_dtb(fsw, node.name, node.filename, args.arch, args.compress)
+        for node in config_nodes:
+            entries.append([node.description, node.compatible, node.fdt])
+    else:
+        for fname in args.dtbs:
+            # Ignore non-DTB (*.dtb) files
+            if os.path.splitext(fname)[1] != ".dtb":
+                continue
 
-        (model, compat, files) = process_dtb(fname, args)
+            (model, compat, files) = process_dtb(fname, args)
 
-        for fn in files:
-            if fn not in fdts:
-                seq += 1
-                size += os.path.getsize(fn)
-                output_dtb(fsw, seq, fn, args.arch, args.compress)
-                fdts[fn] = seq
+            for fn in files:
+                if fn not in fdts:
+                    seq += 1
+                    node_name = f"fdt-{seq}"
+                    size += os.path.getsize(fn)
+                    output_dtb(fsw, node_name, fn, args.arch, args.compress)
+                    fdts[fn] = node_name
 
-        files_seq = [fdts[fn] for fn in files]
+        fdt_nodes = [fdts[fn] for fn in files]
 
-        entries.append([model, compat, files_seq])
+        entries.append([model, compat, fdt_nodes])
 
     finish_fit(fsw, entries)
 
