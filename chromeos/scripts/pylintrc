@@ -19,6 +19,7 @@ disable=
     too-many-arguments,
     locally-disabled,
     fixme,
+    import-error,
     invalid-name,
 
 [REPORTS]
