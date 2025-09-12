@@ -80,8 +80,8 @@
 };
 
 &ap_i2c_tchscr {
-	touchscreen@41 {
-		status = "disabled";
+	touchscreen_ilitek: touchscreen@41 {
+		status = "fail-needs-probe";
 	};
 
 	touchscreen_elan_10: touchscreen@10 {
