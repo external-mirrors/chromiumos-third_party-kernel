@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2010-2023 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2010-2024 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -42,9 +42,11 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_ARBITRATION ?= n
         CONFIG_MALI_PARTITION_MANAGER ?= n
 
+
         ifneq ($(CONFIG_MALI_NO_MALI),y)
-            # Prevent misuse when CONFIG_MALI_NO_MALI=y
+            # Prevent misuse when CONFIG_MALI_NO_MALI!=y
             CONFIG_MALI_REAL_HW ?= y
+        else
             CONFIG_MALI_CORESIGHT = n
         endif
 
@@ -75,7 +77,6 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
             else
                 # Prevent misuse when CONFIG_MALI_NO_MALI=n
                 CONFIG_MALI_REAL_HW = y
-                CONFIG_MALI_ERROR_INJECT = n
             endif
 
 
@@ -102,14 +103,11 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         else
             # Prevent misuse when CONFIG_MALI_EXPERT=n
             CONFIG_MALI_CORESTACK = n
-            CONFIG_LARGE_PAGE_ALLOC_OVERRIDE = n
-            CONFIG_LARGE_PAGE_ALLOC = n
+            CONFIG_LARGE_PAGE_SUPPORT = y
             CONFIG_MALI_PWRSOFT_765 = n
-            CONFIG_MALI_MEMORY_FULLY_BACKED = n
             CONFIG_MALI_JOB_DUMP = n
             CONFIG_MALI_NO_MALI = n
             CONFIG_MALI_REAL_HW = y
-            CONFIG_MALI_ERROR_INJECT = n
             CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED = n
             CONFIG_MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE = n
             CONFIG_MALI_PRFCNT_SET_SELECT_VIA_DEBUG_FS = n
@@ -154,7 +152,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
     endif
 
     # All Mali CONFIG should be listed here
-    CONFIGS := \
+    CONFIGS += \
         CONFIG_MALI \
         CONFIG_MALI_CSF_SUPPORT \
         CONFIG_MALI_GATOR_SUPPORT \
@@ -168,13 +166,11 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_DMA_BUF_LEGACY_COMPAT \
         CONFIG_MALI_EXPERT \
         CONFIG_MALI_CORESTACK \
-        CONFIG_LARGE_PAGE_ALLOC_OVERRIDE \
-        CONFIG_LARGE_PAGE_ALLOC \
+        CONFIG_LARGE_PAGE_SUPPORT \
         CONFIG_MALI_PWRSOFT_765 \
-        CONFIG_MALI_MEMORY_FULLY_BACKED \
         CONFIG_MALI_JOB_DUMP \
         CONFIG_MALI_NO_MALI \
-        CONFIG_MALI_ERROR_INJECT \
+        CONFIG_MALI_IS_FPGA \
         CONFIG_MALI_HW_ERRATA_1485982_NOT_AFFECTED \
         CONFIG_MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE \
         CONFIG_MALI_PRFCNT_SET_PRIMARY \
@@ -192,6 +188,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_XEN \
         CONFIG_MALI_CORESIGHT \
         CONFIG_MALI_TRACE_POWER_GPU_WORK_PERIOD
+
 
 
 endif
@@ -232,6 +229,11 @@ endif
 #
 # KBUILD_EXTRA_SYMBOLS to prevent warnings about unknown functions
 #
+BASE_SYMBOLS =
+
+
+EXTRA_SYMBOLS += \
+    $(BASE_SYMBOLS)
 
 CFLAGS_MODULE += -Wall -Werror
 
@@ -254,6 +256,8 @@ CFLAGS_MODULE += -Wno-sign-compare
 CFLAGS_MODULE += -Wno-shift-negative-value
 # This flag is needed to avoid build errors on older kernels
 CFLAGS_MODULE += $(call cc-option, -Wno-cast-function-type)
+# This flag was added on v6.6 kernel
+CFLAGS_MODULE += $(call cc-option,-Werror=designated-init)
 
 KBUILD_CPPFLAGS += -DKBUILD_EXTRA_WARN1
 
@@ -269,6 +273,8 @@ CFLAGS_MODULE += -Wmissing-field-initializers
 CFLAGS_MODULE += -Wno-type-limits
 CFLAGS_MODULE += $(call cc-option, -Wmaybe-uninitialized)
 CFLAGS_MODULE += $(call cc-option, -Wunused-macros)
+# The following ensures the stack frame does not get larger than a page
+CFLAGS_MODULE += -Wframe-larger-than=4096
 
 KBUILD_CPPFLAGS += -DKBUILD_EXTRA_WARN2
 

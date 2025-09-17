@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 /*
  *
- * (C) COPYRIGHT 2019-2023 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -108,7 +108,7 @@ int kbase_csf_scheduler_group_get_slot_locked(struct kbase_queue_group *group);
  * Note: Caller must hold the interrupt_lock.
  */
 bool kbase_csf_scheduler_group_events_enabled(struct kbase_device *kbdev,
-		struct kbase_queue_group *group);
+					      struct kbase_queue_group *group);
 
 /**
  * kbase_csf_scheduler_get_group_on_slot()- Gets the queue group that has been
@@ -121,8 +121,8 @@ bool kbase_csf_scheduler_group_events_enabled(struct kbase_device *kbdev,
  *
  * Note: Caller must hold the interrupt_lock.
  */
-struct kbase_queue_group *kbase_csf_scheduler_get_group_on_slot(
-		struct kbase_device *kbdev, int slot);
+struct kbase_queue_group *kbase_csf_scheduler_get_group_on_slot(struct kbase_device *kbdev,
+								u32 slot);
 
 /**
  * kbase_csf_scheduler_group_deschedule() - Deschedule a GPU command queue
@@ -148,8 +148,8 @@ void kbase_csf_scheduler_group_deschedule(struct kbase_queue_group *group);
  * on firmware slots from the given Kbase context. The affected groups are
  * added to the supplied list_head argument.
  */
-void kbase_csf_scheduler_evict_ctx_slots(struct kbase_device *kbdev,
-		struct kbase_context *kctx, struct list_head *evicted_groups);
+void kbase_csf_scheduler_evict_ctx_slots(struct kbase_device *kbdev, struct kbase_context *kctx,
+					 struct list_head *evicted_groups);
 
 /**
  * kbase_csf_scheduler_context_init() - Initialize the context-specific part
@@ -235,7 +235,8 @@ void kbase_csf_scheduler_early_term(struct kbase_device *kbdev);
  * No explicit re-initialization is done for CSG & CS interface I/O pages;
  * instead, that happens implicitly on firmware reload.
  *
- * Should be called only after initiating the GPU reset.
+ * Should be called either after initiating the GPU reset or when MCU reset is
+ * expected to follow such as GPU_LOST case.
  */
 void kbase_csf_scheduler_reset(struct kbase_device *kbdev);
 
@@ -264,7 +265,7 @@ void kbase_csf_scheduler_enable_tick_timer(struct kbase_device *kbdev);
  * Return:	0 on success, or negative on failure.
  */
 int kbase_csf_scheduler_group_copy_suspend_buf(struct kbase_queue_group *group,
-		struct kbase_suspend_copy_buffer *sus_buf);
+					       struct kbase_suspend_copy_buffer *sus_buf);
 
 /**
  * kbase_csf_scheduler_lock - Acquire the global Scheduler lock.
@@ -299,8 +300,7 @@ static inline void kbase_csf_scheduler_unlock(struct kbase_device *kbdev)
  * This function will take the global scheduler lock, in order to serialize
  * against the Scheduler actions, for access to CS IO pages.
  */
-static inline void kbase_csf_scheduler_spin_lock(struct kbase_device *kbdev,
-						 unsigned long *flags)
+static inline void kbase_csf_scheduler_spin_lock(struct kbase_device *kbdev, unsigned long *flags)
 {
 	spin_lock_irqsave(&kbdev->csf.scheduler.interrupt_lock, *flags);
 }
@@ -312,8 +312,7 @@ static inline void kbase_csf_scheduler_spin_lock(struct kbase_device *kbdev,
  * @flags: Previously stored interrupt state when Scheduler interrupt
  *         spinlock was acquired.
  */
-static inline void kbase_csf_scheduler_spin_unlock(struct kbase_device *kbdev,
-						   unsigned long flags)
+static inline void kbase_csf_scheduler_spin_unlock(struct kbase_device *kbdev, unsigned long flags)
 {
 	spin_unlock_irqrestore(&kbdev->csf.scheduler.interrupt_lock, flags);
 }
@@ -324,8 +323,7 @@ static inline void kbase_csf_scheduler_spin_unlock(struct kbase_device *kbdev,
  *
  * @kbdev: Instance of a GPU platform device that implements a CSF interface.
  */
-static inline void
-kbase_csf_scheduler_spin_lock_assert_held(struct kbase_device *kbdev)
+static inline void kbase_csf_scheduler_spin_lock_assert_held(struct kbase_device *kbdev)
 {
 	lockdep_assert_held(&kbdev->csf.scheduler.interrupt_lock);
 }
@@ -350,8 +348,7 @@ static inline bool kbase_csf_scheduler_timer_is_enabled(struct kbase_device *kbd
  * @kbdev:  Pointer to the device
  * @enable: Whether to enable periodic scheduler tasks
  */
-void kbase_csf_scheduler_timer_set_enabled(struct kbase_device *kbdev,
-		bool enable);
+void kbase_csf_scheduler_timer_set_enabled(struct kbase_device *kbdev, bool enable);
 
 /**
  * kbase_csf_scheduler_kick - Perform pending scheduling tasks once.
@@ -370,8 +367,7 @@ void kbase_csf_scheduler_kick(struct kbase_device *kbdev);
  *
  * Return: true if the scheduler is running with protected mode tasks
  */
-static inline bool kbase_csf_scheduler_protected_mode_in_use(
-					struct kbase_device *kbdev)
+static inline bool kbase_csf_scheduler_protected_mode_in_use(struct kbase_device *kbdev)
 {
 	return (kbdev->csf.scheduler.active_protm_grp != NULL);
 }
@@ -491,6 +487,48 @@ static inline bool kbase_csf_scheduler_all_csgs_idle(struct kbase_device *kbdev)
 			    kbdev->csf.scheduler.csg_inuse_bitmap,
 			    kbdev->csf.global_iface.group_num);
 }
+
+/**
+ * kbase_csf_scheduler_enqueue_sync_update_work() - Add a context to the list
+ *                                                  of contexts to handle
+ *                                                  SYNC_UPDATE events.
+ *
+ * @kctx: The context to handle SYNC_UPDATE event
+ *
+ * This function wakes up kbase_csf_scheduler_kthread() to handle pending
+ * SYNC_UPDATE events for all contexts.
+ */
+void kbase_csf_scheduler_enqueue_sync_update_work(struct kbase_context *kctx);
+
+/**
+ * kbase_csf_scheduler_enqueue_protm_event_work() - Add a group to the list
+ *                                                  of groups to handle
+ *                                                  PROTM requests.
+ *
+ * @group: The group to handle protected mode request
+ *
+ * This function wakes up kbase_csf_scheduler_kthread() to handle pending
+ * protected mode requests for all groups.
+ */
+void kbase_csf_scheduler_enqueue_protm_event_work(struct kbase_queue_group *group);
+
+/**
+ * kbase_csf_scheduler_enqueue_kcpuq_work() - Wake up kbase_csf_scheduler_kthread() to process
+ *                                            pending commands for a KCPU queue.
+ *
+ * @queue: The queue to process pending commands for
+ */
+void kbase_csf_scheduler_enqueue_kcpuq_work(struct kbase_kcpu_command_queue *queue);
+
+/**
+ * kbase_csf_scheduler_wait_for_kthread_pending_work - Wait until a pending work has completed in
+ *                                                     kbase_csf_scheduler_kthread().
+ *
+ * @kbdev: Instance of a GPU platform device that implements a CSF interface
+ * @pending: The work to wait for
+ */
+void kbase_csf_scheduler_wait_for_kthread_pending_work(struct kbase_device *kbdev,
+						       atomic_t *pending);
 
 /**
  * kbase_csf_scheduler_invoke_tick() - Invoke the scheduling tick

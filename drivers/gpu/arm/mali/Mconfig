@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2012-2023 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012-2024 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -64,16 +64,16 @@ config MALI_NO_MALI
 	  All calls to the simulated hardware will complete immediately as if the hardware
 	  completed the task.
 
-
 endchoice
 
-config MALI_PLATFORM_DT_PIN_RST
-	bool "Enable Juno GPU Pin reset"
+config MALI_IS_FPGA
+	bool "Enable build of Mali kernel driver for FPGA"
 	depends on MALI
 	default n
-	default y if BUSLOG
+	default y if PLATFORM_IS_FPGA
 	help
-	  Enables support for GPUs pin reset on Juno platforms.
+	  This is the default HW backend.
+
 
 config MALI_CSF_SUPPORT
 	bool "Enable Mali CSF based GPU support"
@@ -119,7 +119,7 @@ config MALI_ENABLE_TRACE
 
 config MALI_ARBITER_SUPPORT
 	bool "Enable arbiter support for Mali"
-	depends on MALI && !MALI_CSF_SUPPORT
+	depends on MALI
 	default n
 	help
 	  Enable support for the arbiter interface in the driver.
@@ -173,16 +173,6 @@ menuconfig MALI_EXPERT
 	  Enabling this option and modifying the default settings may produce
 	  a driver with performance or other limitations.
 
-config MALI_MEMORY_FULLY_BACKED
-	bool "Enable memory fully physically-backed"
-	depends on MALI && MALI_EXPERT
-	default n
-	help
-	  This option enables full physical backing of all virtual
-	  memory allocations in the kernel. Notice that this build
-	  option only affects allocations of grow-on-GPU-page-fault
-	  memory.
-
 config MALI_CORESTACK
 	bool "Enable support of GPU core stack power control"
 	depends on MALI && MALI_EXPERT
@@ -196,56 +186,20 @@ config MALI_CORESTACK
 
 	  If unsure, say N.
 
-config PAGE_MIGRATION_SUPPORT
-	bool "Compile with page migration support"
+config LARGE_PAGE_SUPPORT
+	bool "Support for 2MB page allocations"
 	depends on BACKEND_KERNEL
 	default y
-	default n if ANDROID
 	help
-	  Compile in support for page migration.
-	  If set to disabled ('n') then page migration cannot
-	  be enabled at all. If set to enabled, then page migration
-	  support is explicitly compiled in. This has no effect when
-	  PAGE_MIGRATION_OVERRIDE is disabled.
+	  Rather than allocating all GPU memory page-by-page, allow the system
+	  to decide whether to attempt to allocate 2MB pages from the kernel.
+	  This reduces TLB pressure and helps to prevent memory fragmentation.
 
-choice
-	prompt "Error injection level"
-	depends on MALI && MALI_EXPERT
-	default MALI_ERROR_INJECT_NONE
-	help
-	  Enables insertion of errors to test module failure and recovery mechanisms.
+	  Note that this option only enables the support for the module parameter
+	  and does not necessarily mean that 2MB pages will be used automatically.
+	  This depends on GPU support.
 
-config MALI_ERROR_INJECT_NONE
-	bool "disabled"
-	depends on MALI && MALI_EXPERT
-	help
-	  Error injection is disabled.
-
-config MALI_ERROR_INJECT_TRACK_LIST
-	bool "error track list"
-	depends on MALI && MALI_EXPERT && NO_MALI
-	help
-	  Errors to inject are pre-configured by the user.
-
-config MALI_ERROR_INJECT_RANDOM
-	bool "random error injection"
-	depends on MALI && MALI_EXPERT && NO_MALI
-	help
-	  Injected errors are random, rather than user-driven.
-
-endchoice
-
-config MALI_ERROR_INJECT_ON
-	string
-	depends on MALI && MALI_EXPERT
-	default "0" if MALI_ERROR_INJECT_NONE
-	default "1" if MALI_ERROR_INJECT_TRACK_LIST
-	default "2" if MALI_ERROR_INJECT_RANDOM
-
-config MALI_ERROR_INJECT
-	bool
-	depends on MALI && MALI_EXPERT
-	default y if !MALI_ERROR_INJECT_NONE
+	  If in doubt, say Y.
 
 config MALI_DEBUG
 	bool "Enable debug build"
