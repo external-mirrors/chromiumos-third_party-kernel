@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker-anakin.dtsi"
+
+/ {
+	model = "Google Anakin unprovisioned design rev0/rev1 /sku1/2/5/256/257/258/259/260/261/262/263/264 board";
+	compatible = "google,anakin-rev0-sku1", "google,anakin-rev0-sku2",
+		     "google,anakin-rev0-sku5", "google,anakin-rev0-sku256",
+		     "google,anakin-rev0-sku257", "google,anakin-rev0-sku258",
+		     "google,anakin-rev0-sku259", "google,anakin-rev0-sku260",
+		     "google,anakin-rev0-sku261", "google,anakin-rev0-sku262",
+		     "google,anakin-rev0-sku263", "google,anakin-rev0-sku264",
+		     "google,anakin-rev0-sku2147483647", "google,anakin-rev0",
+		     "google,anakin-rev1-sku1", "google,anakin-rev1-sku2",
+		     "google,anakin-rev1-sku5", "google,anakin-rev1-sku256",
+		     "google,anakin-rev1-sku257", "google,anakin-rev1-sku258",
+		     "google,anakin-rev1-sku259", "google,anakin-rev1-sku260",
+		     "google,anakin-rev1-sku261", "google,anakin-rev1-sku262",
+		     "google,anakin-rev1-sku263", "google,anakin-rev1-sku264",
+		     "google,anakin-rev1-sku2147483647", "google,anakin-rev1",
+		     "google,anakin", "mediatek,mt8189";
+};
