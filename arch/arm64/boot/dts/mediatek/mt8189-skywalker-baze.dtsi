@@ -278,6 +278,10 @@
 	};
 };
 
+&pmic {
+	/delete-node/ mt6359codec;
+};
+
 &sound {
 	compatible = "mediatek,mt8189-rt5682s-sound";
 	model = "mt8189_1019_rt5682s";
