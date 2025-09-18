@@ -5,6 +5,7 @@
 import collections
 import copy
 import dataclasses
+import json
 import os
 from typing import List
 
@@ -65,6 +66,22 @@ def _read_dtb_config(dtb_config_file):
     return sku_configs, model_dtb_configs
 
 
+def _get_chromeos_skus(chromeos_config_file):
+    with open(chromeos_config_file, "r", encoding="utf-8") as f:
+        chromeos_configs = json.load(f)
+    sku_configs = []
+    for config in chromeos_configs["chromeos"]["configs"]:
+        # Get model name (i.e. coreboot MAINBOARD_PART_NUMBER) from FRID.
+        frid = config["identity"]["frid"]
+        if not frid.startswith("Google_"):
+            raise ValueError(f'Wrong frid format for {config["name"]}: {frid}')
+        model = frid.removeprefix("Google_").lower()
+        sku = config["identity"]["sku-id"]
+        fw_config = config["firmware"]["firmware-config"]
+        sku_configs.append(SkuConfig(model, sku, fw_config))
+    return sku_configs
+
+
 def _match_dtb(dtb_attr, sku, fw_config):
     sku_attr = dtb_attr.get("sku")
     if sku_attr and sku not in sku_attr:
@@ -78,11 +95,12 @@ def _match_dtb(dtb_attr, sku, fw_config):
     return True
 
 
-def process_dtb_config(dtb_config_file: str):
+def process_dtb_config(dtb_config_file: str, chromeos_config_file: str):
     """Process DTB config file based on ChromeOS config file.
 
     Args:
         dtb_config_file: Kernel DTB/DTBO config file.
+        chromeos_config_file: ChromeOS config file.
 
     Returns:
         (fdt_nodes, config_nodes):
@@ -90,6 +108,8 @@ def process_dtb_config(dtb_config_file: str):
             config_nodes: List of FitConfigNode.
     """
     sku_configs, model_dtb_configs = _read_dtb_config(dtb_config_file)
+    if chromeos_config_file:
+        sku_configs = _get_chromeos_skus(chromeos_config_file)
 
     # Generate per-SKU configs.
     sku_dtb_configs = collections.defaultdict(dict)

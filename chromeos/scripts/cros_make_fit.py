@@ -122,6 +122,11 @@ def parse_args():
         "--dtb-config", type=str, help="Specifies the dtb/dtbo config yaml file"
     )
     parser.add_argument(
+        "--chromeos-config",
+        type=str,
+        help="Specifies the ChromeOS config file (required for --dtb-config)",
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
@@ -334,6 +339,7 @@ def build_fit(args: argparse.Namespace) -> Tuple[bytes, int, int]:
             raise ValueError("List of dtbs incompatible with --dtb-config")
         fdt_nodes, config_nodes = cros_fit_lib.process_dtb_config(
             args.dtb_config,
+            args.chromeos_config,
         )
         for node in fdt_nodes:
             output_dtb(fsw, node.name, node.filename, args.arch, args.compress)
