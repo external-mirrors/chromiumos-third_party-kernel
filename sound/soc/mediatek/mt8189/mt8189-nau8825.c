@@ -362,6 +362,7 @@ static struct snd_soc_dai_link mt8189_nau8825_dai_links[] = {
 			    SND_SOC_DPCM_TRIGGER_PRE},
 		.dynamic = 1,
 		.dpcm_playback = 1,
+		.dpcm_merged_format = 1,
 		SND_SOC_DAILINK_REG(playback0),
 	},
 	{
@@ -371,6 +372,7 @@ static struct snd_soc_dai_link mt8189_nau8825_dai_links[] = {
 			    SND_SOC_DPCM_TRIGGER_PRE},
 		.dynamic = 1,
 		.dpcm_playback = 1,
+		.dpcm_merged_format = 1,
 		SND_SOC_DAILINK_REG(playback1),
 	},
 	{
@@ -380,6 +382,7 @@ static struct snd_soc_dai_link mt8189_nau8825_dai_links[] = {
 				SND_SOC_DPCM_TRIGGER_PRE},
 		.dynamic = 1,
 		.dpcm_capture = 1,
+		.dpcm_merged_format = 1,
 		SND_SOC_DAILINK_REG(capture0),
 	},
 	{
@@ -389,6 +392,7 @@ static struct snd_soc_dai_link mt8189_nau8825_dai_links[] = {
 				SND_SOC_DPCM_TRIGGER_PRE},
 		.dynamic = 1,
 		.dpcm_capture = 1,
+		.dpcm_merged_format = 1,
 		SND_SOC_DAILINK_REG(capture1),
 	},
 	{
@@ -398,6 +402,7 @@ static struct snd_soc_dai_link mt8189_nau8825_dai_links[] = {
 				SND_SOC_DPCM_TRIGGER_PRE},
 		.dynamic = 1,
 		.dpcm_capture = 1,
+		.dpcm_merged_format = 1,
 		SND_SOC_DAILINK_REG(capture2),
 	},
 	{
