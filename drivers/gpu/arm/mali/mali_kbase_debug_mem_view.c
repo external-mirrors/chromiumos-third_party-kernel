@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2013-2023 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2013-2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -31,21 +31,21 @@
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 
-#define SHOW_GPU_MEM_DATA(type, format)                                      \
-{                                                                            \
-	unsigned int i, j;                                                   \
-	const type *ptr = (type *)cpu_addr;                                  \
-	const unsigned int col_width = sizeof(type);                         \
-	const unsigned int row_width = (col_width == sizeof(u64)) ? 32 : 16; \
-	const unsigned int num_cols = row_width / col_width;                 \
-	for (i = 0; i < PAGE_SIZE; i += row_width) {                         \
-		seq_printf(m, "%016llx:", gpu_addr + i);                     \
-		for (j = 0; j < num_cols; j++)                               \
-			seq_printf(m, format, ptr[j]);                       \
-		ptr += num_cols;                                             \
-		seq_putc(m, '\n');                                           \
-	}                                                                    \
-}
+#define SHOW_GPU_MEM_DATA(type, format)                                              \
+	{                                                                            \
+		unsigned int i, j;                                                   \
+		const type *ptr = (type *)cpu_addr;                                  \
+		const unsigned int col_width = sizeof(type);                         \
+		const unsigned int row_width = (col_width == sizeof(u64)) ? 32 : 16; \
+		const unsigned int num_cols = row_width / col_width;                 \
+		for (i = 0; i < PAGE_SIZE; i += row_width) {                         \
+			seq_printf(m, "%016llx:", gpu_addr + i);                     \
+			for (j = 0; j < num_cols; j++)                               \
+				seq_printf(m, format, ptr[j]);                       \
+			ptr += num_cols;                                             \
+			seq_putc(m, '\n');                                           \
+		}                                                                    \
+	}
 
 struct debug_mem_mapping {
 	struct list_head node;
@@ -76,14 +76,14 @@ static void *debug_mem_start(struct seq_file *m, loff_t *_pos)
 	loff_t pos = *_pos;
 
 	list_for_each_entry(map, &mem_data->mapping_list, node) {
-		if (pos >= map->nr_pages) {
-			pos -= map->nr_pages;
+		if (pos >= (loff_t)map->nr_pages) {
+			pos -= (loff_t)map->nr_pages;
 		} else {
 			data = kmalloc(sizeof(*data), GFP_KERNEL);
 			if (!data)
 				return NULL;
 			data->lh = &map->node;
-			data->offset = pos;
+			data->offset = (size_t)pos;
 			return data;
 		}
 	}
@@ -94,6 +94,8 @@ static void *debug_mem_start(struct seq_file *m, loff_t *_pos)
 
 static void debug_mem_stop(struct seq_file *m, void *v)
 {
+	CSTD_UNUSED(m);
+
 	kfree(v);
 }
 
@@ -138,8 +140,8 @@ static int debug_mem_show(struct seq_file *m, void *v)
 	kbase_gpu_vm_lock(mem_data->kctx);
 
 	if (data->offset >= map->alloc->nents) {
-		seq_printf(m, "%016llx: Unbacked page\n\n", (map->start_pfn +
-				data->offset) << PAGE_SHIFT);
+		seq_printf(m, "%016llx: Unbacked page\n\n",
+			   (map->start_pfn + data->offset) << PAGE_SHIFT);
 		goto out;
 	}
 
@@ -235,7 +237,11 @@ static int debug_mem_open(struct inode *i, struct file *file)
 	int ret;
 	enum kbase_memory_zone idx;
 
-	if (!kbase_file_inc_fops_count_unless_closed(kctx->kfile))
+#if (KERNEL_VERSION(6, 7, 0) > LINUX_VERSION_CODE)
+	if (get_file_rcu(kctx->filp) == 0)
+#else
+	if (get_file_rcu(&kctx->filp) == 0)
+#endif
 		return -ENOENT;
 
 	/* Check if file was opened in write mode. GPU memory contents
@@ -286,7 +292,7 @@ out:
 			struct debug_mem_mapping *mapping;
 
 			mapping = list_first_entry(&mem_data->mapping_list,
-					struct debug_mem_mapping, node);
+						   struct debug_mem_mapping, node);
 			kbase_mem_phy_alloc_put(mapping->alloc);
 			list_del(&mapping->node);
 			kfree(mapping);
@@ -295,7 +301,7 @@ out:
 	}
 	seq_release(i, file);
 open_fail:
-	kbase_file_dec_fops_count(kctx->kfile);
+	fput(kctx->filp);
 
 	return ret;
 }
@@ -316,7 +322,7 @@ static int debug_mem_release(struct inode *inode, struct file *file)
 
 		while (!list_empty(&mem_data->mapping_list)) {
 			mapping = list_first_entry(&mem_data->mapping_list,
-				struct debug_mem_mapping, node);
+						   struct debug_mem_mapping, node);
 			kbase_mem_phy_alloc_put(mapping->alloc);
 			list_del(&mapping->node);
 			kfree(mapping);
@@ -325,13 +331,13 @@ static int debug_mem_release(struct inode *inode, struct file *file)
 		kfree(mem_data);
 	}
 
-	kbase_file_dec_fops_count(kctx->kfile);
+	fput(kctx->filp);
 
 	return 0;
 }
 
-static ssize_t debug_mem_write(struct file *file, const char __user *ubuf,
-			       size_t count, loff_t *ppos)
+static ssize_t debug_mem_write(struct file *file, const char __user *ubuf, size_t count,
+			       loff_t *ppos)
 {
 	struct kbase_context *const kctx = file->private_data;
 	unsigned int column_width = 0;
@@ -344,46 +350,42 @@ static ssize_t debug_mem_write(struct file *file, const char __user *ubuf,
 	if (ret)
 		return ret;
 	if (!is_power_of_2(column_width)) {
-		dev_dbg(kctx->kbdev->dev,
-			"Column width %u not a multiple of power of 2", column_width);
-		return  -EINVAL;
+		dev_dbg(kctx->kbdev->dev, "Column width %u not a multiple of power of 2",
+			column_width);
+		return -EINVAL;
 	}
 	if (column_width > 8) {
-		dev_dbg(kctx->kbdev->dev,
-			"Column width %u greater than 8 not supported", column_width);
-		return  -EINVAL;
+		dev_dbg(kctx->kbdev->dev, "Column width %u greater than 8 not supported",
+			column_width);
+		return -EINVAL;
 	}
 
 	kbase_gpu_vm_lock(kctx);
 	kctx->mem_view_column_width = column_width;
 	kbase_gpu_vm_unlock(kctx);
 
-	return count;
+	return (ssize_t)count;
 }
 
-static const struct file_operations kbase_debug_mem_view_fops = {
-	.owner = THIS_MODULE,
-	.open = debug_mem_open,
-	.release = debug_mem_release,
-	.read = seq_read,
-	.write = debug_mem_write,
-	.llseek = seq_lseek
-};
+static const struct file_operations kbase_debug_mem_view_fops = { .owner = THIS_MODULE,
+								  .open = debug_mem_open,
+								  .release = debug_mem_release,
+								  .read = seq_read,
+								  .write = debug_mem_write,
+								  .llseek = seq_lseek };
 
 void kbase_debug_mem_view_init(struct kbase_context *const kctx)
 {
 	/* Caller already ensures this, but we keep the pattern for
 	 * maintenance safety.
 	 */
-	if (WARN_ON(!kctx) ||
-		WARN_ON(IS_ERR_OR_NULL(kctx->kctx_dentry)))
+	if (WARN_ON(!kctx) || WARN_ON(IS_ERR_OR_NULL(kctx->kctx_dentry)))
 		return;
 
 	/* Default column width is 4 */
 	kctx->mem_view_column_width = sizeof(u32);
 
-	debugfs_create_file("mem_view", 0400, kctx->kctx_dentry, kctx,
-			&kbase_debug_mem_view_fops);
+	debugfs_create_file("mem_view", 0400, kctx->kctx_dentry, kctx, &kbase_debug_mem_view_fops);
 }
 
 #endif
