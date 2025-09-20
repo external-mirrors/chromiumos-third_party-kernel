@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2014-2022 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2014-2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -78,8 +78,8 @@ static unsigned long get_voltage(struct kbase_device *kbdev, unsigned long freq)
 	return voltage;
 }
 
-void kbase_devfreq_opp_translate(struct kbase_device *kbdev, unsigned long freq,
-	u64 *core_mask, unsigned long *freqs, unsigned long *volts)
+void kbase_devfreq_opp_translate(struct kbase_device *kbdev, unsigned long freq, u64 *core_mask,
+				 unsigned long *freqs, unsigned long *volts)
 {
 	unsigned int i;
 
@@ -89,10 +89,8 @@ void kbase_devfreq_opp_translate(struct kbase_device *kbdev, unsigned long freq,
 
 			*core_mask = kbdev->devfreq_table[i].core_mask;
 			for (j = 0; j < kbdev->nr_clocks; j++) {
-				freqs[j] =
-					kbdev->devfreq_table[i].real_freqs[j];
-				volts[j] =
-					kbdev->devfreq_table[i].opp_volts[j];
+				freqs[j] = kbdev->devfreq_table[i].real_freqs[j];
+				volts[j] = kbdev->devfreq_table[i].opp_volts[j];
 			}
 
 			break;
@@ -105,7 +103,7 @@ void kbase_devfreq_opp_translate(struct kbase_device *kbdev, unsigned long freq,
 	if (i == kbdev->num_opps) {
 		unsigned long voltage = get_voltage(kbdev, freq);
 
-		*core_mask = kbdev->gpu_props.props.raw_props.shader_present;
+		*core_mask = kbdev->gpu_props.shader_present;
 
 		for (i = 0; i < kbdev->nr_clocks; i++) {
 			freqs[i] = freq;
@@ -181,21 +179,19 @@ static int set_frequency(struct kbase_device *kbdev, unsigned long *freqs)
 	return err;
 }
 
-
-static int
-kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
+static int kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 {
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 	struct dev_pm_opp *opp;
 	unsigned long nominal_freq;
-	unsigned long freqs[BASE_MAX_NR_CLOCKS_REGULATORS] = {0};
-	unsigned long volts[BASE_MAX_NR_CLOCKS_REGULATORS] = {0};
+	unsigned long freqs[BASE_MAX_NR_CLOCKS_REGULATORS] = { 0 };
+	unsigned long volts[BASE_MAX_NR_CLOCKS_REGULATORS] = { 0 };
 #if IS_ENABLED(CONFIG_MTK_SVS)
 	unsigned long unused_volts[BASE_MAX_NR_CLOCKS_REGULATORS] = {0};
 	unsigned int i;
 #endif
-	u64 core_mask;
 	int err;
+	u64 core_mask;
 
 	nominal_freq = *target_freq;
 
@@ -212,7 +208,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 	}
 
 #if IS_ENABLED(CONFIG_MTK_SVS)
-	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++)
+	for (i = 0; i < kbdev->nr_regulators; i++)
 		volts[i] = dev_pm_opp_get_voltage_supply(opp, i);
 #endif
 #if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
@@ -240,8 +236,7 @@ kbase_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 		return 0;
 	}
 
-	kbase_devfreq_opp_translate(kbdev, nominal_freq, &core_mask,
-				    freqs, volts);
+	kbase_devfreq_opp_translate(kbdev, nominal_freq, &core_mask, freqs, volts);
 #endif
 	voltage_range_check(kbdev, volts);
 
@@ -303,8 +298,7 @@ void kbase_devfreq_force_freq(struct kbase_device *kbdev, unsigned long freq)
 	kbase_devfreq_target(kbdev->dev, &target_freq, 0);
 }
 
-static int
-kbase_devfreq_cur_freq(struct device *dev, unsigned long *freq)
+static int kbase_devfreq_cur_freq(struct device *dev, unsigned long *freq)
 {
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 
@@ -313,8 +307,7 @@ kbase_devfreq_cur_freq(struct device *dev, unsigned long *freq)
 	return 0;
 }
 
-static int
-kbase_devfreq_status(struct device *dev, struct devfreq_dev_status *stat)
+static int kbase_devfreq_status(struct device *dev, struct devfreq_dev_status *stat)
 {
 	struct kbase_device *kbdev = dev_get_drvdata(dev);
 	struct kbasep_pm_metrics diff;
@@ -333,11 +326,10 @@ kbase_devfreq_status(struct device *dev, struct devfreq_dev_status *stat)
 	return 0;
 }
 
-static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
-		struct devfreq_dev_profile *dp)
+static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev, struct devfreq_dev_profile *dp)
 {
 	int count;
-	int i = 0;
+	unsigned int i = 0;
 	unsigned long freq;
 	struct dev_pm_opp *opp;
 
@@ -351,15 +343,14 @@ static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
 	if (count < 0)
 		return count;
 
-	dp->freq_table = kmalloc_array(count, sizeof(dp->freq_table[0]),
-				GFP_KERNEL);
+	dp->freq_table = kmalloc_array((size_t)count, sizeof(dp->freq_table[0]), GFP_KERNEL);
 	if (!dp->freq_table)
 		return -ENOMEM;
 
 #if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
 	rcu_read_lock();
 #endif
-	for (i = 0, freq = ULONG_MAX; i < count; i++, freq--) {
+	for (i = 0, freq = ULONG_MAX; i < (unsigned int)count; i++, freq--) {
 		opp = dev_pm_opp_find_freq_floor(kbdev->dev, &freq);
 		if (IS_ERR(opp))
 			break;
@@ -373,9 +364,8 @@ static int kbase_devfreq_init_freq_table(struct kbase_device *kbdev,
 	rcu_read_unlock();
 #endif
 
-	if (count != i)
-		dev_warn(kbdev->dev, "Unable to enumerate all OPPs (%d!=%d\n",
-				count, i);
+	if ((unsigned int)count != i)
+		dev_warn(kbdev->dev, "Unable to enumerate all OPPs (%d!=%u\n", count, i);
 
 	dp->max_state = i;
 
@@ -419,8 +409,7 @@ static void kbase_devfreq_exit(struct device *dev)
 		kbase_devfreq_term_freq_table(kbdev);
 }
 
-static void kbasep_devfreq_read_suspend_clock(struct kbase_device *kbdev,
-		struct device_node *node)
+static void kbasep_devfreq_read_suspend_clock(struct kbase_device *kbdev, struct device_node *node)
 {
 	u64 freq = 0;
 	int err = 0;
@@ -449,8 +438,7 @@ static void kbasep_devfreq_read_suspend_clock(struct kbase_device *kbdev,
 		return;
 
 	kbdev->pm.backend.gpu_clock_suspend_freq = freq;
-	dev_info(kbdev->dev,
-		"suspend clock %llu by opp-mali-errata-1485982", freq);
+	dev_info(kbdev->dev, "suspend clock %llu by opp-mali-errata-1485982", freq);
 }
 
 static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
@@ -465,8 +453,8 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 	 */
 	return 0;
 #else
-	struct device_node *opp_node = of_parse_phandle(kbdev->dev->of_node,
-			"operating-points-v2", 0);
+	struct device_node *opp_node =
+		of_parse_phandle(kbdev->dev->of_node, "operating-points-v2", 0);
 	struct nvmem_cell *cell;
 	u8 *buf;
 	char opp_microvolt_name[30] = "opp-microvolt";
@@ -474,11 +462,11 @@ static int kbase_devfreq_init_core_mask_table(struct kbase_device *kbdev)
 	int table_count;
 	size_t len;
 	struct device_node *node;
-	int i = 0;
+	unsigned int i = 0;
 	int count;
 	int err;
 	int idx;
-	u64 shader_present = kbdev->gpu_props.props.raw_props.shader_present;
+	u64 shader_present = kbdev->gpu_props.shader_present;
 
 	cell = nvmem_cell_get(kbdev->dev, "volt-bin");
 
@@ -527,15 +515,14 @@ skip_volt_bin:
 		return 0;
 
 	count = dev_pm_opp_get_opp_count(kbdev->dev);
-	kbdev->devfreq_table = kmalloc_array(count,
-			sizeof(struct kbase_devfreq_opp), GFP_KERNEL);
+	kbdev->devfreq_table =
+		kmalloc_array((size_t)count, sizeof(struct kbase_devfreq_opp), GFP_KERNEL);
 	if (!kbdev->devfreq_table)
 		return -ENOMEM;
 
 	for_each_available_child_of_node(opp_node, node) {
 		const void *core_count_p;
-		u64 core_mask, opp_freq,
-			real_freqs[BASE_MAX_NR_CLOCKS_REGULATORS];
+		u64 core_mask, opp_freq, real_freqs[BASE_MAX_NR_CLOCKS_REGULATORS];
 		int err;
 #if IS_ENABLED(CONFIG_REGULATOR)
 		u32 opp_volts[BASE_MAX_NR_CLOCKS_REGULATORS];
@@ -547,15 +534,12 @@ skip_volt_bin:
 
 		err = of_property_read_u64(node, "opp-hz", &opp_freq);
 		if (err) {
-			dev_warn(kbdev->dev, "Failed to read opp-hz property with error %d\n",
-					err);
+			dev_warn(kbdev->dev, "Failed to read opp-hz property with error %d\n", err);
 			continue;
 		}
 
-
 #if BASE_MAX_NR_CLOCKS_REGULATORS > 1
-		err = of_property_read_u64_array(node, "opp-hz-real",
-				real_freqs, kbdev->nr_clocks);
+		err = of_property_read_u64_array(node, "opp-hz-real", real_freqs, kbdev->nr_clocks);
 #else
 		WARN_ON(kbdev->nr_clocks != 1);
 		err = of_property_read_u64(node, "opp-hz-real", real_freqs);
@@ -570,9 +554,8 @@ skip_volt_bin:
 				real_freqs[j] = opp_freq;
 		}
 #if IS_ENABLED(CONFIG_REGULATOR)
-		err = of_property_read_u32_array(node,
-			opp_microvolt_name, opp_volts, kbdev->nr_regulators);
-
+		err = of_property_read_u32_array(node, opp_microvolt_name, opp_volts,
+						 kbdev->nr_regulators);
 		if (err < 0) {
 			err = of_property_read_u32_array(node,
 				"opp-microvolt", opp_volts, kbdev->nr_regulators);
@@ -588,16 +571,16 @@ skip_volt_bin:
 		if (of_property_read_u64(node, "opp-core-mask", &core_mask))
 			core_mask = shader_present;
 		if (core_mask != shader_present && corestack_driver_control) {
-
-			dev_warn(kbdev->dev, "Ignoring OPP %llu - Dynamic Core Scaling not supported on this GPU\n",
-					opp_freq);
+			dev_warn(
+				kbdev->dev,
+				"Ignoring OPP %llu - Dynamic Core Scaling not supported on this GPU",
+				opp_freq);
 			continue;
 		}
 
 		core_count_p = of_get_property(node, "opp-core-count", NULL);
 		if (core_count_p) {
-			u64 remaining_core_mask =
-				kbdev->gpu_props.props.raw_props.shader_present;
+			u64 remaining_core_mask = kbdev->gpu_props.shader_present;
 			int core_count = be32_to_cpup(core_count_p);
 
 			core_mask = 0;
@@ -610,8 +593,8 @@ skip_volt_bin:
 					return -ENODEV;
 				}
 
-				core_mask |= (1ull << (core-1));
-				remaining_core_mask &= ~(1ull << (core-1));
+				core_mask |= (1ull << (core - 1));
+				remaining_core_mask &= ~(1ull << (core - 1));
 			}
 		}
 
@@ -623,24 +606,22 @@ skip_volt_bin:
 		kbdev->devfreq_table[i].opp_freq = opp_freq;
 		kbdev->devfreq_table[i].core_mask = core_mask;
 		if (kbdev->nr_clocks > 0) {
-			int j;
+			unsigned int j;
 
 			for (j = 0; j < kbdev->nr_clocks; j++)
-				kbdev->devfreq_table[i].real_freqs[j] =
-					real_freqs[j];
+				kbdev->devfreq_table[i].real_freqs[j] = real_freqs[j];
 		}
 #if IS_ENABLED(CONFIG_REGULATOR)
 		if (kbdev->nr_regulators > 0) {
-			int j;
+			unsigned int j;
 
 			for (j = 0; j < kbdev->nr_regulators; j++)
-				kbdev->devfreq_table[i].opp_volts[j] =
-						opp_volts[j];
+				kbdev->devfreq_table[i].opp_volts[j] = opp_volts[j];
 		}
 #endif
 
-		dev_info(kbdev->dev, "OPP %d : opp_freq=%llu core_mask=%llx\n",
-				i, opp_freq, core_mask);
+		dev_info(kbdev->dev, "OPP %d : opp_freq=%llu core_mask=%llx\n", i, opp_freq,
+			 core_mask);
 
 		i++;
 	}
@@ -673,10 +654,9 @@ static const char *kbase_devfreq_req_type_name(enum kbase_devfreq_work_type type
 
 static void kbase_devfreq_suspend_resume_worker(struct work_struct *work)
 {
-	struct kbase_devfreq_queue_info *info = container_of(work,
-			struct kbase_devfreq_queue_info, work);
-	struct kbase_device *kbdev = container_of(info, struct kbase_device,
-			devfreq_queue);
+	struct kbase_devfreq_queue_info *info =
+		container_of(work, struct kbase_devfreq_queue_info, work);
+	struct kbase_device *kbdev = container_of(info, struct kbase_device, devfreq_queue);
 	unsigned long flags;
 	enum kbase_devfreq_work_type type, acted_type;
 
@@ -686,8 +666,7 @@ static void kbase_devfreq_suspend_resume_worker(struct work_struct *work)
 
 	acted_type = kbdev->devfreq_queue.acted_type;
 	dev_dbg(kbdev->dev, "Worker handles queued req: %s (acted: %s)\n",
-		kbase_devfreq_req_type_name(type),
-		kbase_devfreq_req_type_name(acted_type));
+		kbase_devfreq_req_type_name(type), kbase_devfreq_req_type_name(acted_type));
 	switch (type) {
 	case DEVFREQ_WORK_SUSPEND:
 	case DEVFREQ_WORK_RESUME:
@@ -707,8 +686,7 @@ static void kbase_devfreq_suspend_resume_worker(struct work_struct *work)
 	}
 }
 
-void kbase_devfreq_enqueue_work(struct kbase_device *kbdev,
-				       enum kbase_devfreq_work_type work_type)
+void kbase_devfreq_enqueue_work(struct kbase_device *kbdev, enum kbase_devfreq_work_type work_type)
 {
 	unsigned long flags;
 
@@ -717,12 +695,10 @@ void kbase_devfreq_enqueue_work(struct kbase_device *kbdev,
 	/* Skip enqueuing a work if workqueue has already been terminated. */
 	if (likely(kbdev->devfreq_queue.workq)) {
 		kbdev->devfreq_queue.req_type = work_type;
-		queue_work(kbdev->devfreq_queue.workq,
-			   &kbdev->devfreq_queue.work);
+		queue_work(kbdev->devfreq_queue.workq, &kbdev->devfreq_queue.work);
 	}
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
-	dev_dbg(kbdev->dev, "Enqueuing devfreq req: %s\n",
-		kbase_devfreq_req_type_name(work_type));
+	dev_dbg(kbdev->dev, "Enqueuing devfreq req: %s\n", kbase_devfreq_req_type_name(work_type));
 }
 
 static int kbase_devfreq_work_init(struct kbase_device *kbdev)
@@ -734,8 +710,7 @@ static int kbase_devfreq_work_init(struct kbase_device *kbdev)
 	if (!kbdev->devfreq_queue.workq)
 		return -ENOMEM;
 
-	INIT_WORK(&kbdev->devfreq_queue.work,
-			kbase_devfreq_suspend_resume_worker);
+	INIT_WORK(&kbdev->devfreq_queue.work, kbase_devfreq_suspend_resume_worker);
 	return 0;
 }
 
@@ -752,52 +727,6 @@ static void kbase_devfreq_work_term(struct kbase_device *kbdev)
 	destroy_workqueue(workq);
 }
 
-/*
- * CHROMIUM: Magic values given to simple_ondemand to make things work better.
- *
- * These values are loosely based on values that were added for veyron in
- * https://crrev.com/c/223221.  That patch claimed:
- *
- * > the values used in this patch are temporary values.
- * > A future patch will tune these values.
- *
- * ...but no future patch ever materialized and the 3.14 tree that veyron
- * shipped with continued to use values like these.
- *
- * On newer kernels mali was switched to use devfreq instead of a custom
- * dvfs and that means we used the standard thresholds to bump up and down
- * frequencies.  For simple_ondemand this means we bump up to the max
- * if the utilization > 90% and stay there as long as it stays > 85%.  If
- * it drops below that we'll do some math to figure out what the frequency
- * should be.  Specifically I believe we do:
- *   utilPct * curFreq / (.90 - .05/2)
- *
- * It turns out that simple_ondemand's guidelines aren't ideal for Mali, at
- * least for certain workloads.  At least in workloads like those produced by
- * glmark2 on veyron with the sched cpugovernor, it appears that a fully
- * loaded GPU only measures a utilization between 30-70% for the most part.
- * That meant we were just sitting at the lowest GPU frequency.  Doh!
- *
- * This is believed to be caused by the fact that scheduling tasks to the
- * GPU actually involves two actors: the CPU and the GPU.  Said another
- * way there is CPU overhead involved in loading jobs to the GPU.  This
- * CPU overhead is _not_ measured in the devfreq utilization stats.  That
- * means that a 100% graphics path (both CPU and GPU together) will not report
- * 100% utilization.  We need to fudge things a little bit to handle this case.
- *
- * Let's adjust the devfreq thresholds to make this work better.  Now:
- * - If utilization > 35%, go to max.
- * - If utilization > 30% stay the same.
- * - Set freq to: utilPct * curFreq / (.35 - .05/2)
- *
- * NOTE: struct is static because simple_ondemand hangs outo it.  It also
- * could be const but the normal devfreq framework doesn't declare it as such.
- */
-static struct devfreq_simple_ondemand_data kbase_ondemand_data = {
-	.upthreshold = 35,	/* bump to max if utilization > up */
-	.downdifferential = 5,	/* recalculate if utilization <= (up-down) */
-};
-
 int kbase_devfreq_init(struct kbase_device *kbdev)
 {
 	struct devfreq_dev_profile *dp;
@@ -812,10 +741,7 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 
 	for (i = 0; i < kbdev->nr_clocks; i++) {
 		if (kbdev->clocks[i])
-			kbdev->current_freqs[i] =
-				clk_get_rate(kbdev->clocks[i]);
-		else
-			kbdev->current_freqs[i] = 0;
+			kbdev->current_freqs[i] = clk_get_rate(kbdev->clocks[i]);
 	}
 	kbdev->current_nominal_freq = kbdev->current_freqs[0];
 
@@ -833,8 +759,7 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 
 	if (dp->max_state > 0) {
 		/* Record the maximum frequency possible */
-		kbdev->gpu_props.props.core_props.gpu_freq_khz_max =
-			dp->freq_table[0] / 1000;
+		kbdev->gpu_props.gpu_freq_khz_max = dp->freq_table[0] / 1000;
 	}
 
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
@@ -849,8 +774,7 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 	if (err)
 		goto init_core_mask_table_failed;
 
-	kbdev->devfreq = devfreq_add_device(kbdev->dev, dp,
-				"simple_ondemand", &kbase_ondemand_data);
+	kbdev->devfreq = devfreq_add_device(kbdev->dev, dp, "simple_ondemand", NULL);
 	if (IS_ERR(kbdev->devfreq)) {
 		err = PTR_ERR(kbdev->devfreq);
 		kbdev->devfreq = NULL;
@@ -875,20 +799,21 @@ int kbase_devfreq_init(struct kbase_device *kbdev)
 
 	err = devfreq_register_opp_notifier(kbdev->dev, kbdev->devfreq);
 	if (err) {
-		dev_err(kbdev->dev,
-			"Failed to register OPP notifier (%d)", err);
+		dev_err(kbdev->dev, "Failed to register OPP notifier (%d)", err);
 		goto opp_notifier_failed;
 	}
 
 #if IS_ENABLED(CONFIG_DEVFREQ_THERMAL)
+#if KERNEL_VERSION(5, 11, 0) <= LINUX_VERSION_CODE
+	kbdev->devfreq_cooling = devfreq_cooling_em_register(
+		kbdev->devfreq, &kbase_ipa_power_model_ops);
+#else
 	kbdev->devfreq_cooling = of_devfreq_cooling_register_power(
-			kbdev->dev->of_node,
-			kbdev->devfreq,
-			&kbase_ipa_power_model_ops);
+		kbdev->dev->of_node, kbdev->devfreq, &kbase_ipa_power_model_ops);
+#endif
 	if (IS_ERR_OR_NULL(kbdev->devfreq_cooling)) {
 		err = PTR_ERR_OR_ZERO(kbdev->devfreq_cooling);
-		dev_err(kbdev->dev,
-			"Failed to register cooling device (%d)", err);
+		dev_err(kbdev->dev, "Failed to register cooling device (%d)", err);
 		err = err == 0 ? -ENODEV : err;
 		goto cooling_reg_failed;
 	}

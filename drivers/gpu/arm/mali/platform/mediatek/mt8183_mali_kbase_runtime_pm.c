@@ -16,10 +16,14 @@
 
 /* list of clocks required by GPU */
 static const char * const mt8183_gpu_clks[] = {
+#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	"clk_mux",
 	"clk_main_parent",
 	"clk_sub_parent",
 	"subsys_mfg_cg",
+#else
+	NULL,
+#endif
 };
 
 const struct mtk_hw_config mt8183_hw_config = {
@@ -46,7 +50,9 @@ const struct mtk_hw_config mt8183_hw_config = {
 };
 
 struct mtk_platform_context mt8183_platform_context = {
+#if (KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE)
 	.manual_mux_reparent = true,
+#endif
 	.config = &mt8183_hw_config,
 };
 
