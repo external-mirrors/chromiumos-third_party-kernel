@@ -6,8 +6,8 @@
 #include "mt8189-skywalker-baze.dtsi"
 
 / {
-	model = "Google Baze unprovisioned design and sku0/4/5 board";
-	compatible = "google,baze-sku2147483647", "google,baze-sku0", "google,baze-sku4",
-		     "google,baze-sku5", "google,baze", "mediatek,mt8189";
+	model = "Google Baze unprovisioned design and sku0/1/4/5 board";
+	compatible = "google,baze-sku2147483647", "google,baze-sku0", "google,baze-sku1",
+		     "google,baze-sku4", "google,baze-sku5", "google,baze", "mediatek,mt8189";
 	chassis-type = "convertible";
 };
