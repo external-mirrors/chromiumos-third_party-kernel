@@ -208,9 +208,12 @@
 	no-sd;
 	non-removable;
 	hs400-ds-delay = <0x1481b>;
-	mediatek,hs400-ds-dly3 = <0x14>;
 	vmmc-supply = <&mt6359_vemc_1_ldo_reg>;
 	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
+};
+
+&mt6359_vufs_ldo_reg {
+	regulator-always-on;
 };
 
 &pio{
