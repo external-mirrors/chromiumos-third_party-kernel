@@ -131,6 +131,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-shaak-sku2097153.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-shaak-sku2097154.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4096.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4097.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4101.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8192.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8193.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8194.dtb
