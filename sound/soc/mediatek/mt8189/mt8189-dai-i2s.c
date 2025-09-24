@@ -1695,13 +1695,13 @@ static const struct mtk_afe_i2s_priv mt8189_i2s_priv[DAI_I2S_NUM] = {
 	},
 	[DAI_I2SOUT0] = {
 		.id = MT8189_DAI_I2S_OUT0,
-		.mclk_id = MT8189_I2SIN0_MCK,
+		.mclk_id = MT8189_I2SOUT0_MCK,
 		.share_property_name = "i2sout0-share",
 		.share_i2s_id = -1,
 	},
 	[DAI_I2SOUT1] = {
 		.id = MT8189_DAI_I2S_OUT1,
-		.mclk_id = MT8189_I2SIN1_MCK,
+		.mclk_id = MT8189_I2SOUT1_MCK,
 		.share_property_name = "i2sout1-share",
 		.share_i2s_id = -1,
 	},
