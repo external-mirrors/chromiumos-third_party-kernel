@@ -23,3 +23,7 @@
 		     "google,anakin-rev1-sku2147483647", "google,anakin-rev1",
 		     "google,anakin", "mediatek,mt8189";
 };
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+};
