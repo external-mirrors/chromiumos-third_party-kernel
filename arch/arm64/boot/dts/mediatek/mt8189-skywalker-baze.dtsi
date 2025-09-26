@@ -212,6 +212,10 @@
 	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
 };
 
+&mmc1 {
+	status = "disabled";
+};
+
 &mt6359_vufs_ldo_reg {
 	regulator-always-on;
 };
