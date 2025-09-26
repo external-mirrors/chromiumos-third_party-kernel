@@ -6,9 +6,9 @@
 #include "mt8189-skywalker-tarkin.dtsi"
 
 / {
-	model = "Google Tarkin sku4096/unprovisioned design";
-	compatible = "google,tarkin-sku4096", "google,tarkin-sku2147483647",
-		     "google,tarkin", "mediatek,mt8189";
+	model = "Google Tarkin sku4096 design";
+	compatible = "google,tarkin-sku4096", "google,tarkin",
+		     "mediatek,mt8189";
 };
 
 &cros_ec {

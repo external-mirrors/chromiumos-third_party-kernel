@@ -135,6 +135,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4101.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8192.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8193.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8194.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku2147483647.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-sku4.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-sku16.dtb
