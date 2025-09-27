@@ -6,10 +6,11 @@
 #include "mt8189-skywalker-anakin.dtsi"
 
 / {
-	model = "Google Anakin sku0/3/4/6/7 board";
+	model = "Google Anakin sku0/3/4/6/7/9 board";
 	compatible = "google,anakin-sku0", "google,anakin-sku3",
 		     "google,anakin-sku4", "google,anakin-sku6",
-		     "google,anakin-sku7", "google,anakin", "mediatek,mt8189";
+		     "google,anakin-sku7", "google,anakin-sku9",
+		     "google,anakin", "mediatek,mt8189";
 };
 
 &ap_i2c_tchscr {
