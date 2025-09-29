@@ -6,6 +6,43 @@
 /dts-v1/;
 #include "mt8186-corsola-ponyta.dtsi"
 
+/ {
+	/* This V5 refers to 5V NTC */
+	v5_choke_thermistor: v5-choke-thermal-sensor {
+		compatible = "generic-adc-thermal";
+		#thermal-sensor-cells = <0>;
+		io-channels = <&auxadc 1>;
+		io-channel-names = "sensor-channel";
+		temperature-lookup-table = <    (-5000) 1485
+						0 1406
+						5000 1317
+						10000 1219
+						15000 1115
+						20000 1007
+						25000 900
+						30000 796
+						35000 697
+						40000 605
+						45000 523
+						50000 449
+						55000 384
+						60000 327
+						65000 279
+						70000 237
+						75000 202
+						80000 172
+						85000 147
+						90000 125
+						95000 107
+						100000 92
+						105000 79
+						110000 68
+						115000 59
+						120000 51
+						125000 44>;
+	};
+};
+
 &i2c1 {
 	touchscreen_ilitek: touchscreen@41 {
 		compatible = "ilitek,ili2901";
@@ -65,6 +102,71 @@
 
 &mt6366codec {
 	mediatek,dmic-mode = <0>; /* two-wires */
+};
+
+&thermal_zones {
+	v5-choke-thermal {
+		polling-delay = <1000>; /* milliseconds */
+		polling-delay-passive = <50>; /* milliseconds */
+		thermal-sensors = <&v5_choke_thermistor>;
+		sustainable-power = <1000>;
+
+		trips {
+			v5_choke_alert0: trip-point@0 {
+				temperature = <50000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			v5_choke_alert1: target@1 {
+				temperature = <60000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			v5_choke_ntc_crit: v5-choke-ntc-crit@0 {
+				temperature = <80000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&v5_choke_alert1>;
+				cooling-device = <&cpu0
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>,
+						<&cpu1
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>,
+						<&cpu2
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>,
+						<&cpu3
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>,
+						<&cpu4
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>,
+						<&cpu5
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>;
+				contribution = <4096>;
+			};
+
+			map1 {
+				trip = <&v5_choke_alert1>;
+				cooling-device = <&cpu6
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>,
+						<&cpu7
+					THERMAL_NO_LIMIT
+					THERMAL_NO_LIMIT>;
+				contribution = <1024>;
+			};
+		};
+	};
 };
 
 &touchscreen {
