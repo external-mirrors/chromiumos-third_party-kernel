@@ -147,7 +147,7 @@ static int mtk_mipi_tx_probe(struct platform_device *pdev)
 		mipi_tx->mipitx_drive = clamp_val(mipi_tx->mipitx_drive, 3000,
 						  6000);
 	}
-
+	mipi_tx->is_cphy = of_property_read_bool(dev->of_node, "mediatek,is-cphy");
 	ref_clk_name = __clk_get_name(ref_clk);
 
 	ret = of_property_read_string(dev->of_node, "clock-output-names",

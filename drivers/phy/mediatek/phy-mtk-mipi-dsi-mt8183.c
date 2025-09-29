@@ -28,6 +28,14 @@
 #define MIPITX_PLL_CON3		0x0038
 #define MIPITX_PLL_CON4		0x003c
 #define RG_DSI_PLL_IBIAS		GENMASK(11, 10)
+#define MIPITX_PHY_SEL0		0x0040
+#define MIPITX_PHY_SEL0_VAL	0x65432101
+#define MIPITX_PHY_SEL1		0x0044
+#define MIPITX_PHY_SEL1_VAL	0x24210987
+#define MIPITX_PHY_SEL2		0x0048
+#define MIPITX_PHY_SEL2_VAL	0x68543102
+#define MIPITX_PHY_SEL3		0x004c
+#define MIPITX_PHY_SEL3_VAL	0x00000007
 
 #define MIPITX_D2P_RTCODE	0x0100
 #define MIPITX_D2_SW_CTL_EN	0x0144
@@ -71,7 +79,12 @@ static int mtk_mipi_tx_pll_enable(struct clk_hw *hw)
 	} else {
 		return -EINVAL;
 	}
-
+	if (mipi_tx->is_cphy) {
+		writel(MIPITX_PHY_SEL0_VAL, base + MIPITX_PHY_SEL0);
+		writel(MIPITX_PHY_SEL1_VAL, base + MIPITX_PHY_SEL1);
+		writel(MIPITX_PHY_SEL2_VAL, base + MIPITX_PHY_SEL2);
+		writel(MIPITX_PHY_SEL3_VAL, base + MIPITX_PHY_SEL3);
+	}
 	mtk_phy_clear_bits(base + MIPITX_PLL_CON4, RG_DSI_PLL_IBIAS);
 
 	mtk_phy_set_bits(base + MIPITX_PLL_PWR, AD_DSI_PLL_SDM_PWR_ON);
@@ -138,7 +151,8 @@ static void mtk_mipi_tx_power_on_signal(struct phy *phy)
 	writel(RG_DSI_PAD_TIEL_SEL | RG_DSI_BG_CORE_EN, base + MIPITX_LANE_CON);
 	usleep_range(30, 100);
 	writel(RG_DSI_BG_CORE_EN | RG_DSI_BG_LPF_EN, base + MIPITX_LANE_CON);
-
+	if (mipi_tx->is_cphy)
+		mtk_phy_set_bits(base + MIPITX_LANE_CON, RG_DSI_CPHY_EN);
 	/* Switch OFF each Lane */
 	mtk_phy_clear_bits(base + MIPITX_D0_SW_CTL_EN, DSI_SW_CTL_EN);
 	mtk_phy_clear_bits(base + MIPITX_D1_SW_CTL_EN, DSI_SW_CTL_EN);
@@ -148,10 +162,14 @@ static void mtk_mipi_tx_power_on_signal(struct phy *phy)
 
 	mtk_phy_update_field(base + MIPITX_VOLTAGE_SEL, RG_DSI_HSTX_LDO_REF_SEL,
 			     (mipi_tx->mipitx_drive - 3000) / 200);
+	if (mipi_tx->is_cphy)
+		mtk_phy_update_field(base + MIPITX_VOLTAGE_SEL, RG_DSI_HSTX_LDO_REF_SEL, 0xd);
 
 	mtk_mipi_tx_config_calibration_data(mipi_tx);
-
-	mtk_phy_set_bits(base + MIPITX_CK_CKMODE_EN, DSI_CK_CKMODE_EN);
+	if (mipi_tx->is_cphy)
+		mtk_phy_clear_bits(base + MIPITX_CK_CKMODE_EN, DSI_CK_CKMODE_EN);
+	else
+		mtk_phy_set_bits(base + MIPITX_CK_CKMODE_EN, DSI_CK_CKMODE_EN);
 }
 
 static void mtk_mipi_tx_power_off_signal(struct phy *phy)
