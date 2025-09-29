@@ -107,6 +107,10 @@
 	};
 };
 
+&dispsys_config {
+	compatible = "mediatek,mt8189-padme-mmsys", "syscon";
+};
+
 &dp_tx {
 	/delete-property/ mediatek,phy-flip-gpios;
 };
