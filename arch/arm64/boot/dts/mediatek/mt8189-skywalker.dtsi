@@ -1064,6 +1064,7 @@ ap_i2c_tchpad: &i2c7 {
 			pinmux = <PINMUX_GPIO48__FUNC_WAKEN>,
 				 <PINMUX_GPIO49__FUNC_PERSTN>,
 				 <PINMUX_GPIO50__FUNC_CLKREQN>;
+			bias-pull-up;
 		};
 	};
 
