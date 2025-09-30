@@ -480,10 +480,15 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 	 * The deassertion of PERST# should be delayed 100ms (TPVPERL)
 	 * for the power and clock to become stable.
 	 */
-	msleep(100);
+	msleep(50);
 
 	/* De-assert reset signals */
-	val &= ~(PCIE_MAC_RSTB | PCIE_PHY_RSTB | PCIE_BRG_RSTB | PCIE_PE_RSTB);
+	val &= ~(PCIE_MAC_RSTB | PCIE_PHY_RSTB | PCIE_BRG_RSTB);
+	writel_relaxed(val, pcie->base + PCIE_RST_CTRL_REG);
+
+	msleep(50);
+
+	val &= ~PCIE_PE_RSTB;
 	writel_relaxed(val, pcie->base + PCIE_RST_CTRL_REG);
 
 	/* Check if the link is up or not */
@@ -1268,6 +1273,24 @@ static void mtk_pcie_remove(struct platform_device *pdev)
 	mtk_pcie_power_down(pcie);
 }
 
+static void mtk_pcie_shutdown(struct platform_device *pdev)
+{
+	struct mtk_gen3_pcie *pcie = platform_get_drvdata(pdev);
+	u32 val;
+
+	val = readl_relaxed(pcie->base + PCIE_RST_CTRL_REG);
+	val |= PCIE_PE_RSTB;
+	writel_relaxed(val, pcie->base + PCIE_RST_CTRL_REG);
+
+	/*
+	 * Ensure the time interval between pulling PERST# down and turning off
+	 * REFCLK is greater than Zero
+	 */
+	mdelay(1);
+
+	mtk_pcie_power_down(pcie);
+}
+
 static void mtk_pcie_irq_save(struct mtk_gen3_pcie *pcie)
 {
 	int i;
@@ -1461,6 +1484,7 @@ MODULE_DEVICE_TABLE(of, mtk_pcie_of_match);
 static struct platform_driver mtk_pcie_driver = {
 	.probe = mtk_pcie_probe,
 	.remove_new = mtk_pcie_remove,
+	.shutdown = mtk_pcie_shutdown,
 	.driver = {
 		.name = "mtk-pcie-gen3",
 		.of_match_table = mtk_pcie_of_match,
