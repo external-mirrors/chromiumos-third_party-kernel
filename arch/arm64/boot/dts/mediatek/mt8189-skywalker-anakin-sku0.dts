@@ -10,7 +10,8 @@
 	compatible = "google,anakin-sku0", "google,anakin-sku3",
 		     "google,anakin-sku4", "google,anakin-sku6",
 		     "google,anakin-sku7", "google,anakin-sku9",
-		     "google,anakin", "mediatek,mt8189";
+		     "google,anakin-sku10", "google,anakin",
+		     "mediatek,mt8189";
 };
 
 &ap_i2c_tchscr {
