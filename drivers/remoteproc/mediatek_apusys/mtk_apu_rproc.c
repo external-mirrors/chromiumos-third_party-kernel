@@ -319,6 +319,8 @@ static int mtk_apu_prepare(struct rproc *rproc)
 			goto remove_mtk_apu_exception;
 	}
 
+	dev_dbg(apu->dev, "mtk_apu_prepare done\n");
+
 	return ret;
 
 remove_mtk_apu_exception:
@@ -423,6 +425,7 @@ static int mtk_apu_probe(struct platform_device *pdev)
 	if (!apu->power_pdev)
 		return dev_err_probe(dev, -EPROBE_DEFER, "failed to find power device for mtk_apu\n");
 
+	devm_pm_runtime_enable(dev);
 	link = device_link_add(dev, &apu->power_pdev->dev, DL_FLAG_PM_RUNTIME);
 	if (!link)
 		dev_err(dev, "Unable to create device link between mtk_apu and mtk apu power\n");

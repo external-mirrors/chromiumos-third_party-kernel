@@ -46,6 +46,8 @@ static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 	uint64_t ts = sched_clock();
 	uint64_t dtime_ts;
 	unsigned long power_dtime = 0;
+	struct device *power_dev = &(apu->power_pdev)->dev;
+	int ret;
 
 	dtime = (dtime > MAX_DTIME)? MAX_DTIME: dtime;
 	dtime = (dtime < MIN_DTIME)? MIN_DTIME: dtime;
@@ -57,10 +59,10 @@ static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 		return;
 
 	if (timer_pending(&apu->power_off_timer)) {
-		mutex_lock(&apu->power_lock);
-		apu->ipi_pwr_ref_cnt[MTK_APU_IPI_MIDDLEWARE]--;
-		apu->local_pwr_ref_cnt--;
-		mutex_unlock(&apu->power_lock);
+		ret = pm_runtime_put_sync(power_dev);
+		if (ret != 0)
+			dev_err(apu->dev, "%s: power off fail id=%d, ret=%d\n",
+				__func__, MTK_APU_IPI_MIDDLEWARE, ret);
 	}
 
 	power_dtime = msecs_to_jiffies(apu->cur_dtime_ts - ts);
@@ -408,7 +410,6 @@ int mtk_apu_power_on_off(struct platform_device *pdev, u32 id, u32 on, u32 off)
 	struct mtk_apu *apu = platform_get_drvdata(pdev);
 	struct device *dev;
 	const struct mtk_apu_hw_ops *hw_ops;
-	struct mtk_apu_ipi_desc *ipi;
 
 	if (!apu)
 		return -EINVAL;
@@ -424,20 +425,6 @@ int mtk_apu_power_on_off(struct platform_device *pdev, u32 id, u32 on, u32 off)
 
 	if (!apu->platdata->flags.fast_on_off || !hw_ops->power_on_off)
 		return -EOPNOTSUPP;
-
-	ipi = &apu->ipi_desc[id];
-	spin_lock(&apu->usage_cnt_lock);
-	if (off == 1 && ipi_attrs[id].direction == IPI_HOST_INITIATE &&
-	    (ipi->usage_cnt != 0 && apu->ipi_pwr_ref_cnt[id] <= 1) &&
-	    !(ipi->usage_cnt == 1 && apu->current_ipi_handler_id == id &&
-	    apu->ipi_pwr_ref_cnt[id] == 1)) {
-		dev_err(dev, "%s: power off fail, ipi(%d) usage cnt(%d) not zero!\n",
-			 __func__, id, ipi->usage_cnt);
-		spin_unlock(&apu->usage_cnt_lock);
-		ret = -EINVAL;
-		return ret;
-	}
-	spin_unlock(&apu->usage_cnt_lock);
 
 	ret = hw_ops->power_on_off(apu, id, on, off);
 
@@ -523,7 +510,6 @@ int mtk_apu_ipi_init(struct platform_device *pdev, struct mtk_apu *apu)
 	apu->rx_serial_no = 0;
 
 	mutex_init(&apu->send_lock);
-	mutex_init(&apu->power_lock);
 	mutex_init(&apu->forbid_ipi_lock);
 	spin_lock_init(&apu->usage_cnt_lock);
 
@@ -531,7 +517,6 @@ int mtk_apu_ipi_init(struct platform_device *pdev, struct mtk_apu *apu)
 		mutex_init(&apu->ipi_desc[i].lock);
 		lockdep_set_class_and_name(&apu->ipi_desc[i].lock, &ipi_lock_key[i],
 					   ipi_attrs[i].name);
-		apu->ipi_pwr_ref_cnt[i] = 0;
 	}
 
 	apu->current_ipi_handler_id = -1;

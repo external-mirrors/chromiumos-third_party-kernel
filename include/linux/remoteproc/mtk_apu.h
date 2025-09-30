@@ -133,7 +133,6 @@ struct mtk_apu {
 
 	/* to prevent multiple ipi_send run concurrently */
 	struct mutex send_lock;
-	struct mutex power_lock;
 	struct mutex forbid_ipi_lock;
 	spinlock_t usage_cnt_lock;
 	struct mtk_apu_ipi_desc ipi_desc[MTK_APU_IPI_MAX];
@@ -160,8 +159,6 @@ struct mtk_apu {
 	struct workqueue_struct *timesync_workq;
 
 	uint32_t up_code_buf_sz;
-	uint32_t local_pwr_ref_cnt;
-	uint32_t ipi_pwr_ref_cnt[MTK_APU_IPI_MAX];
 
 	/* reserved memory */
 	uint64_t resv_mem_pa;

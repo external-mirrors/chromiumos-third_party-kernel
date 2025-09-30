@@ -12,6 +12,8 @@ struct apupwr_plat_data {
 	void (*remove)(struct platform_device *pdev);
 	int (*get_rpc_status)(struct platform_device *pdev);
 	int (*get_rpc_pwr_status)(struct platform_device *pdev);
+	int (*plat_aputop_on)(struct device *dev);
+	int (*plat_aputop_off)(struct device *dev);
 };
 
 extern const struct apupwr_plat_data mt8196_plat_data;
