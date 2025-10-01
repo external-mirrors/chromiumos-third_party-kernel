@@ -248,6 +248,14 @@
 	/delete-node/ pins-touch-en;
 };
 
+&u2port0 {
+	mediatek,pre-emphasis = <1>;
+};
+
+&u2port2 {
+	mediatek,pre-emphasis = <2>;
+};
+
 /* USB hub port 1 */
 &usb_hub_dsp1_hs {
 	remote-endpoint = <&usb_a0_hs>;
