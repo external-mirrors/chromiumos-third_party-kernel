@@ -9,6 +9,8 @@
 	model = "Google Yoda sku16 board";
 	compatible = "google,yoda-sku16", "google,yoda-sku17", "google,yoda-sku18", "google,yoda-sku19",
 		     "google,yoda-sku24", "google,yoda-sku25", "google,yoda-sku26", "google,yoda-sku27",
+		     "google,yoda-sku4112", "google,yoda-sku4113", "google,yoda-sku4114", "google,yoda-sku4115",
+		     "google,yoda-sku4120", "google,yoda-sku4121", "google,yoda-sku4122", "google,yoda-sku4123",
 		     "google,yoda", "mediatek,mt8189";
 };
 
