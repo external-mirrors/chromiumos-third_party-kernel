@@ -116,6 +116,17 @@
 		vcc33-supply = <&pp3300_tchscr_x>;
 		status = "fail-needs-probe";
 	};
+
+	touchscreen_g2touch: touchscreen@40 {
+		compatible = "ilitek,ili2901";
+		reg = <0x40>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		status = "fail-needs-probe";
+	};
 };
 
 &dsi0 {
