@@ -19,7 +19,8 @@ FIT data structure). This allows parsing of the data without loading
 the entire FIT.
 
 Use -c to compress the data, using bzip2, gzip, lz4, lzma, lzo and
-zstd algorithms.
+zstd algorithms. Extra arguments passed to the compression tool can be
+specified by -c "lz4 -20".
 
 Use -D to decompose "composite" DTBs into their base components and
 deduplicate the resulting base DTBs and DTB overlays. This requires the
@@ -80,7 +81,7 @@ def parse_args():
         "--compress",
         type=str,
         default="none",
-        help="Specifies the compression",
+        help="Specifies the compression algorithm and arguments",
     )
     parser.add_argument(
         "-D",
@@ -158,7 +159,9 @@ def setup_fit(fsw: libfdt.FdtSw, name: str):
     fsw.begin_node("images")
 
 
-def write_kernel(fsw: libfdt.FdtSw, data: bytes, args: argparse.Namespace):
+def write_kernel(
+    fsw: libfdt.FdtSw, data: bytes, compress: str, args: argparse.Namespace
+):
     """Write out the kernel image
 
     Writes a kernel node along with the required properties
@@ -166,18 +169,18 @@ def write_kernel(fsw: libfdt.FdtSw, data: bytes, args: argparse.Namespace):
     Args:
         fsw: Object to use for writing
         data: Data to write (possibly compressed)
+        compress: Compression algorithm to use, e.g. 'gzip'
         args: Contains necessary strings:
             arch: FIT architecture, e.g. 'arm64'
             fit_os: Operating Systems, e.g. 'linux'
             name: Name of OS, e.g. 'Linux-6.6.0-rc7'
-            compress: Compression algorithm to use, e.g. 'gzip'
     """
     with fsw.add_node("kernel"):
         fsw.property_string("description", args.name)
         fsw.property_string("type", "kernel_noload")
         fsw.property_string("arch", args.arch)
         fsw.property_string("os", args.os)
-        fsw.property_string("compression", args.compress)
+        fsw.property_string("compression", compress)
         fsw.property("data", data)
         fsw.property_u32("load", 0)
         fsw.property_u32("entry", 0)
@@ -210,12 +213,13 @@ def finish_fit(fsw: libfdt.FdtSw, entries: List[Tuple]):
     fsw.end_node()
 
 
-def compress_data(inf: io.IOBase, compress: str) -> bytes:
+def compress_data(inf: io.IOBase, compress: str, args: str) -> bytes:
     """Compress data using a selected algorithm
 
     Args:
         inf: Filename containing the data to compress
         compress: Compression algorithm, e.g. 'gzip'
+        args: Compression arguments, e.g. '-9'
 
     Returns:
         Compressed data
@@ -231,8 +235,11 @@ def compress_data(inf: io.IOBase, compress: str) -> bytes:
         with open(comp_fname.name, "wb") as outf:
             done = False
             for tool in comp.tools.split(","):
+                cmd = [tool, "-c"]
+                if args:
+                    cmd.extend(args.split())
                 try:
-                    subprocess.call([tool, "-c"], stdin=inf, stdout=outf)
+                    subprocess.call(cmd, stdin=inf, stdout=outf)
                     done = True
                     break
                 except FileNotFoundError:
@@ -245,7 +252,12 @@ def compress_data(inf: io.IOBase, compress: str) -> bytes:
 
 
 def output_dtb(
-    fsw: libfdt.FdtSw, node_name: str, fname: str, arch: str, compress: str
+    fsw: libfdt.FdtSw,
+    node_name: str,
+    fname: str,
+    arch: str,
+    compress: str,
+    compress_args: str,
 ):
     """Write out a single devicetree to the FIT
 
@@ -254,7 +266,8 @@ def output_dtb(
         node_name: FDT image node name
         fname: Filename containing the DTB
         arch: FIT architecture, e.g. 'arm64'
-        compress: Compressed algorithm, e.g. 'gzip'
+        compress: Compression algorithm, e.g. 'gzip'
+        compress_args: Compression arguments, e.g. '-9'
     """
     with fsw.add_node(node_name):
         fsw.property_string("description", os.path.basename(fname))
@@ -263,7 +276,7 @@ def output_dtb(
         fsw.property_string("compression", compress)
 
         with open(fname, "rb") as inf:
-            compressed = compress_data(inf, compress)
+            compressed = compress_data(inf, compress, compress_args)
         fsw.property("data", compressed)
 
 
@@ -328,11 +341,17 @@ def build_fit(args: argparse.Namespace) -> Tuple[bytes, int, int]:
     entries = []
     fdts = {}
 
+    # Parse args.compress
+    compress_parts = args.compress.strip().split(maxsplit=1)
+    if len(compress_parts) == 1:
+        compress_parts.append("")
+    compress_algo, compress_args = compress_parts
+
     # Handle the kernel
     with open(args.kernel, "rb") as inf:
-        comp_data = compress_data(inf, args.compress)
+        comp_data = compress_data(inf, compress_algo, compress_args)
     size += os.path.getsize(args.kernel)
-    write_kernel(fsw, comp_data, args)
+    write_kernel(fsw, comp_data, compress_algo, args)
 
     if args.dtb_config:
         if args.dtbs:
@@ -342,7 +361,14 @@ def build_fit(args: argparse.Namespace) -> Tuple[bytes, int, int]:
             args.chromeos_config,
         )
         for node in fdt_nodes:
-            output_dtb(fsw, node.name, node.filename, args.arch, args.compress)
+            output_dtb(
+                fsw,
+                node.name,
+                node.filename,
+                args.arch,
+                compress_algo,
+                compress_args,
+            )
         for node in config_nodes:
             entries.append([node.description, node.compatible, node.fdt])
     else:
@@ -358,7 +384,14 @@ def build_fit(args: argparse.Namespace) -> Tuple[bytes, int, int]:
                     seq += 1
                     node_name = f"fdt-{seq}"
                     size += os.path.getsize(fn)
-                    output_dtb(fsw, node_name, fn, args.arch, args.compress)
+                    output_dtb(
+                        fsw,
+                        node_name,
+                        fn,
+                        args.arch,
+                        compress_algo,
+                        compress_args,
+                    )
                     fdts[fn] = node_name
 
         fdt_nodes = [fdts[fn] for fn in files]
