@@ -77,7 +77,11 @@ def _get_chromeos_skus(chromeos_config_file):
             raise ValueError(f'Wrong frid format for {config["name"]}: {frid}')
         model = frid.removeprefix("Google_").lower()
         sku = config["identity"]["sku-id"]
-        fw_config = config["firmware"]["firmware-config"]
+        fw = config.get("firmware")
+        if not fw:
+            print(f"Missing firmware for {model} SKU {sku}; skipping")
+            continue
+        fw_config = fw["firmware-config"]
         sku_configs.append(SkuConfig(model, sku, fw_config))
     return sku_configs
 
