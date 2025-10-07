@@ -47,29 +47,34 @@ class FitConfigNode:
 def _read_dtb_config(dtb_config_file):
     with open(dtb_config_file, "r", encoding="utf-8") as f:
         dtb_configs = yaml.safe_load(f)
-    sku_configs = []
+    model_sku_configs = collections.defaultdict(list)
     model_dtb_configs = {}
     default_config = dtb_configs.get(DTB_CONFIG_DEFAULT_KEY, {})
     for model, config in dtb_configs.items():
         if model == DTB_CONFIG_DEFAULT_KEY:
             continue
         # skus
+        skus = set()
         for sku_config in config.get(DTB_CONFIG_KEY_SKUS, []):
             sku = sku_config["sku"]
             fw_config = sku_config["fw_config"]
-            sku_configs.append(SkuConfig(model, sku, fw_config))
+            if sku in skus:
+                raise ValueError(f"Duplicate sku {sku} for {model}")
+            skus.add(sku)
+            model_sku_configs[model].append(SkuConfig(model, sku, fw_config))
         # dtb/dtbo
         dtbs = config[DTB_CONFIG_KEY_DTB]
         dtbos = copy.deepcopy(default_config.get(DTB_CONFIG_KEY_DTBO, {}))
         dtbos.update(config.get(DTB_CONFIG_KEY_DTBO, {}))
         model_dtb_configs[model] = (dtbs, dtbos)
-    return sku_configs, model_dtb_configs
+    return model_sku_configs, model_dtb_configs
 
 
 def _get_chromeos_skus(chromeos_config_file):
     with open(chromeos_config_file, "r", encoding="utf-8") as f:
         chromeos_configs = json.load(f)
-    sku_configs = []
+    model_skus = set()
+    model_sku_configs = collections.defaultdict(list)
     for config in chromeos_configs["chromeos"]["configs"]:
         # Get model name (i.e. coreboot MAINBOARD_PART_NUMBER) from FRID.
         frid = config["identity"]["frid"]
@@ -82,8 +87,10 @@ def _get_chromeos_skus(chromeos_config_file):
             print(f"Missing firmware for {model} SKU {sku}; skipping")
             continue
         fw_config = fw["firmware-config"]
-        sku_configs.append(SkuConfig(model, sku, fw_config))
-    return sku_configs
+        if (model, sku) in model_skus:
+            raise ValueError(f"Duplicate sku {sku} for {model}")
+        model_sku_configs[model].append(SkuConfig(model, sku, fw_config))
+    return model_sku_configs
 
 
 def _match_dtb(dtb_attr, sku, fw_config):
@@ -171,41 +178,38 @@ def process_dtb_config(dtb_config_file: str, chromeos_config_file: str):
             fdt_nodes: List of FitFdtNode.
             config_nodes: List of FitConfigNode.
     """
-    sku_configs, model_dtb_configs = _read_dtb_config(dtb_config_file)
+    model_sku_configs, model_dtb_configs = _read_dtb_config(dtb_config_file)
     if chromeos_config_file:
-        sku_configs = _get_chromeos_skus(chromeos_config_file)
+        model_sku_configs = _get_chromeos_skus(chromeos_config_file)
 
     # Generate per-SKU configs.
     sku_dtb_configs = collections.defaultdict(dict)
-    for sku_config in sku_configs:
-        model = sku_config.model
-        sku = sku_config.sku
-        fw_config = sku_config.fw_config
+    for model, sku_configs in model_sku_configs.items():
         # Skip models not in dtb_config_file.
         dtb_config = model_dtb_configs.get(model)
         if not dtb_config:
             continue
 
-        # Skip already processed SKU.
-        if sku in sku_dtb_configs[model]:
-            continue
+        for sku_config in sku_configs:
+            sku = sku_config.sku
+            fw_config = sku_config.fw_config
 
-        dtbs, dtbos = dtb_config
-        matched_dtb = None
-        for dtb, attr in dtbs.items():
-            if _match_dtb(attr, sku, fw_config):
-                matched_dtb = dtb
-                break
-        if not matched_dtb:
-            raise ValueError(
-                "Unable to match a dtb: "
-                f"model {model}, sku {sku}, fw_config {fw_config}"
-            )
-        matched_dtbos = []
-        for dtbo, attr in dtbos.items():
-            if _match_dtb(attr, sku, fw_config):
-                matched_dtbos.append(dtbo)
-        sku_dtb_configs[model][sku] = (matched_dtb, matched_dtbos)
+            dtbs, dtbos = dtb_config
+            matched_dtb = None
+            for dtb, attr in dtbs.items():
+                if _match_dtb(attr, sku, fw_config):
+                    matched_dtb = dtb
+                    break
+            if not matched_dtb:
+                raise ValueError(
+                    "Unable to match a dtb: "
+                    f"model {model}, sku {sku}, fw_config {fw_config}"
+                )
+            matched_dtbos = []
+            for dtbo, attr in dtbos.items():
+                if _match_dtb(attr, sku, fw_config):
+                    matched_dtbos.append(dtbo)
+            sku_dtb_configs[model][sku] = (matched_dtb, matched_dtbos)
 
     dtb_nodes, dtbo_nodes, fit_dtb_nodes = _gen_fit_dtb_nodes(sku_dtb_configs)
     fit_config_nodes = _gen_fit_config_nodes(
