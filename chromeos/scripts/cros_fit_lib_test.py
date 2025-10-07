@@ -54,7 +54,7 @@ class TestCrosFitLib(unittest.TestCase):
         config = fit_config_nodes[0]
         self.assertEqual(
             self._parse_compatible(config.compatible),
-            {"google,rauru"},
+            {"google,rauru-sku0"},
             "Compatible string mismatch",
         )
         self.assertEqual(
@@ -112,7 +112,7 @@ class TestCrosFitLib(unittest.TestCase):
         config = fit_config_nodes[0]
         self.assertEqual(
             self._parse_compatible(config.compatible),
-            {"google,rauru"},
+            {"google,rauru-sku0"},
             "Compatible string mismatch",
         )
         self.assertEqual(
@@ -258,6 +258,108 @@ class TestCrosFitLib(unittest.TestCase):
             self._get_fdt_filenames(config, fit_dtb_nodes),
             ["rauru.dtb", "trackpad2.dtbo"],
             "FDT filenames mismatch for sku 1 and 2",
+        )
+
+    @mock.patch("cros_fit_lib._read_dtb_config")
+    def test_process_dtb_config_match_rev(self, mock_read_dtb_config):
+        """Test process_dtb_config with rev matching."""
+        model_sku_configs = {
+            "rauru": [
+                cros_fit_lib.SkuConfig("rauru", 0, 0x0),
+                cros_fit_lib.SkuConfig("rauru", 1, 0x0),
+            ]
+        }
+        model_dtb_configs = {
+            "rauru": (
+                {
+                    "rauru-rev0-rev1.dtb": {
+                        "rev": {"max": 1},
+                    },
+                    "rauru.dtb": {
+                        "rev": {"min": 3},
+                    },
+                },
+                {
+                    "trackpad-rev0.dtbo": {
+                        "rev": {"min": 0, "max": 0},
+                    },
+                    "trackpad.dtbo": {
+                        "rev": {"min": 5},
+                    },
+                    "wwan.dtbo": {},
+                },
+            )
+        }
+        mock_read_dtb_config.return_value = (
+            model_sku_configs,
+            model_dtb_configs,
+        )
+
+        fit_dtb_nodes, config_nodes = cros_fit_lib.process_dtb_config(
+            "fake_dtb_config.yaml", ""
+        )
+
+        self.assertEqual(
+            len(config_nodes), 4, "Wrong number of FIT config nodes"
+        )
+
+        # Rev 0
+        config = config_nodes[0]
+        self.assertEqual(
+            self._parse_compatible(config.compatible),
+            {"google,rauru-rev0-sku0", "google,rauru-rev0-sku1"},
+            "Compatible string mismatch for rev 0",
+        )
+        self.assertEqual(
+            self._get_fdt_filenames(config, fit_dtb_nodes),
+            ["rauru-rev0-rev1.dtb", "trackpad-rev0.dtbo", "wwan.dtbo"],
+            "FDT filenames mismatch for rev 0",
+        )
+
+        # Rev 1
+        config = config_nodes[1]
+        self.assertEqual(
+            self._parse_compatible(config.compatible),
+            {"google,rauru-rev1-sku0", "google,rauru-rev1-sku1"},
+            "Compatible string mismatch for rev 1",
+        )
+        self.assertEqual(
+            self._get_fdt_filenames(config, fit_dtb_nodes),
+            ["rauru-rev0-rev1.dtb", "wwan.dtbo"],
+            "FDT filenames mismatch for rev 1",
+        )
+
+        # No rev 2
+
+        # Rev 3 & 4
+        config = config_nodes[2]
+        self.assertEqual(
+            self._parse_compatible(config.compatible),
+            {
+                "google,rauru-rev3-sku0",
+                "google,rauru-rev3-sku1",
+                "google,rauru-rev4-sku0",
+                "google,rauru-rev4-sku1",
+            },
+            "Compatible string mismatch for rev 3 and 4",
+        )
+        self.assertEqual(
+            self._get_fdt_filenames(config, fit_dtb_nodes),
+            ["rauru.dtb", "wwan.dtbo"],
+            "FDT filenames mismatch for rev 3 and 4",
+        )
+
+        # Rev 5 (latest revision)
+        config = config_nodes[3]
+        self.assertEqual(
+            self._parse_compatible(config.compatible),
+            {"google,rauru-sku0", "google,rauru-sku1"},
+            "Compatible string mismatch for latest rev",
+        )
+        self.assertEqual(
+            self._get_fdt_filenames(config, fit_dtb_nodes),
+            ["rauru.dtb", "trackpad.dtbo", "wwan.dtbo"],
+            "FDT filenames mismatch for latest rev",
         )
 
 
