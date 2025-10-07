@@ -99,6 +99,66 @@ def _match_dtb(dtb_attr, sku, fw_config):
     return True
 
 
+def _gen_fit_dtb_nodes(sku_dtb_configs):
+    fit_dtb_nodes = []
+    dtb_nodes = {}
+    for sku_configs in sku_dtb_configs.values():
+        for dtb, _ in sku_configs.values():
+            if dtb in dtb_nodes:
+                continue
+            if os.path.splitext(dtb)[1] != ".dtb":
+                raise ValueError(f"Wrong file extension for dtb file: {dtb}")
+            seq = len(dtb_nodes) + 1
+            node_name = f"fdt-{seq}"
+            dtb_nodes[dtb] = node_name
+            fit_dtb_nodes.append(FitFdtNode(node_name, dtb))
+    dtbo_nodes = {}
+    for sku_configs in sku_dtb_configs.values():
+        for _, dtbos in sku_configs.values():
+            for dtbo in dtbos:
+                if dtbo in dtbo_nodes:
+                    continue
+                if os.path.splitext(dtbo)[1] != ".dtbo":
+                    raise ValueError(
+                        f"Wrong file extension for dtbo file: {dtbo}"
+                    )
+                seq = len(dtbo_nodes) + 1
+                node_name = f"fdto-{seq}"
+                dtbo_nodes[dtbo] = node_name
+                fit_dtb_nodes.append(FitFdtNode(node_name, dtbo))
+    return dtb_nodes, dtbo_nodes, fit_dtb_nodes
+
+
+def _gen_fit_config_nodes(sku_dtb_configs, dtb_nodes, dtbo_nodes):
+    # Merge SKUs with same DTB & DTBOs.
+    config_nodes = []
+    for model, sku_configs in sku_dtb_configs.items():
+        dtb_key_to_sku = {}
+        equiv_skus = collections.defaultdict(list)
+        for sku in sorted(sku_configs):
+            dtb, dtbos = sku_configs[sku]
+            dtb_key = tuple([dtb] + dtbos)
+            equiv_sku = dtb_key_to_sku.get(dtb_key)
+            if equiv_sku is not None:
+                equiv_skus[equiv_sku].append(sku)
+            else:
+                equiv_skus[sku].append(sku)
+                dtb_key_to_sku[dtb_key] = sku
+        for equiv_sku, skus in equiv_skus.items():
+            dtb, dtbos = sku_configs[equiv_sku]
+            skus_str = "/".join(str(sku) for sku in skus)
+            description = f"Google {model.title()} SKU {skus_str}"
+            if len(equiv_skus) == 1:
+                compat_list = [f"google,{model}"]
+            else:
+                compat_list = [f"google,{model}-sku{sku}" for sku in skus]
+            compat = bytes("".join(f"{x}\x00" for x in compat_list), "ascii")
+            fdt_nodes = [dtb_nodes[dtb]]
+            fdt_nodes += [dtbo_nodes[dtbo] for dtbo in dtbos]
+            config_nodes.append(FitConfigNode(description, compat, fdt_nodes))
+    return config_nodes
+
+
 def process_dtb_config(dtb_config_file: str, chromeos_config_file: str):
     """Process DTB config file based on ChromeOS config file.
 
@@ -147,59 +207,9 @@ def process_dtb_config(dtb_config_file: str, chromeos_config_file: str):
                 matched_dtbos.append(dtbo)
         sku_dtb_configs[model][sku] = (matched_dtb, matched_dtbos)
 
-    # Add DTB/DTBO nodes to FIT.
-    all_dtb_nodes = []
-    dtb_nodes = {}
-    for model, sku_configs in sku_dtb_configs.items():
-        for sku, (dtb, _) in sku_configs.items():
-            if dtb in dtb_nodes:
-                continue
-            if os.path.splitext(dtb)[1] != ".dtb":
-                raise ValueError(f"Wrong file extension for dtb file: {dtb}")
-            seq = len(dtb_nodes) + 1
-            node_name = f"fdt-{seq}"
-            dtb_nodes[dtb] = node_name
-            all_dtb_nodes.append(FitFdtNode(node_name, dtb))
-    dtbo_nodes = {}
-    for model, sku_configs in sku_dtb_configs.items():
-        for sku, (_, dtbos) in sku_configs.items():
-            for dtbo in dtbos:
-                if dtbo in dtbo_nodes:
-                    continue
-                if os.path.splitext(dtbo)[1] != ".dtbo":
-                    raise ValueError(
-                        f"Wrong file extension for dtbo file: {dtbo}"
-                    )
-                seq = len(dtbo_nodes) + 1
-                node_name = f"fdto-{seq}"
-                dtbo_nodes[dtbo] = node_name
-                all_dtb_nodes.append(FitFdtNode(node_name, dtbo))
+    dtb_nodes, dtbo_nodes, fit_dtb_nodes = _gen_fit_dtb_nodes(sku_dtb_configs)
+    fit_config_nodes = _gen_fit_config_nodes(
+        sku_dtb_configs, dtb_nodes, dtbo_nodes
+    )
 
-    # Merge SKUs with same DTB & DTBOs.
-    config_nodes = []
-    for model, sku_configs in sku_dtb_configs.items():
-        dtb_key_to_sku = {}
-        equiv_skus = collections.defaultdict(list)
-        for sku in sorted(sku_configs):
-            dtb, dtbos = sku_configs[sku]
-            dtb_key = tuple([dtb] + dtbos)
-            equiv_sku = dtb_key_to_sku.get(dtb_key)
-            if equiv_sku is not None:
-                equiv_skus[equiv_sku].append(sku)
-            else:
-                equiv_skus[sku].append(sku)
-                dtb_key_to_sku[dtb_key] = sku
-        for equiv_sku, skus in equiv_skus.items():
-            dtb, dtbos = sku_configs[equiv_sku]
-            skus_str = "/".join(str(sku) for sku in skus)
-            description = f"Google {model.title()} SKU {skus_str}"
-            if len(equiv_skus) == 1:
-                compat_list = [f"google,{model}"]
-            else:
-                compat_list = [f"google,{model}-sku{sku}" for sku in skus]
-            compat = bytes("".join(f"{x}\x00" for x in compat_list), "ascii")
-            fdt_nodes = [dtb_nodes[dtb]]
-            fdt_nodes += [dtbo_nodes[dtbo] for dtbo in dtbos]
-            config_nodes.append(FitConfigNode(description, compat, fdt_nodes))
-
-    return all_dtb_nodes, config_nodes
+    return fit_dtb_nodes, fit_config_nodes
