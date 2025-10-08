@@ -20,15 +20,6 @@
 		sdb-gpios = <&pio 5 GPIO_ACTIVE_HIGH>;
 	};
 
-	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
-		compatible = "regulator-fixed";
-		regulator-name = "pp1800_tchscr_report_disable";
-		pinctrl-names = "default";
-		regulator-boot-on;
-		pinctrl-0 = <&touch_pin_report>;
-		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
-	};
-
 	/* system wide LDO 3.3V power rail */
 	pp3300_z5: regulator-pp3300-ldo-z5 {
 		compatible = "regulator-fixed";
@@ -90,7 +81,6 @@
 
 &ap_i2c_tchscr {
 	touchscreen_ilitek: touchscreen@41 {
-		vccio-supply = <&pp1800_tchscr_report_disable>;
 		status = "fail-needs-probe";
 	};
 
@@ -308,13 +298,6 @@
 			bias-pull-up = <MTK_PUPD_SET_R1R0_00>;
 		};
 	};
-
-	touch_pin_report: pin-report-pins {
-		pins-touch-en {
-			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
-			output-low;
-		};
-	};
 };
 
 &pmic {
@@ -359,10 +342,6 @@
 
 &spi1 {
 	status = "disabled";
-};
-
-&touchscreen_pins {
-	/delete-node/ pins-touch-en;
 };
 
 &u3phy0 {

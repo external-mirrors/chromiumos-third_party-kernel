@@ -18,15 +18,6 @@
 		vin-supply = <&pp3300_z1>;
 	};
 
-	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
-		compatible = "regulator-fixed";
-		regulator-name = "pp1800_tchscr_report_disable";
-		pinctrl-names = "default";
-		regulator-boot-on;
-		pinctrl-0 = <&touch_pin_report>;
-		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
-	};
-
 	rt1019p: audio-codec {
 		compatible = "realtek,rt1019p";
 		label = "rt1019p";
@@ -396,13 +387,6 @@
 		"SPMI_SDA",
 		"EMI_RESET_N";
 
-	touch_pin_report: pin-report-pins {
-		pins-touch-en {
-			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
-			output-low;
-		};
-	};
-
 	trackpad_pwr_pins: trackpad-pwr-pins {
 		pins-pwr {
 			pinmux = <PINMUX_GPIO3__FUNC_GPIO3>;
@@ -477,10 +461,6 @@
 
 &spi1 {
 	status = "disabled";
-};
-
-&touchscreen_pins {
-	/delete-node/ pins-touch-en;
 };
 
 &u3phy0 {
