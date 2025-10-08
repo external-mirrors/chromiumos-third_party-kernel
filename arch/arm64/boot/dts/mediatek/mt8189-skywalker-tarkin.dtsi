@@ -5,17 +5,6 @@
 /dts-v1/;
 #include "mt8189-skywalker.dtsi"
 
-/ {
-	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
-		compatible = "regulator-fixed";
-		regulator-name = "pp1800_tchscr_report_disable";
-		pinctrl-names = "default";
-		regulator-boot-on;
-		pinctrl-0 = <&touch_pin_report>;
-		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
-	};
-};
-
 &ap_i2c_aud {
 	/delete-node/ audio-codec@1a;
 
@@ -326,13 +315,6 @@
 		"SPMI_SDA",
 		"EMI_RESET_N";
 
-	touch_pin_report: pin-report-pins {
-		pins-touch-en {
-			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
-			output-low;
-		};
-	};
-
 	mmc0_pins_default: mmc0-default-pins {
 		pins-cmd-dat {
 			pinmux = <PINMUX_GPIO156__FUNC_MSDC0_DAT7>,
@@ -426,10 +408,6 @@
 
 &spi1 {
 	status = "disabled";
-};
-
-&touchscreen_pins {
-	/delete-node/ pins-touch-en;
 };
 
 &ufshci {

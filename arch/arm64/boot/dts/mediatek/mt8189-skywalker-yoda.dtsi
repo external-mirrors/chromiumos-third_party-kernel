@@ -26,15 +26,6 @@
 		pinctrl-0 = <&trackpad_pwr_pins>;
 		vin-supply = <&pp3300_z1>;
 	};
-
-	pp1800_tchscr_report_disable: regulator-pp1800-tchscr-report-disable {
-		compatible = "regulator-fixed";
-		regulator-name = "pp1800_tchscr_report_disable";
-		pinctrl-names = "default";
-		regulator-boot-on;
-		pinctrl-0 = <&touch_pin_report>;
-		gpio = <&pio 14 GPIO_ACTIVE_LOW>;
-	};
 };
 
 &ap_sar_sensor {
@@ -178,13 +169,6 @@
 			output-low;
 		};
 	};
-
-	touch_pin_report: pin-report-pins {
-		pins-touch-en {
-			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
-			output-low;
-		};
-	};
 };
 
 &ap_i2c_tchpad  {
@@ -265,10 +249,6 @@
 		vdd-supply = <&pp3300_tchscr_x>;
 		status = "fail-needs-probe";
 	};
-};
-
-&touchscreen_pins {
-	/delete-node/ pins-touch-en;
 };
 
 &u2port0 {
