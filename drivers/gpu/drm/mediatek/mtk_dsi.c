@@ -1193,7 +1193,7 @@ mtk_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 
 	if (mode->hdisplay > 3840)
 		return MODE_BAD_HVALUE;
-	if (mode->vdisplay > 2160)
+	if (mode->vdisplay > 2560)
 		return MODE_BAD_VVALUE;
 
 	if (mode->clock * bpp / dsi->lanes > dsi->driver_data->max_linkrate_kbps)
