@@ -91,6 +91,30 @@ static bool should_abort_conn_on_suspend(struct fuse_conn *fc)
 	return ret;
 }
 
+/* NOTE: we use pr_cont(), results may vary */
+void fuse_print_conn_mounts(struct fuse_conn *fc, const char *event)
+{
+	struct fuse_mount *fm;
+	bool first = true;
+
+	down_read(&fc->killsb);
+	if (list_empty(&fc->mounts))
+		goto out;
+
+	pr_info("%s: %s, mounts:", current->comm, event);
+	list_for_each_entry(fm, &fc->mounts, fc_entry) {
+		pr_cont("%c%d:%d (%s%s%s)", first ? ' ' : ',',
+			MAJOR(fm->sb->s_dev), MINOR(fm->sb->s_dev),
+			fm->sb->s_type->name,
+			fm->sb->s_subtype ? "." : "",
+			fm->sb->s_subtype ? fm->sb->s_subtype : "");
+		first = false;
+	}
+	pr_cont("\n");
+out:
+	up_read(&fc->killsb);
+}
+
 static int fuse_watchdog_fn(void *conn)
 {
 	struct task_struct *watchdog;
@@ -2290,6 +2314,7 @@ void fuse_abort_conn(struct fuse_conn *fc)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
 
+	fuse_print_conn_mounts(fc, "abort connection");
 	terminate_fuse_watchdog(fc);
 
 	spin_lock(&fc->lock);
