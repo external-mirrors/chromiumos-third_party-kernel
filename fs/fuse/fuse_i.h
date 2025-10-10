@@ -1151,6 +1151,7 @@ void fuse_abort_conn(struct fuse_conn *fc);
 void fuse_wait_aborted(struct fuse_conn *fc);
 void init_fuse_watchdog(struct fuse_conn *fc);
 void terminate_fuse_watchdog(struct fuse_conn *fc);
+void fuse_print_conn_mounts(struct fuse_conn *fc, const char *event);
 
 /**
  * Invalidate inode attributes
