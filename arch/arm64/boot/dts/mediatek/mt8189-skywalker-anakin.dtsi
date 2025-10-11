@@ -140,7 +140,7 @@
 		compatible = "sbs,sbs-battery";
 		reg = <0xf>;
 		sbs,i2c-retry-count = <2>;
-		sbs,poll-retry-count = <1>;
+		sbs,poll-retry-count = <10>;
 	};
 };
 
