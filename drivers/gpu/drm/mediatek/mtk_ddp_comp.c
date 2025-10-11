@@ -20,26 +20,6 @@
 #include "mtk_drm_drv.h"
 #include "mtk_plane.h"
 
-
-#define DISP_REG_DITHER_EN			0x0000
-#define DITHER_EN				BIT(0)
-#define DISP_REG_DITHER_CFG			0x0020
-#define DITHER_RELAY_MODE			BIT(0)
-#define DITHER_ENGINE_EN			BIT(1)
-#define DISP_DITHERING				BIT(2)
-#define DISP_REG_DITHER_SIZE			0x0030
-#define DISP_REG_DITHER_5			0x0114
-#define DISP_REG_DITHER_7			0x011c
-#define DISP_REG_DITHER_15			0x013c
-#define DITHER_LSB_ERR_SHIFT_R(x)		(((x) & 0x7) << 28)
-#define DITHER_ADD_LSHIFT_R(x)			(((x) & 0x7) << 20)
-#define DITHER_NEW_BIT_MODE			BIT(0)
-#define DISP_REG_DITHER_16			0x0140
-#define DITHER_LSB_ERR_SHIFT_B(x)		(((x) & 0x7) << 28)
-#define DITHER_ADD_LSHIFT_B(x)			(((x) & 0x7) << 20)
-#define DITHER_LSB_ERR_SHIFT_G(x)		(((x) & 0x7) << 12)
-#define DITHER_ADD_LSHIFT_G(x)			(((x) & 0x7) << 4)
-
 #define DISP_REG_MDP_RSZ_EN			0x0000
 #define DISP_REG_MDP_RSZ_INPUT_SIZE		0x0010
 #define DISP_REG_MDP_RSZ_OUTPUT_SIZE		0x0014
@@ -47,6 +27,7 @@
 #define DISP_REG_OD_EN				0x0000
 #define DISP_REG_OD_CFG				0x0020
 #define OD_RELAYMODE				BIT(0)
+#define OD_DITHERING					BIT(2)
 #define DISP_REG_OD_SIZE			0x0030
 
 #define DISP_REG_POSTMASK_EN			0x0000
@@ -169,68 +150,6 @@ static void mtk_ddp_clk_disable(struct device *dev)
 	clk_disable_unprepare(priv->clk);
 }
 
-void mtk_dither_set_common(void __iomem *regs, struct cmdq_client_reg *cmdq_reg,
-			   unsigned int bpc, unsigned int cfg,
-			   unsigned int dither_en, struct cmdq_pkt *cmdq_pkt)
-{
-	/* If bpc equal to 0, the dithering function didn't be enabled */
-	if (bpc == 0)
-		return;
-
-	if (bpc >= MTK_MIN_BPC) {
-		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER_5);
-		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER_7);
-		mtk_ddp_write(cmdq_pkt,
-			      DITHER_LSB_ERR_SHIFT_R(MTK_MAX_BPC - bpc) |
-			      DITHER_ADD_LSHIFT_R(MTK_MAX_BPC - bpc) |
-			      DITHER_NEW_BIT_MODE,
-			      cmdq_reg, regs, DISP_REG_DITHER_15);
-		mtk_ddp_write(cmdq_pkt,
-			      DITHER_LSB_ERR_SHIFT_B(MTK_MAX_BPC - bpc) |
-			      DITHER_ADD_LSHIFT_B(MTK_MAX_BPC - bpc) |
-			      DITHER_LSB_ERR_SHIFT_G(MTK_MAX_BPC - bpc) |
-			      DITHER_ADD_LSHIFT_G(MTK_MAX_BPC - bpc),
-			      cmdq_reg, regs, DISP_REG_DITHER_16);
-		mtk_ddp_write(cmdq_pkt, dither_en, cmdq_reg, regs, cfg);
-	}
-}
-
-static void mtk_dither_config(struct device *dev, unsigned int w,
-			      unsigned int h, unsigned int vrefresh,
-			      unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
-{
-	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
-
-	mtk_ddp_write(cmdq_pkt, w << 16 | h, &priv->cmdq_reg, priv->regs, DISP_REG_DITHER_SIZE);
-	mtk_ddp_write(cmdq_pkt, DITHER_RELAY_MODE, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_DITHER_CFG);
-	mtk_dither_set_common(priv->regs, &priv->cmdq_reg, bpc, DISP_REG_DITHER_CFG,
-			      DITHER_ENGINE_EN, cmdq_pkt);
-}
-
-static void mtk_dither_start(struct device *dev)
-{
-	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
-
-	writel(DITHER_EN, priv->regs + DISP_REG_DITHER_EN);
-}
-
-static void mtk_dither_stop(struct device *dev)
-{
-	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
-
-	writel_relaxed(0x0, priv->regs + DISP_REG_DITHER_EN);
-}
-
-static void mtk_dither_set(struct device *dev, unsigned int bpc,
-			   unsigned int cfg, struct cmdq_pkt *cmdq_pkt)
-{
-	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
-
-	mtk_dither_set_common(priv->regs, &priv->cmdq_reg, bpc, cfg,
-			      DISP_DITHERING, cmdq_pkt);
-}
-
 static void mtk_od_config(struct device *dev, unsigned int w,
 			  unsigned int h, unsigned int vrefresh,
 			  unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
@@ -239,7 +158,8 @@ static void mtk_od_config(struct device *dev, unsigned int w,
 
 	mtk_ddp_write(cmdq_pkt, w << 16 | h, &priv->cmdq_reg, priv->regs, DISP_REG_OD_SIZE);
 	mtk_ddp_write(cmdq_pkt, OD_RELAYMODE, &priv->cmdq_reg, priv->regs, DISP_REG_OD_CFG);
-	mtk_dither_set(dev, bpc, DISP_REG_OD_CFG, cmdq_pkt);
+	mtk_dither_set_common(priv->regs, &priv->cmdq_reg, bpc,
+			      DISP_REG_OD_CFG, OD_DITHERING, cmdq_pkt);
 }
 
 static void mtk_od_start(struct device *dev)
@@ -372,8 +292,8 @@ static const struct mtk_ddp_comp_funcs ddp_color = {
 };
 
 static const struct mtk_ddp_comp_funcs ddp_dither = {
-	.clk_enable = mtk_ddp_clk_enable,
-	.clk_disable = mtk_ddp_clk_disable,
+	.clk_enable = mtk_dither_clk_enable,
+	.clk_disable = mtk_dither_clk_disable,
 	.config = mtk_dither_config,
 	.start = mtk_dither_start,
 	.stop = mtk_dither_stop,
@@ -802,6 +722,7 @@ int mtk_ddp_comp_init(struct device_node *node, struct mtk_ddp_comp *comp,
 	    type == MTK_DISP_BLS ||
 	    type == MTK_DISP_CCORR ||
 	    type == MTK_DISP_COLOR ||
+	    type == MTK_DISP_DITHER ||
 	    type == MTK_DISP_DSC ||
 	    type == MTK_DISP_GAMMA ||
 	    type == MTK_DISP_MERGE ||
