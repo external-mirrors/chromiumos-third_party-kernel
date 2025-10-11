@@ -103,9 +103,17 @@
 #define DSC_READ_WORKING			BIT(2)
 #define DISP_REG_DSC1_OFFSET		0x0400
 
+enum {
+	MTK_DSC_SOC_TYPE_NONE  = 0,
+	MTK_DSC_SOC_TYPE_MT8189,
+	MTK_DSC_SOC_TYPE_MT8195,
+	MTK_DSC_SOC_TYPE_MT8196,
+};
+
 struct mtk_dsc_data {
 	u32 max_clock_khz;
 	bool dsc_bypass_enable;
+	u32 version;
 };
 
 struct mtk_dsc {
@@ -178,6 +186,8 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	unsigned int rgb_swap = 0;
 	unsigned int dsc_cfg = 0xb687d82b;
 
+	if (dsc->data->version == MTK_DSC_SOC_TYPE_MT8189)
+		dsc_cfg = 0x22;
 	dev_dbg(dsc->dev, "w:%d, h:%d, compression_enable:%d\n", w, h, dsc->compression_enable);
 
 	if(dsc->data->dsc_bypass_enable) {
@@ -212,19 +222,21 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_IN_SRC_SEL);
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_BYPASS);
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, 0, DSC_RELAY);
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_PT_MEM_EN, DSC_PT_MEM_EN);
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_EMPTY_FLAG_ALWAYS_LOW, DSC_EMPTY_FLAG_SEL);
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_UFOE_SEL, DSC_UFOE_SEL);
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_ZERO_FIFO_STALL_DISABLE,
-		DSC_ZERO_FIFO_STALL_DISABLE);
+	if (dsc->data->version != MTK_DSC_SOC_TYPE_MT8189) {
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_PT_MEM_EN, DSC_PT_MEM_EN);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_EMPTY_FLAG_ALWAYS_LOW, DSC_EMPTY_FLAG_SEL);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_UFOE_SEL, DSC_UFOE_SEL);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_CON, DSC_ZERO_FIFO_STALL_DISABLE,
+				   DSC_ZERO_FIFO_STALL_DISABLE);
 
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTEN, 0x7F, DSC_INTEN_SEL);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTEN, 0x7F, DSC_INTEN_SEL);
 
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTACK, DSC_INTACK_BUF_UNDERFLOW, DSC_INTACK_SEL);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTACK, DSC_INTACK_BUF_UNDERFLOW, DSC_INTACK_SEL);
 
-	mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTACK, DSC_INTACK_BUF_UNDERFLOW, DSC_INTACK_SEL);
+		mtk_dsc_write_mask(dsc, DISP_REG_DSC_INTACK, DSC_INTACK_BUF_UNDERFLOW, DSC_INTACK_SEL);
 
-	mtk_dsc_write(dsc, DISP_REG_DSC_SPR, 0x0);
+		mtk_dsc_write(dsc, DISP_REG_DSC_SPR, 0x0);
+	}
 
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_W, w, GENMASK(15, 0));
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PIC_W, (pic_group_width - 1) << 16, GENMASK(31, 16));
@@ -264,7 +276,10 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_DBG_CON, BIT(9), BIT(9));
 
-	mtk_dsc_write(dsc, DISP_REG_DSC_OBUF, 0x410);
+	if (dsc->data->version == MTK_DSC_SOC_TYPE_MT8189)
+		mtk_dsc_write(dsc, DISP_REG_DSC_OBUF, 0x7c1);
+	else
+		mtk_dsc_write(dsc, DISP_REG_DSC_OBUF, 0x410);
 
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PPS0, (dsc->dsc_cfg.line_buf_depth == 0) ?
 		0x9 : dsc->dsc_cfg.line_buf_depth, GENMASK(3, 0));
@@ -491,16 +506,25 @@ static int mtk_dsc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct mtk_dsc_data mt8189_dsc_driver_conf = {
+	.max_clock_khz = 600000,
+	.version = MTK_DSC_SOC_TYPE_MT8189,
+};
+
 static const struct mtk_dsc_data mt8195_dsc_driver_conf = {
 	.max_clock_khz = 600000,
 	.dsc_bypass_enable = true,
+	.version = MTK_DSC_SOC_TYPE_MT8195,
 };
 
 static const struct mtk_dsc_data mt8196_dsc_driver_conf = {
 	.max_clock_khz = 600000,
+	.version = MTK_DSC_SOC_TYPE_MT8196,
 };
 
 static const struct of_device_id mtk_dsc_driver_dt_match[] = {
+	{ .compatible = "mediatek,mt8189-disp-dsc",
+	  .data = &mt8189_dsc_driver_conf},
 	{ .compatible = "mediatek,mt8195-disp-dsc",
 	  .data = &mt8195_dsc_driver_conf},
 	{ .compatible = "mediatek,mt8196-disp-dsc",
