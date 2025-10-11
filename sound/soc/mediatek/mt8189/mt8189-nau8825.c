@@ -28,6 +28,7 @@
 #define RT5682S_HS_PRESENT	BIT(1)
 #define RT5650_HS_PRESENT	BIT(2)
 #define RT5682I_HS_PRESENT	BIT(3)
+#define ES8326_HS_PRESENT	BIT(4)
 
 /*
  * Nau88l25
@@ -55,6 +56,11 @@
 #define CS35L41_CODEC_DAI     "cs35l41-pcm"
 #define CS35L41_DEV0_NAME     "cs35l41.7-0040"
 #define CS35L41_DEV1_NAME     "cs35l41.7-0042"
+
+/*
+ * ES8326
+ */
+#define ES8326_CODEC_DAI  "ES8326 HiFi"
 
 enum mt8189_jacks {
 	MT8189_JACK_HEADSET,
@@ -851,6 +857,7 @@ static int mt8189_headset_codec_init(struct snd_soc_pcm_runtime *rtd)
 	struct mtk_soc_card_data *soc_card_data = snd_soc_card_get_drvdata(card);
 	struct snd_soc_jack *jack = &soc_card_data->card_data->jacks[MT8189_JACK_HEADSET];
 	struct snd_soc_component *component = snd_soc_rtd_to_codec(rtd, 0)->component;
+	struct mtk_platform_card_data *card_data = soc_card_data->card_data;
 	int ret;
 	int type;
 
@@ -880,10 +887,17 @@ static int mt8189_headset_codec_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 
-	snd_jack_set_key(jack->jack, SND_JACK_BTN_0, KEY_PLAYPAUSE);
-	snd_jack_set_key(jack->jack, SND_JACK_BTN_1, KEY_VOICECOMMAND);
-	snd_jack_set_key(jack->jack, SND_JACK_BTN_2, KEY_VOLUMEUP);
-	snd_jack_set_key(jack->jack, SND_JACK_BTN_3, KEY_VOLUMEDOWN);
+	if (card_data->flags & ES8326_HS_PRESENT) {
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_0, KEY_PLAYPAUSE);
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_1, KEY_VOLUMEUP);
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_2, KEY_VOLUMEDOWN);
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_3, KEY_VOICECOMMAND);
+	} else {
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_0, KEY_PLAYPAUSE);
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_1, KEY_VOICECOMMAND);
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_2, KEY_VOLUMEUP);
+		snd_jack_set_key(jack->jack, SND_JACK_BTN_3, KEY_VOLUMEDOWN);
+	}
 
 	type = SND_JACK_HEADSET | SND_JACK_BTN_0 | SND_JACK_BTN_1 | SND_JACK_BTN_2 | SND_JACK_BTN_3;
 	ret = snd_soc_component_set_jack(component, jack, (void *)&type);
@@ -984,6 +998,31 @@ static const struct snd_soc_ops mt8189_headset_i2s_ops = {
 	.startup = mt8189_common_i2s_startup,
 };
 
+static int mt8189_es8326_hw_params(struct snd_pcm_substream *substream,
+				   struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
+	unsigned int rate = params_rate(params);
+	int ret;
+
+	/* Configure MCLK for codec */
+	ret = snd_soc_dai_set_sysclk(codec_dai, 0, rate * 256, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		dev_err(codec_dai->dev, "can't set MCLK %d\n", ret);
+		return ret;
+	}
+
+	/* Configure MCLK for cpu */
+	return snd_soc_dai_set_sysclk(cpu_dai, 0, rate * 256, SND_SOC_CLOCK_OUT);
+}
+
+static const struct snd_soc_ops mt8189_es8326_ops = {
+	.hw_params = mt8189_es8326_hw_params,
+	.startup = mt8189_common_i2s_startup,
+};
+
 static struct snd_soc_codec_conf mt8189_cs35l41_codec_conf[] = {
 	{
 		.dlc = COMP_CODEC_CONF(CS35L41_DEV0_NAME),
@@ -1003,6 +1042,7 @@ static int mt8189_nau8825_soc_card_probe(struct mtk_soc_card_data *soc_card_data
 	bool init_rt5682s = false;
 	bool init_rt5650 = false;
 	bool init_rt5682i = false;
+	bool init_es8326 = false;
 	bool init_dumb = false;
 	int i;
 
@@ -1046,6 +1086,13 @@ static int mt8189_nau8825_soc_card_probe(struct mtk_soc_card_data *soc_card_data
 					dai_link->init = mt8189_headset_codec_init;
 					dai_link->exit = mt8189_headset_codec_exit;
 					init_rt5682i = true;
+				}
+			} else if (!strcmp(dai_link->codecs->dai_name, ES8326_CODEC_DAI)) {
+				dai_link->ops = &mt8189_es8326_ops;
+				if (!init_es8326) {
+					dai_link->init = mt8189_headset_codec_init;
+					dai_link->exit = mt8189_headset_codec_exit;
+					init_es8326 = true;
 				}
 			} else {
 				if (strcmp(dai_link->codecs->dai_name, "snd-soc-dummy-dai")) {
@@ -1123,12 +1170,24 @@ static const struct mtk_soundcard_pdata mt8189_rt5682i_card = {
 	.soc_probe = mt8189_nau8825_soc_card_probe,
 };
 
+static const struct mtk_soundcard_pdata mt8188_es8326_card = {
+	.card_name = "mt8188_es8326",
+	.card_data = &(struct mtk_platform_card_data) {
+		.card = &mt8189_nau8825_soc_card,
+		.num_jacks = MT8189_JACK_MAX,
+		.flags = ES8326_HS_PRESENT
+	},
+	.sof_priv = NULL,
+	.soc_probe = mt8189_nau8825_soc_card_probe,
+};
+
 #if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id mt8189_nau8825_dt_match[] = {
 	{.compatible = "mediatek,mt8189-nau8825-sound", .data = &mt8189_nau8825_card,},
 	{.compatible = "mediatek,mt8189-rt5650-sound", .data = &mt8189_rt5650_card,},
 	{.compatible = "mediatek,mt8189-rt5682s-sound", .data = &mt8189_rt5682s_card,},
 	{.compatible = "mediatek,mt8189-rt5682i-sound", .data = &mt8189_rt5682i_card,},
+	{.compatible = "mediatek,mt8189-es8326-sound", .data = &mt8188_es8326_card,},
 	{}
 };
 
