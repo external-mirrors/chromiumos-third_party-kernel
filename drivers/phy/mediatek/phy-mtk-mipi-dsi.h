@@ -32,6 +32,7 @@ struct mtk_mipi_tx {
 	const struct mtk_mipitx_data *driver_data;
 	struct clk_hw pll_hw;
 	bool is_cphy;
+	bool pre_emphasis_en;
 };
 
 struct mtk_mipi_tx *mtk_mipi_tx_from_clk_hw(struct clk_hw *hw);
