@@ -6,14 +6,10 @@
 
 #include <drm/drm_gem_shmem_helper.h>
 
-#include <linux/workqueue.h>
-
 struct gna_gem_object {
 	struct drm_gem_shmem_object base;
 
 	uint32_t handle;
-
-	struct work_struct work;
 };
 
 #endif /* __GNA_GEM_H__ */
