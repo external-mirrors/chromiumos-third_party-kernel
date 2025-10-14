@@ -112,6 +112,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku1.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-sku2.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1114112.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1310720.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048576.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048578.dtb
