@@ -10,23 +10,7 @@
 #include "mt8189-skywalker-padme.dtsi"
 
 / {
-	model = "Google Padme unprovisioned/sku802 board";
-	compatible = "google,padme-sku2147483426", "google,padme-sku802",
+	model = "Google Padme rev1 unprovisioned/sku802 board";
+	compatible = "google,padme-rev1-sku2147483426", "google,padme-rev1-sku802",
 		     "google,padme", "mediatek,mt8189";
-};
-
-&usb_a0 {
-	status = "disabled";
-};
-
-&usb_a1 {
-	status = "disabled";
-};
-
-&usb_hub_2_x {
-	status = "disabled";
-};
-
-&usb_hub_3_x {
-	status = "disabled";
 };

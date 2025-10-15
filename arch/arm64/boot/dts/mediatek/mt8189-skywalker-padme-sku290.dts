@@ -11,9 +11,26 @@
 
 / {
 	model = "Google Padme sku290 board";
-	compatible = "google,padme-sku290", "google,padme", "mediatek,mt8189";
+	compatible = "google,padme-sku290", "google,padme-sku1570",
+		     "google,padme", "mediatek,mt8189";
 };
 
 &ap_sar_sensor {
+	status = "disabled";
+};
+
+&usb_a0 {
+	status = "disabled";
+};
+
+&usb_a1 {
+	status = "disabled";
+};
+
+&usb_hub_2_x {
+	status = "disabled";
+};
+
+&usb_hub_3_x {
 	status = "disabled";
 };

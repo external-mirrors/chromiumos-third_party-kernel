@@ -10,8 +10,8 @@
 #include "mt8189-skywalker-padme.dtsi"
 
 / {
-	model = "Google Padme sku546/sku1058 board";
-	compatible = "google,padme-sku546", "google,padme-sku1058",
+	model = "Google Padme rev1 sku546/sku1058 board";
+	compatible = "google,padme-rev1-sku546", "google,padme-rev1-sku1058",
 		     "google,padme", "mediatek,mt8189";
 };
 
@@ -67,20 +67,4 @@
 			sound-dai = <&rt5682i>;
 		};
 	};
-};
-
-&usb_a0 {
-	status = "disabled";
-};
-
-&usb_a1 {
-	status = "disabled";
-};
-
-&usb_hub_2_x {
-	status = "disabled";
-};
-
-&usb_hub_3_x {
-	status = "disabled";
 };
