@@ -290,6 +290,7 @@
 #define EMMC50_CFG_CMD_RESP_SEL   BIT(9)   /* RW */
 
 /* EMMC50_CFG1 mask */
+#define EMMC50_CFG1_PSH_PS_SEL    BIT(27)  /* RW */
 #define EMMC50_CFG1_DS_CFG        BIT(28)  /* RW */
 
 #define EMMC50_CFG3_OUTS_WR       GENMASK(4, 0)  /* RW */
@@ -430,6 +431,7 @@ struct mtk_mmc_compatible {
 	bool support_new_tx;
 	bool support_new_rx;
 	bool support_spm_ack;
+	bool send_cmd_enhanced;
 };
 
 struct msdc_tune_para {
@@ -686,6 +688,7 @@ static const struct mtk_mmc_compatible mt8189_compat = {
 	.support_new_tx = true,
 	.support_new_rx = true,
 	.support_spm_ack = true,
+	.send_cmd_enhanced = true,
 };
 
 static const struct of_device_id msdc_of_ids[] = {
@@ -2739,6 +2742,13 @@ static void msdc_cqe_enable(struct mmc_host *mmc)
 
 	/* Set the send status command idle timer */
 	cqhci_writel(cq_host, host->cq_ssc1_time, CQHCI_SSC1);
+
+	if (host->dev_comp->send_cmd_enhanced) {
+		sdr_set_bits(host->base + CQHCI_SETTING, CQHCI_RD_CMD_WND_SEL);
+		sdr_set_bits(host->base + CQHCI_SETTING, CQHCI_WR_CMD_WND_SEL);
+		sdr_set_field(host->base + EMMC51_CFG0, CMDQ_RDAT_CNT, 0xb4);
+		sdr_set_field(host->base + EMMC50_CFG1, EMMC50_CFG1_PSH_PS_SEL, 1);
+	}
 }
 
 static void msdc_cqe_disable(struct mmc_host *mmc, bool recovery)
