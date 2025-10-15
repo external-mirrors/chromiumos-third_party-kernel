@@ -1377,6 +1377,16 @@ spi_ap_fp: &spi5 {
 	usb2-lpm-disable;
 
 	status = "okay";
+	hub@2 {
+		compatible = "usb1da0,55a1";
+		reg = <2>;
+
+		bluetooth@5 {
+				compatible = "usb0489,e111";
+				reg = <5>;
+				reset-gpios = <&pio 248 GPIO_ACTIVE_LOW>;
+		};
+	};
 };
 
 #include <arm/cros-ec-keyboard.dtsi>
