@@ -1629,10 +1629,6 @@ ap_i2c_tchpad: &i2c7 {
 	status = "okay";
 };
 
-&mt6359_vsim1_ldo_reg {
-	regulator-always-on;
-};
-
 &mt6359_vpa_buck_reg {
 	regulator-min-microvolt = <3000000>;
 	regulator-max-microvolt = <3000000>;
