@@ -264,7 +264,6 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
 	struct mtk_plane_pending_state *pending = &state->pending;
 	const struct drm_format_info *fmt_info = drm_format_info(pending->format);
-	unsigned int align_width = 0;
 	bool csc_enable = (fmt_info) ? fmt_info->is_yuv : false;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 	unsigned int clrfmt = 0;
@@ -274,15 +273,9 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 				   OVL_CON_FLD_CLRFMT |
 				   OVL_CON_FLD_CLRFMT_NB;
 
-	/* OVLSYS is in 1T2P domain, width needs to be 2 pixels align */
-	align_width = ALIGN_DOWN(pending->width, 2);
-
-	mtk_ddp_write(cmdq_pkt, pending->height << 16 | align_width, &priv->cmdq_reg,
+	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
 		      priv->regs, DISP_REG_OVL_ROI_SIZE);
-
-	mtk_ddp_write(cmdq_pkt, pending->height << 16 | align_width, &priv->cmdq_reg,
-		      priv->regs, DISP_REG_OVL_SRC_SIZE);
-	mtk_ddp_write(cmdq_pkt, pending->height << 16 | align_width, &priv->cmdq_reg,
+	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
 		      priv->regs, DISP_REG_OVL_SRC_SIZE);
 
 	if (pending->is_secure)
