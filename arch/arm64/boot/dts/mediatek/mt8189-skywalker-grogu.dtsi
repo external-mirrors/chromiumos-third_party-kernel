@@ -5,6 +5,13 @@
 /dts-v1/;
 #include "mt8189-skywalker.dtsi"
 
+
+/ {
+	connector-hdmi {
+		status = "disabled";
+	};
+};
+
 &ap_i2c_aud {
 	/delete-node/ audio-codec@1a;
 
@@ -31,6 +38,11 @@
 
 /* Disable support SAR */
 &ap_i2c_sar {
+	status = "disabled";
+};
+
+/* Disable support HDMI */
+&ap_i2c_hdmi {
 	status = "disabled";
 };
 
@@ -68,6 +80,11 @@
 		vccio-supply = <&pp1800_tchscr_report_disable>;
 		status = "okay";
 	};
+};
+
+/* Disable support HDMI for MIPI DSI */
+&dsi0 {
+	status = "disabled";
 };
 
 /* Disable support PEN */
@@ -347,6 +364,7 @@
 	};
 
 	/delete-node/ dai-link-2;
+	/delete-node/ dai-link-6;
 };
 
 /* Disable support Finger print */
