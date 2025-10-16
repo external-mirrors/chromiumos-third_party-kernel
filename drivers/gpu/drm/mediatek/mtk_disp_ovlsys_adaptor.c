@@ -277,7 +277,6 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 	struct mtk_plane_pending_state *pending = &state->pending;
 	struct device *exdma;
 	struct device *blender;
-	unsigned int align_width = 0;
 	const struct drm_format_info *fmt_info = drm_format_info(pending->format);
 	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
 
@@ -297,10 +296,7 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 		return;
 	}
 
-	/* OVLSYS is in 1T2P domain, width needs to be 2 pixels align */
-	align_width = ALIGN_DOWN(pending->width, 2);
-
-	if (!pending->enable || pending->height == 0 || align_width == 0 ||
+	if (!pending->enable || pending->height == 0 || pending->width == 0 ||
 	    pending->x > priv->max_size || pending->y > priv->max_size) {
 		pending->enable = false;
 		mtk_disp_exdma_stop(exdma, cmdq_pkt);

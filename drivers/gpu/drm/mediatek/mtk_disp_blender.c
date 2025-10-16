@@ -154,7 +154,6 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
 	struct mtk_plane_pending_state *pending = &state->pending;
-	unsigned int align_width = ALIGN_DOWN(pending->width, 2);
 	unsigned int alpha;
 	unsigned int clrfmt;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
@@ -167,7 +166,7 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 	mtk_ddp_write(cmdq_pkt, pending->y << 16 | pending->x, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_BLD_OVL_OFFSET);
 
-	mtk_ddp_write(cmdq_pkt, pending->height << 16 | align_width, &priv->cmdq_reg, priv->regs,
+	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_BLD_OVL_SRC_SIZE);
 
 	if (state->base.fb && state->base.fb->format->has_alpha)
