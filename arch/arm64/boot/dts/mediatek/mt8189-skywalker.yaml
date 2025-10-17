@@ -50,6 +50,19 @@ baze:
     mt8189-skywalker-shaak-sku2097154.dtb:
       sku: [0x200002]
 
+grogu:
+  dtb:
+    mt8189-skywalker-grogu-sku1114112.dtb:
+      sku: [0x110000, 0x110001, 0x110002, 0x110003,
+            0x110004, 0x110005, 0x110006, 0x110007,
+            0x110008, 0x110009, 0x11000A, 0x11000B,
+            0x11000C, 0x11000D, 0x11000E, 0x11000F]
+    mt8189-skywalker-grogu-sku1310720.dtb:
+      sku: [0x140000, 0x140001, 0x140002, 0x140003,
+            0x140004, 0x140005, 0x140006, 0x140007,
+            0x140008, 0x140009, 0x14000A, 0x14000B,
+            0x14000C, 0x14000D, 0x14000E, 0x14000F]
+
 obiwan:
   dtb:
     mt8189-skywalker-obiwan-sku131072.dtb:
