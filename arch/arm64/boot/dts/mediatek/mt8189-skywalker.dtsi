@@ -1908,6 +1908,10 @@ ap_i2c_tchpad: &i2c7 {
 	status = "okay";
 };
 
+&watchdog {
+	mediatek,disable-extrst;
+};
+
 &u3port0 {
 	status = "disabled";
 };
