@@ -982,12 +982,22 @@ PhysmemNewRamBackedPMR_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_PHYSMEMNEWRAMBACKEDPMR, eError);
 }
@@ -1193,12 +1203,22 @@ PhysmemNewRamBackedLockedPMR_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_PHYSMEMNEWRAMBACKEDLOCKEDPMR, eError);
 }
@@ -2222,12 +2242,22 @@ ChangeSparseMem_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_CHANGESPARSEMEM, eError);
 }
@@ -2695,12 +2725,22 @@ HeapCfgHeapConfigName_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_HEAPCFGHEAPCONFIGNAME, eError);
 }
@@ -2825,12 +2865,22 @@ HeapCfgHeapDetails_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_HEAPCFGHEAPDETAILS, eError);
 }
@@ -3053,12 +3103,22 @@ PhysHeapGetMemInfo_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_PHYSHEAPGETMEMINFO, eError);
 }
@@ -3204,12 +3264,22 @@ GetHeapPhysMemUsage_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_GETHEAPPHYSMEMUSAGE, eError);
 }
@@ -3438,12 +3508,22 @@ PhysHeapGetMemInfoPkd_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_PHYSHEAPGETMEMINFOPKD, eError);
 }
@@ -3567,12 +3647,22 @@ GetHeapPhysMemUsagePkd_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_GETHEAPPHYSMEMUSAGEPKD, eError);
 }
@@ -4058,12 +4148,22 @@ ChangeSparseMem2_exit:
 		PVR_ASSERT(ui32BufferSize == ui32NextOffset);
 #endif /* PVRSRV_NEED_PVR_ASSERT */
 
-#if defined(INTEGRITY_OS)
-	if (pArrayArgsBuffer)
-#else
-	if (!bHaveEnoughSpace && pArrayArgsBuffer)
+	if (pArrayArgsBuffer != NULL)
+	{
+#if !defined(INTEGRITY_OS)
+		if (bHaveEnoughSpace)
+		{
+			/* Clear buffer to prevent next bridge call from using stale data.
+			 * This could for example happen if the call errors before initialising
+			 * all of the data. */
+			OSCachedMemSet(pArrayArgsBuffer, 0, ui32BufferSize);
+		}
+		else
 #endif
-		OSFreeMemNoStats(pArrayArgsBuffer);
+		{
+			OSFreeMemNoStats(pArrayArgsBuffer);
+		}
+	}
 
 	return offsetof(PVRSRV_BRIDGE_OUT_CHANGESPARSEMEM2, eError);
 }
