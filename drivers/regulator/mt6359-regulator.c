@@ -945,6 +945,45 @@ static struct mt6359_regulator_info mt6359p_regulators[] = {
 			  MT6359_RG_LDO_VSRAM_OTHERS_SSHUB_VOSEL_SHIFT),
 };
 
+static int parse_dts_for_desc(struct device *dev,
+				struct mt6359_regulator_info * mt6359_info)
+{
+	struct device_node *child = NULL;
+	u32 off_on_delay = 0;
+	int ret = -1, i = 0;
+	struct device_node *regulators_np = NULL;
+	struct mt6359_regulator_info *info = NULL;
+	if (dev == NULL || mt6359_info == NULL) {
+		dev_err(dev,"%s invalid param.",__func__);
+		return -ENODEV;
+	}
+
+	regulators_np = of_get_child_by_name(dev->parent->of_node, "regulators");
+	if (!regulators_np) {
+		dev_err(dev, "No regulators node found\n");
+		return -ENODEV;
+	}
+
+	for_each_child_of_node(regulators_np, child) {
+		ret = of_property_read_u32(child, "off-on-delay-us", &off_on_delay);
+		if (ret != 0)
+			continue;
+
+		for (i = 0, info = mt6359_info; i < MT6359_MAX_REGULATOR; i++, info++) {
+			if (info == NULL || child->name == NULL)
+				break;
+
+			if (strcmp(info->desc.of_match, child->name) == 0) {
+				info->desc.off_on_delay = off_on_delay;
+				dev_dbg(dev,"%s found Regulator node '%s':off-on-delay = %u us\n",
+					__func__,child->name, off_on_delay);
+				break;
+			}
+		}
+	}
+	return 0;
+}
+
 static int mt6359_regulator_probe(struct platform_device *pdev)
 {
 	struct mt6397_chip *mt6397 = dev_get_drvdata(pdev->dev.parent);
@@ -962,6 +1001,7 @@ static int mt6359_regulator_probe(struct platform_device *pdev)
 	else
 		mt6359_info = mt6359_regulators;
 
+	parse_dts_for_desc(&pdev->dev, mt6359_info);
 	config.dev = mt6397->dev;
 	config.regmap = mt6397->regmap;
 	for (i = 0; i < MT6359_MAX_REGULATOR; i++, mt6359_info++) {
