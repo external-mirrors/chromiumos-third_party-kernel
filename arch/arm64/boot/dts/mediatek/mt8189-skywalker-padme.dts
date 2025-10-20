@@ -584,6 +584,39 @@
 	status = "disabled";
 };
 
+&spi2 {
+	touchscreen: touchscreen@0 {
+		compatible = "ilitek,ili79900a";
+		reg = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_EDGE_FALLING>;
+		spi-max-frequency = <3000000>;
+		spi-cs-setup-delay-ns = <2000>;
+		panel = <&mipi_panel>;
+
+		input-report-header-address = <0x001000>;
+		input-report-body-address   = <0x001000>;
+		output-report-address       = <0x002000>;
+		read-opcode                 = <0x83>;
+		write-opcode                = <0x82>;
+		post-power-on-delay-ms      = <0>;
+		minimal-reset-delay-ms      = <10>;
+		status = "okay";
+	};
+};
+
+&spi2_pins {
+	pins-bus {
+		pinmux = <PINMUX_GPIO77__FUNC_SPIM2_CSB>,
+			<PINMUX_GPIO78__FUNC_SPIM2_CLK>,
+			<PINMUX_GPIO79__FUNC_SPIM2_MO>,
+			<PINMUX_GPIO80__FUNC_SPIM2_MI>;
+		drive-strength = <8>;
+	};
+};
+
 &thermal_zones {
 	tboard0-thermal {
 		polling-delay = <0>; /* milliseconds */
@@ -611,6 +644,20 @@
 				type = "critical";
 			};
 		};
+	};
+};
+
+&touchscreen_pins {
+	pins-int {
+		pinmux = <PINMUX_GPIO15__FUNC_GPIO15>;
+		/delete-property/ bias-pull-up;
+		input-enable;
+	};
+
+	pins-reset {
+		pinmux = <PINMUX_GPIO126__FUNC_GPIO126>;
+		/delete-property/ output-high;
+		output-low;
 	};
 };
 
