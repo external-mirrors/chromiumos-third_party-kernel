@@ -71,12 +71,35 @@ obiwan:
 
 padme:
   dtb:
+    mt8189-skywalker-padme-rev1-sku290.dtb:
+      rev:
+        min: 1
+        max: 1
+      sku: [0x122, 0x622]
+    mt8189-skywalker-padme-rev1-sku546.dtb:
+      rev:
+        min: 1
+        max: 1
+      sku: [0x222, 0x422]
+    mt8189-skywalker-padme-rev1-sku802.dtb:
+      rev:
+        min: 1
+        max: 1
+      sku: [0x322, 0x7FFFFF22]
     mt8189-skywalker-padme-sku290.dtb:
-      sku: [0x122]
+      rev:
+        min: 2
+      sku: [0x122, 0x622]
     mt8189-skywalker-padme-sku546.dtb:
+      rev:
+        min: 2
       sku: [0x222, 0x422]
     mt8189-skywalker-padme-sku802.dtb:
+      rev:
+        min: 2
       sku: [0x322, 0x7FFFFF22]
+    mt8189-skywalker-padme-sku1314.dtb:
+      sku: [0x522]
 
 tarkin:
   dtb:
