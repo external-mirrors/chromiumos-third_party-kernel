@@ -622,6 +622,10 @@
 	status = "disabled";
 };
 
+&u2port0 {
+	mediatek,pre-emphasis = <3>;
+};
+
 &ufshci {
 	status = "disabled";
 };
