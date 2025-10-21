@@ -65,22 +65,33 @@ grogu:
 
 obiwan:
   dtb:
-    mt8189-skywalker-obiwan-sku131072.dtb:
-      sku: [0x20000, 0x20002]
-    mt8189-skywalker-obiwan-sku131073.dtb:
-      sku: [0x20001, 0x20003, 0x20004, 0x20005]
-    mt8189-skywalker-obiwan-sku131078.dtb:
-      sku: [0x20006]
-    mt8189-skywalker-quigon-sku196608.dtb:
-      sku: [0x30000, 0x30003, 0x7FFFFFFF]
-    mt8189-skywalker-quigon-sku196609.dtb:
-      sku: [0x30001, 0x30002, 0x30007, 0x30008]
-    mt8189-skywalker-quigon-sku196612.dtb:
-      sku: [0x30004, 0x30005]
-    mt8189-skywalker-quigon-sku196614.dtb:
-      sku: [0x30006]
-    mt8189-skywalker-quigon-sku196617.dtb:
-      sku: [0x30009]
+    mt8189-skywalker-obiwan.dtb: {}
+  dtbo:
+    mt8189-skywalker-obiwan-touchscreen.dtbo:
+      fw_config:
+        mask: 0x1
+        value: 0x1
+    # Panel follower depends on touchscreen.
+    mt8189-skywalker-obiwan-panel-follower.dtbo:
+      fw_config:
+        mask: 0x8
+        value: 0x8
+    mt8189-skywalker-obiwan-kb.dtbo:
+      fw_config:
+        mask: 0x2
+        value: 0x0
+    mt8189-skywalker-obiwan-kb-backlight.dtbo:
+      fw_config:
+        mask: 0x2
+        value: 0x2
+    mt8189-skywalker-obiwan-rt5682i.dtbo:
+      fw_config:
+        mask: 0x1C00000
+        value: 0x0800000
+    mt8189-skywalker-obiwan-rt5682s.dtbo:
+      fw_config:
+        mask: 0x1C00000
+        value: 0x0400000
 
 padme:
   dtb:

@@ -3,28 +3,16 @@
  * Copyright (C) 2025 Google Inc.
  */
 /dts-v1/;
-#include "mt8189-skywalker-obiwan.dtsi"
+/plugin/;
 
-/ {
-	model = "Google Quigon sku196617 board";
-	compatible = "google,obiwan-sku196617", "google,obiwan", "mediatek,mt8189";
-};
-
-&ap_i2c_tchscr {
-	status = "disabled";
-};
-
-&cros_ec {
-	keyboard-backlight {
-		compatible = "google,cros-kbd-led-backlight";
-	};
-};
+#include <dt-bindings/interrupt-controller/irq.h>
 
 &i2c2 {
-	/delete-node/ audio-codec@1a;
+	#address-cells = <1>;
+	#size-cells = <0>;
 
-	rt5682i: audio-codec@1a {
-		compatible = "realtek,rt5682i";
+	rt5682s: audio-codec@1a {
+		compatible = "realtek,rt5682s";
 		reg = <0x1a>;
 		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
 		pinctrl-names = "default";
@@ -41,8 +29,8 @@
 };
 
 &sound {
-	compatible = "mediatek,mt8189-rt5682i-sound";
-	model = "mt8189_1019_rt5682i";
+	compatible = "mediatek,mt8189-rt5682s-sound";
+	model = "mt8189_1019_rt5682s";
 	status = "okay";
 
 	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
@@ -50,6 +38,7 @@
 			"I2SOUT0", "ETDMOUT_HP_PIN",
 			"I2SIN0", "ETDMIN_HP_PIN",
 			"I2SIN0", "ETDMOUT_HP_PIN",
+			"IN1P", "Headset Mic",
 			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
 			"AP DMIC Capture", "AP_DMIC0_PIN",
 			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
@@ -59,7 +48,7 @@
 		mediatek,clk-provider = "cpu";
 
 		codec {
-			sound-dai = <&rt5682i>;
+			sound-dai = <&rt5682s>;
 		};
 	};
 
@@ -68,7 +57,7 @@
 		mediatek,clk-provider = "cpu";
 
 		codec {
-			sound-dai = <&rt5682i>;
+			sound-dai = <&rt5682s>;
 		};
 	};
 };
