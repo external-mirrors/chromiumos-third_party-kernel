@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
+
+DTC_FLAGS_mt8189-skywalker-obiwan += -@
+
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt2712-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6779-evb.dtb
@@ -120,9 +123,13 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048576.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048578.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048580.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048582.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-sku131072.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-sku131073.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-sku131078.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-kb-backlight.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-kb.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-panel-follower.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-rt5682i.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-rt5682s.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-touchscreen.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme-rev1-sku290.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme-rev1-sku546.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme-rev1-sku802.dtb
@@ -132,11 +139,6 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme-sku802.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme-sku1314.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-phasma-sku12288.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-phasma-sku12290.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196608.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196609.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196612.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196614.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196617.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-shaak-sku2097153.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-shaak-sku2097154.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4096.dtb

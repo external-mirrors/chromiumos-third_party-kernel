@@ -6,6 +6,9 @@
 #include "mt8189-skywalker.dtsi"
 
 / {
+	model = "Google Obiwan board";
+	compatible = "google,obiwan", "mediatek,mt8189";
+
 	pp1800_trackpad: regulator-pp1800-trackpad {
 		compatible = "regulator-fixed";
 		regulator-name = "pp1800_trackpad";
@@ -73,38 +76,9 @@
 };
 
 &ap_i2c_tchscr {
+	status = "disabled";
 
-	touchscreen@41 {
-		status = "disabled";
-	};
-
-	elantouchscreen: touchscreen@10 {
-		compatible = "elan,ekth6a12nay";
-		reg = <0x10>;
-
-		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchscreen_pins>;
-		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
-		vcc33-supply = <&pp3300_tchscr_x>;
-		vccio-supply = <&pp1800_tchscr_report_disable>;
-		status = "fail-needs-probe";
-	};
-
-	touchscreen: touchscreen@24 {
-		compatible = "parade,tc3408";
-		reg = <0x24>;
-
-		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchscreen_pins>;
-		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
-		vcc33-supply = <&pp3300_tchscr_x>;
-		vccio-supply = <&pp1800_tchscr_report_disable>;
-		status = "fail-needs-probe";
-	};
+	/delete-node/ touchscreen@41;
 };
 
 &ap_sar_sensor {
@@ -134,22 +108,6 @@
 
 &i2c2 {
 	/delete-node/ audio-codec@1a;
-
-	rt5682s: audio-codec@1a {
-		compatible = "realtek,rt5682s";
-		reg = <0x1a>;
-		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&audio_codec_pins>;
-		#sound-dai-cells = <0>;
-
-		AVDD-supply = <&mt6359_vio18_ldo_reg>;
-		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
-		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
-		MICVDD-supply = <&pp3300_z1>;
-		realtek,jd-src = <1>;
-		status = "okay";
-	};
 };
 
 &i2c_tunnel {
@@ -177,26 +135,6 @@
 		MATRIX_KEY(0x01, 0x05, 0)		/* T12 */
 		MATRIX_KEY(0x03, 0x05, 0)		/* T13 */
 		MATRIX_KEY(0x00, 0x0b, 0)		/* T14 */
-	>;
-
-	linux,keymap = <
-		CROS_TOP_ROW_KEYMAP_V30
-		CROS_MAIN_KEYMAP_V30
-
-		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
-		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
-		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
-		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
-		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
-		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
-		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
-		MATRIX_KEY(0x02, 0x0b, KEY_KBDILLUMTOGGLE)	/* T8 */
-		MATRIX_KEY(0x01, 0x09, KEY_MICMUTE)		/* T9 */
-		MATRIX_KEY(0x00, 0x04, KEY_MUTE)		/* T10 */
-		MATRIX_KEY(0x00, 0x01, KEY_VOLUMEDOWN)		/* T11 */
-		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEUP)		/* T12 */
-		MATRIX_KEY(0x03, 0x05, KEY_ACCESSIBILITY)	/* T13 */
-		MATRIX_KEY(0x00, 0x0b, KEY_DICTATE)		/* T14 */
 	>;
 };
 
@@ -400,20 +338,6 @@
 };
 
 &sound {
-	compatible = "mediatek,mt8189-rt5682s-sound";
-	model = "mt8189_1019_rt5682s";
-	status = "okay";
-
-	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
-			"I2SOUT0", "ETDMIN_HP_PIN",
-			"I2SOUT0", "ETDMOUT_HP_PIN",
-			"I2SIN0", "ETDMIN_HP_PIN",
-			"I2SIN0", "ETDMOUT_HP_PIN",
-			"IN1P", "Headset Mic",
-			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
-			"AP DMIC Capture", "AP_DMIC0_PIN",
-			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
-
 	dai-link-0 {
 		link-name = "I2SOUT1_BE";
 		mediatek,clk-provider = "cpu";
@@ -423,23 +347,8 @@
 		};
 	};
 
-	dai-link-1 {
-		link-name = "I2SOUT0_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s>;
-		};
-	};
-
-	dai-link-2 {
-		link-name = "I2SIN0_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s>;
-		};
-	};
+	/delete-node/ dai-link-1;
+	/delete-node/ dai-link-2;
 
 	dai-link-3 {
 		link-name = "TDM_DPTX_BE";
