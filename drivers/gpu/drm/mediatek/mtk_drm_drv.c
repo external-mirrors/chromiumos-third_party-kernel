@@ -311,6 +311,18 @@ static const struct mtk_drm_route mt8189_mtk_ddp_ext_routes[] = {
 	{1, DDP_COMPONENT_DSI0},
 };
 
+static enum mtk_ddp_comp_id mt8189_mtk_ddp_dsi_main[] = {
+	DDP_COMPONENT_OVL0,
+	DDP_COMPONENT_RDMA0,
+	DDP_COMPONENT_COMP0_OUT_CB4,
+	DDP_COMPONENT_DSI0,
+};
+
+static const struct mtk_drm_route mt8189_mtk_ddp_ext_dvo_routes[] = {
+	{1, DDP_COMPONENT_DVO1},
+	{1, DDP_COMPONENT_DVO0},
+};
+
 static const struct mtk_mmsys_driver_data mt2701_mmsys_driver_data = {
 	.main_path = mt2701_mtk_ddp_main,
 	.main_len = ARRAY_SIZE(mt2701_mtk_ddp_main),
@@ -392,6 +404,20 @@ static const struct mtk_mmsys_driver_data mt8189_mmsys_driver_data = {
 	.ext_len = ARRAY_SIZE(mt8189_mtk_ddp_ext),
 	.conn_routes = mt8189_mtk_ddp_ext_routes,
 	.num_conn_routes = ARRAY_SIZE(mt8189_mtk_ddp_ext_routes),
+	.max_width = 8191,
+	.min_width = 1,
+	.min_height = 1,
+	.default_sec_mode = true,/* The default register status is secure mode*/
+};
+
+static const struct mtk_mmsys_driver_data mt8189_mmsys_driver_dsi_data = {
+	.main_path = mt8189_mtk_ddp_dsi_main,
+	.main_len = ARRAY_SIZE(mt8189_mtk_ddp_dsi_main),
+	.mmsys_dev_num = 1,
+	.ext_path = mt8189_mtk_ddp_ext,
+	.ext_len = ARRAY_SIZE(mt8189_mtk_ddp_ext),
+	.conn_routes = mt8189_mtk_ddp_ext_dvo_routes,
+	.num_conn_routes = ARRAY_SIZE(mt8189_mtk_ddp_ext_dvo_routes),
 	.max_width = 8191,
 	.min_width = 1,
 	.min_height = 1,
@@ -521,6 +547,8 @@ static const struct of_device_id mtk_drm_of_ids[] = {
 	  .data = &mt8195_vdosys1_driver_data},
 	{ .compatible = "mediatek,mt8189-mmsys",
 	  .data = &mt8189_mmsys_driver_data},
+	{ .compatible = "mediatek,mt8189-padme-mmsys",
+	  .data = &mt8189_mmsys_driver_dsi_data},
 	{ .compatible = "mediatek,mt8192-mmsys",
 	  .data = &mt8192_mmsys_driver_data},
 	{ .compatible = "mediatek,mt8195-mmsys",
