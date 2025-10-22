@@ -22,6 +22,9 @@ patternProperties:
     properties:
       regulator-name:
         pattern: "^v(s1|gpu11|modem|pu|core|s2|pa|proc2|proc1|core_sshub)$"
+        off-on-delay-us:
+          description: Minimum delay in microseconds between regulator being turned off and then on again.
+          $ref: /schemas/types.yaml#/definitions/uint32
 
     unevaluatedProperties: false
 
@@ -250,6 +253,7 @@ examples:
           regulator-name = "vcn33_1_bt";
           regulator-min-microvolt = <2800000>;
           regulator-max-microvolt = <3500000>;
+          off-on-delay-us = <20000>;
         };
         mt6359_vcn33_1_wifi_ldo_reg: ldo_vcn33_1_wifi {
           regulator-name = "vcn33_1_wifi";
