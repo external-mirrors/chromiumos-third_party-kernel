@@ -314,7 +314,7 @@ static const struct mtk_drm_route mt8189_mtk_ddp_ext_routes[] = {
 static enum mtk_ddp_comp_id mt8189_mtk_ddp_dsi_main[] = {
 	DDP_COMPONENT_OVL0,
 	DDP_COMPONENT_RDMA0,
-	DDP_COMPONENT_COMP0_OUT_CB4,
+	DDP_COMPONENT_DSC0,
 	DDP_COMPONENT_DSI0,
 };
 
