@@ -538,3 +538,7 @@
 &xhci0 {
 	status = "okay";
 };
+
+&pp3300_tchscr_x {
+	off-on-delay-us = <20000>;
+};
