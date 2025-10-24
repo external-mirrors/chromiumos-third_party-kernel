@@ -72,3 +72,8 @@
 &touchscreen_ilitek {
 	status = "disabled";
 };
+
+&backlight_lcd0 {
+	brightness-levels = <30 1023>;
+	num-interpolated-steps = <993>;
+};
