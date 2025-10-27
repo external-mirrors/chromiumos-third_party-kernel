@@ -166,6 +166,8 @@ static bool need_sha_check(u32 cur_rev)
 	switch (cur_rev >> 8) {
 	case 0x80012: return cur_rev <= 0x800126f; break;
 	case 0x80082: return cur_rev <= 0x800820f; break;
+	case 0x81081: return cur_rev <= 0x810810e; break;
+	case 0x82001: return cur_rev <= 0x8200105; break;
 	case 0x83010: return cur_rev <= 0x830107c; break;
 	case 0x86001: return cur_rev <= 0x860010e; break;
 	case 0x86081: return cur_rev <= 0x8608108; break;
