@@ -2755,6 +2755,19 @@ static void mtk_dp_bridge_atomic_disable(struct drm_bridge *bridge,
 			   DP_PWR_STATE_BANDGAP_TPLL,
 			   DP_PWR_STATE_MASK);
 
+	if (mtk_dp->data->edp_ver) {
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   PHY_PWR_STATE_OW_EN_DP_ENC_P0_3,
+				   PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK);
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   BIAS_POWER_ON,
+				   PHY_PWR_STATE_OW_VALUE_DP_ENC_P0_3_MASK);
+
+		mtk_edp_phyd_wait_aux_ldo_ready(mtk_dp, 100000);
+
+		mtk_dp_update_bits(mtk_dp, REG_3F44_DP_ENC_P0_3,
+				   0, PHY_PWR_STATE_OW_EN_DP_ENC_P0_3_MASK);
+	}
 	/* Ensure the sink is muted */
 	msleep(20);
 }
