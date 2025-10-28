@@ -23,6 +23,7 @@
 #include "intel_pcode.h"
 #include "intel_pmdemand.h"
 #include "intel_pps_regs.h"
+#include "intel_quirks.h"
 #include "intel_snps_phy.h"
 #include "skl_watermark.h"
 #include "skl_watermark_regs.h"
@@ -2233,7 +2234,8 @@ void intel_display_power_suspend_late(struct drm_i915_private *i915)
 	}
 
 	/* Tweaked Wa_14010685332:cnp,icp,jsp,mcc,tgp,adp */
-	if (INTEL_PCH_TYPE(i915) >= PCH_CNP && INTEL_PCH_TYPE(i915) < PCH_DG1)
+	if (INTEL_PCH_TYPE(i915) >= PCH_CNP && INTEL_PCH_TYPE(i915) < PCH_DG1 &&
+	    !intel_has_quirk(&i915->display, QUIRK_NO_CHICKEN_ON_S0IX_ENTRY))
 		intel_de_rmw(i915, SOUTH_CHICKEN1, SBCLK_RUN_REFCLK_DIS, SBCLK_RUN_REFCLK_DIS);
 }
 
@@ -2248,7 +2250,8 @@ void intel_display_power_resume_early(struct drm_i915_private *i915)
 	}
 
 	/* Tweaked Wa_14010685332:cnp,icp,jsp,mcc,tgp,adp */
-	if (INTEL_PCH_TYPE(i915) >= PCH_CNP && INTEL_PCH_TYPE(i915) < PCH_DG1)
+	if (INTEL_PCH_TYPE(i915) >= PCH_CNP && INTEL_PCH_TYPE(i915) < PCH_DG1 &&
+	    !intel_has_quirk(&i915->display, QUIRK_NO_CHICKEN_ON_S0IX_ENTRY))
 		intel_de_rmw(i915, SOUTH_CHICKEN1, SBCLK_RUN_REFCLK_DIS, 0);
 }
 

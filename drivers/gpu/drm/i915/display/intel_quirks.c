@@ -70,6 +70,12 @@ static void quirk_no_pps_backlight_power_hook(struct intel_display *display)
 	drm_info(display->drm, "Applying no pps backlight power quirk\n");
 }
 
+static void quirk_no_chicken_on_s0ix_entry(struct intel_display *display)
+{
+	intel_set_quirk(display, QUIRK_NO_CHICKEN_ON_S0IX_ENTRY);
+	drm_info(display->drm, "Applying no chicken on S0ix entry\n");
+}
+
 static void quirk_fw_sync_len(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -169,6 +175,18 @@ static const struct intel_dmi_quirk intel_dmi_quirks[] = {
 			{ }
 		},
 		.hook = quirk_no_pps_backlight_power_hook,
+	},
+	{
+		.dmi_id_list = &(const struct dmi_system_id[]) {
+			{
+				.ident = "Google Volteer",
+				.matches = {DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Google"),
+					    DMI_EXACT_MATCH(DMI_PRODUCT_FAMILY, "Google_Volteer"),
+				},
+			},
+			{ }
+		},
+		.hook = quirk_no_chicken_on_s0ix_entry,
 	},
 };
 

@@ -21,6 +21,7 @@ enum intel_quirk_id {
 	QUIRK_NO_PPS_BACKLIGHT_POWER_HOOK,
 	QUIRK_FW_SYNC_LEN,
 	QUIRK_SKIP_LINK_CHECK,
+	QUIRK_NO_CHICKEN_ON_S0IX_ENTRY,
 };
 
 void intel_init_quirks(struct intel_display *display);
