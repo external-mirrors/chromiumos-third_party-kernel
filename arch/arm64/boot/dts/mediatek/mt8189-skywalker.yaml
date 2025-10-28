@@ -33,22 +33,20 @@ anakin:
 
 baze:
   dtb:
-    mt8189-skywalker-baze-sku0.dtb:
-      sku: [0x0, 0x1, 0x4, 0x5, 0x7FFFFFFF]
-    mt8189-skywalker-baze-sku2.dtb:
-      sku: [0x2, 0x3, 0x6, 0x7]
-    mt8189-skywalker-jye-sku1048576.dtb:
-      sku: [0x100000, 0x100001, 0x100008]
-    mt8189-skywalker-jye-sku1048578.dtb:
-      sku: [0x100002, 0x10000A]
-    mt8189-skywalker-jye-sku1048580.dtb:
-      sku: [0x100004, 0x100005]
-    mt8189-skywalker-jye-sku1048582.dtb:
-      sku: [0x100006, 0x100007]
-    mt8189-skywalker-shaak-sku2097153.dtb:
-      sku: [0x200001]
-    mt8189-skywalker-shaak-sku2097154.dtb:
-      sku: [0x200002]
+    mt8189-skywalker-baze.dtb: {}
+  dtbo:
+    mt8189-skywalker-baze-kb.dtbo:
+      fw_config:
+        mask: 0x3
+        value: 0x0
+    mt8189-skywalker-baze-kb-ca-fr.dtbo:
+      fw_config:
+        mask: 0x3
+        value: 0x1
+    mt8189-skywalker-baze-touchscreen.dtbo:
+      fw_config:
+        mask: 0x4
+        value: 0x4
 
 grogu:
   dtb:

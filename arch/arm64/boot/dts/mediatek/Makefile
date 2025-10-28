@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
+
+DTC_FLAGS_mt8189-skywalker-baze += -@
+
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt2712-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6779-evb.dtb
@@ -112,14 +115,12 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku1.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku3.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku266.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-sku0.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-sku2.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb-ca-fr.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-touchscreen.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1114112.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1310720.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048576.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048578.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048580.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jye-sku1048582.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-sku131072.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-sku131073.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-sku131078.dtb
@@ -137,8 +138,6 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196609.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196612.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196614.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-quigon-sku196617.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-shaak-sku2097153.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-shaak-sku2097154.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4096.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4097.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku4101.dtb
