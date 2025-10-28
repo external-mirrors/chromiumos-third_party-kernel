@@ -6,6 +6,9 @@
 #include "mt8189-skywalker.dtsi"
 
 / {
+	model = "Google Yoda board";
+	compatible = "google,yoda", "mediatek,mt8189";
+
 	rt1019p: audio-codec {
 		compatible = "realtek,rt1019p";
 		label = "rt1019p";
@@ -94,29 +97,9 @@
 
 &i2c2 {
 	/delete-node/ audio-codec@1a;
-
-	rt5682s: audio-codec@1a {
-		compatible = "realtek,rt5682s";
-		reg = <0x1a>;
-		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&audio_codec_pins>;
-		#sound-dai-cells = <0>;
-
-		AVDD-supply = <&mt6359_vio18_ldo_reg>;
-		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
-		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
-		MICVDD-supply = <&pp3300_z1>;
-		realtek,jd-src = <1>;
-		status = "okay";
-	};
 };
 
 &sound {
-	compatible = "mediatek,mt8189-rt5682s-sound";
-	model = "mt8189_1019_rt5682s";
-	status = "okay";
-
 	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
 			"I2SOUT0", "ETDMIN_HP_PIN",
 			"I2SOUT0", "ETDMOUT_HP_PIN",
@@ -135,23 +118,8 @@
 		};
 	};
 
-	dai-link-1 {
-		link-name = "I2SOUT0_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s>;
-		};
-	};
-
-	dai-link-2 {
-		link-name = "I2SIN0_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s>;
-		};
-	};
+	/delete-node/ dai-link-1;
+	/delete-node/ dai-link-2;
 
 	dai-link-3 {
 		link-name = "TDM_DPTX_BE";
@@ -249,6 +217,10 @@
 		vdd-supply = <&pp3300_tchscr_x>;
 		status = "fail-needs-probe";
 	};
+};
+
+&ap_i2c_sar {
+	status = "disabled";
 };
 
 &u2port0 {
