@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
+DTC_FLAGS_mt8189-skywalker-anakin += -@
 DTC_FLAGS_mt8189-skywalker-baze += -@
 DTC_FLAGS_mt8189-skywalker-obiwan += -@
 
@@ -110,12 +111,10 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8188-geralt-ciri-sku6.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8188-geralt-ciri-sku7.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-rev0-sku0.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-rev0-sku1.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku0.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku1.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku3.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-sku266.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-kb-v10.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-touchscreen.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-anakin-usb-c1.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb-ca-fr.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb.dtbo
