@@ -3,6 +3,7 @@
 DTC_FLAGS_mt8189-skywalker-anakin += -@
 DTC_FLAGS_mt8189-skywalker-baze += -@
 DTC_FLAGS_mt8189-skywalker-obiwan += -@
+DTC_FLAGS_mt8189-skywalker-yoda += -@
 
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt2712-evb.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt6755-evb.dtb
@@ -144,9 +145,10 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8192.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8193.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku8194.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-sku2147483647.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-sku0.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-sku4.dtb
-dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-sku16.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-rt5682i.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-rt5682s.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-wwan.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-asurada-hayato-r1.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-asurada-spherion-r0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-evb.dtb
