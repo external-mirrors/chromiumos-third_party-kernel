@@ -296,8 +296,8 @@ static const unsigned int mt8196_mtk_ddp_disp1_third[] = {
 static enum mtk_ddp_comp_id mt8189_mtk_ddp_main[] = {
 	DDP_COMPONENT_OVL0,
 	DDP_COMPONENT_RDMA0,
-	DDP_COMPONENT_DSC0,
-	DDP_COMPONENT_DSI0,
+	DDP_COMPONENT_COMP0_OUT_CB4,
+	DDP_COMPONENT_DVO0,
 };
 
 static enum mtk_ddp_comp_id mt8189_mtk_ddp_ext[] = {
