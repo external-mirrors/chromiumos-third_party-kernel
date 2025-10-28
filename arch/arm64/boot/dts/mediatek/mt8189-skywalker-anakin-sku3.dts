@@ -6,10 +6,10 @@
 #include "mt8189-skywalker-anakin.dtsi"
 
 / {
-	model = "Google Anakin sku0/9/10 board";
-	compatible = "google,anakin-sku0", "google,anakin-sku9",
-		     "google,anakin-sku10", "google,anakin",
-		     "mediatek,mt8189";
+	model = "Google Anakin sku3/4/6/7 board";
+	compatible = "google,anakin-sku3","google,anakin-sku4",
+		     "google,anakin-sku6", "google,anakin-sku7",
+		     "google,anakin", "mediatek,mt8189";
 };
 
 &ap_i2c_tchscr {
@@ -63,4 +63,8 @@
 		MATRIX_KEY(0x02, 0x0a, KEY_YEN)             /* JP */
 		MATRIX_KEY(0x04, 0x0a, KEY_FN)              /* FN */
 	>;
+};
+
+&usb_c1 {
+	status = "disabled";
 };
