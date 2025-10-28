@@ -2319,7 +2319,10 @@ static void mtk_dp_audio_sdp_config_v2(struct mtk_dp *mtk_dp, const enum dp_enco
 	u8 SDP_DB[32] = {0};
 	u8 SDP_HB[4] = {0, DP_SDP_HB1_PKG_AINFO, 0x1b, 0x48};
 
-	SDP_DB[0x0] = 0x10 | (ch - 1);
+	if (ch > 0)
+		SDP_DB[0x0] = 0x10 | (ch - 1);
+	else
+		SDP_DB[0x0] = 0x10;
 
 	switch (fs) {
 	case 32000:
@@ -2331,7 +2334,6 @@ static void mtk_dp_audio_sdp_config_v2(struct mtk_dp *mtk_dp, const enum dp_enco
 		break;
 
 	case 48000:
-	default:
 		SDP_DB[0x1] = 0x3 << 2 ;
 		break;
 
@@ -2345,6 +2347,9 @@ static void mtk_dp_audio_sdp_config_v2(struct mtk_dp *mtk_dp, const enum dp_enco
 
 	case 192000:
 		SDP_DB[0x1] = 0x6 << 2 ;
+		break;
+	default:
+		SDP_DB[0x1] = 0x0;
 		break;
 	}
 
