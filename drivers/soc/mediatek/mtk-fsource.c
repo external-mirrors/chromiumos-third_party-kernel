@@ -115,7 +115,7 @@ static int __init fsource_init(void)
 	int ret;
 	ret = platform_driver_register(&fsource_driver);
 	if (ret) {
-		dev_err(&pdev->dev, "platform driver register failed: %d\n", ret);
+		pr_err("[%s] platform driver register failed: %d\n", __func__, ret);
 		return ret;
 	}
 	return 0;
