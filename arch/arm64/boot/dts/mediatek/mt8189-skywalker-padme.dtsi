@@ -169,6 +169,10 @@
 	status = "disabled";
 };
 
+&gpio_keys {
+	status = "disabled";
+};
+
 &hdmibrdg {
 	status = "disabled";
 };
