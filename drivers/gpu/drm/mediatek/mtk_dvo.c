@@ -24,6 +24,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
+#include <drm/drm_print.h>
 #include <drm/drm_simple_kms_helper.h>
 
 #include "mtk_dvo_regs.h"
@@ -247,7 +248,8 @@ static void mtk_dvo_disable(struct mtk_dvo *dvo)
 
 static void mtk_dvo_irq_enable(struct mtk_dvo *dvo)
 {
-	mtk_dvo_mask(dvo, DVO_INTEN, INT_VDE_END_EN, INT_VDE_END_EN);
+	mtk_dvo_mask(dvo, DVO_INTEN, INT_VDE_END_EN | UNDERFLOW_EN,
+		     INT_VDE_END_EN | UNDERFLOW_EN);
 }
 
 static void mtk_dvo_info_queue_start(struct mtk_dvo *dvo)
@@ -266,6 +268,25 @@ static void mtk_dvo_trailing_blank_setting(struct mtk_dvo *dvo)
 {
 	mtk_dvo_mask(dvo, DVO_TGEN_V_LAST_TRAILING_BLANK, 0x20, V_LAST_TRAILING_BLANK_MASK);
 	mtk_dvo_mask(dvo, DVO_TGEN_OUTPUT_DELAY_LINE, 0x20, EXT_TG_DLY_LINE_MASK);
+}
+
+static irqreturn_t mtk_dvo_irq_handler(int irq, void *dev_id)
+{
+	struct mtk_dvo *dvo = dev_id;
+	u32 val;
+
+	val = readl(dvo->regs + DVO_INTSTA);
+	if (!val)
+		return IRQ_NONE;
+
+	writel(0x0, dvo->regs + DVO_INTSTA);
+
+	if (val & EXT_VDE_END_STA)
+		DRM_DEV_DEBUG_DRIVER(dvo->dev, "frame complete!\n");
+	if (val & INT_UNDERFLOW_STA)
+		dev_err(dvo->dev, "frame underflow!\n");
+
+	return IRQ_HANDLED;
 }
 
 static void mtk_dvo_get_gs_level(struct mtk_dvo *dvo)
@@ -954,6 +975,13 @@ static int mtk_dvo_probe(struct platform_device *pdev)
 	dvo->irq = platform_get_irq(pdev, 0);
 	if (dvo->irq < 0)
 		return dvo->irq;
+
+	ret = devm_request_irq(dev, dvo->irq, mtk_dvo_irq_handler,
+			       IRQF_TRIGGER_NONE, dev_name(dev), dvo);
+	if (ret < 0) {
+		dev_err(dev, "Failed to request irq %d: %d\n", dvo->irq, ret);
+		return ret;
+	}
 
 	platform_set_drvdata(pdev, dvo);
 
