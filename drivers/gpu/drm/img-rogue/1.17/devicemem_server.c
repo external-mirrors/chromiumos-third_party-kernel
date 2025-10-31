@@ -64,6 +64,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "pvrsrv.h" /* for PVRSRVGetPVRSRVData() */
 
 #define DEVMEMCTX_FLAGS_FAULT_ADDRESS_AVAILABLE (1 << 0)
+#define DEVMEMCTX_FLAGS_IS_KERNEL_CONTEXT (1 << 1)
+
 #define DEVMEMHEAP_REFCOUNT_MIN 1
 #define DEVMEMHEAP_REFCOUNT_MAX IMG_INT32_MAX
 #define DEVMEMRESERVATION_REFCOUNT_MIN 1
@@ -639,6 +641,11 @@ DevmemIntCtxCreate(CONNECTION_DATA *psConnection,
 
 	psDevmemCtx->uiCreatedHeaps = 0;
 
+	if (bKernelMemoryCtx)
+	{
+		BITMASK_SET(psDevmemCtx->ui32Flags, DEVMEMCTX_FLAGS_IS_KERNEL_CONTEXT);
+	}
+
 	return PVRSRV_OK;
 
 fail_register:
@@ -752,6 +759,13 @@ DevmemIntHeapCreate(DEVMEMINT_CTX *psDevmemCtx,
 		{
 			break;
 		}
+	}
+
+	/* Don't allow creating Firmware heaps on client contexts. */
+	if (!BITMASK_HAS(psDevmemCtx->ui32Flags, DEVMEMCTX_FLAGS_IS_KERNEL_CONTEXT) &&
+	    uiHeapConfigIndex == DEVMEM_HEAPCFG_META)
+	{
+		return PVRSRV_ERROR_INVALID_PARAMS;
 	}
 
 	if (bHeapParamsValidated != IMG_TRUE)

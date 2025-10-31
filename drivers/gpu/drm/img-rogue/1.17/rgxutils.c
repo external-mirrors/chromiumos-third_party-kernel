@@ -429,6 +429,14 @@ AcquireValidateRefCriticalBuffer(PVRSRV_DEVICE_NODE*     psDevNode,
 	    "%s: Error from DevmemIntGetReservationData for critical buffer: %s",
 	    __func__, PVRSRVGetErrorString(eError));
 
+	/* Make sure that the reservation is on a heap with correct policy */
+	if (psDevVAddr->uiAddr < RGX_PMMETA_PROTECT_HEAP_BASE ||
+	    psDevVAddr->uiAddr >= RGX_PMMETA_PROTECT_HEAP_BASE + RGX_PMMETA_PROTECT_HEAP_SIZE)
+	{
+		eError = PVRSRV_ERROR_INVALID_HEAP;
+		PVR_LOG_GOTO_IF_ERROR_VA(eError, RollbackReservation,
+		    "%s: Invalid heap policy for the critical buffer", __func__);
+	}
 
 	/* Check buffer sizes and flags are as required */
 	eError = _ValidateCriticalPMR(*ppsPMR, ui64MinSize);
