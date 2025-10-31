@@ -5,6 +5,7 @@
 
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
+#include <drm/drm_print.h>
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/of_device.h>
@@ -22,6 +23,7 @@
 
 #define DISP_REG_OVL_OUTPROC_INTEN				0x004
 #define OVL_OUTPROC_FME_CPL_INTEN					BIT(1)
+#define OVL_OUTPROC_FME_UND_INTEN					BIT(2)
 #define DISP_REG_OVL_OUTPROC_INTSTA				0x008
 #define DISP_REG_OVL_OUTPROC_DATAPATH_CON			0x010
 #define DATAPATH_CON_OUTPUT_CLAMP					BIT(26)
@@ -43,6 +45,7 @@
 #define OVL_OUTPROC_HF_FOVL_CK_ON					BIT(10)
 
 struct mtk_disp_outproc {
+	struct device		*dev;
 	void __iomem		*regs;
 	struct clk		*clk;
 	void			(*vblank_cb)(void *data);
@@ -99,7 +102,8 @@ void mtk_disp_outproc_enable_vblank(struct device *dev)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
 
-	writel(OVL_OUTPROC_FME_CPL_INTEN, priv->regs + DISP_REG_OVL_OUTPROC_INTEN);
+	writel(OVL_OUTPROC_FME_CPL_INTEN | OVL_OUTPROC_FME_UND_INTEN,
+	       priv->regs + DISP_REG_OVL_OUTPROC_INTEN);
 }
 
 void mtk_disp_outproc_disable_vblank(struct device *dev)
@@ -122,6 +126,11 @@ static irqreturn_t mtk_disp_outproc_irq_handler(int irq, void *dev_id)
 
 	if (priv->vblank_cb)
 		priv->vblank_cb(priv->vblank_cb_data);
+
+	if (val & OVL_OUTPROC_FME_CPL_INTEN)
+		DRM_DEV_DEBUG_DRIVER(priv->dev, "frame complete!\n");
+	if (val & OVL_OUTPROC_FME_UND_INTEN)
+		dev_err(priv->dev, "frame underflow!\n");
 
 	return IRQ_HANDLED;
 }
@@ -235,6 +244,7 @@ static int mtk_disp_outproc_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
+	priv->dev = dev;
 	priv->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(priv->regs))
 		return dev_err_probe(dev, PTR_ERR(priv->regs), "failed to ioremap outproc\n");

@@ -168,6 +168,7 @@
 #define MT8196_IRQ_TABLE_OVL0_OUTPROC1				(0xa7) /* GIC 451 */
 #define MT8196_IRQ_TABLE_OVL1_OUTPROC0				(0xd6) /* GIC 452 */
 #define MT8196_IRQ_TABLE_DSI0					(0x35) /* GIC 453 */
+#define MT8196_IRQ_TABLE_DVO0					(0x38) /* GIC 461 */
 
 static const struct mtk_mmsys_async_info mmsys_mt8196_ovl0_async_comp_table[] = {
 	{DDP_COMPONENT_OVL0_DLO_ASYNC5, 0, MT8196_OVL_DL_OUT_RELAY5_SIZE, GENMASK(29, 0)},
@@ -199,7 +200,8 @@ static const struct mtk_mmsys_default mmsys_mt8196_vdisp_ao_default_table[] = {
 	{MT8196_VDISP_AO_REG_INT_SEL_G0, MT8196_IRQ_TABLE_OVL0_OUTPROC0, GENMASK(7, 0)},
 	{MT8196_VDISP_AO_REG_INT_SEL_G0, MT8196_IRQ_TABLE_OVL0_OUTPROC1 << 8, GENMASK(15, 8)},
 	{MT8196_VDISP_AO_REG_INT_SEL_G0, MT8196_IRQ_TABLE_OVL1_OUTPROC0 << 16, GENMASK(23, 16)},
-	{MT8196_VDISP_AO_REG_INT_SEL_G0, MT8196_IRQ_TABLE_DSI0 << 24, GENMASK(31, 24)}
+	{MT8196_VDISP_AO_REG_INT_SEL_G0, MT8196_IRQ_TABLE_DSI0 << 24, GENMASK(31, 24)},
+	{MT8196_VDISP_AO_REG_INT_SEL_G2, MT8196_IRQ_TABLE_DVO0 << 24, GENMASK(31, 24)},
 };
 
 static const struct mtk_mmsys_default mmsys_mt8196_ovl0_default_table[] = {
