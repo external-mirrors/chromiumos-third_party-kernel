@@ -7,14 +7,15 @@
 
 / {
 	model = "Google starros sku1114112 board";
-	compatible = "google,grogu-sku1114112", "google,grogu-sku1114113",
-		     "google,grogu-sku1114114", "google,grogu-sku1114115",
-		     "google,grogu-sku1114116", "google,grogu-sku1114117",
-		     "google,grogu-sku1114118", "google,grogu-sku1114119",
-		     "google,grogu-sku1114120", "google,grogu-sku1114121",
-		     "google,grogu-sku1114122", "google,grogu-sku1114123",
-		     "google,grogu-sku1114124", "google,grogu-sku1114125",
-		     "google,grogu-sku1114126", "google,grogu-sku1114127",
+	compatible = "google,grogu-sku1114112", "google,grogu-sku1114114",
+		     "google,grogu-sku1114116", "google,grogu-sku1114118",
+		     "google,grogu-sku1114120", "google,grogu-sku1114122",
+		     "google,grogu-sku1114124", "google,grogu-sku1114126",
 		     "google,grogu", "mediatek,mt8189";
 	chassis-type = "laptop";
+};
+
+/* non-touchscreen */
+&ap_i2c_tchscr {
+	status = "disabled";
 };

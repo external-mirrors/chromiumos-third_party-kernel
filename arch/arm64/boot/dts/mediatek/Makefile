@@ -121,6 +121,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb-ca-fr.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-touchscreen.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1114112.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1114113.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1310720.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-kb-backlight.dtbo
