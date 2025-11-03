@@ -423,8 +423,6 @@
 
 			/* pll mcucfg */
 			mcucfg-ver = <0>;
-			pll-con = <0x208>, <0x218>, <0x228>;
-			clk-div = <0xa2a0>, <0xa2a4>, <0xa2e0>;
 		};
 
 		performance: performance-controller@108d68 {
