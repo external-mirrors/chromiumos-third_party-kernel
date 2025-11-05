@@ -239,6 +239,7 @@
 #define TX_REG_EN_AUDIO 0xBB
 #define TX_REG_AUD_FIFO1 0xBC
 #define TX_REG_AUD_FIFO2 0xBD
+#define TX_REG_AUD_CTS 0x1BC
 #define TX_REG_AUD_STS1 0x1F0
 #define B_EN_AUD_NLPCM BIT(1)
 #define TX_REG_AUD_STS2 0x1F3
@@ -391,6 +392,10 @@
 #define TX_REG_AUDPKT_N_1 0x3AC
 #define TX_REG_AUDPKT_N_2 0x3AD
 
+#define TX_REG_AUDPKT_CTS_0 0x3A8
+#define TX_REG_AUDPKT_CTS_1 0x3A9
+#define TX_REG_AUDPKT_CTS_2 0x3AA
+
 #define SOFT_DDC_TIMEOUT_MS 100
 #define HDCP_KSV_LIST_TIMEOUT_MS 5000
 
@@ -420,9 +425,12 @@ enum it61620_audio_select {
 	SPDIF,
 };
 
+/*
+ * The values are written to the hardware registers and must match the values
+ * defined in the hardware specification.
+ */
 enum it61620_audio_word_length {
 	WORD_LENGTH_16BIT = 0x0,
-	WORD_LENGTH_18BIT = 0x1,
 	WORD_LENGTH_20BIT = 0x2,
 	WORD_LENGTH_24BIT = 0x3,
 };
@@ -451,8 +459,7 @@ struct it6162_chip_info {
 struct it61620_audio {
 	enum it61620_audio_select select;
 	enum it61620_audio_type type;
-	enum it61620_audio_sample_rate sample_rate;
-	u8 word_length;
+	unsigned int sample_rate;
 	u8 channel_count;
 	u8 audfmt;
 	unsigned int audio_enable;
@@ -1667,43 +1674,191 @@ static void it61620_hdmi_irq(struct it61620 *it61620)
 		it61620_hdmi_interrupt_handler(it61620);
 }
 
-static void it61620_hdmi_audio_set_ncts(struct it61620 *it61620)
-{
-	struct device *dev = it61620->dev;
+struct drm_hdmi_acr_n_cts_entry {
 	unsigned int n;
+	unsigned int cts;
+};
 
-	switch (it61620->audio_config.sample_rate) {
-	case SAMPLE_RATE_32K:
-		n = 4096;
-		break;
-	case SAMPLE_RATE_44_1K:
-		n = 6272;
-		break;
-	case SAMPLE_RATE_48K:
-		n = 6144;
-		break;
-	case SAMPLE_RATE_64K:
-		n = 8192;
-		break;
-	case SAMPLE_RATE_88_2K:
-		n = 12544;
-		break;
-	case SAMPLE_RATE_96K:
-		n = 12288;
-		break;
-	case SAMPLE_RATE_176_4K:
-		n = 25088;
-		break;
-	case SAMPLE_RATE_192K:
-		n = 24576;
-		break;
-	default:
-		dev_err(dev, "Error: AudFmt Error !!!\n");
+struct drm_hdmi_acr_data {
+	unsigned long tmds_clock_khz;
+	struct drm_hdmi_acr_n_cts_entry n_cts_32k, n_cts_44k1, n_cts_48k;
+};
+
+static const struct drm_hdmi_acr_data hdmi_acr_n_cts[] = {
+	{
+		/* "Other" entry */
+		.n_cts_32k =  { .n = 4096, },
+		.n_cts_44k1 = { .n = 6272, },
+		.n_cts_48k =  { .n = 6144, },
+	}, {
+		.tmds_clock_khz = 25175,
+		.n_cts_32k =  { .n = 4576,  .cts = 28125, },
+		.n_cts_44k1 = { .n = 7007,  .cts = 31250, },
+		.n_cts_48k =  { .n = 6864,  .cts = 28125, },
+	}, {
+		.tmds_clock_khz = 25200,
+		.n_cts_32k =  { .n = 4096,  .cts = 25200, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 28000, },
+		.n_cts_48k =  { .n = 6144,  .cts = 25200, },
+	}, {
+		.tmds_clock_khz = 27000,
+		.n_cts_32k =  { .n = 4096,  .cts = 27000, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 30000, },
+		.n_cts_48k =  { .n = 6144,  .cts = 27000, },
+	}, {
+		.tmds_clock_khz = 27027,
+		.n_cts_32k =  { .n = 4096,  .cts = 27027, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 30030, },
+		.n_cts_48k =  { .n = 6144,  .cts = 27027, },
+	}, {
+		.tmds_clock_khz = 54000,
+		.n_cts_32k =  { .n = 4096,  .cts = 54000, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 60000, },
+		.n_cts_48k =  { .n = 6144,  .cts = 54000, },
+	}, {
+		.tmds_clock_khz = 54054,
+		.n_cts_32k =  { .n = 4096,  .cts = 54054, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 60060, },
+		.n_cts_48k =  { .n = 6144,  .cts = 54054, },
+	}, {
+		.tmds_clock_khz = 74176,
+		.n_cts_32k =  { .n = 11648, .cts = 210937, }, /* and 210938 */
+		.n_cts_44k1 = { .n = 17836, .cts = 234375, },
+		.n_cts_48k =  { .n = 11648, .cts = 140625, },
+	}, {
+		.tmds_clock_khz = 74250,
+		.n_cts_32k =  { .n = 4096,  .cts = 74250, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 82500, },
+		.n_cts_48k =  { .n = 6144,  .cts = 74250, },
+	}, {
+		.tmds_clock_khz = 148352,
+		.n_cts_32k =  { .n = 11648, .cts = 421875, },
+		.n_cts_44k1 = { .n = 8918,  .cts = 234375, },
+		.n_cts_48k =  { .n = 5824,  .cts = 140625, },
+	}, {
+		.tmds_clock_khz = 148500,
+		.n_cts_32k =  { .n = 4096,  .cts = 148500, },
+		.n_cts_44k1 = { .n = 6272,  .cts = 165000, },
+		.n_cts_48k =  { .n = 6144,  .cts = 148500, },
+	}, {
+		.tmds_clock_khz = 296703,
+		.n_cts_32k =  { .n = 5824,  .cts = 421875, },
+		.n_cts_44k1 = { .n = 4459,  .cts = 234375, },
+		.n_cts_48k =  { .n = 5824,  .cts = 281250, },
+	}, {
+		.tmds_clock_khz = 297000,
+		.n_cts_32k =  { .n = 3072,  .cts = 222750, },
+		.n_cts_44k1 = { .n = 4704,  .cts = 247500, },
+		.n_cts_48k =  { .n = 5120,  .cts = 247500, },
+	}, {
+		.tmds_clock_khz = 593407,
+		.n_cts_32k =  { .n = 5824,  .cts = 843750, },
+		.n_cts_44k1 = { .n = 8918,  .cts = 937500, },
+		.n_cts_48k =  { .n = 5824,  .cts = 562500, },
+	}, {
+		.tmds_clock_khz = 594000,
+		.n_cts_32k =  { .n = 3072,  .cts = 445500, },
+		.n_cts_44k1 = { .n = 9408,  .cts = 990000, },
+		.n_cts_48k =  { .n = 6144,  .cts = 594000, },
+	},
+};
+
+static int drm_hdmi_acr_find_tmds_entry(unsigned long tmds_clock_khz)
+{
+	int i;
+
+	/* skip the "other" entry */
+	for (i = 1; i < ARRAY_SIZE(hdmi_acr_n_cts); i++) {
+		if (hdmi_acr_n_cts[i].tmds_clock_khz == tmds_clock_khz)
+			return i;
 	}
 
-	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_N_0, (u8)((n) & 0xFF));
-	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_N_1, (u8)((n >> 8) & 0xFF));
-	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_N_2, (u8)((n >> 16) & 0x0F));
+	return 0;
+}
+
+/**
+ * drm_hdmi_acr_get_n_cts() - get N and CTS values for Audio Clock Regeneration
+ *
+ * @tmds_char_rate: TMDS clock (char rate) as used by the HDMI connector
+ * @sample_rate: audio sample rate
+ * @out_n: a pointer to write the N value
+ * @out_cts: a pointer to write the CTS value
+ *
+ * Get the N and CTS values (either by calculating them or by returning data
+ * from the tables. This follows the HDMI 1.4b Section 7.2 "Audio Sample Clock
+ * Capture and Regeneration".
+ *
+ * Note, @sample_rate corresponds to the Fs value, see sections 7.2.4 - 7.2.6
+ * on how to select Fs for non-L-PCM formats.
+ */
+static void drm_hdmi_acr_get_n_cts(unsigned long long tmds_char_rate,
+				   unsigned int sample_rate,
+				   unsigned int *out_n,
+				   unsigned int *out_cts)
+{
+	/* be a bit more tolerant, especially for the 1.001 entries */
+	unsigned long tmds_clock_khz = DIV_ROUND_CLOSEST_ULL(tmds_char_rate, 1000);
+	const struct drm_hdmi_acr_n_cts_entry *entry;
+	unsigned int n, cts, mult;
+	int tmds_idx;
+
+	tmds_idx = drm_hdmi_acr_find_tmds_entry(tmds_clock_khz);
+
+	/*
+	 * Don't change the order, 192 kHz is divisible by 48k and 32k, but it
+	 * should use 48k entry.
+	 */
+	if (sample_rate % 48000 == 0) {
+		entry = &hdmi_acr_n_cts[tmds_idx].n_cts_48k;
+		mult = sample_rate / 48000;
+	} else if (sample_rate % 44100 == 0) {
+		entry = &hdmi_acr_n_cts[tmds_idx].n_cts_44k1;
+		mult = sample_rate / 44100;
+	} else if (sample_rate % 32000 == 0) {
+		entry = &hdmi_acr_n_cts[tmds_idx].n_cts_32k;
+		mult = sample_rate / 32000;
+	} else {
+		entry = NULL;
+	}
+
+	if (entry) {
+		n = entry->n * mult;
+		cts = entry->cts;
+	} else {
+		/* Recommended optimal value, HDMI 1.4b, Section 7.2.1 */
+		n = 128 * sample_rate / 1000;
+		cts = 0;
+	}
+
+	if (!cts)
+		cts = DIV_ROUND_CLOSEST_ULL(tmds_char_rate * n,
+					    128 * sample_rate);
+
+	*out_n = n;
+	*out_cts = cts;
+}
+
+static void it61620_hdmi_audio_set_ncts(struct it61620 *it61620)
+{
+	struct drm_device *drm = it61620->drm;
+	struct videomode *vm = &it61620->vm;
+	struct it61620_audio *config = &it61620->audio_config;
+	unsigned int n, cts;
+
+	if (!it61620->en_audio)
+		return;
+	drm_hdmi_acr_get_n_cts(vm->pixelclock, config->sample_rate, &n, &cts);
+
+	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_N_0, (u8)((n) & 0xff));
+	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_N_1, (u8)((n >> 8) & 0xff));
+	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_N_2, (u8)((n >> 16) & 0x0f));
+
+	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_CTS_0, (u8)((cts) & 0xff));
+	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_CTS_1,
+			       (u8)((cts >> 8) & 0xff));
+	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_CTS_2,
+			       (u8)((cts >> 16) & 0x0f));
+	drm_dbg(drm, "audio N %d CTS %d", n, cts);
 }
 
 static inline void it61620_hdmi_disable_audio_infoframe(struct it61620 *it61620)
@@ -2039,9 +2194,9 @@ static void it61620_config_default(struct it61620 *it61620)
 	it61620->connector_status = connector_status_disconnected;
 
 	audio_config->select = I2S;
-	audio_config->sample_rate = SAMPLE_RATE_48K;
+	audio_config->sample_rate = 48000;
 	audio_config->type = LPCM;
-	audio_config->word_length = WORD_LENGTH_16BIT;
+	audio_config->sample_width = WORD_LENGTH_16BIT;
 	audio_config->channel_count = 2;
 	audio_config->audfmt = 0;
 }
@@ -2211,10 +2366,30 @@ static void it61620_disable_audio(struct it61620 *it61620)
 			     B_EN_AUDIO_MUTE, B_EN_AUDIO_MUTE);
 }
 
+static void it61620_check_audio(struct it61620 *it61620)
+{
+	u32 clock;
+	struct videomode *vm = &it61620->vm;
+	struct it61620_audio *audio_config = &it61620->audio_config;
+
+	clock = vm->pixelclock / 1000;
+
+	if ((clock < 55000 || (clock > 66000 && clock < 74000)) &&
+	    audio_config->channel_count == 2 &&
+	    (audio_config->sample_rate == 176400 ||
+	     audio_config->sample_rate == 192000))
+		it61620_hdmi_reg_set(it61620, TX_REG_AUD_FULLPKT, 0x01, 0x01);
+	else
+		it61620_hdmi_reg_set(it61620, TX_REG_AUD_FULLPKT, 0x01, 0x00);
+
+	it61620_hdmi_audio_set_ncts(it61620);
+}
+
 static void it61620_config_audio(struct it61620 *it61620)
 {
 	struct it61620_audio *config = &it61620->audio_config;
 	struct drm_device *drm = it61620->drm;
+	enum it61620_audio_sample_rate it61620_audio_sample_rate;
 	u8 infoca, audsrc, chksum;
 	unsigned int i;
 
@@ -2222,12 +2397,36 @@ static void it61620_config_audio(struct it61620 *it61620)
 	drm_dbg(drm, "sample width %d", config->sample_width);
 	drm_dbg(drm, "fmt %d", config->select);
 
-	it61620_hdmi_reg_set(it61620, TX_REG_AUD_FMT, 0x7F,
-			     (config->word_length << 5) | config->audfmt);
+	switch (config->sample_rate) {
+	case 32000:
+		it61620_audio_sample_rate = SAMPLE_RATE_32K;
+		break;
+	case 44100:
+		it61620_audio_sample_rate = SAMPLE_RATE_44_1K;
+		break;
+	case 48000:
+		it61620_audio_sample_rate = SAMPLE_RATE_48K;
+		break;
+	case 88200:
+		it61620_audio_sample_rate = SAMPLE_RATE_88_2K;
+		break;
+	case 96000:
+		it61620_audio_sample_rate = SAMPLE_RATE_96K;
+		break;
+	case 176400:
+		it61620_audio_sample_rate = SAMPLE_RATE_176_4K;
+		break;
+	case 192000:
+		it61620_audio_sample_rate = SAMPLE_RATE_192K;
+		break;
+	}
+
+	it61620_hdmi_reg_set(it61620, TX_REG_AUD_FMT, 0x7f,
+			     (config->sample_width << 5) | config->audfmt);
 	if (config->select == SPDIF) {
 		it61620_hdmi_reg_write(it61620, TX_REG_AUD_FIFO1, 0x00);
 		it61620_hdmi_reg_write(it61620, TX_REG_AUD_FIFO2, 0x00);
-		it61620_hdmi_reg_set(it61620, TX_REG_AUD_SPDIF, 0x0F, 0x02);
+		it61620_hdmi_reg_set(it61620, TX_REG_AUD_SPDIF, 0x0f, 0x02);
 		it61620_hdmi_reg_write(it61620, TX_REG_AUD_CTRL, 0X01);
 	} else {
 		it61620_hdmi_reg_write(it61620, TX_REG_AUD_FIFO1, 0x10);
@@ -2239,9 +2438,10 @@ static void it61620_config_audio(struct it61620 *it61620)
 		it61620_hdmi_reg_write(it61620, TX_REG_AUD_STS1, 0x00);
 	else
 		it61620_hdmi_reg_write(it61620, TX_REG_AUD_STS1, B_EN_AUD_NLPCM);
-	it61620_hdmi_reg_write(it61620, TX_REG_AUD_STS2, (config->sample_rate));
+	it61620_hdmi_reg_write(it61620, TX_REG_AUD_STS2, (it61620_audio_sample_rate));
 	it61620_hdmi_reg_write(it61620, TX_REG_AUD_STS3,
-			       (~(config->sample_rate << 4)) & 0xF0 + 0x0B);
+			       (~(it61620_audio_sample_rate << 4)) & 0xf0 + 0x0b);
+	it61620_hdmi_reg_set(it61620, TX_REG_AUD_CTS, 0x08, 0x08);
 
 	switch (config->channel_count) {
 	case 2:
@@ -2261,11 +2461,11 @@ static void it61620_config_audio(struct it61620 *it61620)
 		audsrc = 0x07;
 		break;
 	case 6:
-		infoca = 0x0B;
+		infoca = 0x0b;
 		audsrc = 0x07;
 		break;
 	case 7:
-		infoca = 0x0F;
+		infoca = 0x0f;
 		audsrc = 0x0f;
 		break;
 	case 8:
@@ -2290,7 +2490,7 @@ static void it61620_config_audio(struct it61620 *it61620)
 
 	chksum = 0x84;
 	chksum += 0x01;
-	chksum += 0x0A;
+	chksum += 0x0a;
 	for (i = TX_REG_AUDINFO_DB01; i <= TX_REG_AUDINFO_DB05; i++)
 		chksum += it61620_hdmi_reg_read(it61620, i);
 
@@ -2349,44 +2549,16 @@ static int it61620_audio_update_hw_params(struct it61620 *it61620,
 	       AES_IEC958_STATUS_SIZE);
 
 	config->channel_number = hparms->channels;
-
-	switch (hparms->sample_rate) {
-	case 32000:
-		config->sample_rate = SAMPLE_RATE_32K;
-		break;
-	case 44100:
-		config->sample_rate = SAMPLE_RATE_44_1K;
-		break;
-	case 48000:
-		config->sample_rate = SAMPLE_RATE_48K;
-		break;
-	case 88200:
-		config->sample_rate = SAMPLE_RATE_88_2K;
-		break;
-	case 96000:
-		config->sample_rate = SAMPLE_RATE_96K;
-		break;
-	case 176400:
-		config->sample_rate = SAMPLE_RATE_176_4K;
-		break;
-	case 192000:
-		config->sample_rate = SAMPLE_RATE_192K;
-		break;
-	default:
-		return -EINVAL;
-	}
+	config->sample_rate = hparms->sample_rate;
 
 	switch (hparms->sample_width) {
 	case 16:
 		config->sample_width = WORD_LENGTH_16BIT;
 		break;
-	case 24:
-		config->sample_width = WORD_LENGTH_18BIT;
-		break;
-	case 18:
+	case 20:
 		config->sample_width = WORD_LENGTH_20BIT;
 		break;
-	case 20:
+	case 24:
 		config->sample_width = WORD_LENGTH_24BIT;
 		break;
 	default:
@@ -2405,6 +2577,7 @@ static int it61620_audio_update_hw_params(struct it61620 *it61620,
 	}
 
 	it61620_config_audio(it61620);
+	it61620_check_audio(it61620);
 	it61620_hdmi_audio_infoframe_set(it61620, hparms->cea.length);
 	return 0;
 }
@@ -2432,7 +2605,6 @@ static int it61620_hdmi_hw_params(struct device *dev, void *data,
 	switch (hparms->sample_width) {
 	case 16:
 	case 24:
-	case 18:
 	case 20:
 		break;
 	default:
@@ -2908,6 +3080,13 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	}
 
 	it61620_mipi_set_d2v_video_timing(it61620);
+	/*
+	 * The calculation of audio N/CTS values depends on the video pixel clock.
+	 * When the user changes the video timing, it61620_audio_update_hw_params()
+	 * will not be called again, so we need to call it61620_check_audio()to
+	 * handle this case.
+	 */
+	it61620_check_audio(it61620);
 	it61620_hdmi_config_output(it61620);
 }
 
