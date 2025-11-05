@@ -80,6 +80,8 @@
 #define RX_REG_HTOTAL_H 0x49
 
 #define RX_REG_SELDCLK 0x24
+#define DCLK_MASK 0x1C
+#define DCLK_SEL_CONT 0x04
 #define RX_REG_VFP_L 0x3A
 #define RX_REG_VFP_H 0x3B
 #define RX_REG_VSW_L 0x3C
@@ -397,6 +399,10 @@
 
 #define HI_BYTE(x) (((x) >> 8) & 0xFF)
 #define LO_BYTE(x) ((x) & 0xFF)
+
+#define D2V_H_LIMIT		1920
+#define D2V_HTOTAL_LIMIT	4272
+#define D2V_HTOTAL_CONS		2880
 
 enum video_state {
 	it61620_VIDEO_OFF = 0x00,
@@ -860,7 +866,6 @@ static void it61620_mipi_irq_handler(struct it61620 *it61620)
 
 static void it61620_mipi_set_d2v_video_timing(struct it61620 *it61620)
 {
-	u8 seldckval;
 	u8 d2vffrd_adr_dly;
 	u32 htotal, hfp, hsw, hbp, hdew;
 	u32 vfp, vsw, vbp, vdew;
@@ -890,21 +895,12 @@ static void it61620_mipi_set_d2v_video_timing(struct it61620 *it61620)
 	vsw = vm->vsync_len;
 	vbp = vm->vback_porch;
 
-	if (it61620->dev_ver != DEV_VERSION_A0) {
-		if (it61620->dev_ver == DEV_VERSION_C0) {
-			seldckval = 0x04;
-		} else {
-			if (clock > 270000)
-				seldckval = 0x0C;
-			else
-				seldckval = 0x18;
-		}
-		it61620_mipi_reg_set(it61620, RX_REG_SELDCLK, 0x1C, seldckval);
-	}
+	if (it61620->dev_ver != DEV_VERSION_A0)
+		it61620_mipi_reg_set(it61620, RX_REG_SELDCLK, DCLK_MASK, DCLK_SEL_CONT);
 
-	if (hdew > 1920) {
-		if (htotal < 4272) {
-			d2vffrd_adr_dly = abs(htotal - 2880) / 24;
+	if (hdew > D2V_H_LIMIT) {
+		if (htotal < D2V_HTOTAL_LIMIT) {
+			d2vffrd_adr_dly = abs(htotal - D2V_HTOTAL_CONS) / 24;
 			it61620_mipi_reg_write(it61620, RX_REG_DSC_VFRD, d2vffrd_adr_dly);
 		} else {
 			it61620_mipi_reg_write(it61620, RX_REG_DSC_VFRD, 0x50);
