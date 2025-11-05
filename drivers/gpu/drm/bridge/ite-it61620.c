@@ -289,7 +289,11 @@
 #define B_AVI_RP BIT(1)
 #define B_EN_AUD BIT(2)
 #define B_EN_AUD_RP BIT(3)
+#define B_EN_VSIF BIT(6)
+#define B_EN_VSIF_RP BIT(7)
 #define TX_REG_EN_PKT2 0x1C0
+#define B_EN_NULL BIT(0)
+#define B_NULL_RP BIT(1)
 #define B_EN_GEN BIT(4)
 #define B_GEN_RP BIT(5)
 
@@ -342,6 +346,16 @@
 #define TX_REG_AUDINFO_DB08 0x1E7
 #define TX_REG_AUDINFO_DB09 0x1E8
 #define TX_REG_AUDINFO_DB10 0x1E9
+
+#define TX_REG_NULLPKT_HB00 0x310
+#define TX_REG_NULLPKT_HB01 0x311
+#define TX_REG_NULLPKT_HB02 0x312
+#define TX_REG_NULLPKT_PB00 0x314
+#define TX_REG_NULLPKT_PB27 0x32F
+
+#define TX_REG_VSIFPKT_HB02 0x37E
+#define TX_REG_VSIFPKT_PB00 0x380
+#define TX_REG_VSIFPKT_PB01 0x381
 
 #define TX_REG_SSC_PD 0x211
 
@@ -1934,7 +1948,48 @@ static int it61620_hdmi_avi_infoframe_set(struct it61620 *it61620)
 	return 0;
 }
 
-static void it61620_hdmi_config_output(struct it61620 *it61620)
+static void it61620_hdmi_vendor_infoframe_set(struct it61620 *it61620,
+					      const struct drm_connector *connector,
+					      const struct drm_display_mode *mode)
+{
+	struct drm_device *drm = it61620->drm;
+	struct hdmi_vendor_infoframe frame;
+	u8 i, *ptr;
+	u8 buf[32];
+	int ret;
+	ssize_t len;
+
+	drm_dbg(drm, "VSIF set\n");
+	it61620_hdmi_reg_set(it61620, TX_REG_EN_PKT1,
+			     (B_EN_VSIF | B_EN_VSIF_RP), 0x00);
+
+	ret = drm_hdmi_vendor_infoframe_from_display_mode(&frame, connector, mode);
+	if (ret) {
+		drm_warn(drm, "Failed to setup vendor infoframe: %d", ret);
+		return;
+	}
+	if (!frame.vic)
+		return;
+
+	len = hdmi_vendor_infoframe_pack(&frame, buf, sizeof(buf));
+	if (len < 0) {
+		drm_warn(drm, "Failed to pack vendor infoframe\n");
+		return;
+	}
+
+	it61620_hdmi_reg_write(it61620, TX_REG_VSIFPKT_HB02, buf[2]);
+	ptr = buf + 3;
+	for (i = 0; i < (len - 3); i++)
+		it61620_hdmi_reg_write(it61620, TX_REG_VSIFPKT_PB00 + i, ptr[i]);
+
+	it61620_hdmi_reg_set(it61620, TX_REG_EN_PKT1,
+			     (B_EN_VSIF | B_EN_VSIF_RP),
+			     (B_EN_VSIF | B_EN_VSIF_RP));
+}
+
+static void it61620_hdmi_config_output(struct it61620 *it61620,
+				       const struct drm_connector *connector,
+				       const struct drm_display_mode *mode)
 {
 	struct drm_device *drm = it61620->drm;
 
@@ -1944,6 +1999,7 @@ static void it61620_hdmi_config_output(struct it61620 *it61620)
 	if (it61620->is_hdmi) {
 		drm_dbg(drm, "HDMI\n");
 		it61620_hdmi_avi_infoframe_set(it61620);
+		it61620_hdmi_vendor_infoframe_set(it61620, connector, mode);
 		it61620_hdmi_enable_hdmi_mode(it61620);
 		it61620_hdmi_reg_set(it61620, TX_REG_EN_PKT2,
 				     (B_EN_GEN | B_GEN_RP),
@@ -3048,7 +3104,7 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	struct drm_atomic_state *state = old_state->base.state;
 	struct drm_crtc_state *crtc_state;
 	struct drm_connector_state *conn_state;
-	struct drm_display_mode *mode;
+	struct drm_display_mode *adj_mode;
 	struct drm_connector *connector;
 	int ret;
 
@@ -3067,14 +3123,14 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	if (WARN_ON(!crtc_state))
 		return;
 
-	mode = &crtc_state->adjusted_mode;
-	if (WARN_ON(!mode))
+	adj_mode = &crtc_state->adjusted_mode;
+	if (WARN_ON(!adj_mode))
 		return;
 
 	if (it61620->is_hdmi) {
 		ret = drm_hdmi_avi_infoframe_from_display_mode(&it61620->avi_info,
 							       connector,
-							       mode);
+							       adj_mode);
 		if (ret)
 			drm_dbg(drm, "Failed to setup AVI infoframe: %d", ret);
 	}
@@ -3087,7 +3143,7 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	 * handle this case.
 	 */
 	it61620_check_audio(it61620);
-	it61620_hdmi_config_output(it61620);
+	it61620_hdmi_config_output(it61620, connector, adj_mode);
 }
 
 static void it61620_bridge_atomic_disable(struct drm_bridge *bridge,
