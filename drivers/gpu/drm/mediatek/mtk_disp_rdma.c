@@ -45,6 +45,7 @@
 #define MEM_MODE_INPUT_SWAP				BIT(8)
 #define DISP_RDMA_MEM_SRC_PITCH			0x002c
 #define DISP_RDMA_MEM_GMC_SETTING_0		0x0030
+#define DISP_RDMA_MEM_GMC_SETTING_1		0x0034
 #define DISP_REG_RDMA_FIFO_CON			0x0040
 #define RDMA_FIFO_UNDERFLOW_EN				BIT(31)
 #define RDMA_FIFO_PSEUDO_SIZE(bytes)			(((bytes) / 16) << 16)
@@ -74,6 +75,8 @@ struct mtk_disp_rdma_data {
 	const u32 *formats;
 	size_t num_formats;
 	unsigned int threshold;
+	unsigned int ultra_gap;
+	bool need_ultra;
 };
 
 /*
@@ -191,6 +194,24 @@ void mtk_rdma_config(struct device *dev, unsigned int width,
 	unsigned int reg;
 	struct mtk_disp_rdma *rdma = dev_get_drvdata(dev);
 	u32 rdma_fifo_size;
+	u32 val;
+	u32 pre_ultra_high;
+	u32 pre_ultra_low;
+	u32 ultra_high;
+	u32 ultra_low;
+
+	if (rdma->data->need_ultra) {
+		/* RDMA golden setting calculation */
+		/* DISP_RDMA_MEM_GMC_SETTING_0 */
+		pre_ultra_low =
+			rdma->data->fifo_size * 6 /10;
+		pre_ultra_high =
+			pre_ultra_low + rdma->data->ultra_gap;
+		/* DISP_RDMA_MEM_GMC_SETTING_1 */
+		ultra_low =
+			rdma->data->fifo_size * 5 /10;
+		ultra_high = ultra_low + rdma->data->ultra_gap;
+	}
 
 	mtk_ddp_write_mask(cmdq_pkt, width, &rdma->cmdq_reg, rdma->regs,
 			   DISP_REG_RDMA_SIZE_CON_0, 0xfff);
@@ -216,6 +237,15 @@ void mtk_rdma_config(struct device *dev, unsigned int width,
 	      RDMA_FIFO_PSEUDO_SIZE(rdma_fifo_size) |
 	      RDMA_OUTPUT_VALID_FIFO_THRESHOLD(threshold);
 	mtk_ddp_write(cmdq_pkt, reg, &rdma->cmdq_reg, rdma->regs, DISP_REG_RDMA_FIFO_CON);
+
+	if (rdma->data->need_ultra) {
+		val = pre_ultra_low | (pre_ultra_high << 16);
+		mtk_ddp_write(cmdq_pkt, val, &rdma->cmdq_reg, rdma->regs,
+			      DISP_RDMA_MEM_GMC_SETTING_0);
+		val = ultra_low | (ultra_high << 16);
+		mtk_ddp_write(cmdq_pkt, val, &rdma->cmdq_reg, rdma->regs,
+			      DISP_RDMA_MEM_GMC_SETTING_1);
+	}
 }
 
 static unsigned int rdma_fmt_convert(struct mtk_disp_rdma *rdma,
@@ -419,6 +449,8 @@ static const struct mtk_disp_rdma_data mt8189_rdma_driver_data = {
 	.fifo_size = 2200,
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.ultra_gap = 440,
+	.need_ultra = true,
 };
 
 static const struct of_device_id mtk_disp_rdma_driver_dt_match[] = {
