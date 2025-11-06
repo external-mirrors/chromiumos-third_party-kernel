@@ -144,6 +144,7 @@
 		regulator-name = "pp5000_usb";
 		regulator-always-on;
 		enable-active-high;
+		off-on-delay-us = <400000>;
 		gpio = <&pio 131 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb_init_done_pins>;
