@@ -1528,7 +1528,7 @@
 		};
 
 		gpu_opp_table: opp-table-gpu {
-			compatible = "operating-points-v2";
+			compatible = "operating-points-v2", "operating-points-v2-mali";
 			opp-shared;
 
 			opp-390000000 {
