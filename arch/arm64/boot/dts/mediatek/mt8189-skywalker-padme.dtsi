@@ -277,8 +277,8 @@
 		MATRIX_KEY(0x00, 0x0b, KEY_ACCESSIBILITY)        /* T14 */
 		MATRIX_KEY(0x02, 0x0a, KEY_YEN)                  /* JP ￥*/
 		MATRIX_KEY(0x04, 0x0a, KEY_FN)                   /* FN ￥*/
-		MATRIX_KEY(0x06, 0x0a, KEY_102ND)               /*UK #*/
-		MATRIX_KEY(0x02, 0x07, KEY_BACKSLASH)
+		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)            /*UK #*/
+		MATRIX_KEY(0x02, 0x07, KEY_102ND)                /*UK \\*/
 	>;
 };
 
