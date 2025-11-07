@@ -60,7 +60,7 @@
 		wakeup-source;
 		hid-descr-addr = <0x0001>;
 		vcc-supply = <&pp3300_s3>;
-		status = "okay";
+		status = "fail-needs-probe";
 	};
 };
 
@@ -78,7 +78,7 @@
 		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
 		vcc33-supply = <&pp3300_tchscr_x>;
 		vccio-supply = <&pp1800_tchscr_report_disable>;
-		status = "okay";
+		status = "fail-needs-probe";
 	};
 };
 
