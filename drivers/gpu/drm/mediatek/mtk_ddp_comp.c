@@ -158,7 +158,7 @@ static void mtk_od_config(struct device *dev, unsigned int w,
 
 	mtk_ddp_write(cmdq_pkt, w << 16 | h, &priv->cmdq_reg, priv->regs, DISP_REG_OD_SIZE);
 	mtk_ddp_write(cmdq_pkt, OD_RELAYMODE, &priv->cmdq_reg, priv->regs, DISP_REG_OD_CFG);
-	mtk_dither_set_common(priv->regs, &priv->cmdq_reg, bpc,
+	mtk_dither_set_common(priv->regs, &priv->cmdq_reg, MTK_DEFAULT_MAX_BPC, bpc,
 			      DISP_REG_OD_CFG, OD_DITHERING, cmdq_pkt);
 }
 

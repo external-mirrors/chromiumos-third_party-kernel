@@ -25,6 +25,11 @@
 #define DISP_DITHERING				BIT(2)
 #define DISP_REG_DITHER_SIZE			0x0030
 #define DISP_REG_DITHER(x) 			(0x100 + (x)*4)
+#define DITHER_LSB_OFF				BIT(0)
+#define DITHER_ORDERED_ENABLE			BIT(2)
+#define DITHER_TABLE_ENABLE			BIT(4)
+#define DITHER_FRAME_PHASE_ENABLE		BIT(12)
+#define DITHER_SUB_PIXEL_AADEND			BIT(13)
 #define DITHER_LSB_ERR_SHIFT_R(x)		(((x) & 0x7) << 28)
 #define DITHER_ADD_LSHIFT_R(x)			(((x) & 0x7) << 20)
 #define DITHER_NEW_BIT_MODE			BIT(0)
@@ -33,10 +38,15 @@
 #define DITHER_LSB_ERR_SHIFT_G(x)		(((x) & 0x7) << 12)
 #define DITHER_ADD_LSHIFT_G(x)			(((x) & 0x7) << 4)
 
+struct mtk_disp_dither_data {
+	unsigned int max_bits;
+};
+
 struct mtk_disp_dither {
 	struct clk *clk;
 	void __iomem *regs;
 	struct cmdq_client_reg cmdq_reg;
+	const struct mtk_disp_dither_data *data;
 };
 
 int mtk_dither_clk_enable(struct device *dev)
@@ -54,26 +64,43 @@ void mtk_dither_clk_disable(struct device *dev)
 }
 
 void mtk_dither_set_common(void __iomem *regs, struct cmdq_client_reg *cmdq_reg,
+			   unsigned int max_bits,
 			   unsigned int bpc, unsigned int cfg,
 			   unsigned int dither_en, struct cmdq_pkt *cmdq_pkt)
 {
-	/* If bpc equal to 0, the dithering function didn't be enabled */
-	if (bpc == 0)
+
+	/* Dithering function is not enabled
+	 * when bpc is 0 or bpc is greater than or equal to max_bits
+	 */
+	if (bpc == 0 || max_bits <= bpc)
 		return;
 
 	if (bpc >= MTK_MIN_BPC) {
 		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(5));
+		mtk_ddp_write(cmdq_pkt, DITHER_SUB_PIXEL_AADEND |
+			      DITHER_FRAME_PHASE_ENABLE |
+			      DITHER_ORDERED_ENABLE,
+			      cmdq_reg, regs, DISP_REG_DITHER(6));
 		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(7));
+		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(8));
+		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(9));
+		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(10));
+		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(11));
+		mtk_ddp_write(cmdq_pkt, DITHER_LSB_OFF |
+			      DITHER_TABLE_ENABLE,
+			      cmdq_reg, regs, DISP_REG_DITHER(12));
+		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(13));
+		mtk_ddp_write(cmdq_pkt, 0, cmdq_reg, regs, DISP_REG_DITHER(14));
 		mtk_ddp_write(cmdq_pkt,
-			      DITHER_LSB_ERR_SHIFT_R(MTK_MAX_BPC - bpc) |
-			      DITHER_ADD_LSHIFT_R(MTK_MAX_BPC - bpc) |
+			      DITHER_LSB_ERR_SHIFT_R(max_bits - bpc) |
+			      DITHER_ADD_LSHIFT_R(max_bits - bpc) |
 			      DITHER_NEW_BIT_MODE,
 			      cmdq_reg, regs, DISP_REG_DITHER(15));
 		mtk_ddp_write(cmdq_pkt,
-			      DITHER_LSB_ERR_SHIFT_B(MTK_MAX_BPC - bpc) |
-			      DITHER_ADD_LSHIFT_B(MTK_MAX_BPC - bpc) |
-			      DITHER_LSB_ERR_SHIFT_G(MTK_MAX_BPC - bpc) |
-			      DITHER_ADD_LSHIFT_G(MTK_MAX_BPC - bpc),
+			      DITHER_LSB_ERR_SHIFT_B(max_bits - bpc) |
+			      DITHER_ADD_LSHIFT_B(max_bits - bpc) |
+			      DITHER_LSB_ERR_SHIFT_G(max_bits - bpc) |
+			      DITHER_ADD_LSHIFT_G(max_bits - bpc),
 			      cmdq_reg, regs, DISP_REG_DITHER(16));
 		mtk_ddp_write(cmdq_pkt, dither_en, cmdq_reg, regs, cfg);
 	}
@@ -84,11 +111,15 @@ void mtk_dither_config(struct device *dev, unsigned int w,
 		       unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
+	unsigned int max_bits = MTK_DEFAULT_MAX_BPC;
+
+	if (dither->data)
+		max_bits = dither->data->max_bits;
 
 	mtk_ddp_write(cmdq_pkt, w << 16 | h, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER_SIZE);
 	mtk_ddp_write(cmdq_pkt, DITHER_RELAY_MODE, &dither->cmdq_reg, dither->regs,
 		      DISP_REG_DITHER_CFG);
-	mtk_dither_set_common(dither->regs, &dither->cmdq_reg, bpc, DISP_REG_DITHER_CFG,
+	mtk_dither_set_common(dither->regs, &dither->cmdq_reg, max_bits, bpc, DISP_REG_DITHER_CFG,
 			      DITHER_ENGINE_EN, cmdq_pkt);
 }
 
@@ -110,8 +141,12 @@ void mtk_dither_set(struct device *dev, unsigned int bpc,
 		    unsigned int cfg, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
+	unsigned int max_bits = MTK_DEFAULT_MAX_BPC;
 
-	mtk_dither_set_common(dither->regs, &dither->cmdq_reg, bpc, cfg,
+	if (dither->data)
+		max_bits = dither->data->max_bits;
+
+	mtk_dither_set_common(dither->regs, &dither->cmdq_reg, max_bits, bpc, cfg,
 			      DISP_DITHERING, cmdq_pkt);
 }
 
@@ -160,6 +195,7 @@ static int mtk_disp_dither_probe(struct platform_device *pdev)
 		dev_dbg(dev, "get mediatek,gce-client-reg fail!\n");
 #endif
 
+	priv->data = of_device_get_match_data(dev);
 	platform_set_drvdata(pdev, priv);
 
 	ret = component_add(dev, &mtk_disp_dither_component_ops);
@@ -174,10 +210,14 @@ static void mtk_disp_dither_remove(struct platform_device *pdev)
 	component_del(&pdev->dev, &mtk_disp_dither_component_ops);
 }
 
+static const struct mtk_disp_dither_data mt8189_dither_driver_data = {
+	.max_bits = 12,
+};
+
 static const struct of_device_id mtk_disp_dither_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt8167-disp-dither", },
 	{ .compatible = "mediatek,mt8183-disp-dither", },
-	{ .compatible = "mediatek,mt8189-disp-dither", },
+	{ .compatible = "mediatek,mt8189-disp-dither", .data = &mt8189_dither_driver_data},
 	{},
 };
 MODULE_DEVICE_TABLE(of, mtk_disp_dither_driver_dt_match);

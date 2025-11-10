@@ -11,8 +11,8 @@
 #include "mtk_drm_drv.h"
 #include "mtk_plane.h"
 
-#define MTK_MAX_BPC	10
-#define MTK_MIN_BPC	3
+#define MTK_DEFAULT_MAX_BPC	10
+#define MTK_MIN_BPC		5
 
 /**
  * struct mtk_crtc_crc - crc related information
