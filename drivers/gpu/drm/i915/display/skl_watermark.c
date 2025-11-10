@@ -58,7 +58,7 @@ u8 intel_enabled_dbuf_slices_mask(struct drm_i915_private *i915)
  */
 static bool skl_needs_memory_bw_wa(struct drm_i915_private *i915)
 {
-	return DISPLAY_VER(i915) == 9 || IS_GEMINILAKE(i915);
+	return DISPLAY_VER(i915) == 9;
 }
 
 static bool
