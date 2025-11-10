@@ -830,7 +830,7 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
 	struct drm_connector_list_iter conn_iter;
-	unsigned int width, height, vrefresh, bpc = MTK_MAX_BPC;
+	unsigned int width, height, vrefresh, bpc = MTK_DEFAULT_MAX_BPC;
 	int ret;
 	int i, j;
 	enum mtk_drm_mmsys mmsys;
