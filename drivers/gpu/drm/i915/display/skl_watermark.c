@@ -1908,7 +1908,7 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 	lines = div_round_up_fixed16(selected_result,
 				     wp->plane_blocks_per_line);
 
-	if (DISPLAY_VER(i915) == 9) {
+	if (DISPLAY_VER(i915) == 9 || IS_GEMINILAKE(i915)) {
 		/* Display WA #1125: skl,bxt,kbl */
 		if (level == 0 && wp->rc_surface)
 			blocks += fixed16_to_u32_round_up(wp->y_tile_minimum);
