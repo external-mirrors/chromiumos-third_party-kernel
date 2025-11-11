@@ -73,6 +73,36 @@
 	status = "disabled";
 };
 
+&aud_gpio_ap_dmic_off {
+	pins-cmd1-dat {
+		pinmux = <PINMUX_GPIO119__FUNC_GPIO119>;
+		input-enable;
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+	pins-cmd2-dat {
+		pinmux = <PINMUX_GPIO120__FUNC_GPIO120>;
+		input-enable;
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+};
+
+&aud_gpio_ap_dmic_on {
+	pins-cmd1-dat {
+		pinmux = <PINMUX_GPIO119__FUNC_DMIC0_CLK>;
+		input-schmitt-enable;
+		drive-strength = <8>;
+		bias-disable;
+	};
+	pins-cmd2-dat {
+		pinmux = <PINMUX_GPIO120__FUNC_DMIC0_DAT0>;
+		input-schmitt-enable;
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
 &audio_codec_pins {
 	pins-en-codec-pwr-soc {
 		pinmux = <PINMUX_GPIO30__FUNC_GPIO30>;
