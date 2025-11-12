@@ -72,7 +72,7 @@ obiwan:
     mt8189-skywalker-obiwan-sku131078.dtb:
       sku: [0x20006]
     mt8189-skywalker-quigon-sku196608.dtb:
-      sku: [0x30000, 0x30003, 0x7FFFFFFF]
+      sku: [0x30000, 0x30003, 0x3000a, 0x7FFFFFFF]
     mt8189-skywalker-quigon-sku196609.dtb:
       sku: [0x30001, 0x30002, 0x30007, 0x30008]
     mt8189-skywalker-quigon-sku196612.dtb:
