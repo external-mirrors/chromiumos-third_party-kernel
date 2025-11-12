@@ -138,6 +138,10 @@
 	regulator-always-on;
 };
 
+&pen_insert {
+	wakeup-event-action = <EV_ACT_ANY>;
+};
+
 &pio{
 	/* 182 lines */
 	gpio-line-names =
