@@ -12,6 +12,9 @@
 / {
 	model = "Google Padme sku1314 board";
 	compatible = "google,padme-sku1314", "google,padme", "mediatek,mt8189";
+
+	/delete-node/ connector-0;
+	/delete-node/ connector-1;
 };
 
 &ap_sar_sensor {
@@ -72,18 +75,9 @@
 	};
 };
 
-&usb_a0 {
-	status = "disabled";
-};
-
-&usb_a1 {
-	status = "disabled";
-};
-
-&usb_hub_2_x {
-	status = "disabled";
-};
-
-&usb_hub_3_x {
-	status = "disabled";
+/*This is a workaround; further analysis is needed to determine why disabling
+is not feasible.*/
+&xhci3 {
+	/delete-node/ hub@1;
+	/delete-node/ hub@2;
 };
