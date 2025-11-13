@@ -151,6 +151,10 @@
 	status = "okay";
 };
 
+&mt6359_vufs_ldo_reg {
+	regulator-always-on;
+};
+
 /* Disable support SD card */
 &mmc1 {
 	status = "disabled";
