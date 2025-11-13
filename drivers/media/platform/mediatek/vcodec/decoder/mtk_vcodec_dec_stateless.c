@@ -583,7 +583,7 @@ static int mtk_vdec_s_ctrl(struct v4l2_ctrl *ctrl)
 		mtk_v4l2_vdec_dbg(3, ctx, "get secure handle: %d => 0x%x", sec_fd, ctrl->val);
 		break;
 	case V4L2_CID_MPEG_MTK_SET_SECURE_MODE:
-		if (!ctx->is_secure_playback) {
+		if (ctrl->val && !ctx->is_secure_playback) {
 			ret = mtk_vcodec_dec_optee_open(ctx->dev);
 			if (ret) {
 				mtk_v4l2_vdec_err(ctx, "Failed to open decoder optee os");
