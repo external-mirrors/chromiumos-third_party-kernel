@@ -56,6 +56,7 @@
 #include <linux/kprobes.h>
 #include <linux/lockdep.h>
 #include <linux/context_tracking.h>
+#include <linux/bug.h>
 
 #include <asm/sections.h>
 
@@ -107,6 +108,11 @@ static __init int kernel_lockdep_sysctls_init(void)
 }
 late_initcall(kernel_lockdep_sysctls_init);
 #endif /* CONFIG_SYSCTL */
+
+static void print_footer(void)
+{
+	pr_warn("---[ end trace %016llx ]---\n", 0ULL);
+}
 
 DEFINE_PER_CPU(unsigned int, lockdep_recursion);
 EXPORT_PER_CPU_SYMBOL_GPL(lockdep_recursion);
@@ -1942,6 +1948,7 @@ print_circular_bug_header(struct lock_list *entry, unsigned int depth,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("======================================================\n");
 	pr_warn("WARNING: possible circular locking dependency detected\n");
 	print_kernel_ident();
@@ -2058,6 +2065,7 @@ static noinline void print_circular_bug(struct lock_list *this,
 
 	printk("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 static noinline void print_bfs_bug(int ret)
@@ -2571,6 +2579,7 @@ print_bad_irq_dependency(struct task_struct *curr,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=====================================================\n");
 	pr_warn("WARNING: %s-safe -> %s-unsafe lock order detected\n",
 		irqclass, irqclass);
@@ -2624,6 +2633,7 @@ print_bad_irq_dependency(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 static const char *state_names[] = {
@@ -2989,6 +2999,7 @@ print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("============================================\n");
 	pr_warn("WARNING: possible recursive locking detected\n");
 	print_kernel_ident();
@@ -3010,6 +3021,7 @@ print_deadlock_bug(struct task_struct *curr, struct held_lock *prev,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 /*
@@ -3608,6 +3620,7 @@ static void print_collision(struct task_struct *curr,
 			struct lock_chain *chain)
 {
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("============================\n");
 	pr_warn("WARNING: chain_key collision\n");
 	print_kernel_ident();
@@ -3623,6 +3636,7 @@ static void print_collision(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 #endif
 
@@ -3972,6 +3986,7 @@ print_usage_bug(struct task_struct *curr, struct held_lock *this,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("================================\n");
 	pr_warn("WARNING: inconsistent lock state\n");
 	print_kernel_ident();
@@ -3999,6 +4014,7 @@ print_usage_bug(struct task_struct *curr, struct held_lock *this,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 /*
@@ -4034,6 +4050,7 @@ print_irq_inversion_bug(struct task_struct *curr,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("========================================================\n");
 	pr_warn("WARNING: possible irq lock inversion dependency detected\n");
 	print_kernel_ident();
@@ -4078,6 +4095,7 @@ print_irq_inversion_bug(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 /*
@@ -4732,6 +4750,7 @@ print_lock_invalid_wait_context(struct task_struct *curr,
 		return 0;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=============================\n");
 	pr_warn("[ BUG: Invalid wait context ]\n");
 	print_kernel_ident();
@@ -4749,6 +4768,7 @@ print_lock_invalid_wait_context(struct task_struct *curr,
 
 	pr_warn("stack backtrace:\n");
 	dump_stack();
+	print_footer();
 
 	return 0;
 }
@@ -4955,6 +4975,7 @@ print_lock_nested_lock_not_held(struct task_struct *curr,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("==================================\n");
 	pr_warn("WARNING: Nested lock was not taken\n");
 	print_kernel_ident();
@@ -4974,6 +4995,7 @@ print_lock_nested_lock_not_held(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 static int __lock_is_held(const struct lockdep_map *lock, int read);
@@ -5177,6 +5199,7 @@ static void print_unlock_imbalance_bug(struct task_struct *curr,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=====================================\n");
 	pr_warn("WARNING: bad unlock balance detected!\n");
 	print_kernel_ident();
@@ -5192,6 +5215,7 @@ static void print_unlock_imbalance_bug(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 static noinstr int match_held_lock(const struct held_lock *hlock,
@@ -5896,6 +5920,7 @@ static void print_lock_contention_bug(struct task_struct *curr,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=================================\n");
 	pr_warn("WARNING: bad contention detected!\n");
 	print_kernel_ident();
@@ -5911,6 +5936,7 @@ static void print_lock_contention_bug(struct task_struct *curr,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 static void
@@ -6544,6 +6570,7 @@ print_freed_lock_bug(struct task_struct *curr, const void *mem_from,
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=========================\n");
 	pr_warn("WARNING: held lock freed!\n");
 	print_kernel_ident();
@@ -6555,6 +6582,7 @@ print_freed_lock_bug(struct task_struct *curr, const void *mem_from,
 
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 static inline int not_in_range(const void* mem_from, unsigned long mem_len,
@@ -6602,6 +6630,7 @@ static void print_held_locks_bug(void)
 		return;
 
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("====================================\n");
 	pr_warn("WARNING: %s/%d still has locks held!\n",
 	       current->comm, task_pid_nr(current));
@@ -6610,6 +6639,7 @@ static void print_held_locks_bug(void)
 	lockdep_print_held_locks(current);
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 }
 
 void debug_check_no_locks_held(void)
@@ -6668,6 +6698,7 @@ asmlinkage __visible void lockdep_sys_exit(void)
 		if (!debug_locks_off())
 			return;
 		pr_warn("\n");
+		pr_warn(CUT_HERE);
 		pr_warn("================================================\n");
 		pr_warn("WARNING: lock held when returning to user space!\n");
 		print_kernel_ident();
@@ -6675,6 +6706,7 @@ asmlinkage __visible void lockdep_sys_exit(void)
 		pr_warn("%s/%d is leaving the kernel with locks still held!\n",
 				curr->comm, curr->pid);
 		lockdep_print_held_locks(curr);
+		print_footer();
 	}
 
 	/*
@@ -6692,6 +6724,7 @@ void lockdep_rcu_suspicious(const char *file, const int line, const char *s)
 
 	/* Note: the following can be executed concurrently, so be careful. */
 	pr_warn("\n");
+	pr_warn(CUT_HERE);
 	pr_warn("=============================\n");
 	pr_warn("WARNING: suspicious RCU usage\n");
 	print_kernel_ident();
@@ -6729,6 +6762,7 @@ void lockdep_rcu_suspicious(const char *file, const int line, const char *s)
 	lockdep_print_held_locks(curr);
 	pr_warn("\nstack backtrace:\n");
 	dump_stack();
+	print_footer();
 	warn_rcu_exit(rcu);
 }
 EXPORT_SYMBOL_GPL(lockdep_rcu_suspicious);
