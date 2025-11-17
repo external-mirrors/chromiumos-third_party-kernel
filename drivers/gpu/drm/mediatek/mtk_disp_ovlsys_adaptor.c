@@ -905,6 +905,7 @@ static int mtk_disp_ovlsys_adaptor_probe(struct platform_device *pdev)
 
 	ret = component_add(dev, &mtk_disp_ovlsys_adaptor_comp_ops);
 	if (ret != 0) {
+		component_master_del(dev, &mtk_disp_ovlsys_adaptor_master_ops);
 		pm_runtime_disable(dev);
 		dev_err(dev, "Failed to add component: %d\n", ret);
 	}
@@ -914,6 +915,7 @@ static int mtk_disp_ovlsys_adaptor_probe(struct platform_device *pdev)
 
 static int mtk_disp_ovlsys_adaptor_remove(struct platform_device *pdev)
 {
+	component_del(&pdev->dev, &mtk_disp_ovlsys_adaptor_comp_ops);
 	component_master_del(&pdev->dev, &mtk_disp_ovlsys_adaptor_master_ops);
 	pm_runtime_disable(&pdev->dev);
 
