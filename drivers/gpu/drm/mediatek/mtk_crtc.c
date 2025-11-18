@@ -656,13 +656,19 @@ static int ddp_cmdq_done_kthread(void *data)
 	struct mtk_crtc *mtk_crtc = (struct mtk_crtc *)data;
 
 	while (!kthread_should_stop()) {
+		/* use INTERRUPTIBLE wait to pass check_hung_uninterruptible_tasks() */
 		wait_event_interruptible(mtk_crtc->cb_blocking_queue,
+					 kthread_should_stop() ||
 					 atomic_read(&mtk_crtc->cmdq_done));
-		atomic_set(&mtk_crtc->cmdq_done, 0);
+		if (kthread_should_stop())
+			break;
 
 		mutex_lock(&mtk_crtc->hw_lock);
 		mtk_crtc_post_update_hrt_state(mtk_crtc);
 		mutex_unlock(&mtk_crtc->hw_lock);
+
+		atomic_set(&mtk_crtc->cmdq_done, 0);
+		wake_up(&mtk_crtc->cb_blocking_queue);
 	}
 	return 0;
 }
@@ -736,12 +742,8 @@ ddp_cmdq_cb_out:
 		kfree(data->pkt);
 	}
 
-	mtk_crtc->cmdq_vblank_cnt = 0;
-	wake_up(&mtk_crtc->cb_blocking_queue);
-
 	/*
-	 * 1.Make sure sec_cb_blocking queue is waked later than cb_blocking_queue.
-	 * 2.The new mtk_crtc_update_config() will do the pre update HRT earlier than
+	 * The new mtk_crtc_update_config() will do the pre update HRT earlier than
 	 * the ddp_cmdq_cb() called from mtk_crtc_disable_secure_state(), that may
 	 * cause the underflow issue if mtk_crtc_post_update_hrt_state() scales down
 	 * the HRT for the non-disabled layer in mtk_crtc_disable_secure_state().
@@ -750,12 +752,13 @@ ddp_cmdq_cb_out:
 	if (mtk_crtc->sec_cmdq_working) {
 		mtk_crtc->sec_cmdq_working = false;
 		wake_up(&mtk_crtc->sec_cb_blocking_queue);
-		return;
+	} else {
+		/* For post update HRT */
+		atomic_set(&mtk_crtc->cmdq_done, 1);
 	}
 
-	/* For post update HRT */
-	atomic_set(&mtk_crtc->cmdq_done, 1);
-	wake_up_interruptible(&mtk_crtc->cb_blocking_queue);
+	mtk_crtc->cmdq_vblank_cnt = 0;
+	wake_up_all(&mtk_crtc->cb_blocking_queue);
 }
 #endif
 
@@ -1505,7 +1508,8 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 	/* Wait for planes to be disabled by cmdq */
 	if (mtk_crtc->cmdq_client.chan)
 		wait_event_timeout(mtk_crtc->cb_blocking_queue,
-				   mtk_crtc->cmdq_vblank_cnt == 0,
+				   mtk_crtc->cmdq_vblank_cnt == 0 &&
+				   atomic_read(&mtk_crtc->cmdq_done) == 0,
 				   msecs_to_jiffies(500));
 #endif
 	/* Wait for planes to be disabled */
