@@ -210,6 +210,7 @@
 		cirrus,asp-sdout-hiz = <3>;
 		cirrus,gpio2-src-select = <2>;
 		cirrus,gpio2-output-enable;
+		cirrus,subsystem-id = "104315ee";
 		#sound-dai-cells = <0>;
 	};
 
@@ -224,6 +225,7 @@
 		cirrus,asp-sdout-hiz = <3>;
 		cirrus,gpio2-src-select = <2>;
 		cirrus,gpio2-output-enable;
+		cirrus,subsystem-id = "104315ee";
 		#sound-dai-cells = <0>;
 	};
 };
