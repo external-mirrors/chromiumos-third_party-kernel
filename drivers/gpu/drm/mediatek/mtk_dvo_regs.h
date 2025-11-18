@@ -134,8 +134,10 @@
 #define EXT_TG_DLY_LINE_MASK			(0xffff << 0)
 
 #define DVO_MUTEX_VSYNC_SET		0x84
-#define MUTEX_VSYNC_SEL				BIT(0)
-#define MUTEX_VFP_MASK				GENMASK(19, 4)
+#define INT_SOF_DLY_SHIFT		(20)
+#define INT_SOF_DLY_MASK		(0x000f << 20)
+#define MUTEX_VSYNC_SEL			BIT(0)
+#define MUTEX_VFP_MASK			GENMASK(19, 4)
 
 #define DVO_PATTERN_CTRL		0x100
 #define PRE_PAT_EN				BIT(0)

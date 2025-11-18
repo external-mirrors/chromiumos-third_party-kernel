@@ -50,6 +50,8 @@
 #define ULTRA_LOW_US					23
 #define URGENT_HIGH_US					12
 #define URGENT_LOW_US					11
+/* Delay DVO SoF to extend RDMA prepare time */
+#define INT_SOF_DLY					0x0000000F
 
 enum mtk_dvo_out_bit_num {
 	MTK_DVO_OUT_BIT_NUM_8BITS,
@@ -433,6 +435,9 @@ static void mtk_dvo_config_vsync(struct mtk_dvo *dvo,
 	mtk_dvo_mask(dvo, porch_addr,
 		     (sync->back_porch + sync->sync_width) << VSYNC2ACT,
 	     dvo->conf->dimension_mask << VSYNC2ACT);
+	mtk_dvo_mask(dvo, DVO_MUTEX_VSYNC_SET,
+		     INT_SOF_DLY << INT_SOF_DLY_SHIFT,
+		     INT_SOF_DLY_MASK);
 }
 
 static void mtk_dvo_config_vsync_lodd(struct mtk_dvo *dvo,
