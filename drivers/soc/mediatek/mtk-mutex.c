@@ -1237,7 +1237,7 @@ void mtk_mutex_remove_comp(struct mtk_mutex *mutex,
 	if (is_output_comp) {
 		offset = DISP_REG_MUTEX_SOF(mtx->data->mutex_sof_reg, mutex->id);
 		reg = readl_relaxed(mtx->regs + offset);
-		reg &= ~(1 << mtx->data->mutex_sof[id]);
+		reg &= ~mtx->data->mutex_sof[sof_id];
 		writel_relaxed(reg, mtx->regs + offset);
 	}
 }
