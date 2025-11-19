@@ -223,6 +223,10 @@
 	status = "disabled";
 };
 
+&target {
+	temperature = <90000>;
+};
+
 &u2port0 {
 	mediatek,pre-emphasis = <1>;
 };
