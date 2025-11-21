@@ -308,6 +308,8 @@ struct mtk_dsi {
 	bool is_cphy;
 };
 
+static int mtk_dsi_wait_for_idle(struct mtk_dsi *dsi);
+
 static inline struct mtk_dsi *bridge_to_dsi(struct drm_bridge *b)
 {
 	return container_of(b, struct mtk_dsi, bridge);
@@ -950,17 +952,19 @@ static irqreturn_t mtk_dsi_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static s32 mtk_dsi_switch_to_cmd_mode(struct mtk_dsi *dsi, u8 irq_flag, u32 t)
+static s32 mtk_dsi_switch_to_cmd_mode(struct mtk_dsi *dsi, u8 irq_flag)
 {
+	int ret;
 	mtk_dsi_irq_data_clear(dsi, irq_flag);
+	mtk_dsi_stop(dsi);
+	ret = mtk_dsi_wait_for_idle(dsi);
+	if (ret)
+		return ret;
 	mtk_dsi_set_cmd_mode(dsi);
+	mtk_dsi_stop(dsi);
+	ret = mtk_dsi_wait_for_idle(dsi);
 
-	if (!mtk_dsi_wait_for_irq_done(dsi, irq_flag, t)) {
-		DRM_ERROR("failed to switch cmd mode\n");
-		return -ETIME;
-	} else {
-		return 0;
-	}
+	return ret;
 }
 
 static int mtk_dsi_poweron(struct mtk_dsi *dsi)
@@ -1055,6 +1059,9 @@ err_refcount:
 
 static void mtk_dsi_poweroff(struct mtk_dsi *dsi)
 {
+	u32 dsi_mode;
+	int ret;
+
 	if (WARN_ON(dsi->refcount == 0))
 		return;
 
@@ -1068,9 +1075,16 @@ static void mtk_dsi_poweroff(struct mtk_dsi *dsi)
 	 * mtk_dsi_start() needs to be called in mtk_output_dsi_enable(),
 	 * after dsi is fully set.
 	 */
-	mtk_dsi_stop(dsi);
 
-	mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG, 500);
+	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data));
+	if (dsi_mode & MODE) {
+		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG);
+		if (ret)
+			dev_err(dsi->dev, "power off switch cmd mode fail\n");
+		else
+			dev_dbg(dsi->dev, "power off switch cmd mode done\n");
+	}
+
 	mtk_dsi_reset_engine(dsi);
 	mtk_dsi_lane0_ulp_mode_enter(dsi);
 	mtk_dsi_clk_ulp_mode_enter(dsi);
@@ -1387,7 +1401,7 @@ static int mtk_dsi_host_detach(struct mipi_dsi_host *host,
 	return 0;
 }
 
-static void mtk_dsi_wait_for_idle(struct mtk_dsi *dsi)
+static int mtk_dsi_wait_for_idle(struct mtk_dsi *dsi)
 {
 	int ret;
 	u32 val;
@@ -1400,6 +1414,7 @@ static void mtk_dsi_wait_for_idle(struct mtk_dsi *dsi)
 		mtk_dsi_enable(dsi);
 		mtk_dsi_reset_engine(dsi);
 	}
+	return ret;
 }
 
 static u32 mtk_dsi_recv_cnt(u8 type, u8 *read_data)
@@ -1491,8 +1506,7 @@ static ssize_t mtk_dsi_host_transfer(struct mipi_dsi_host *host,
 
 	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data));
 	if (dsi_mode & MODE) {
-		mtk_dsi_stop(dsi);
-		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG, 500);
+		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG);
 		if (ret)
 			goto restore_dsi_mode;
 	}
@@ -1568,6 +1582,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	struct mtk_dsi *dsi;
 	struct device *dev = &pdev->dev;
 	struct resource *regs;
+	u32 dsi_mode;
 	int irq_num;
 	int ret;
 
@@ -1628,9 +1643,14 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
 	pm_runtime_enable(dev);
 
-	mtk_dsi_stop(dsi);
-
-	mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG, 500);
+	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data));
+	if (dsi_mode & MODE) {
+		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG);
+		if (ret)
+			dev_err(dsi->dev, "Probe switch cmd mode fail\n");
+		else
+			dev_dbg(dsi->dev, "Probe switch cmd mode done\n");
+	}
 	return 0;
 }
 
