@@ -195,6 +195,7 @@ struct mtk_dvo_yc_limit {
  * @csc_enable_bit: Enable bit of CSC.
  * @pixels_per_iter: Quantity of transferred pixels per iteration.
  * @edge_cfg_in_mmsys: If the edge configuration for DVO's output needs to be set in MMSYS.
+ * @irq_en: Register irq handler and enable irq.
  */
 struct mtk_dvo_conf {
 	unsigned int (*cal_factor)(int clock);
@@ -218,6 +219,7 @@ struct mtk_dvo_conf {
 	bool has_commit;
 	bool is_dp;
 	bool hfp_adjustment_for_bs;
+	bool irq_en;
 };
 
 static struct mtk_dvo_gs_info mtk_dvo_gs[MTK_DVO_GSL_MAX] = {
@@ -907,6 +909,7 @@ static const struct mtk_dvo_conf mt8196_conf = {
 	.has_commit = true,
 	.dimension_mask = HFP_MASK,
 	.hvsize_mask = PIC_HSIZE_MASK,
+	.irq_en = true,
 };
 
 static const struct mtk_dvo_conf mt8189_conf = {
@@ -981,11 +984,13 @@ static int mtk_dvo_probe(struct platform_device *pdev)
 	if (dvo->irq < 0)
 		return dvo->irq;
 
-	ret = devm_request_irq(dev, dvo->irq, mtk_dvo_irq_handler,
-			       IRQF_TRIGGER_NONE, dev_name(dev), dvo);
-	if (ret < 0) {
-		dev_err(dev, "Failed to request irq %d: %d\n", dvo->irq, ret);
-		return ret;
+	if (dvo->conf->irq_en) {
+		ret = devm_request_irq(dev, dvo->irq, mtk_dvo_irq_handler,
+				       IRQF_TRIGGER_NONE, dev_name(dev), dvo);
+		if (ret < 0) {
+			dev_err(dev, "Failed to request irq %d: %d\n", dvo->irq, ret);
+			return ret;
+		}
 	}
 
 	platform_set_drvdata(pdev, dvo);
