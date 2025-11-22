@@ -9,11 +9,7 @@
 #include <linux/component.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/regmap.h>
-#include <linux/of_platform.h>
 #include <linux/platform_device.h>
-#include <linux/mfd/syscon.h>
 #include <linux/pm_runtime.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
 
@@ -51,12 +47,6 @@
 #define DISP_RDMA_MEM_GMC_SETTING_0		0x0030
 #define DISP_RDMA_MEM_GMC_SETTING_1		0x0034
 #define DISP_REG_RDMA_FIFO_CON			0x0040
-#define DISP_RDMA_DEBUG				0x0090
-#define DEBUG_OUT_SEL				0x0300
-#define DISP_REG_RDMA_CRC			0x00f4
-#define DISP_REG_RDMA_DATA_SEL			0x0018
-#define DISP_REG_RDMA_SEL			0x000a
-#define RDMA_CRC_MASK			GENMASK(15, 0)
 #define RDMA_FIFO_UNDERFLOW_EN				BIT(31)
 #define RDMA_FIFO_PSEUDO_SIZE(bytes)			(((bytes) / 16) << 16)
 #define RDMA_OUTPUT_VALID_FIFO_THRESHOLD(bytes)		((bytes) / 16)
@@ -87,9 +77,6 @@ struct mtk_disp_rdma_data {
 	unsigned int threshold;
 	unsigned int ultra_gap;
 	bool need_ultra;
-	bool to_mminfra_out;
-	unsigned int crc_cnt;
-	const u32 *ofs;
 };
 
 /*
@@ -104,13 +91,6 @@ struct mtk_disp_rdma {
 	void				(*vblank_cb)(void *data);
 	void				*vblank_cb_data;
 	u32				fifo_size;
-	struct mtk_crtc_crc		crc;
-	struct regmap *mminfra_reg;
-	struct regmap *dispsys_reg;
-};
-
-static const u32 rdma_crc_ofs[] = {
-	DISP_REG_RDMA_CRC,
 };
 
 static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
@@ -136,27 +116,6 @@ static void rdma_update_bits(struct device *dev, unsigned int reg,
 
 	tmp = (tmp & ~mask) | (val & mask);
 	writel(tmp, rdma->regs + reg);
-}
-
-size_t mtk_rdma_crc_cnt(struct device *dev)
-{
-	struct mtk_disp_rdma *priv = dev_get_drvdata(dev);
-
-	return priv->crc.cnt;
-}
-
-u32 *mtk_rdma_crc_entry(struct device *dev)
-{
-	struct mtk_disp_rdma *priv = dev_get_drvdata(dev);
-
-	return priv->crc.va;
-}
-
-void mtk_rdma_crc_read(struct device *dev)
-{
-	struct mtk_disp_rdma *priv = dev_get_drvdata(dev);
-
-	mtk_crtc_read_crc(&priv->crc);
 }
 
 void mtk_rdma_register_vblank_cb(struct device *dev,
@@ -218,33 +177,13 @@ void mtk_rdma_clk_disable(struct device *dev)
 
 void mtk_rdma_start(struct device *dev)
 {
-	struct mtk_disp_rdma *priv = dev_get_drvdata(dev);
-
 	rdma_update_bits(dev, DISP_REG_RDMA_GLOBAL_CON, RDMA_ENGINE_EN,
 			 RDMA_ENGINE_EN);
-
-	if (priv->crc.cnt && priv->crc.crc_sel && priv->crc.crc_out) {
-		regmap_update_bits(priv->mminfra_reg,
-			priv->crc.crc_sel + DEBUG_OUT_SEL, RDMA_CRC_MASK, DISP_REG_RDMA_SEL);
-		regmap_update_bits(priv->dispsys_reg,
-			priv->crc.crc_out + DEBUG_OUT_SEL, RDMA_CRC_MASK, DISP_REG_RDMA_DATA_SEL);
-
-#if IS_REACHABLE(CONFIG_MTK_CMDQ)
-		mtk_crtc_start_crc_cmdq(&priv->crc);
-#endif
-	}
 }
 
 void mtk_rdma_stop(struct device *dev)
 {
-	struct mtk_disp_rdma *priv = dev_get_drvdata(dev);
-
 	rdma_update_bits(dev, DISP_REG_RDMA_GLOBAL_CON, RDMA_ENGINE_EN, 0);
-
-#if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	if (priv->crc.cnt)
-		mtk_crtc_stop_crc_cmdq(&priv->crc);
-#endif
 }
 
 void mtk_rdma_config(struct device *dev, unsigned int width,
@@ -408,9 +347,6 @@ static const struct component_ops mtk_disp_rdma_component_ops = {
 static int mtk_disp_rdma_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *node = dev->of_node;
-	struct device_node *np;
-	struct resource crc_res;
 	struct mtk_disp_rdma *priv;
 	struct resource *res;
 	int irq;
@@ -475,78 +411,13 @@ static int mtk_disp_rdma_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to add component: %d\n", ret);
 	}
 
-	/* set crc source */
-	priv->crc.cnt = priv->data->crc_cnt;
-	priv->crc.to_mminfra_out = priv->data->to_mminfra_out;
-
-	if (priv->crc.cnt) {
-		np = of_parse_phandle(node, "mediatek,mminfra", 0);
-		if (!np) {
-			dev_warn(dev, "fail to get mediatek,mminfra for crc\n");
-			goto disable_crc;
-		}
-
-		ret = of_address_to_resource(np, 0, &crc_res);
-		priv->crc.crc_out = crc_res.start;
-		priv->mminfra_reg = syscon_node_to_regmap(np);
-		of_node_put(np);
-		if (IS_ERR(priv->mminfra_reg)) {
-			dev_warn(dev,
-				"could not find mminfra node\n");
-			goto disable_crc;
-		}
-		np = of_parse_phandle(node, "mediatek,dispsys-config", 0);
-		if (!np) {
-			dev_warn(dev, "fail to get mediatek,dispsys-config for crc\n");
-		goto disable_crc;
-		}
-
-		ret = of_address_to_resource(np, 0, &crc_res);
-		priv->crc.crc_sel = crc_res.start;
-		priv->dispsys_reg = syscon_node_to_regmap(np);
-		of_node_put(np);
-		if (IS_ERR(priv->dispsys_reg)) {
-			dev_warn(dev,
-				"could not find dispsys node\n");
-			goto disable_crc;
-		}
-		priv->crc.ofs = priv->data->ofs;
-		priv->crc.rst_ofs = DISP_RDMA_DEBUG;
-		priv->crc.rst_msk = RDMA_ENGINE_EN;
-		priv->crc.va = kcalloc(priv->crc.cnt, sizeof(*priv->crc.va), GFP_KERNEL);
-		if (!priv->crc.va) {
-			dev_err(dev, "failed to allocate memory for crc\n");
-			goto disable_crc;
-		}
-
-		if (of_property_read_u32_index(dev->of_node, "mediatek,gce-events", 0,
-					       &priv->crc.cmdq_event)) {
-			dev_warn(dev, "failed to get gce-events for crc\n");
-			kfree(priv->crc.va);
-			goto disable_crc;
-		}
-
-		priv->crc.cmdq_reg = &priv->cmdq_reg;
-		mtk_crtc_create_crc_cmdq(dev, &priv->crc);
-	}
-
 	return ret;
-
-disable_crc:
-	priv->crc.cnt = 0;
-
-	return 0;
 }
 
 static void mtk_disp_rdma_remove(struct platform_device *pdev)
 {
-	struct mtk_disp_rdma *priv = dev_get_drvdata(&pdev->dev);
-
 	component_del(&pdev->dev, &mtk_disp_rdma_component_ops);
-	if (priv->crc.cnt) {
-		kfree(priv->crc.va);
-		memset(&priv->crc, 0, sizeof(struct mtk_crtc_crc));
-	}
+
 	pm_runtime_disable(&pdev->dev);
 }
 
@@ -580,9 +451,6 @@ static const struct mtk_disp_rdma_data mt8189_rdma_driver_data = {
 	.num_formats = ARRAY_SIZE(mt8173_formats),
 	.ultra_gap = 440,
 	.need_ultra = true,
-	.to_mminfra_out = true,
-	.crc_cnt = ARRAY_SIZE(rdma_crc_ofs),
-	.ofs = rdma_crc_ofs,
 };
 
 static const struct of_device_id mtk_disp_rdma_driver_dt_match[] = {
