@@ -504,7 +504,7 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 	unsigned int ignore_pixel_alpha = 0;
 	unsigned int con;
 
-	if (!pending->enable || !pending->height || !pending->width) {
+	if (!pending->enable) {
 		mtk_ovl_layer_off(dev, idx, cmdq_pkt);
 		return;
 	}
