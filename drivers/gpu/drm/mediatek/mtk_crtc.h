@@ -36,9 +36,6 @@ struct mtk_crtc_crc {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	dma_addr_t pa;
 	u32 cmdq_event;
-	bool to_mminfra_out;
-	u32 crc_out;
-	u32 crc_sel;
 	struct cmdq_client_reg *cmdq_reg;
 	struct cmdq_client cmdq_client;
 	struct cmdq_pkt cmdq_handle;
