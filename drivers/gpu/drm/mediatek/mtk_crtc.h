@@ -131,7 +131,7 @@ struct device *mtk_crtc_dma_dev_get(struct drm_crtc *crtc);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 void mtk_crtc_destroy_crc_cmdq(struct mtk_crtc_crc *crc);
-void mtk_crtc_create_crc_cmdq(struct device *dev, struct mtk_crtc_crc *crc);
+void mtk_crtc_create_crc_cmdq(struct mtk_crtc_crc *crc, struct mtk_crtc *data);
 void mtk_crtc_stop_crc_cmdq(struct mtk_crtc_crc *crc);
 void mtk_crtc_start_crc_cmdq(struct mtk_crtc_crc *crc);
 void mtk_crtc_read_crc(struct mtk_crtc_crc *crc);

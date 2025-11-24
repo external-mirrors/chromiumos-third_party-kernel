@@ -314,6 +314,9 @@ static void mtk_crtc_destroy(struct drm_crtc *crtc)
 		mbox_free_channel(mtk_crtc->sec_cmdq_client.chan);
 		mtk_crtc->sec_cmdq_client.chan = NULL;
 	}
+
+	if (mtk_crtc->crc_provider)
+		mtk_crtc->crc_provider->funcs->crc_detach(mtk_crtc->crc_provider->dev);
 #endif
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
@@ -1925,10 +1928,12 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 			if (comp->funcs->ctm_set)
 				has_ctm = true;
 
-			if (comp->funcs->crc_cnt &&
-			    comp->funcs->crc_entry &&
-			    comp->funcs->crc_read)
+
+			if (comp->funcs->crc_cnt && comp->funcs->crc_cnt(comp->dev) &&
+			    !mtk_crtc->crc_provider) {
 				mtk_crtc->crc_provider = comp;
+				comp->funcs->crc_attach(comp->dev, mtk_crtc);
+			}
 
 		}
 
@@ -2114,8 +2119,8 @@ void mtk_crtc_destroy_crc_cmdq(struct mtk_crtc_crc *crc)
 
 /**
  * mtk_crtc_create_crc_cmdq - Create a CMDQ thread for syncing the CRCs
- * @dev: Kernel device node of the CRC provider
  * @crc: Pointer of the CRC to init
+ * @data: Pointer of the crtc data
  *
  * This function will create a looping thread on GCE (Global Command Engine) to
  * keep the CRC up to date by monitoring the assigned event (usually the frame
@@ -2135,10 +2140,11 @@ void mtk_crtc_destroy_crc_cmdq(struct mtk_crtc_crc *crc)
  * 2. Will get the CRC of the previous frame if using the existed wait-for-event
  *    command which is at the beginning of the packet
  */
-void mtk_crtc_create_crc_cmdq(struct device *dev, struct mtk_crtc_crc *crc)
+void mtk_crtc_create_crc_cmdq(struct mtk_crtc_crc *crc, struct mtk_crtc *mtk_crtc)
 {
 	int i;
 	dma_addr_t crc_pa;
+	struct device *dev = mtk_crtc->crc_provider->dev;
 
 	if (!crc->cnt) {
 		dev_warn(dev, "%s: not support\n", __func__);
@@ -2201,12 +2207,7 @@ void mtk_crtc_create_crc_cmdq(struct device *dev, struct mtk_crtc_crc *crc)
 	}
 
 	/* reset crc */
-	mtk_ddp_write_mask(&crc->cmdq_handle, ~0, crc->cmdq_reg, 0,
-			   crc->rst_ofs, crc->rst_msk);
-
-	/* clear reset bit */
-	mtk_ddp_write_mask(&crc->cmdq_handle, 0, crc->cmdq_reg, 0,
-			   crc->rst_ofs, crc->rst_msk);
+	mtk_crtc->crc_provider->funcs->crc_reset(dev, &crc->cmdq_handle);
 
 	/* jump to head of the cmdq packet */
 	cmdq_pkt_jump_abs(&crc->cmdq_handle, crc->cmdq_handle.pa_base,

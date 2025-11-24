@@ -297,6 +297,12 @@ static const struct mtk_ddp_comp_funcs ddp_dither = {
 	.config = mtk_dither_config,
 	.start = mtk_dither_start,
 	.stop = mtk_dither_stop,
+	.crc_cnt = mtk_dither_crc_cnt,
+	.crc_entry = mtk_dither_crc_entry,
+	.crc_read = mtk_dither_crc_read,
+	.crc_reset = mtk_dither_crc_reset,
+	.crc_attach = mtk_dither_crc_attach,
+	.crc_detach = mtk_dither_crc_detach,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_dpi = {
@@ -390,6 +396,9 @@ static const struct mtk_ddp_comp_funcs ddp_ovlsys_adaptor = {
 	.crc_cnt = mtk_ovlsys_adaptor_crc_cnt,
 	.crc_entry = mtk_ovlsys_adaptor_crc_entry,
 	.crc_read = mtk_ovlsys_adaptor_crc_read,
+	.crc_reset = mtk_ovlsys_adaptor_crc_reset,
+	.crc_attach = mtk_ovlsys_adaptor_crc_attach,
+	.crc_detach = mtk_ovlsys_adaptor_crc_detach,
 	.start = mtk_ovlsys_adaptor_start,
 	.stop = mtk_ovlsys_adaptor_stop,
 	.layer_check = mtk_ovlsys_adaptor_layer_check,

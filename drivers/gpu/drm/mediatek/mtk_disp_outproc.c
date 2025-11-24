@@ -205,6 +205,34 @@ void mtk_disp_outproc_stop(struct device *dev)
 #endif
 }
 
+void mtk_disp_outproc_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+	struct mtk_crtc_crc *crc = &priv->crc;
+
+	/* reset crc */
+	mtk_ddp_write_mask(cmdq_pkt, OVL_OUTPROC_CRC_CLR, &priv->cmdq_reg, priv->regs,
+			   crc->rst_ofs, crc->rst_msk);
+
+	/* clear reset bit */
+	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
+			   crc->rst_ofs, crc->rst_msk);
+}
+
+void mtk_disp_outproc_crc_attach(struct device *dev, struct mtk_crtc *data)
+{
+	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+
+	mtk_crtc_create_crc_cmdq(&priv->crc, data);
+}
+
+void mtk_disp_outproc_crc_detach(struct device *dev)
+{
+	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
+
+	mtk_crtc_destroy_crc_cmdq(&priv->crc);
+}
+
 int mtk_disp_outproc_clk_enable(struct device *dev)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
@@ -258,24 +286,26 @@ static int mtk_disp_outproc_probe(struct platform_device *pdev)
 	if (ret)
 		dev_dbg(dev, "No mediatek,gce-client-reg\n");
 
-	/* set crc source */
-	priv->crc.cnt = ARRAY_SIZE(outproc_crc_ofs);
-	if (priv->crc.cnt) {
-		priv->crc.ofs = outproc_crc_ofs;
-		priv->crc.rst_ofs = DISP_REG_OVL_OUTPROC_TRIG;
-		priv->crc.rst_msk = OVL_OUTPROC_CRC_CLR;
-		priv->crc.va = kcalloc(priv->crc.cnt, sizeof(*priv->crc.va), GFP_KERNEL);
-		if (!priv->crc.va) {
-			dev_err(dev, "failed to allocate memory for crc\n");
-			priv->crc.cnt = 0;
+	/* set crc source if gce-events is set */
+	ret = of_property_read_u32_index(dev->of_node, "mediatek,gce-events", 0,
+					 &priv->crc.cmdq_event);
+	if (ret)
+		dev_dbg(dev, "failed to get gce-events for crc\n");
+	else {
+		priv->crc.cnt = ARRAY_SIZE(outproc_crc_ofs);
+		if (priv->crc.cnt) {
+			priv->crc.ofs = outproc_crc_ofs;
+			priv->crc.rst_ofs = DISP_REG_OVL_OUTPROC_TRIG;
+			priv->crc.rst_msk = OVL_OUTPROC_CRC_CLR;
+			priv->crc.va = devm_kcalloc(dev, priv->crc.cnt, sizeof(*priv->crc.va),
+						    GFP_KERNEL);
+			if (!priv->crc.va) {
+				dev_err(dev, "failed to allocate memory for crc\n");
+				priv->crc.cnt = 0;
+			}
+
+			priv->crc.cmdq_reg = &priv->cmdq_reg;
 		}
-
-		if (of_property_read_u32_index(dev->of_node, "mediatek,gce-events", 0,
-					       &priv->crc.cmdq_event))
-			dev_warn(dev, "failed to get gce-events for crc\n");
-
-		priv->crc.cmdq_reg = &priv->cmdq_reg;
-		mtk_crtc_create_crc_cmdq(dev, &priv->crc);
 	}
 #endif
 

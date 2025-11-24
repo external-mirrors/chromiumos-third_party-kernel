@@ -22,6 +22,7 @@ struct drm_crtc;
 struct drm_device;
 struct mtk_plane_state;
 struct drm_crtc_state;
+struct mtk_crtc;
 
 enum mtk_ddp_comp_type {
 	MTK_DISP_AAL,
@@ -109,6 +110,9 @@ struct mtk_ddp_comp_funcs {
 	size_t (*crc_cnt)(struct device *dev);
 	u32 *(*crc_entry)(struct device *dev);
 	void (*crc_read)(struct device *dev);
+	void (*crc_reset)(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+	void (*crc_attach)(struct device *dev, struct mtk_crtc *data);
+	void (*crc_detach)(struct device *dev);
 	void (*get_dsc_info)(struct device *dev, struct dsc_info *dsc_info);
 	void (*set_dsc_info)(struct device *dev, const struct dsc_info *dsc_info);
 	void (*fifo_sel)(struct device *dev, struct device *mmsys_dev, unsigned int id);

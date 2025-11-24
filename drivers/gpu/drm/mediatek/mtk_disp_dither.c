@@ -24,6 +24,9 @@
 #define DITHER_ENGINE_EN			BIT(1)
 #define DISP_DITHERING				BIT(2)
 #define DISP_REG_DITHER_SIZE			0x0030
+#define DITHER_CRC_EN				BIT(16)
+#define DITHER_CRC_START			BIT(20)
+#define DITHER_CRC_CLR				BIT(24)
 #define DISP_REG_DITHER(x) 			(0x100 + (x)*4)
 #define DITHER_LSB_OFF				BIT(0)
 #define DITHER_ORDERED_ENABLE			BIT(2)
@@ -40,6 +43,8 @@
 
 struct mtk_disp_dither_data {
 	unsigned int max_bits;
+	const u32 *crc_ofs;
+	u8 crc_cnt;
 };
 
 struct mtk_disp_dither {
@@ -47,6 +52,11 @@ struct mtk_disp_dither {
 	void __iomem *regs;
 	struct cmdq_client_reg cmdq_reg;
 	const struct mtk_disp_dither_data *data;
+	struct mtk_crtc_crc crc;
+};
+
+static const u32 mtk_disp_dither_crc_ofs[] = {
+	DISP_REG_DITHER(17),
 };
 
 int mtk_dither_clk_enable(struct device *dev)
@@ -127,6 +137,12 @@ void mtk_dither_start(struct device *dev)
 {
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
 
+	if (dither->crc.cnt) {
+		writel(DITHER_CRC_EN | DITHER_CRC_START,
+		       dither->regs + DISP_REG_DITHER(0));
+		mtk_crtc_start_crc_cmdq(&dither->crc);
+	}
+
 	writel(DITHER_EN, dither->regs + DISP_REG_DITHER_EN);
 }
 
@@ -135,6 +151,60 @@ void mtk_dither_stop(struct device *dev)
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
 
 	writel_relaxed(0x0, dither->regs + DISP_REG_DITHER_EN);
+	if (dither->crc.cnt) {
+		writel(0, dither->regs + DISP_REG_DITHER(0));
+		mtk_crtc_stop_crc_cmdq(&dither->crc);
+	}
+}
+
+size_t mtk_dither_crc_cnt(struct device *dev)
+{
+	struct mtk_disp_dither *priv = dev_get_drvdata(dev);
+
+	return priv->crc.cnt;
+}
+
+u32 *mtk_dither_crc_entry(struct device *dev)
+{
+	struct mtk_disp_dither *priv = dev_get_drvdata(dev);
+
+	return priv->crc.va;
+}
+
+void mtk_dither_crc_read(struct device *dev)
+{
+	struct mtk_disp_dither *priv = dev_get_drvdata(dev);
+
+	mtk_crtc_read_crc(&priv->crc);
+}
+
+void mtk_dither_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_disp_dither *priv = dev_get_drvdata(dev);
+	struct mtk_crtc_crc *crc = &priv->crc;
+	u32 crc_mask = DITHER_CRC_CLR | DITHER_CRC_START;
+
+	/* reset crc and clear crc start bit*/
+	mtk_ddp_write_mask(cmdq_pkt, DITHER_CRC_CLR, &priv->cmdq_reg, priv->regs,
+			   crc->rst_ofs, crc_mask);
+
+	/* clear reset bit and start crc */
+	mtk_ddp_write_mask(cmdq_pkt, DITHER_CRC_START, &priv->cmdq_reg, priv->regs,
+			   crc->rst_ofs, crc_mask);
+}
+
+void mtk_dither_crc_attach(struct device *dev, struct mtk_crtc *data)
+{
+	struct mtk_disp_dither *priv = dev_get_drvdata(dev);
+
+	mtk_crtc_create_crc_cmdq(&priv->crc, data);
+}
+
+void mtk_dither_crc_detach(struct device *dev)
+{
+	struct mtk_disp_dither *priv = dev_get_drvdata(dev);
+
+	mtk_crtc_destroy_crc_cmdq(&priv->crc);
 }
 
 void mtk_dither_set(struct device *dev, unsigned int bpc,
@@ -193,6 +263,30 @@ static int mtk_disp_dither_probe(struct platform_device *pdev)
 	ret = cmdq_dev_get_client_reg(dev, &priv->cmdq_reg, 0);
 	if (ret)
 		dev_dbg(dev, "get mediatek,gce-client-reg fail!\n");
+
+	/* set crc source if gce-events is set */
+	ret = of_property_read_u32_index(dev->of_node, "mediatek,gce-events", 0,
+					 &priv->crc.cmdq_event);
+	if (ret)
+		dev_dbg(dev, "failed to get gce-events for crc\n");
+	else {
+		priv->data = device_get_match_data(dev);
+		if (priv->data)
+			priv->crc.cnt = priv->data->crc_cnt;
+
+		if (priv->crc.cnt) {
+			priv->crc.ofs = priv->data->crc_ofs;
+			priv->crc.rst_ofs = DISP_REG_DITHER(0);
+			priv->crc.va = devm_kcalloc(dev, priv->crc.cnt, sizeof(*priv->crc.va),
+						    GFP_KERNEL);
+			if (!priv->crc.va) {
+				dev_err(dev, "failed to allocate memory for crc\n");
+				priv->crc.cnt = 0;
+			}
+
+			priv->crc.cmdq_reg = &priv->cmdq_reg;
+		}
+	}
 #endif
 
 	priv->data = of_device_get_match_data(dev);
@@ -211,6 +305,8 @@ static void mtk_disp_dither_remove(struct platform_device *pdev)
 }
 
 static const struct mtk_disp_dither_data mt8189_dither_driver_data = {
+	.crc_ofs = mtk_disp_dither_crc_ofs,
+	.crc_cnt = 1,
 	.max_bits = 12,
 };
 

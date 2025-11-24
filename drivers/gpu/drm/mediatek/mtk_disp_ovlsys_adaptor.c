@@ -347,6 +347,41 @@ void mtk_ovlsys_adaptor_crc_read(struct device *dev)
 	}
 }
 
+void mtk_ovlsys_adaptor_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+{
+	int i;
+	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
+
+	for (i = 0; i < priv->path_size; i++) {
+		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
+			return mtk_disp_outproc_crc_reset(priv->ovl_adaptor_comp[priv->path[i]],
+							  cmdq_pkt);
+	}
+}
+
+void mtk_ovlsys_adaptor_crc_attach(struct device *dev, struct mtk_crtc *data)
+{
+	int i;
+	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
+
+	for (i = 0; i < priv->path_size; i++) {
+		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
+			return mtk_disp_outproc_crc_attach(priv->ovl_adaptor_comp[priv->path[i]],
+							   data);
+	}
+}
+
+void mtk_ovlsys_adaptor_crc_detach(struct device *dev)
+{
+	int i;
+	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
+
+	for (i = 0; i < priv->path_size; i++) {
+		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
+			return mtk_disp_outproc_crc_detach(priv->ovl_adaptor_comp[priv->path[i]]);
+	}
+}
+
 void mtk_ovlsys_adaptor_config(struct device *dev, unsigned int w,
 			       unsigned int h, unsigned int vrefresh,
 			       unsigned int bpc, struct cmdq_pkt *cmdq_pkt)

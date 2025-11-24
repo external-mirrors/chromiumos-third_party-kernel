@@ -6,6 +6,8 @@
 #ifndef __MTK_DISP_OUTPROC_H__
 #define __MTK_DISP_OUTPROC_H__
 
+struct mtk_crtc;
+
 void mtk_disp_outproc_start(struct device *dev);
 void mtk_disp_outproc_stop(struct device *dev);
 int mtk_disp_outproc_clk_enable(struct device *dev);
@@ -22,4 +24,7 @@ void mtk_disp_outproc_disable_vblank(struct device *dev);
 size_t mtk_disp_outproc_crc_cnt(struct device *dev);
 u32 *mtk_disp_outproc_crc_entry(struct device *dev);
 void mtk_disp_outproc_crc_read(struct device *dev);
+void mtk_disp_outproc_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_outproc_crc_attach(struct device *dev, struct mtk_crtc *data);
+void mtk_disp_outproc_crc_detach(struct device *dev);
 #endif

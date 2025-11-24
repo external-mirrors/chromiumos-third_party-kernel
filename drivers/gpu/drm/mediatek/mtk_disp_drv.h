@@ -73,6 +73,12 @@ void mtk_dither_config(struct device *dev, unsigned int w,
 		       unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
 void mtk_dither_start(struct device *dev);
 void mtk_dither_stop(struct device *dev);
+size_t mtk_dither_crc_cnt(struct device *dev);
+u32 *mtk_dither_crc_entry(struct device *dev);
+void mtk_dither_crc_read(struct device *dev);
+void mtk_dither_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_dither_crc_attach(struct device *dev, struct mtk_crtc *data);
+void mtk_dither_crc_detach(struct device *dev);
 
 void mtk_disp_outproc_start(struct device *dev);
 void mtk_disp_outproc_stop(struct device *dev);
@@ -238,6 +244,9 @@ size_t mtk_ovlsys_adaptor_get_num_formats(struct device *dev);
 size_t mtk_ovlsys_adaptor_crc_cnt(struct device *dev);
 u32 *mtk_ovlsys_adaptor_crc_entry(struct device *dev);
 void mtk_ovlsys_adaptor_crc_read(struct device *dev);
+void mtk_ovlsys_adaptor_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_ovlsys_adaptor_crc_attach(struct device *dev,struct mtk_crtc *data);
+void mtk_ovlsys_adaptor_crc_detach(struct device *dev);
 void mtk_ovlsys_adaptor_fifo_sel(struct device *dev, struct device *mmsys_dev, unsigned int id);
 void mtk_ovlsys_adaptor_get_channel_id(struct device *dev, unsigned int idx,
 				       unsigned int *channel_id);
