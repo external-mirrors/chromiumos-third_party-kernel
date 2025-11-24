@@ -131,7 +131,7 @@ tarkin:
     mt8189-skywalker-tarkin-sku8192.dtb:
       sku: [0x2000]
     mt8189-skywalker-tarkin-sku8193.dtb:
-      sku: [0x2001]
+      sku: [0x2001, 0x2003]
     mt8189-skywalker-tarkin-sku8194.dtb:
       sku: [0x2002]
     mt8189-skywalker-phasma-sku12288.dtb:
