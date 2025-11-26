@@ -4007,8 +4007,6 @@ static void mtk_dp_init_variable_v2(struct mtk_dp *mtk_dp)
 	mtk_dp->training_info.sink_ssc_en = false;
 	mtk_dp->training_info.tps3_support = true;
 	mtk_dp->training_info.tps4_support = true;
-	mtk_dp->training_info.phy_status = HPD_INITIAL_STATE;
-	mtk_dp->training_info.cable_plug_in = false;
 	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++) {
 		mtk_dp->info[encoder_id].depth = DP_COLOR_DEPTH_8BIT;
 		memset(&mtk_dp->info[encoder_id].dp_output_timing, 0,
@@ -4018,7 +4016,6 @@ static void mtk_dp_init_variable_v2(struct mtk_dp *mtk_dp)
 		mtk_dp->dsc_enable[encoder_id] = false;
 	}
 	mtk_dp->dp_ready = false;
-	mtk_dp->need_debounce = false;
 	mtk_dp->audio_enable = false;
 }
 
@@ -4130,6 +4127,9 @@ static void mtk_dp_init_port_v2(struct mtk_dp *mtk_dp)
 
 	mtk_dp_phy_set_idle_pattern_v2(mtk_dp, true);
 	mtk_dp_init_variable_v2(mtk_dp);
+	mtk_dp->training_info.phy_status = HPD_INITIAL_STATE;
+	mtk_dp->training_info.cable_plug_in = false;
+	mtk_dp->need_debounce = false;
 
 	mtk_dp_fec_disable_v2(mtk_dp);
 	for (encoder_id = 0; encoder_id < mtk_dp->data->encoder_num; encoder_id++)
@@ -4927,6 +4927,9 @@ static void mtk_dp_resouce_free(struct mtk_dp *mtk_dp)
 	disable_irq(mtk_dp->irq);
 
 	mtk_dp_disconnect_release_v2(mtk_dp);
+	mtk_dp->training_info.phy_status = HPD_INITIAL_STATE;
+	mtk_dp->training_info.cable_plug_in = false;
+	mtk_dp->need_debounce = false;
 
 	if (mtk_dp->data->mst_support)
 		mtk_dp_mst_drv_deinit(mtk_dp);
@@ -5983,11 +5986,11 @@ static irqreturn_t mtk_dp_hpd_event_thread_v2(int hpd, void *dev)
 	spin_lock_irqsave(&mtk_dp->irq_thread_lock, flags);
 	cable_state_change = mtk_dp->training_info.cable_state_change;
 	phy_status = mtk_dp->training_info.phy_status;
-	spin_unlock_irqrestore(&mtk_dp->irq_thread_lock, flags);
-
 	mtk_dp->training_info.cable_state_change = false;
 	if (mtk_dp->training_info.phy_status & HPD_INT_EVNET)
 		mtk_dp->training_info.phy_status &= ~HPD_INT_EVNET;
+	spin_unlock_irqrestore(&mtk_dp->irq_thread_lock, flags);
+
 
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] cable_state_change:0x%x, phy_status:0x%x\n",
 		    cable_state_change, phy_status);
@@ -6159,7 +6162,7 @@ static irqreturn_t mtk_dp_hpd_event_v2(int hpd, void *dev)
 		if (hw_status != 0)
 			drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] hw status:0x%x\n", hw_status);
 
-		mtk_dp->training_info.phy_status |= hw_status;
+		mtk_dp->training_info.phy_status = hw_status;
 
 		mtk_dp_hpd_handle_in_isr_v2(mtk_dp);
 
@@ -6287,6 +6290,9 @@ static int mtk_dp_suspend_v2(struct device *dev)
 	mtk_dp_hpd_interrupt_enable_v2(mtk_dp, false);
 
 	mtk_dp_disconnect_release_v2(mtk_dp);
+	mtk_dp->training_info.phy_status = HPD_INITIAL_STATE;
+	mtk_dp->training_info.cable_plug_in = false;
+	mtk_dp->need_debounce = false;
 
 	mtk_dp_disable_mac_power_v2(mtk_dp);
 
