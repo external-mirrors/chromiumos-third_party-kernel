@@ -1378,6 +1378,7 @@ static bool it61620_hdmi_enable_hdcp(struct it61620 *it61620)
 
 	drm_dbg(drm, "auth fail");
 	it61620_hdmi_enable_avmute(it61620, true);
+	it61620_hdmi_ddc_abort(it61620);
 	return false;
 }
 
