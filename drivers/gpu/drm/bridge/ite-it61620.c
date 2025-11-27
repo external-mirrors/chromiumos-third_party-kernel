@@ -1873,6 +1873,8 @@ static void it61620_hdmi_audio_set_ncts(struct it61620 *it61620)
 	it61620_hdmi_reg_write(it61620, TX_REG_AUDPKT_CTS_2,
 			       (u8)((cts >> 16) & 0x0f));
 	drm_dbg(drm, "audio N %d CTS %d", n, cts);
+
+	it61620_hdmi_reg_set(it61620, TX_REG_AUD_CTS, 0x06, 0x06);
 }
 
 static inline void it61620_hdmi_disable_audio_infoframe(struct it61620 *it61620)
@@ -2753,6 +2755,7 @@ static void it61620_plugged_cb_work(struct work_struct *work)
 
 static void it61620_start_plugged_cb_work(struct it61620 *it61620)
 {
+	it61620_hdmi_reg_set(it61620, TX_REG_AUD_CTS, 0x04, 0x00);
 	queue_delayed_work(system_wq, &it61620->plugged_cb_work,
 			   msecs_to_jiffies(1000));
 }
