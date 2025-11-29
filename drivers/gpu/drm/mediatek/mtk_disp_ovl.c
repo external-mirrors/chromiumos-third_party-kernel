@@ -57,6 +57,8 @@
 
 /* OVL_CON_RGB_SWAP works only if OVL_CON_CLRFMT_MAN is enabled */
 #define OVL_CON_RGB_SWAP	BIT(25)
+#define OVL_EN			BIT(0)
+#define OVL_OP_8BIT_MODE	BIT(4)
 
 #define OVL_CON_CLRFMT_RGB	(1 << 12)
 #define OVL_CON_CLRFMT_ARGB8888	(2 << 12)
@@ -253,15 +255,17 @@ void mtk_ovl_clk_disable(struct device *dev)
 void mtk_ovl_start(struct device *dev)
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
+	unsigned int reg;
 
 	if (ovl->data->smi_id_en) {
-		unsigned int reg;
-
 		reg = readl(ovl->regs + DISP_REG_OVL_DATAPATH_CON);
 		reg = reg | OVL_LAYER_SMI_ID_EN;
 		writel_relaxed(reg, ovl->regs + DISP_REG_OVL_DATAPATH_CON);
 	}
-	writel_relaxed(0x1, ovl->regs + DISP_REG_OVL_EN);
+
+	reg = readl(ovl->regs + DISP_REG_OVL_EN);
+	reg |= OVL_EN | OVL_OP_8BIT_MODE;
+	writel_relaxed(reg, ovl->regs + DISP_REG_OVL_EN);
 }
 
 void mtk_ovl_stop(struct device *dev)
@@ -713,6 +717,9 @@ static const struct mtk_disp_ovl_data mt8189_ovl_driver_data = {
 	.layer_nr = 4,
 	.fmt_rgb565_is_0 = true,
 	.smi_id_en = true,
+	.blend_modes = BIT(DRM_MODE_BLEND_PREMULTI) |
+		       BIT(DRM_MODE_BLEND_COVERAGE) |
+		       BIT(DRM_MODE_BLEND_PIXEL_NONE),
 	.supports_afbc = true,
 	.formats = mt8195_formats,
 	.num_formats = ARRAY_SIZE(mt8195_formats),
