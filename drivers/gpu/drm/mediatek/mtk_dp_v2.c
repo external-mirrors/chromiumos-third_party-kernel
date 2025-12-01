@@ -4606,9 +4606,12 @@ static void mtk_dp_bridge_atomic_enable_v2(struct drm_bridge *bridge,
 					  &mtk_dp->info[id].audio_cur_cfg);
 
 	if (mtk_dp->audio_enable) {
-		mtk_dp_audio_mute_v2(mtk_dp, id, true);
-		mtk_dp_audio_config_v2(mtk_dp, id);
-		mtk_dp_audio_mute_v2(mtk_dp, id, false);
+		if (mtk_dp->info[id].audio_cur_cfg.channels != 0 &&
+		    mtk_dp->info[id].audio_cur_cfg.sample_rate != 0) {
+			mtk_dp_audio_mute_v2(mtk_dp, id, true);
+			mtk_dp_audio_config_v2(mtk_dp, id);
+			mtk_dp_audio_mute_v2(mtk_dp, id, false);
+		}
 	} else {
 		memset(&mtk_dp->info[id].audio_cur_cfg, 0,
 		       sizeof(mtk_dp->info[id].audio_cur_cfg));
