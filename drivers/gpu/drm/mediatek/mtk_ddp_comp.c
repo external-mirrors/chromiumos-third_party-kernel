@@ -297,6 +297,7 @@ static const struct mtk_ddp_comp_funcs ddp_dither = {
 	.config = mtk_dither_config,
 	.start = mtk_dither_start,
 	.stop = mtk_dither_stop,
+	.bypass = mtk_dither_bypass,
 	.crc_cnt = mtk_dither_crc_cnt,
 	.crc_entry = mtk_dither_crc_entry,
 	.crc_read = mtk_dither_crc_read,

@@ -53,6 +53,7 @@ struct mtk_disp_dither {
 	struct cmdq_client_reg cmdq_reg;
 	const struct mtk_disp_dither_data *data;
 	struct mtk_crtc_crc crc;
+	u8 panel_bpc;
 };
 
 static const u32 mtk_disp_dither_crc_ofs[] = {
@@ -71,6 +72,30 @@ void mtk_dither_clk_disable(struct device *dev)
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
 
 	clk_disable_unprepare(dither->clk);
+}
+
+void mtk_dither_bypass(struct device *dev, bool bypass, struct cmdq_pkt *cmdq_pkt)
+{
+	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
+	unsigned int max_bits = MTK_DEFAULT_MAX_BPC;
+
+	if (dither->data)
+		max_bits = dither->data->max_bits;
+
+	if (bypass) {
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(5));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(6));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(7));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(12));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(13));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(14));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(15));
+		mtk_ddp_write(cmdq_pkt, 0, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER(16));
+	} else {
+		mtk_dither_set_common(dither->regs, &dither->cmdq_reg, max_bits,
+				      dither->panel_bpc, DISP_REG_DITHER_CFG,
+				      DITHER_ENGINE_EN, cmdq_pkt);
+	}
 }
 
 void mtk_dither_set_common(void __iomem *regs, struct cmdq_client_reg *cmdq_reg,
@@ -125,6 +150,8 @@ void mtk_dither_config(struct device *dev, unsigned int w,
 
 	if (dither->data)
 		max_bits = dither->data->max_bits;
+
+	dither->panel_bpc = bpc;
 
 	mtk_ddp_write(cmdq_pkt, w << 16 | h, &dither->cmdq_reg, dither->regs, DISP_REG_DITHER_SIZE);
 	mtk_ddp_write(cmdq_pkt, DITHER_RELAY_MODE, &dither->cmdq_reg, dither->regs,

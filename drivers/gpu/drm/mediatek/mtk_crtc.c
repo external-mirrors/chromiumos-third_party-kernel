@@ -1281,6 +1281,7 @@ static void mtk_crtc_crc_work(struct kthread_work *base)
 static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct mtk_ddp_comp *comp = mtk_crtc->crc_provider;
 
 	if (!src)
 		return -EINVAL;
@@ -1290,6 +1291,9 @@ static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 			  __func__, drm_crtc_index(crtc), src);
 		return -EINVAL;
 	}
+
+	if (comp->funcs->bypass)
+		comp->funcs->bypass(comp->dev, crtc->crc.opened, NULL);
 
 	/*
 	 * skip the first crc because the first frame (vblank+1) is configured

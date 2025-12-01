@@ -79,6 +79,7 @@ void mtk_dither_crc_read(struct device *dev);
 void mtk_dither_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt);
 void mtk_dither_crc_attach(struct device *dev, struct mtk_crtc *data);
 void mtk_dither_crc_detach(struct device *dev);
+void mtk_dither_bypass(struct device *dev, bool bypass, struct cmdq_pkt *cmdq_pkt);
 
 void mtk_disp_outproc_start(struct device *dev);
 void mtk_disp_outproc_stop(struct device *dev);
