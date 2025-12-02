@@ -18,7 +18,6 @@
 #include <linux/soc/mediatek/mtk-mmsys.h>
 #include <linux/soc/mediatek/mtk-mutex.h>
 
-#include "mtk_disp_outproc.h"
 #include "mtk_disp_blender.h"
 #include "mtk_disp_drv.h"
 #include "mtk_crtc.h"
@@ -343,7 +342,7 @@ void mtk_ovlsys_adaptor_crc_read(struct device *dev)
 
 	for (i = 0; i < priv->path_size; i++) {
 		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
-			return mtk_disp_outproc_crc_read(priv->ovl_adaptor_comp[priv->path[i]]);
+			mtk_disp_outproc_crc_read(priv->ovl_adaptor_comp[priv->path[i]]);
 	}
 }
 
@@ -354,8 +353,8 @@ void mtk_ovlsys_adaptor_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt)
 
 	for (i = 0; i < priv->path_size; i++) {
 		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
-			return mtk_disp_outproc_crc_reset(priv->ovl_adaptor_comp[priv->path[i]],
-							  cmdq_pkt);
+			mtk_disp_outproc_crc_reset(priv->ovl_adaptor_comp[priv->path[i]],
+						   cmdq_pkt);
 	}
 }
 
@@ -366,8 +365,7 @@ void mtk_ovlsys_adaptor_crc_attach(struct device *dev, struct mtk_crtc *data)
 
 	for (i = 0; i < priv->path_size; i++) {
 		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
-			return mtk_disp_outproc_crc_attach(priv->ovl_adaptor_comp[priv->path[i]],
-							   data);
+			mtk_disp_outproc_crc_attach(priv->ovl_adaptor_comp[priv->path[i]], data);
 	}
 }
 
@@ -378,7 +376,7 @@ void mtk_ovlsys_adaptor_crc_detach(struct device *dev)
 
 	for (i = 0; i < priv->path_size; i++) {
 		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC)
-			return mtk_disp_outproc_crc_detach(priv->ovl_adaptor_comp[priv->path[i]]);
+			mtk_disp_outproc_crc_detach(priv->ovl_adaptor_comp[priv->path[i]]);
 	}
 }
 

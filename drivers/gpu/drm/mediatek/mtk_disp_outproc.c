@@ -19,7 +19,6 @@
 #include "mtk_ddp_comp.h"
 #include <linux/of.h>
 #include "mtk_drm_drv.h"
-#include "mtk_disp_outproc.h"
 
 #define DISP_REG_OVL_OUTPROC_INTEN				0x004
 #define OVL_OUTPROC_FME_CPL_INTEN					BIT(1)

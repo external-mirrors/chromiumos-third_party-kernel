@@ -94,6 +94,12 @@ void mtk_disp_outproc_register_vblank_cb(struct device *dev,
 void mtk_disp_outproc_unregister_vblank_cb(struct device *dev);
 void mtk_disp_outproc_enable_vblank(struct device *dev);
 void mtk_disp_outproc_disable_vblank(struct device *dev);
+size_t mtk_disp_outproc_crc_cnt(struct device *dev);
+u32 *mtk_disp_outproc_crc_entry(struct device *dev);
+void mtk_disp_outproc_crc_read(struct device *dev);
+void mtk_disp_outproc_crc_reset(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_outproc_crc_attach(struct device *dev, void *data);
+void mtk_disp_outproc_crc_detach(struct device *dev);
 
 void mtk_dpi_start(struct device *dev);
 void mtk_dpi_stop(struct device *dev);
