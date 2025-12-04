@@ -111,24 +111,39 @@ padme:
 
 tarkin:
   dtb:
-    mt8189-skywalker-tarkin-sku4096.dtb:
-      sku: [0x1000]
-    mt8189-skywalker-tarkin-sku4097.dtb:
-      sku: [0x1001, 0x1002, 0x1003, 0x1004, 0x1006]
-    mt8189-skywalker-tarkin-sku4101.dtb:
-      sku: [0x1005, 0x1007, 0x1008]
-    mt8189-skywalker-tarkin-sku8192.dtb:
-      sku: [0x2000]
-    mt8189-skywalker-tarkin-sku8193.dtb:
-      sku: [0x2001, 0x2003]
-    mt8189-skywalker-tarkin-sku8194.dtb:
-      sku: [0x2002]
-    mt8189-skywalker-phasma-sku12288.dtb:
-      sku: [0x3000, 0x3001]
-    mt8189-skywalker-phasma-sku12290.dtb:
-      sku: [0x3002, 0x3003]
-    mt8189-skywalker-tarkin-sku2147483647.dtb:
-      sku: [0x7FFFFFFF]
+    mt8189-skywalker-tarkin.dtb: {}
+  dtbo:
+    mt8189-skywalker-tarkin-touchscreen.dtbo:
+      fw_config:
+        mask: 0x1
+        value: 0x1
+    # Keyboards w/ and w/o backlight have different 'linux,keymap',
+    # so we don't split 'keyboard-backlight' into a separate .dtbo.
+    # KB_LAYOUT (0x0000000C) | KB_BL (0x2) = 0x0000000E
+    mt8189-skywalker-tarkin-kb-cm1406.dtbo:
+      fw_config:
+        mask: 0x0000000E
+        value: 0x00000000
+    mt8189-skywalker-tarkin-kb-cm1406-backlight.dtbo:
+      fw_config:
+        mask: 0x0000000E
+        value: 0x00000002
+    mt8189-skywalker-tarkin-kb-cm1405.dtbo:
+      fw_config:
+        mask: 0x0000000E
+        value: 0x00000004
+    mt8189-skywalker-tarkin-kb-cm1405-backlight.dtbo:
+      fw_config:
+        mask: 0x0000000E
+        value: 0x00000006
+    mt8189-skywalker-tarkin-kb-cm1505.dtbo:
+      fw_config:
+        mask: 0x0000000E
+        value: 0x00000008
+    mt8189-skywalker-tarkin-kb-cm1505-backlight.dtbo:
+      fw_config:
+        mask: 0x0000000E
+        value: 0x0000000A
 
 yoda:
   dtb:

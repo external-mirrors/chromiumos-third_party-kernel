@@ -3,38 +3,29 @@
  * Copyright (C) 2025 Google Inc.
  */
 /dts-v1/;
-#include "mt8189-skywalker-tarkin.dtsi"
+/plugin/;
 
-/ {
-	model = "Google Tarkin sku4097/4098/4099 design";
-	compatible = "google,tarkin-sku4097", "google,tarkin-sku4098",
-		     "google,tarkin-sku4099", "google,tarkin-sku4100",
-		     "google,tarkin-sku4102", "google,tarkin",
-		     "mediatek,mt8189";
-};
-
-&ap_i2c_tchscr {
-	status = "disabled";
-};
+#include <dt-bindings/input/cros-ec-keyboard.h>
+#include <dt-bindings/input/input.h>
 
 &keyboard_controller {
 	keypad,num-columns = <18>;
 
 	function-row-physmap = <
-		MATRIX_KEY(0x00, 0x02, 0)               /* T1 */
-		MATRIX_KEY(0x03, 0x02, 0)               /* T2 */
-		MATRIX_KEY(0x02, 0x02, 0)               /* T3 */
-		MATRIX_KEY(0x01, 0x02, 0)               /* T4 */
-		MATRIX_KEY(0x04, 0x04, 0)               /* T5 */
-		MATRIX_KEY(0x02, 0x04, 0)               /* T6 */
-		MATRIX_KEY(0x01, 0x04, 0)               /* T7 */
-		MATRIX_KEY(0x02, 0x0b, 0)               /* T8 */
-		MATRIX_KEY(0x01, 0x09, 0)               /* T9 */
-		MATRIX_KEY(0x00, 0x04, 0)               /* T10 */
-		MATRIX_KEY(0x00, 0x01, 0)               /* T11 */
-		MATRIX_KEY(0x01, 0x05, 0)               /* T12 */
-		MATRIX_KEY(0x03, 0x05, 0)               /* T13 */
-		MATRIX_KEY(0x02, 0x09, 0)               /* 76 */
+		MATRIX_KEY(0x00, 0x02, 0)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)		/* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)		/* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)		/* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)		/* T13 */
+		MATRIX_KEY(0x02, 0x09, 0)		/* 76 */
 	>;
 
 	linux,keymap = <

@@ -5,6 +5,11 @@
 /dts-v1/;
 #include "mt8189-skywalker.dtsi"
 
+/ {
+	model = "Google Tarkin board";
+	compatible = "google,tarkin", "mediatek,mt8189";
+};
+
 &ap_i2c_aud {
 	/delete-node/ audio-codec@1a;
 
@@ -41,33 +46,11 @@
 };
 
 &ap_i2c_tchscr {
+	status = "disabled";
+
 	/delete-node/ touchscreen@41;
 
-        touchscreen_elan: touchscreen@10 {
-		compatible = "elan,ekth3500";
-		reg = <0x10>;
-		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchscreen_pins>;
-		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
-		vcc33-supply = <&pp3300_tchscr_x>;
-		vccio-supply = <&pp1800_tchscr_report_disable>;
-		status = "fail-needs-probe";
-	};
-
-	touchscreen_parade: touchscreen@24 {
-		compatible = "parade,tc3408";
-		reg = <0x24>;
-		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchscreen_pins>;
-		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
-		panel = <&panel>;
-		vcc33-supply = <&pp3300_tchscr_x>;
-		vccio-supply = <&pp1800_tchscr_report_disable>;
-		status = "fail-needs-probe";
-	};
-};
+ };
 
 &ap_sar_sensor {
 	status = "disabled";
@@ -369,7 +352,7 @@
 };
 
 &ufshci {
-        status = "disabled";
+	status = "disabled";
 };
 
 /* USB hub port 1 */
