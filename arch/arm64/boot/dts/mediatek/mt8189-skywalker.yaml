@@ -3,8 +3,7 @@ DEFAULT: {}
 
 skywalker:
   dtb:
-    mt8189-skywalker.dtb:
-      sku: [0x7FFFFFFF]
+    mt8189-skywalker.dtb: {}
 
 anakin:
   dtb:
