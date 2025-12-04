@@ -3,14 +3,14 @@
  * Copyright (c) 2021 MediaTek Inc.
  */
 
-#include <drm/drm_fourcc.h>
 #include <drm/drm_blend.h>
+#include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <linux/clk.h>
 #include <linux/component.h>
-#include <linux/of_platform.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
@@ -19,77 +19,78 @@
 #include "mtk_disp_pmqos.h"
 #include "mtk_drm_drv.h"
 
-#define DISP_REG_OVL_EN_CON			0xc
-#define OVL_OP_8BIT_MODE				BIT(4)
-#define OVL_HG_FOVL_CK_ON				BIT(8)
-#define OVL_HF_FOVL_CK_ON				BIT(10)
-#define DISP_REG_OVL_DATAPATH_CON		0x014
-#define DATAPATH_CON_LAYER_SMI_ID_EN			BIT(0)
-#define DATAPATH_CON_GCLAST_EN				BIT(24)
-#define DATAPATH_CON_HDR_GCLAST_EN			BIT(25)
-#define DISP_REG_OVL_EN				0x020
-#define DISP_OVL_EN					BIT(0)
-#define DISP_REG_OVL_RST			0x024
-#define DISP_OVL_RST					BIT(0)
-#define DISP_REG_OVL_ROI_SIZE			0x030
-#define DISP_REG_OVL_L0_EN			0x040
-#define DISP_OVL_L0_EN					BIT(0)
-#define DISP_REG_OVL_OFFSET			0x044
-#define DISP_REG_OVL_SRC_SIZE			0x048
-#define DISP_REG_OVL_L0_CLRFMT			0x050
-#define OVL_CON_FLD_CLRFMT				GENMASK(3, 0)
-#define OVL_CON_CLRFMT_MAN				BIT(4)
-#define OVL_CON_FLD_CLRFMT_NB				GENMASK(9, 8)
-#define OVL_CON_CLRFMT_NB_10_BIT			BIT(8)
-#define OVL_CON_BYTE_SWAP				BIT(16)
-#define OVL_CON_RGB_SWAP				BIT(17)
-#define OVL_CON_CLRFMT_RGB565				0x000
-#define OVL_CON_CLRFMT_RGB888				0x001
-#define OVL_CON_CLRFMT_BGRA8888				0x002
-#define OVL_CON_CLRFMT_ABGRB8888			0x003
-#define OVL_CON_CLRFMT_UYVY				0x004
-#define OVL_CON_CLRFMT_YUYV				0x005
-#define OVL_CON_CLRFMT_BGR565				(0x000 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_BGR888				(0x001 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_RGBA8888				(0x002 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_ARGB8888				(0x003 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_VYUY				(0x004 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_YVYU				(0x005 | OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_PBGRA8888			(0x003 | OVL_CON_CLRFMT_MAN)
-#define OVL_CON_CLRFMT_PARGB8888			(OVL_CON_CLRFMT_PBGRA8888 | \
-							OVL_CON_BYTE_SWAP)
-#define OVL_CON_CLRFMT_PRGBA8888			(OVL_CON_CLRFMT_PBGRA8888 | \
-							OVL_CON_RGB_SWAP)
-#define OVL_CON_CLRFMT_PABGR8888			(OVL_CON_CLRFMT_PBGRA8888 | \
-							OVL_CON_RGB_SWAP | \
-							OVL_CON_BYTE_SWAP)
-#define DISP_REG_OVL_RDMA0_CTRL			0x100
-#define DISP_RDMA0_EN					BIT(0)
-#define DISP_REG_OVL_RDMA_BURST_CON1		0x1f4
-#define DISP_RDMA_BURST_CON1_BURST16_EN			BIT(28)
-#define DISP_RDMA_BURST_CON1_DDR_EN			BIT(30)
-#define DISP_RDMA_BURST_CON1_DDR_ACK_EN			BIT(31)
-#define DISP_REG_OVL_DUMMY_REG			0x200
-#define DISP_OVL_EXT_DDR_EN_OPT				BIT(2)
-#define DISP_OVL_FORCE_EXT_DDR_EN			BIT(3)
-#define DISP_REG_OVL_GDRDY_PRD			0x208
-#define DISP_REG_OVL_PITCH_MSB			0x2f0
-#define DISP_REG_OVL_PITCH			0x2f4
-#define OVL_L0_SRC_PITCH				GENMASK(15, 0)
-#define OVL_L0_CONST_BLD				BIT(28)
-#define OVL_L0_SRC_PITCH_MASK				GENMASK(15, 0)
-#define DISP_REG_OVL_L0_GUSER_EXT		0x2fc
-#define OVL_RDMA0_L0_VCSEL				BIT(5)
-#define OVL_RDMA0_HDR_L0_VCSEL				BIT(21)
-#define DISP_REG_OVL_CON			0x300
-#define DISP_OVL_CON_FLD_INT_MTX_SEL			GENMASK(19, 16)
-#define DISP_OVL_CON_INT_MTX_BT601_TO_RGB		(6 << 16)
-#define DISP_OVL_CON_INT_MTX_BT709_TO_RGB		(7 << 16)
-#define DISP_OVL_CON_INT_MTX_EN				BIT(27)
-#define DISP_REG_OVL_ADDR			0xf40
-#define DISP_REG_OVL_MOUT			0xff0
-#define OVL_MOUT_OUT_DATA				BIT(0)
-#define OVL_MOUT_BGCLR_OUT				BIT(1)
+#define DISP_REG_OVL_EXDMA_EN_CON		0xc
+#define OVL_EXDMA_OP_8BIT_MODE				BIT(4)
+#define OVL_EXDMA_HG_FOVL_CK_ON				BIT(8)
+#define OVL_EXDMA_HF_FOVL_CK_ON				BIT(10)
+#define DISP_REG_OVL_EXDMA_DATAPATH_CON		0x014
+#define OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN		BIT(0)
+#define OVL_EXDMA_DATAPATH_CON_GCLAST_EN		BIT(24)
+#define OVL_EXDMA_DATAPATH_CON_HDR_GCLAST_EN		BIT(25)
+#define DISP_REG_OVL_EXDMA_EN			0x020
+#define OVL_EXDMA_EN					BIT(0)
+#define DISP_REG_OVL_EXDMA_RST			0x024
+#define OVL_EXDMA_RST					BIT(0)
+#define DISP_REG_OVL_EXDMA_ROI_SIZE		0x030
+#define DISP_REG_OVL_EXDMA_L0_EN		0x040
+#define OVL_EXDMA_L0_EN					BIT(0)
+#define DISP_REG_OVL_EXDMA_L0_OFFSET		0x044
+#define DISP_REG_OVL_EXDMA_SRC_SIZE		0x048
+#define DISP_REG_OVL_EXDMA_L0_CLRFMT		0x050
+#define OVL_EXDMA_CON_FLD_CLRFMT			GENMASK(3, 0)
+#define OVL_EXDMA_CON_CLRFMT_MAN			BIT(4)
+#define OVL_EXDMA_CON_FLD_CLRFMT_NB			GENMASK(9, 8)
+#define OVL_EXDMA_CON_CLRFMT_NB_10_BIT			BIT(8)
+#define OVL_EXDMA_CON_BYTE_SWAP				BIT(16)
+#define OVL_EXDMA_CON_RGB_SWAP				BIT(17)
+#define OVL_EXDMA_CON_CLRFMT_RGB565			0x000
+#define OVL_EXDMA_CON_CLRFMT_RGB888			0x001
+#define OVL_EXDMA_CON_CLRFMT_BGRA8888			0x002
+#define OVL_EXDMA_CON_CLRFMT_ABGR8888			0x003
+#define OVL_EXDMA_CON_CLRFMT_UYVY			0x004
+#define OVL_EXDMA_CON_CLRFMT_YUYV			0x005
+#define OVL_EXDMA_CON_CLRFMT_BGR565			(0x000 | OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_BGR888			(0x001 | OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_RGBA8888			(0x002 | OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_ARGB8888			(0x003 | OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_VYUY			(0x004 | OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_YVYU			(0x005 | OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_PBGRA8888			(0x003 | OVL_EXDMA_CON_CLRFMT_MAN)
+#define OVL_EXDMA_CON_CLRFMT_PARGB8888			(OVL_EXDMA_CON_CLRFMT_PBGRA8888 | \
+							 OVL_EXDMA_CON_BYTE_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_PRGBA8888			(OVL_EXDMA_CON_CLRFMT_PBGRA8888 | \
+							 OVL_EXDMA_CON_RGB_SWAP)
+#define OVL_EXDMA_CON_CLRFMT_PABGR8888			(OVL_EXDMA_CON_CLRFMT_PBGRA8888 | \
+							 OVL_EXDMA_CON_RGB_SWAP | \
+							 OVL_EXDMA_CON_BYTE_SWAP)
+#define DISP_REG_OVL_EXDMA_RDMA0_CTRL		0x100
+#define OVL_EXDMA_RDMA0_EN				BIT(0)
+#define DISP_REG_OVL_EXDMA_RDMA_BURST_CON1	0x1f4
+#define OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN		BIT(28)
+#define OVL_EXDMA_RDMA_BURST_CON1_DDR_EN		BIT(30)
+#define OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN		BIT(31)
+#define DISP_REG_OVL_EXDMA_DUMMY_REG		0x200
+#define OVL_EXDMA_EXT_DDR_EN_OPT			BIT(2)
+#define OVL_EXDMA_FORCE_EXT_DDR_EN			BIT(3)
+#define DISP_REG_OVL_EXDMA_GDRDY_PRD		0x208
+#define DISP_REG_OVL_EXDMA_PITCH_MSB		0x2f0
+#define OVL_EXDMA_L0_SRC_PITCH_MSB_MASK			GENMASK(3, 0)
+#define DISP_REG_OVL_EXDMA_PITCH		0x2f4
+#define OVL_EXDMA_L0_SRC_PITCH				GENMASK(15, 0)
+#define OVL_EXDMA_L0_CONST_BLD				BIT(28)
+#define OVL_EXDMA_L0_SRC_PITCH_MASK			GENMASK(15, 0)
+#define DISP_REG_OVL_EXDMA_L0_GUSER_EXT		0x2fc
+#define OVL_EXDMA_RDMA0_L0_VCSEL			BIT(5)
+#define OVL_EXDMA_RDMA0_HDR_L0_VCSEL			BIT(21)
+#define DISP_REG_OVL_EXDMA_CON			0x300
+#define OVL_EXDMA_CON_FLD_INT_MTX_SEL			GENMASK(19, 16)
+#define OVL_EXDMA_CON_INT_MTX_BT601_TO_RGB		(6 << 16)
+#define OVL_EXDMA_CON_INT_MTX_BT709_TO_RGB		(7 << 16)
+#define OVL_EXDMA_CON_INT_MTX_EN			BIT(27)
+#define DISP_REG_OVL_EXDMA_ADDR			0xf40
+#define DISP_REG_OVL_EXDMA_MOUT			0xff0
+#define OVL_EXDMA_MOUT_OUT_DATA				BIT(0)
+#define OVL_EXDMA_MOUT_BGCLR_OUT			BIT(1)
 
 static const u32 formats[] = {
 	DRM_FORMAT_XRGB8888,
@@ -150,112 +151,123 @@ static unsigned int mtk_disp_exdma_fmt_convert(unsigned int fmt, unsigned int bl
 	switch (fmt) {
 	default:
 	case DRM_FORMAT_RGB565:
-		return OVL_CON_CLRFMT_RGB565;
+		return OVL_EXDMA_CON_CLRFMT_RGB565;
 	case DRM_FORMAT_BGR565:
-		return OVL_CON_CLRFMT_BGR565;
+		return OVL_EXDMA_CON_CLRFMT_BGR565;
 	case DRM_FORMAT_RGB888:
-		return OVL_CON_CLRFMT_RGB888;
+		return OVL_EXDMA_CON_CLRFMT_RGB888;
 	case DRM_FORMAT_BGR888:
-		return OVL_CON_CLRFMT_BGR888;
+		return OVL_EXDMA_CON_CLRFMT_BGR888;
 	case DRM_FORMAT_RGBX8888:
 	case DRM_FORMAT_RGBA8888:
 	case DRM_FORMAT_RGBA1010102:
 	case DRM_FORMAT_RGBX1010102:
 		return ((blend_mode == DRM_MODE_BLEND_PREMULTI) ?
-			OVL_CON_CLRFMT_PABGR8888 : OVL_CON_CLRFMT_ABGRB8888) |
-			(is_10bit_rgb(fmt) ? OVL_CON_CLRFMT_NB_10_BIT : 0);
+			OVL_EXDMA_CON_CLRFMT_PABGR8888 : OVL_EXDMA_CON_CLRFMT_ABGR8888) |
+			(is_10bit_rgb(fmt) ? OVL_EXDMA_CON_CLRFMT_NB_10_BIT : 0);
 	case DRM_FORMAT_BGRX8888:
 	case DRM_FORMAT_BGRA8888:
 	case DRM_FORMAT_BGRA1010102:
 	case DRM_FORMAT_BGRX1010102:
 		return ((blend_mode == DRM_MODE_BLEND_PREMULTI) ?
-			OVL_CON_CLRFMT_PARGB8888 : OVL_CON_CLRFMT_ARGB8888) |
-			(is_10bit_rgb(fmt) ? OVL_CON_CLRFMT_NB_10_BIT : 0);
+			OVL_EXDMA_CON_CLRFMT_PARGB8888 : OVL_EXDMA_CON_CLRFMT_ARGB8888) |
+			(is_10bit_rgb(fmt) ? OVL_EXDMA_CON_CLRFMT_NB_10_BIT : 0);
 	case DRM_FORMAT_XRGB8888:
 	case DRM_FORMAT_ARGB8888:
 	case DRM_FORMAT_ARGB2101010:
 	case DRM_FORMAT_XRGB2101010:
 		return ((blend_mode == DRM_MODE_BLEND_PREMULTI) ?
-			OVL_CON_CLRFMT_PBGRA8888 : OVL_CON_CLRFMT_BGRA8888) |
-			(is_10bit_rgb(fmt) ? OVL_CON_CLRFMT_NB_10_BIT : 0);
+			OVL_EXDMA_CON_CLRFMT_PBGRA8888 : OVL_EXDMA_CON_CLRFMT_BGRA8888) |
+			(is_10bit_rgb(fmt) ? OVL_EXDMA_CON_CLRFMT_NB_10_BIT : 0);
 	case DRM_FORMAT_XBGR8888:
 	case DRM_FORMAT_ABGR8888:
 	case DRM_FORMAT_ABGR2101010:
 	case DRM_FORMAT_XBGR2101010:
 		return ((blend_mode == DRM_MODE_BLEND_PREMULTI) ?
-			OVL_CON_CLRFMT_PRGBA8888 : OVL_CON_CLRFMT_RGBA8888) |
-			(is_10bit_rgb(fmt) ? OVL_CON_CLRFMT_NB_10_BIT : 0);
+			OVL_EXDMA_CON_CLRFMT_PRGBA8888 : OVL_EXDMA_CON_CLRFMT_RGBA8888) |
+			(is_10bit_rgb(fmt) ? OVL_EXDMA_CON_CLRFMT_NB_10_BIT : 0);
 	case DRM_FORMAT_UYVY:
-		return OVL_CON_CLRFMT_UYVY;
+		return OVL_EXDMA_CON_CLRFMT_UYVY;
 	case DRM_FORMAT_YUYV:
-		return OVL_CON_CLRFMT_YUYV;
+		return OVL_EXDMA_CON_CLRFMT_YUYV;
 	}
 }
 
-static unsigned int exdma_color_convert(unsigned int color_encoding)
+static unsigned int mtk_disp_exdma_color_convert(unsigned int color_encoding)
 {
 	switch (color_encoding) {
 	default:
 	case DRM_COLOR_YCBCR_BT709:
-		return DISP_OVL_CON_INT_MTX_BT709_TO_RGB;
+		return OVL_EXDMA_CON_INT_MTX_BT709_TO_RGB;
 	case DRM_COLOR_YCBCR_BT601:
-		return DISP_OVL_CON_INT_MTX_BT601_TO_RGB;
+		return OVL_EXDMA_CON_INT_MTX_BT601_TO_RGB;
 	}
 }
 
 void mtk_disp_exdma_start(struct device *dev, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
-	unsigned int value = 0, mask = 0;
+	unsigned int val, mask;
 
-	value = DISP_RDMA_BURST_CON1_BURST16_EN | DISP_RDMA_BURST_CON1_DDR_ACK_EN;
-	mask = DISP_RDMA_BURST_CON1_BURST16_EN | DISP_RDMA_BURST_CON1_DDR_EN |
-	       DISP_RDMA_BURST_CON1_DDR_ACK_EN;
-	mtk_ddp_write_mask(cmdq_pkt, value, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_RDMA_BURST_CON1, mask);
+	/*
+	 * This configuration enables dynamic power switching mechanism for EXDMA,
+	 * also known as "SRT mode".
+	 * Such configuration allows the system to achieve better power efficiency.
+	 */
+	val = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
+	mask = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_EN |
+	       OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_RDMA_BURST_CON1, mask);
 	/*
 	 * The dummy register is used in the configuration of the EXDMA engine to
-	 * write commands to DRAM, ensuring that data transfers occur normally.
+	 * signal ddren_request, and get ddren_ack before accessing the DRAM to
+	 * ensure data transfers occur normally.
 	 */
-	value = DISP_OVL_EXT_DDR_EN_OPT | DISP_OVL_FORCE_EXT_DDR_EN;
-	mask = DISP_OVL_EXT_DDR_EN_OPT | DISP_OVL_FORCE_EXT_DDR_EN;
-	mtk_ddp_write_mask(cmdq_pkt, value, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_DUMMY_REG, mask);
+	val = OVL_EXDMA_EXT_DDR_EN_OPT | OVL_EXDMA_FORCE_EXT_DDR_EN;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_DUMMY_REG, val);
 
-	value = DATAPATH_CON_LAYER_SMI_ID_EN | DATAPATH_CON_HDR_GCLAST_EN | DATAPATH_CON_GCLAST_EN;
-	mask = DATAPATH_CON_LAYER_SMI_ID_EN | DATAPATH_CON_HDR_GCLAST_EN | DATAPATH_CON_GCLAST_EN;
-	mtk_ddp_write_mask(cmdq_pkt, value, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_DATAPATH_CON, mask);
+	val = OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN |
+	      OVL_EXDMA_DATAPATH_CON_HDR_GCLAST_EN |
+	      OVL_EXDMA_DATAPATH_CON_GCLAST_EN;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_DATAPATH_CON, val);
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_MOUT_BGCLR_OUT, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_MOUT, OVL_MOUT_BGCLR_OUT | OVL_MOUT_OUT_DATA);
+	val = OVL_EXDMA_MOUT_BGCLR_OUT;
+	mask = OVL_EXDMA_MOUT_BGCLR_OUT | OVL_EXDMA_MOUT_OUT_DATA;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_MOUT, mask);
 
-	mtk_ddp_write(cmdq_pkt, ~0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_GDRDY_PRD);
+	mtk_ddp_write(cmdq_pkt, GENMASK(31, 0), &priv->cmdq_reg, priv->regs,
+		      DISP_REG_OVL_EXDMA_GDRDY_PRD);
 
-	mtk_ddp_write_mask(cmdq_pkt, DISP_RDMA0_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_RDMA0_CTRL, DISP_RDMA0_EN);
-	mtk_ddp_write_mask(cmdq_pkt, DISP_OVL_L0_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_L0_EN, DISP_OVL_L0_EN);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_RDMA0_EN, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_RDMA0_CTRL, OVL_EXDMA_RDMA0_EN);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_L0_EN, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_L0_EN, OVL_EXDMA_L0_EN);
 
-	mtk_ddp_write_mask(cmdq_pkt, DISP_OVL_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EN, DISP_OVL_EN);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_EN, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_EN, OVL_EXDMA_EN);
 }
 
 void mtk_disp_exdma_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
 
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_EN, DISP_OVL_EN);
 	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_RDMA0_CTRL, DISP_RDMA0_EN);
+			   DISP_REG_OVL_EXDMA_EN, OVL_EXDMA_EN);
 	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_DATAPATH_CON, DATAPATH_CON_LAYER_SMI_ID_EN);
+			   DISP_REG_OVL_EXDMA_RDMA0_CTRL, OVL_EXDMA_RDMA0_EN);
 	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_L0_EN, DISP_OVL_L0_EN);
-	mtk_ddp_write_mask(cmdq_pkt, DISP_OVL_RST, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_RST, DISP_OVL_RST);
+			   DISP_REG_OVL_EXDMA_DATAPATH_CON,
+			   OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN);
 	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_RST, DISP_OVL_RST);
+			   DISP_REG_OVL_EXDMA_L0_EN, OVL_EXDMA_L0_EN);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_RST, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_RST, OVL_EXDMA_RST);
+	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_RST, OVL_EXDMA_RST);
 }
 
 void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
@@ -266,64 +278,52 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 	const struct drm_format_info *fmt_info = drm_format_info(pending->format);
 	bool csc_enable = (fmt_info) ? fmt_info->is_yuv : false;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
-	unsigned int clrfmt = 0;
-	unsigned int clrfmt_mask = OVL_CON_RGB_SWAP |
-				   OVL_CON_BYTE_SWAP |
-				   OVL_CON_CLRFMT_MAN |
-				   OVL_CON_FLD_CLRFMT |
-				   OVL_CON_FLD_CLRFMT_NB;
+	unsigned int val;
 
 	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
-		      priv->regs, DISP_REG_OVL_ROI_SIZE);
+		      priv->regs, DISP_REG_OVL_EXDMA_ROI_SIZE);
 	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
-		      priv->regs, DISP_REG_OVL_SRC_SIZE);
+		      priv->regs, DISP_REG_OVL_EXDMA_SRC_SIZE);
 
 	if (pending->is_secure)
 		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr, 0,
-				  &priv->cmdq_reg, DISP_REG_OVL_ADDR);
+				  &priv->cmdq_reg, DISP_REG_OVL_EXDMA_ADDR);
 	else
 		mtk_ddp_write(cmdq_pkt, pending->addr, &priv->cmdq_reg,
-			      priv->regs, DISP_REG_OVL_ADDR);
-
-	mtk_ddp_write_mask(cmdq_pkt, pending->pitch, &priv->cmdq_reg,
-			   priv->regs, DISP_REG_OVL_PITCH, OVL_L0_SRC_PITCH_MASK);
-	mtk_ddp_write_mask(cmdq_pkt, pending->pitch >> 16, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_PITCH_MSB, 0xf);
-
-	if (csc_enable)
-		mtk_ddp_write_mask(cmdq_pkt, exdma_color_convert(pending->color_encoding) |
-				   DISP_OVL_CON_INT_MTX_EN, &priv->cmdq_reg, priv->regs,
-				   DISP_REG_OVL_CON, DISP_OVL_CON_FLD_INT_MTX_SEL |
-				   DISP_OVL_CON_INT_MTX_EN);
-	else
-		mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_CON,
-				   DISP_OVL_CON_INT_MTX_EN);
+			      priv->regs, DISP_REG_OVL_EXDMA_ADDR);
 
 	/* alpha blend setting */
 	if (state->base.fb && state->base.fb->format->has_alpha)
 		blend_mode = state->base.pixel_blend_mode;
 
-	clrfmt = mtk_disp_exdma_fmt_convert(pending->format, blend_mode);
+	val = pending->pitch;
+	if (blend_mode == DRM_MODE_BLEND_PIXEL_NONE)
+		val |= OVL_EXDMA_L0_CONST_BLD;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_EXDMA_PITCH,
+			   OVL_EXDMA_L0_CONST_BLD | OVL_EXDMA_L0_SRC_PITCH_MASK);
+	mtk_ddp_write_mask(cmdq_pkt, pending->pitch >> 16, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_PITCH_MSB, OVL_EXDMA_L0_SRC_PITCH_MSB_MASK);
 
-	mtk_ddp_write_mask(cmdq_pkt, clrfmt, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_L0_CLRFMT, clrfmt_mask);
+	val = mtk_disp_exdma_color_convert(pending->color_encoding);
+	if (csc_enable)
+		val |= OVL_EXDMA_CON_INT_MTX_EN;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_EXDMA_CON,
+			   OVL_EXDMA_CON_FLD_INT_MTX_SEL | OVL_EXDMA_CON_INT_MTX_EN);
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_OP_8BIT_MODE | OVL_HG_FOVL_CK_ON | OVL_HF_FOVL_CK_ON,
-			   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_EN_CON,
-			   OVL_OP_8BIT_MODE | OVL_HG_FOVL_CK_ON | OVL_HF_FOVL_CK_ON);
+	val = mtk_disp_exdma_fmt_convert(pending->format, blend_mode);
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_L0_CLRFMT,
+			   OVL_EXDMA_CON_RGB_SWAP | OVL_EXDMA_CON_BYTE_SWAP |
+			   OVL_EXDMA_CON_CLRFMT_MAN | OVL_EXDMA_CON_FLD_CLRFMT |
+			   OVL_EXDMA_CON_FLD_CLRFMT_NB);
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_RDMA0_L0_VCSEL | OVL_RDMA0_HDR_L0_VCSEL,
-			   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_L0_GUSER_EXT,
-			   OVL_RDMA0_L0_VCSEL | OVL_RDMA0_HDR_L0_VCSEL);
+	val = OVL_EXDMA_OP_8BIT_MODE | OVL_EXDMA_HG_FOVL_CK_ON | OVL_EXDMA_HF_FOVL_CK_ON;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_EN_CON, val);
 
-	if (blend_mode == DRM_MODE_BLEND_PIXEL_NONE) {
-		mtk_ddp_write_mask(cmdq_pkt, OVL_L0_CONST_BLD | pending->pitch,
-				   &priv->cmdq_reg, priv->regs,
-				   DISP_REG_OVL_PITCH, OVL_L0_CONST_BLD | OVL_L0_SRC_PITCH);
-	} else {
-		mtk_ddp_write_mask(cmdq_pkt, pending->pitch, &priv->cmdq_reg, priv->regs,
-				   DISP_REG_OVL_PITCH, OVL_L0_CONST_BLD | OVL_L0_SRC_PITCH);
-	}
+	val = OVL_EXDMA_RDMA0_L0_VCSEL | OVL_EXDMA_RDMA0_HDR_L0_VCSEL;
+	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_L0_GUSER_EXT, val);
 }
 
 const u32 *mtk_disp_exdma_get_formats(struct device *dev)

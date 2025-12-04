@@ -8,9 +8,9 @@
 #include <drm/drm_print.h>
 #include <linux/clk.h>
 #include <linux/component.h>
-#include <linux/of_platform.h>
-#include <linux/of_device.h>
 #include <linux/of_address.h>
+#include <linux/of_device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
@@ -18,10 +18,10 @@
 #include <linux/soc/mediatek/mtk-mmsys.h>
 #include <linux/soc/mediatek/mtk-mutex.h>
 
-#include "mtk_disp_blender.h"
-#include "mtk_disp_drv.h"
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
+#include "mtk_disp_blender.h"
+#include "mtk_disp_drv.h"
 #include "mtk_drm_drv.h"
 
 enum mtk_ovlsys_adaptor_comp_type {

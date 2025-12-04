@@ -8,6 +8,7 @@
 #include <drm/drm_print.h>
 #include <linux/clk.h>
 #include <linux/component.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
@@ -17,19 +18,18 @@
 
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
-#include <linux/of.h>
 #include "mtk_drm_drv.h"
 
 #define DISP_REG_OVL_OUTPROC_INTEN				0x004
 #define OVL_OUTPROC_FME_CPL_INTEN					BIT(1)
 #define OVL_OUTPROC_FME_UND_INTEN					BIT(2)
 #define DISP_REG_OVL_OUTPROC_INTSTA				0x008
-#define DISP_REG_OVL_OUTPROC_DATAPATH_CON			0x010
-#define DATAPATH_CON_OUTPUT_CLAMP					BIT(26)
 #define DISP_REG_OVL_OUTPROC_TRIG				0x00c
 #define OVL_OUTPROC_SW_TRIG						BIT(0)
 #define OVL_OUTPROC_CRC_EN						BIT(8)
 #define OVL_OUTPROC_CRC_CLR						BIT(9)
+#define DISP_REG_OVL_OUTPROC_DATAPATH_CON			0x010
+#define OVL_OUTPROC_DATAPATH_CON_OUTPUT_CLAMP				BIT(26)
 #define DISP_REG_OVL_OUTPROC_EN					0x020
 #define OVL_OUTPROC_OVL_EN						BIT(0)
 #define DISP_REG_OVL_OUTPROC_RST				0x024
@@ -149,8 +149,9 @@ void mtk_disp_outproc_config(struct device *dev, unsigned int w,
 
 	mtk_ddp_write_mask(cmdq_pkt, h << 16 | w, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_OUTPROC_ROI_SIZE, ~0);
-	mtk_ddp_write_mask(cmdq_pkt, DATAPATH_CON_OUTPUT_CLAMP, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_DATAPATH_CON, DATAPATH_CON_OUTPUT_CLAMP);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_OUTPROC_DATAPATH_CON_OUTPUT_CLAMP,
+			   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_OUTPROC_DATAPATH_CON,
+			   OVL_OUTPROC_DATAPATH_CON_OUTPUT_CLAMP);
 }
 
 void mtk_disp_outproc_start(struct device *dev)

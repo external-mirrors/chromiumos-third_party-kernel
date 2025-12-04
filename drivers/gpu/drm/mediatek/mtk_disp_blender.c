@@ -26,21 +26,19 @@
 #define OVL_BLD_BGCLR_IN_SEL					BIT(0)
 #define OVL_BLD_BGCLR_OUT_TO_PROC				BIT(4)
 #define OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER				BIT(5)
-
 #define DISP_REG_OVL_BLD_EN				0x020
 #define OVL_BLD_EN						BIT(0)
 #define OVL_BLD_FORCE_RELAY_MODE				BIT(4)
-#define OVL_RELAY_MODE						BIT(5)
+#define OVL_BLD_RELAY_MODE					BIT(5)
 #define DISP_REG_OVL_BLD_RST				0x024
 #define OVL_BLD_RST						BIT(0)
 #define DISP_REG_OVL_BLD_SHADOW_CTRL			0x028
-#define DISP_OVL_BLD_BYPASS_SHADOW				BIT(2)
-#define DISP_OVL_BLD_BGCLR_BALCK			0xff000000
+#define OVL_BLD_BYPASS_SHADOW					BIT(2)
 #define DISP_REG_OVL_BLD_ROI_SIZE			0x030
 #define DISP_REG_OVL_BLD_L_EN				0x040
 #define OVL_BLD_L_EN						BIT(0)
-#define DISP_REG_BLD_OVL_OFFSET				0x044
-#define DISP_REG_BLD_OVL_SRC_SIZE			0x048
+#define DISP_REG_OVL_BLD_OFFSET				0x044
+#define DISP_REG_OVL_BLD_SRC_SIZE			0x048
 #define DISP_REG_OVL_BLD_L0_CLRFMT			0x050
 #define OVL_BLD_CON_FLD_CLRFMT					GENMASK(3, 0)
 #define OVL_BLD_CON_CLRFMT_MAN					BIT(4)
@@ -72,9 +70,10 @@
 #define DISP_REG_OVL_BLD_L_CON2				0x200
 #define OVL_BLD_L_ALPHA						GENMASK(7, 0)
 #define OVL_BLD_L_ALPHA_EN					BIT(12)
-#define DISP_REG_OVL_BLD_L0_PITCH			0x208
-#define OVL_L0_CONST_BLD					BIT(24)
+#define DISP_REG_OVL_BLD_L0_ALPHA_SEL			0x208
+#define OVL_BLD_L0_CONST					BIT(24)
 #define DISP_REG_OVL_BLD_L0_CLR				0x20c
+#define OVL_BLD_BGCLR_BLACK					(0xff000000)
 
 struct mtk_disp_blender {
 	void __iomem		*regs;
@@ -154,8 +153,7 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
 	struct mtk_plane_pending_state *pending = &state->pending;
-	unsigned int alpha;
-	unsigned int clrfmt;
+	unsigned int alpha, clrfmt, ignore_pixel_alpha = 0;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 
 	if (!pending->enable) {
@@ -164,33 +162,29 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 	}
 
 	mtk_ddp_write(cmdq_pkt, pending->y << 16 | pending->x, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_BLD_OVL_OFFSET);
-
-	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_BLD_OVL_SRC_SIZE);
+		      DISP_REG_OVL_BLD_OFFSET);
+	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
+		      priv->regs, DISP_REG_OVL_BLD_SRC_SIZE);
 
 	if (state->base.fb && state->base.fb->format->has_alpha)
 		blend_mode = state->base.pixel_blend_mode;
 
 	clrfmt = mtk_disp_blender_fmt_convert(pending->format, blend_mode);
-
 	mtk_ddp_write_mask(cmdq_pkt, clrfmt, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_BLD_L0_CLRFMT, OVL_BLD_CON_CLRFMT_MAN |
 			   OVL_BLD_CON_RGB_SWAP |  OVL_BLD_CON_BYTE_SWAP |
 			   OVL_BLD_CON_FLD_CLRFMT | OVL_BLD_CON_FLD_CLRFMT_NB);
 
-	alpha = (0xFF & (state->base.alpha >> 8)) | OVL_BLD_L_ALPHA_EN;
+	if (blend_mode == DRM_MODE_BLEND_PIXEL_NONE)
+		ignore_pixel_alpha = OVL_BLD_L0_CONST;
+	mtk_ddp_write_mask(cmdq_pkt, ignore_pixel_alpha, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_BLD_L0_ALPHA_SEL, OVL_BLD_L0_CONST);
+
+	alpha = (OVL_BLD_L_ALPHA & (state->base.alpha >> 8)) | OVL_BLD_L_ALPHA_EN;
 	mtk_ddp_write_mask(cmdq_pkt, alpha, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_OVL_BLD_L_CON2, OVL_BLD_L_ALPHA_EN | OVL_BLD_L_ALPHA);
 
 	mtk_ddp_write(cmdq_pkt, OVL_BLD_L_EN, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
-
-	if (blend_mode == DRM_MODE_BLEND_PIXEL_NONE)
-		mtk_ddp_write_mask(cmdq_pkt, OVL_L0_CONST_BLD, &priv->cmdq_reg, priv->regs,
-				   DISP_REG_OVL_BLD_L0_PITCH, OVL_L0_CONST_BLD);
-	else
-		mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-				   DISP_REG_OVL_BLD_L0_PITCH, OVL_L0_CONST_BLD);
 }
 
 void mtk_disp_blender_config(struct device *dev, unsigned int w,
@@ -204,14 +198,19 @@ void mtk_disp_blender_config(struct device *dev, unsigned int w,
 	dev_dbg(dev, "%s-w:%d, h:%d\n", __func__, w, h);
 
 	tmp = readl(priv->regs + DISP_REG_OVL_BLD_SHADOW_CTRL);
-	tmp = tmp | DISP_OVL_BLD_BYPASS_SHADOW;
+	tmp |= OVL_BLD_BYPASS_SHADOW;
 	writel(tmp, priv->regs + DISP_REG_OVL_BLD_SHADOW_CTRL);
 
 	mtk_ddp_write(cmdq_pkt, h << 16 | w, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_OVL_BLD_ROI_SIZE);
-	mtk_ddp_write(cmdq_pkt, DISP_OVL_BLD_BGCLR_BALCK, &priv->cmdq_reg, priv->regs,
+	mtk_ddp_write(cmdq_pkt, OVL_BLD_BGCLR_BLACK, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_OVL_BLD_BGCLR_CLR);
-	mtk_ddp_write(cmdq_pkt, DISP_OVL_BLD_BGCLR_BALCK, &priv->cmdq_reg, priv->regs,
+	/*
+	 * The input source of blender layer can be EXDMA layer output or
+	 * the blender constant layer itself.
+	 * This color setting is configured for the blender constant layer.
+	 */
+	mtk_ddp_write(cmdq_pkt, OVL_BLD_BGCLR_BLACK, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_OVL_BLD_L0_CLR);
 
 	if (blender == FIRST_BLENDER)
