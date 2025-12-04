@@ -187,9 +187,8 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 	mtk_ddp_write(cmdq_pkt, OVL_BLD_L_EN, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
 }
 
-void mtk_disp_blender_config(struct device *dev, unsigned int w,
-			     unsigned int h, unsigned int vrefresh,
-			     unsigned int bpc, enum mtk_disp_blender_layer blender)
+void mtk_disp_blender_config(struct device *dev, unsigned int w, unsigned int h,
+			     bool top, bool bottom)
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
 	unsigned int tmp, val;
@@ -212,14 +211,16 @@ void mtk_disp_blender_config(struct device *dev, unsigned int w,
 	 */
 	writel(OVL_BLD_BGCLR_BLACK, priv->regs + DISP_REG_OVL_BLD_L0_CLR);
 
-	if (blender == FIRST_BLENDER)
-		val = OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER;
-	else if (blender == LAST_BLENDER)
-		val = OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_IN_SEL;
-	else if (blender == SINGLE_BLENDER)
+	if (top)
 		val = OVL_BLD_BGCLR_OUT_TO_PROC;
 	else
-		val = OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER | OVL_BLD_BGCLR_IN_SEL;
+		val = OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER;
+	/*
+	 * The primary input is from EXDMA and the second input
+	 * is optionally from another blender
+	 */
+	if (!bottom)
+		val |= OVL_BLD_BGCLR_IN_SEL;
 
 	tmp = readl(priv->regs + DISP_REG_OVL_BLD_DATAPATH_CON);
 	tmp = (tmp & ~mask) | val;

@@ -385,28 +385,13 @@ void mtk_ovlsys_adaptor_config(struct device *dev, unsigned int w,
 {
 	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
 	int i;
-	int blender_idx = 0;
 
-	for (i = 0; i < priv->path_size; i++) {
-		enum mtk_disp_blender_layer blender;
+	for (i = 0; i < priv->layer_nr; i++)
+		mtk_disp_blender_config(priv->ovl_adaptor_comp[priv->path[i * 2 + 1]], w, h,
+					i == (priv->layer_nr - 1),
+					i == 0);
 
-		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_BLENDER) {
-			blender_idx++;
-			if (priv->layer_nr == 1)
-				blender = SINGLE_BLENDER;
-			else if (blender_idx == 1)
-				blender = FIRST_BLENDER;
-			else if (blender_idx == priv->layer_nr)
-				blender = LAST_BLENDER;
-			else
-				blender = OTHERS;
-
-			mtk_disp_blender_config(priv->ovl_adaptor_comp[priv->path[i]], w, h,
-						vrefresh, bpc, blender);
-		} else if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC) {
-			mtk_disp_outproc_config(priv->ovl_adaptor_comp[priv->path[i]], w, h);
-		}
-	}
+	mtk_disp_outproc_config(priv->ovl_adaptor_comp[priv->path[priv->layer_nr * 2]], w, h);
 }
 
 int mtk_ovlsys_adaptor_layer_check(struct device *dev,

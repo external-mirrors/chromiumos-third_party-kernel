@@ -45,9 +45,8 @@ void mtk_disp_blender_start(struct device *dev);
 void mtk_disp_blender_stop(struct device *dev);
 int mtk_disp_blender_clk_enable(struct device *dev);
 void mtk_disp_blender_clk_disable(struct device *dev);
-void mtk_disp_blender_config(struct device *dev, unsigned int w,
-			     unsigned int h, unsigned int vrefresh,
-			     unsigned int bpc, enum mtk_disp_blender_layer blender);
+void mtk_disp_blender_config(struct device *dev, unsigned int w, unsigned int h,
+			     bool top, bool bottom);
 void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *state,
 				   struct cmdq_pkt *cmdq_pkt);
 
