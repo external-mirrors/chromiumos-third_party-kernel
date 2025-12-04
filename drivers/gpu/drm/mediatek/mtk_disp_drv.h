@@ -41,23 +41,22 @@ void mtk_color_config(struct device *dev, unsigned int w,
 		      unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
 void mtk_color_start(struct device *dev);
 
-void mtk_disp_blender_start(struct device *dev, struct cmdq_pkt *cmdq_pkt);
-void mtk_disp_blender_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_blender_start(struct device *dev);
+void mtk_disp_blender_stop(struct device *dev);
 int mtk_disp_blender_clk_enable(struct device *dev);
 void mtk_disp_blender_clk_disable(struct device *dev);
 void mtk_disp_blender_config(struct device *dev, unsigned int w,
 			     unsigned int h, unsigned int vrefresh,
-			     unsigned int bpc, enum mtk_disp_blender_layer blender,
-			     struct cmdq_pkt *cmdq_pkt);
+			     unsigned int bpc, enum mtk_disp_blender_layer blender);
 void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *state,
 				   struct cmdq_pkt *cmdq_pkt);
 
 int mtk_disp_exdma_clk_enable(struct device *dev);
 void mtk_disp_exdma_clk_disable(struct device *dev);
-void mtk_disp_exdma_start(struct device *dev, struct cmdq_pkt *cmdq_pkt);
-void mtk_disp_exdma_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt);
-void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
-			   struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_exdma_start(struct device *dev);
+void mtk_disp_exdma_stop(struct device *dev);
+void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *state,
+				 struct cmdq_pkt *cmdq_pkt);
 const u32 *mtk_disp_exdma_get_formats(struct device *dev);
 size_t mtk_disp_exdma_get_num_formats(struct device *dev);
 void mtk_disp_exdma_set_hrt_bw(struct device *dev, unsigned int bw);
@@ -85,9 +84,7 @@ void mtk_disp_outproc_start(struct device *dev);
 void mtk_disp_outproc_stop(struct device *dev);
 int mtk_disp_outproc_clk_enable(struct device *dev);
 void mtk_disp_outproc_clk_disable(struct device *dev);
-void mtk_disp_outproc_config(struct device *dev, unsigned int w,
-			     unsigned int h, unsigned int vrefresh,
-			     unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
+void mtk_disp_outproc_config(struct device *dev, unsigned int w, unsigned int h);
 void mtk_disp_outproc_register_vblank_cb(struct device *dev,
 					 void (*vblank_cb)(void *),
 					 void *vblank_cb_data);

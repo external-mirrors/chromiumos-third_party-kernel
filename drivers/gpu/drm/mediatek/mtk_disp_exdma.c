@@ -81,7 +81,6 @@
 #define OVL_EXDMA_L0_SRC_PITCH_MASK			GENMASK(15, 0)
 #define DISP_REG_OVL_EXDMA_L0_GUSER_EXT		0x2fc
 #define OVL_EXDMA_RDMA0_L0_VCSEL			BIT(5)
-#define OVL_EXDMA_RDMA0_HDR_L0_VCSEL			BIT(21)
 #define DISP_REG_OVL_EXDMA_CON			0x300
 #define OVL_EXDMA_CON_FLD_INT_MTX_SEL			GENMASK(19, 16)
 #define OVL_EXDMA_CON_INT_MTX_BT601_TO_RGB		(6 << 16)
@@ -204,10 +203,10 @@ static unsigned int mtk_disp_exdma_color_convert(unsigned int color_encoding)
 	}
 }
 
-void mtk_disp_exdma_start(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+void mtk_disp_exdma_start(struct device *dev)
 {
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
-	unsigned int val, mask;
+	unsigned int tmp, val, mask;
 
 	/*
 	 * This configuration enables dynamic power switching mechanism for EXDMA,
@@ -217,61 +216,55 @@ void mtk_disp_exdma_start(struct device *dev, struct cmdq_pkt *cmdq_pkt)
 	val = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
 	mask = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_EN |
 	       OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
-	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_RDMA_BURST_CON1, mask);
+	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_RDMA_BURST_CON1);
+	tmp = (tmp & ~mask) | val;
+	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_RDMA_BURST_CON1);
+
 	/*
 	 * The dummy register is used in the configuration of the EXDMA engine to
 	 * signal ddren_request, and get ddren_ack before accessing the DRAM to
 	 * ensure data transfers occur normally.
 	 */
 	val = OVL_EXDMA_EXT_DDR_EN_OPT | OVL_EXDMA_FORCE_EXT_DDR_EN;
-	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_DUMMY_REG, val);
+	writel(val, priv->regs + DISP_REG_OVL_EXDMA_DUMMY_REG);
 
 	val = OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN |
 	      OVL_EXDMA_DATAPATH_CON_HDR_GCLAST_EN |
 	      OVL_EXDMA_DATAPATH_CON_GCLAST_EN;
-	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_DATAPATH_CON, val);
+	writel(val, priv->regs + DISP_REG_OVL_EXDMA_DATAPATH_CON);
 
 	val = OVL_EXDMA_MOUT_BGCLR_OUT;
 	mask = OVL_EXDMA_MOUT_BGCLR_OUT | OVL_EXDMA_MOUT_OUT_DATA;
-	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_MOUT, mask);
+	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_MOUT);
+	tmp = (tmp & ~mask) | val;
+	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_MOUT);
 
-	mtk_ddp_write(cmdq_pkt, GENMASK(31, 0), &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_EXDMA_GDRDY_PRD);
+	writel(GENMASK(31, 0), priv->regs + DISP_REG_OVL_EXDMA_GDRDY_PRD);
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_RDMA0_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_RDMA0_CTRL, OVL_EXDMA_RDMA0_EN);
-	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_L0_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_L0_EN, OVL_EXDMA_L0_EN);
+	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_RDMA0_CTRL);
+	tmp |= OVL_EXDMA_RDMA0_EN;
+	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_RDMA0_CTRL);
+	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_L0_EN);
+	tmp |= OVL_EXDMA_L0_EN;
+	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_L0_EN);
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_EN, OVL_EXDMA_EN);
+	writel(OVL_EXDMA_EN, priv->regs + DISP_REG_OVL_EXDMA_EN);
 }
 
-void mtk_disp_exdma_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+void mtk_disp_exdma_stop(struct device *dev)
 {
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
 
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_EN, OVL_EXDMA_EN);
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_RDMA0_CTRL, OVL_EXDMA_RDMA0_EN);
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_DATAPATH_CON,
-			   OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN);
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_L0_EN, OVL_EXDMA_L0_EN);
-	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_RST, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_RST, OVL_EXDMA_RST);
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_RST, OVL_EXDMA_RST);
+	writel(0, priv->regs + DISP_REG_OVL_EXDMA_EN);
+	writel(0, priv->regs + DISP_REG_OVL_EXDMA_RDMA0_CTRL);
+	writel(0, priv->regs + DISP_REG_OVL_EXDMA_DATAPATH_CON);
+	writel(0, priv->regs + DISP_REG_OVL_EXDMA_L0_EN);
+	writel(OVL_EXDMA_RST, priv->regs + DISP_REG_OVL_EXDMA_RST);
+	writel(0, priv->regs + DISP_REG_OVL_EXDMA_RST);
 }
 
-void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
-			   struct cmdq_pkt *cmdq_pkt)
+void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *state,
+				 struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
 	struct mtk_plane_pending_state *pending = &state->pending;
@@ -285,6 +278,8 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
 		      priv->regs, DISP_REG_OVL_EXDMA_SRC_SIZE);
 
+	mtk_ddp_write(cmdq_pkt, pending->y << 16 | pending->x, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_OVL_EXDMA_L0_OFFSET);
 	if (pending->is_secure)
 		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr, 0,
 				  &priv->cmdq_reg, DISP_REG_OVL_EXDMA_ADDR);
@@ -318,12 +313,11 @@ void mtk_disp_exdma_config(struct device *dev, struct mtk_plane_state *state,
 			   OVL_EXDMA_CON_FLD_CLRFMT_NB);
 
 	val = OVL_EXDMA_OP_8BIT_MODE | OVL_EXDMA_HG_FOVL_CK_ON | OVL_EXDMA_HF_FOVL_CK_ON;
-	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_EN_CON, val);
+	mtk_ddp_write(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_OVL_EXDMA_EN_CON);
 
-	val = OVL_EXDMA_RDMA0_L0_VCSEL | OVL_EXDMA_RDMA0_HDR_L0_VCSEL;
-	mtk_ddp_write_mask(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_EXDMA_L0_GUSER_EXT, val);
+	mtk_ddp_write(cmdq_pkt, OVL_EXDMA_RDMA0_L0_VCSEL, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_OVL_EXDMA_L0_GUSER_EXT);
 }
 
 const u32 *mtk_disp_exdma_get_formats(struct device *dev)

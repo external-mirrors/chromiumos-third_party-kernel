@@ -298,17 +298,16 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 	if (!pending->enable || pending->height == 0 || pending->width == 0 ||
 	    pending->x > priv->max_size || pending->y > priv->max_size) {
 		pending->enable = false;
-		mtk_disp_exdma_stop(exdma, cmdq_pkt);
+		mtk_disp_exdma_stop(exdma);
 		mtk_disp_blender_layer_config(blender, state, cmdq_pkt);
 		return;
 	}
 
-	mtk_disp_exdma_config(exdma, state, cmdq_pkt);
-
+	mtk_disp_exdma_layer_config(exdma, state, cmdq_pkt);
 	mtk_disp_blender_layer_config(blender, state, cmdq_pkt);
 
-	mtk_disp_exdma_start(exdma, cmdq_pkt);
-	mtk_disp_blender_start(blender, cmdq_pkt);
+	mtk_disp_exdma_start(exdma);
+	mtk_disp_blender_start(blender);
 }
 
 size_t mtk_ovlsys_adaptor_crc_cnt(struct device *dev)
@@ -403,10 +402,9 @@ void mtk_ovlsys_adaptor_config(struct device *dev, unsigned int w,
 				blender = OTHERS;
 
 			mtk_disp_blender_config(priv->ovl_adaptor_comp[priv->path[i]], w, h,
-						vrefresh, bpc, blender, cmdq_pkt);
+						vrefresh, bpc, blender);
 		} else if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_OUTPROC) {
-			mtk_disp_outproc_config(priv->ovl_adaptor_comp[priv->path[i]], w, h,
-						vrefresh, bpc, cmdq_pkt);
+			mtk_disp_outproc_config(priv->ovl_adaptor_comp[priv->path[i]], w, h);
 		}
 	}
 }
@@ -431,9 +429,9 @@ void mtk_ovlsys_adaptor_start(struct device *dev)
 
 	for (i = 0; i < priv->path_size; i++) {
 		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_EXDMA)
-			mtk_disp_exdma_start(priv->ovl_adaptor_comp[priv->path[i]], NULL);
+			mtk_disp_exdma_start(priv->ovl_adaptor_comp[priv->path[i]]);
 		else if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_BLENDER)
-			mtk_disp_blender_start(priv->ovl_adaptor_comp[priv->path[i]], NULL);
+			mtk_disp_blender_start(priv->ovl_adaptor_comp[priv->path[i]]);
 		else
 			mtk_disp_outproc_start(priv->ovl_adaptor_comp[priv->path[i]]);
 	}
@@ -446,9 +444,9 @@ void mtk_ovlsys_adaptor_stop(struct device *dev)
 
 	for (i = 0; i < priv->path_size; i++) {
 		if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_EXDMA)
-			mtk_disp_exdma_stop(priv->ovl_adaptor_comp[priv->path[i]], NULL);
+			mtk_disp_exdma_stop(priv->ovl_adaptor_comp[priv->path[i]]);
 		else if (get_type(priv->path[i]) == OVLSYS_ADAPTOR_TYPE_BLENDER)
-			mtk_disp_blender_stop(priv->ovl_adaptor_comp[priv->path[i]], NULL);
+			mtk_disp_blender_stop(priv->ovl_adaptor_comp[priv->path[i]]);
 		else
 			mtk_disp_outproc_stop(priv->ovl_adaptor_comp[priv->path[i]]);
 	}

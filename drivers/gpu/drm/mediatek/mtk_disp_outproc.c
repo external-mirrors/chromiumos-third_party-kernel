@@ -134,9 +134,7 @@ static irqreturn_t mtk_disp_outproc_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-void mtk_disp_outproc_config(struct device *dev, unsigned int w,
-			     unsigned int h, unsigned int vrefresh,
-			     unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
+void mtk_disp_outproc_config(struct device *dev, unsigned int w, unsigned int h)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
 	unsigned int tmp;
@@ -144,64 +142,53 @@ void mtk_disp_outproc_config(struct device *dev, unsigned int w,
 	dev_dbg(dev, "%s-w:%d, h:%d\n", __func__, w, h);
 
 	tmp = readl(priv->regs + DISP_REG_OVL_OUTPROC_SHADOW_CTRL);
-	tmp = tmp | OVL_OUTPROC_BYPASS_SHADOW;
+	tmp |= OVL_OUTPROC_BYPASS_SHADOW;
 	writel(tmp, priv->regs + DISP_REG_OVL_OUTPROC_SHADOW_CTRL);
 
-	mtk_ddp_write_mask(cmdq_pkt, h << 16 | w, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_ROI_SIZE, ~0);
-	mtk_ddp_write_mask(cmdq_pkt, OVL_OUTPROC_DATAPATH_CON_OUTPUT_CLAMP,
-			   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_OUTPROC_DATAPATH_CON,
-			   OVL_OUTPROC_DATAPATH_CON_OUTPUT_CLAMP);
+	writel((h << 16) | w, priv->regs + DISP_REG_OVL_OUTPROC_ROI_SIZE);
+
+	tmp = readl(priv->regs + DISP_REG_OVL_OUTPROC_DATAPATH_CON);
+	tmp |= OVL_OUTPROC_DATAPATH_CON_OUTPUT_CLAMP;
+	writel(tmp, priv->regs + DISP_REG_OVL_OUTPROC_DATAPATH_CON);
 }
 
 void mtk_disp_outproc_start(struct device *dev)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
-	unsigned int crc_mode_en  = OVL_OUTPROC_HG_FOVL_CK_ON |
-				    OVL_OUTPROC_HF_FOVL_CK_ON |
-				    OVL_OUTPROC_OP_8BIT_MODE;
-
-	mtk_ddp_write_mask(NULL, OVL_OUTPROC_RST, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_RST, OVL_OUTPROC_RST);
-	mtk_ddp_write_mask(NULL, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_RST, OVL_OUTPROC_RST);
-	mtk_ddp_write(NULL, 0, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_OUTPROC_INTSTA);
-	mtk_ddp_write_mask(NULL, OVL_OUTPROC_OVL_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_EN, OVL_OUTPROC_OVL_EN);
-
-	if (priv->crc.cnt) {
-		mtk_ddp_write_mask(NULL, crc_mode_en, &priv->cmdq_reg, priv->regs,
-				 DISP_REG_OVL_OUTPROC_MODE, crc_mode_en);
-		mtk_ddp_write(NULL, OVL_OUTPROC_CRC_EN, &priv->cmdq_reg, priv->regs,
-			      DISP_REG_OVL_OUTPROC_TRIG);
+	unsigned int crc_mode_en = OVL_OUTPROC_HG_FOVL_CK_ON |
+				   OVL_OUTPROC_HF_FOVL_CK_ON |
+				   OVL_OUTPROC_OP_8BIT_MODE;
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-		mtk_crtc_start_crc_cmdq(&priv->crc);
+	mtk_crtc_start_crc_cmdq(&priv->crc);
 #endif
+
+	writel(OVL_OUTPROC_RST, priv->regs + DISP_REG_OVL_OUTPROC_RST);
+	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_RST);
+
+	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_INTSTA);
+	writel(OVL_OUTPROC_OVL_EN, priv->regs + DISP_REG_OVL_OUTPROC_EN);
+
+	if (priv->crc.cnt) {
+		writel(crc_mode_en, priv->regs + DISP_REG_OVL_OUTPROC_MODE);
+		writel(OVL_OUTPROC_CRC_EN, priv->regs + DISP_REG_OVL_OUTPROC_TRIG);
 	}
 }
 
 void mtk_disp_outproc_stop(struct device *dev)
 {
 	struct mtk_disp_outproc *priv = dev_get_drvdata(dev);
-	unsigned int crc_mode_en  = OVL_OUTPROC_HG_FOVL_CK_ON |
-				    OVL_OUTPROC_HF_FOVL_CK_ON |
-				    OVL_OUTPROC_OP_8BIT_MODE;
 
-	mtk_ddp_write(NULL, 0, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_OUTPROC_TRIG);
-	mtk_ddp_write_mask(NULL, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_MODE, crc_mode_en);
+	if (priv->crc.cnt) {
+		writel(0, priv->regs + DISP_REG_OVL_OUTPROC_TRIG);
+		writel(0, priv->regs + DISP_REG_OVL_OUTPROC_MODE);
+	}
 
-	mtk_ddp_write(NULL, 0, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_OUTPROC_INTEN);
-	mtk_ddp_write_mask(NULL, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_OUTPROC_EN, OVL_OUTPROC_OVL_EN);
+	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_INTEN);
+	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_EN);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	if (priv->crc.cnt)
-		mtk_crtc_stop_crc_cmdq(&priv->crc);
+	mtk_crtc_stop_crc_cmdq(&priv->crc);
 #endif
 }
 

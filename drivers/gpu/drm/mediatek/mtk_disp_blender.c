@@ -189,11 +189,13 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 
 void mtk_disp_blender_config(struct device *dev, unsigned int w,
 			     unsigned int h, unsigned int vrefresh,
-			     unsigned int bpc, enum mtk_disp_blender_layer blender,
-			     struct cmdq_pkt *cmdq_pkt)
+			     unsigned int bpc, enum mtk_disp_blender_layer blender)
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
-	unsigned int tmp;
+	unsigned int tmp, val;
+	unsigned int mask = OVL_BLD_BGCLR_OUT_TO_PROC |
+			    OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER |
+			    OVL_BLD_BGCLR_IN_SEL;
 
 	dev_dbg(dev, "%s-w:%d, h:%d\n", __func__, w, h);
 
@@ -201,59 +203,49 @@ void mtk_disp_blender_config(struct device *dev, unsigned int w,
 	tmp |= OVL_BLD_BYPASS_SHADOW;
 	writel(tmp, priv->regs + DISP_REG_OVL_BLD_SHADOW_CTRL);
 
-	mtk_ddp_write(cmdq_pkt, h << 16 | w, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_BLD_ROI_SIZE);
-	mtk_ddp_write(cmdq_pkt, OVL_BLD_BGCLR_BLACK, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_BLD_BGCLR_CLR);
+	writel(h << 16 | w, priv->regs + DISP_REG_OVL_BLD_ROI_SIZE);
+	writel(OVL_BLD_BGCLR_BLACK, priv->regs + DISP_REG_OVL_BLD_BGCLR_CLR);
 	/*
 	 * The input source of blender layer can be EXDMA layer output or
 	 * the blender constant layer itself.
 	 * This color setting is configured for the blender constant layer.
 	 */
-	mtk_ddp_write(cmdq_pkt, OVL_BLD_BGCLR_BLACK, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_BLD_L0_CLR);
+	writel(OVL_BLD_BGCLR_BLACK, priv->regs + DISP_REG_OVL_BLD_L0_CLR);
 
 	if (blender == FIRST_BLENDER)
-		mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER,
-				   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_DATAPATH_CON,
-				   OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER |
-				   OVL_BLD_BGCLR_IN_SEL);
+		val = OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER;
 	else if (blender == LAST_BLENDER)
-		mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_IN_SEL,
-				   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_DATAPATH_CON,
-				   OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER |
-				   OVL_BLD_BGCLR_IN_SEL);
+		val = OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_IN_SEL;
 	else if (blender == SINGLE_BLENDER)
-		mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_BGCLR_OUT_TO_PROC,
-				   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_DATAPATH_CON,
-				   OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER |
-				   OVL_BLD_BGCLR_IN_SEL);
+		val = OVL_BLD_BGCLR_OUT_TO_PROC;
 	else
-		mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER | OVL_BLD_BGCLR_IN_SEL,
-				   &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_DATAPATH_CON,
-				   OVL_BLD_BGCLR_OUT_TO_PROC | OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER |
-				   OVL_BLD_BGCLR_IN_SEL);
+		val = OVL_BLD_BGCLR_OUT_TO_NEXT_LAYER | OVL_BLD_BGCLR_IN_SEL;
+
+	tmp = readl(priv->regs + DISP_REG_OVL_BLD_DATAPATH_CON);
+	tmp = (tmp & ~mask) | val;
+	writel(tmp, priv->regs + DISP_REG_OVL_BLD_DATAPATH_CON);
 }
 
-void mtk_disp_blender_start(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+void mtk_disp_blender_start(struct device *dev)
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
+	unsigned int tmp;
 
-	mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_EN, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_BLD_EN, OVL_BLD_EN);
+	tmp = readl(priv->regs + DISP_REG_OVL_BLD_EN);
+	tmp |= OVL_BLD_EN;
+	writel(tmp, priv->regs + DISP_REG_OVL_BLD_EN);
 }
 
-void mtk_disp_blender_stop(struct device *dev, struct cmdq_pkt *cmdq_pkt)
+void mtk_disp_blender_stop(struct device *dev)
 {
 	struct mtk_disp_blender *priv = dev_get_drvdata(dev);
+	unsigned int tmp;
 
-	mtk_ddp_write(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_BLD_EN, OVL_BLD_EN);
-	mtk_ddp_write_mask(cmdq_pkt, OVL_BLD_RST, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_BLD_RST, OVL_BLD_RST);
-	mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
-			   DISP_REG_OVL_BLD_RST, OVL_BLD_RST);
+	tmp = readl(priv->regs + DISP_REG_OVL_BLD_EN);
+	tmp = tmp & ~OVL_BLD_EN;
+	writel(tmp, priv->regs + DISP_REG_OVL_BLD_EN);
+	writel(OVL_BLD_RST, priv->regs + DISP_REG_OVL_BLD_RST);
+	writel(0, priv->regs + DISP_REG_OVL_BLD_RST);
 }
 
 int mtk_disp_blender_clk_enable(struct device *dev)
