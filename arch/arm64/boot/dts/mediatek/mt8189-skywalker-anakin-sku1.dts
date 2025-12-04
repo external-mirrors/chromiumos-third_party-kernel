@@ -6,15 +6,69 @@
 #include "mt8189-skywalker-anakin.dtsi"
 
 / {
-	model = "Google Anakin sku1/2/5/8/256/257/258/259/260/261/262/263/264/265/267 board";
+	model = "Google Anakin sku1/2/5/8/11/13/16/20/22/24/26/28/30/32/34/35
+		/37/39/41/43/45/47/49/51/53/55/57/59/61/63/65/67/69/71/73/75/77
+		/256/257/258/259/260/261/262/263/264/265/267/268/269/270/271
+		/272/273/274/275/276/277/278/279/280/281/282/283/284/285/286/287
+		/288/289/290/291/292/293/294/295/296/297/298/299/300/301/302/303
+		/304/305/306/307/308/309/310/311/312/312/313/314/315/316/317/318
+		/319/320/321/322/323/324/325/326/327/328/329 board";
 	compatible = "google,anakin-sku1", "google,anakin-sku2",
 		     "google,anakin-sku5", "google,anakin-sku8",
+		     "google,anakin-sku11", "google,anakin-sku13",
+		     "google,anakin-sku16", "google,anakin-sku20",
+		     "google,anakin-sku22", "google,anakin-sku24",
+		     "google,anakin-sku26", "google,anakin-sku28",
+		     "google,anakin-sku30", "google,anakin-sku32",
+		     "google,anakin-sku34", "google,anakin-sku35",
+		     "google,anakin-sku37", "google,anakin-sku39",
+		     "google,anakin-sku41", "google,anakin-sku43",
+		     "google,anakin-sku45", "google,anakin-sku47",
+		     "google,anakin-sku49", "google,anakin-sku51",
+		     "google,anakin-sku53", "google,anakin-sku55",
+		     "google,anakin-sku57", "google,anakin-sku59",
+		     "google,anakin-sku61", "google,anakin-sku63",
+		     "google,anakin-sku65", "google,anakin-sku67",
+		     "google,anakin-sku69", "google,anakin-sku71",
+		     "google,anakin-sku73", "google,anakin-sku75",
+		     "google,anakin-sku77",
 		     "google,anakin-sku256", "google,anakin-sku257",
 		     "google,anakin-sku258", "google,anakin-sku259",
 		     "google,anakin-sku260", "google,anakin-sku261",
 		     "google,anakin-sku262", "google,anakin-sku263",
 		     "google,anakin-sku264", "google,anakin-sku265",
-		     "google,anakin-sku267", "google,anakin",
+		     "google,anakin-sku267", "google,anakin-sku268",
+		     "google,anakin-sku269", "google,anakin-sku270",
+		     "google,anakin-sku271", "google,anakin-sku272",
+		     "google,anakin-sku273", "google,anakin-sku274",
+		     "google,anakin-sku275", "google,anakin-sku276",
+		     "google,anakin-sku277", "google,anakin-sku278",
+		     "google,anakin-sku279", "google,anakin-sku280",
+		     "google,anakin-sku281", "google,anakin-sku282",
+		     "google,anakin-sku283", "google,anakin-sku284",
+		     "google,anakin-sku285", "google,anakin-sku286",
+		     "google,anakin-sku287", "google,anakin-sku288",
+		     "google,anakin-sku289", "google,anakin-sku290",
+		     "google,anakin-sku291", "google,anakin-sku292",
+		     "google,anakin-sku293", "google,anakin-sku294",
+		     "google,anakin-sku295", "google,anakin-sku296",
+		     "google,anakin-sku297", "google,anakin-sku298",
+		     "google,anakin-sku299", "google,anakin-sku300",
+		     "google,anakin-sku301", "google,anakin-sku302",
+		     "google,anakin-sku303", "google,anakin-sku304",
+		     "google,anakin-sku305", "google,anakin-sku306",
+		     "google,anakin-sku307", "google,anakin-sku308",
+		     "google,anakin-sku309", "google,anakin-sku310",
+		     "google,anakin-sku311", "google,anakin-sku312",
+		     "google,anakin-sku313", "google,anakin-sku314",
+		     "google,anakin-sku315", "google,anakin-sku316",
+		     "google,anakin-sku317", "google,anakin-sku318",
+		     "google,anakin-sku319", "google,anakin-sku320",
+		     "google,anakin-sku321", "google,anakin-sku322",
+		     "google,anakin-sku323", "google,anakin-sku324",
+		     "google,anakin-sku325", "google,anakin-sku326",
+		     "google,anakin-sku327", "google,anakin-sku328",
+		     "google,anakin-sku329", "google,anakin",
 		     "mediatek,mt8189";
 };
 

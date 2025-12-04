@@ -6,9 +6,27 @@
 #include "mt8189-skywalker-anakin.dtsi"
 
 / {
-	model = "Google Anakin sku0/9/10 board";
+	model = "Google Anakin sku0/9/10/12/14/17/19/21/23/25/27/29/31/33/36/38
+		/40/42/44/46/48/50/52/54/56/58/60/62/64/66/68/70/72/74/76/78 board";
 	compatible = "google,anakin-sku0", "google,anakin-sku9",
-		     "google,anakin-sku10", "google,anakin",
+		     "google,anakin-sku10", "google,anakin-sku12",
+		     "google,anakin-sku14", "google,anakin-sku15",
+		     "google,anakin-sku17", "google,anakin-sku19",
+		     "google,anakin-sku21", "google,anakin-sku23",
+		     "google,anakin-sku25", "google,anakin-sku27",
+		     "google,anakin-sku29", "google,anakin-sku31",
+		     "google,anakin-sku33", "google,anakin-sku36",
+		     "google,anakin-sku38", "google,anakin-sku40",
+		     "google,anakin-sku42", "google,anakin-sku44",
+		     "google,anakin-sku46", "google,anakin-sku48",
+		     "google,anakin-sku50", "google,anakin-sku52",
+		     "google,anakin-sku54", "google,anakin-sku56",
+		     "google,anakin-sku58", "google,anakin-sku60",
+		     "google,anakin-sku62", "google,anakin-sku64",
+		     "google,anakin-sku66", "google,anakin-sku68",
+		     "google,anakin-sku70", "google,anakin-sku72",
+		     "google,anakin-sku74", "google,anakin-sku76",
+		     "google,anakin-sku78", "google,anakin",
 		     "mediatek,mt8189";
 };
 
