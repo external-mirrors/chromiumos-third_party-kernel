@@ -54,6 +54,7 @@ int mtk_disp_exdma_clk_enable(struct device *dev);
 void mtk_disp_exdma_clk_disable(struct device *dev);
 void mtk_disp_exdma_start(struct device *dev);
 void mtk_disp_exdma_stop(struct device *dev);
+void mtk_disp_exdma_config(struct device *dev);
 void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *state,
 				 struct cmdq_pkt *cmdq_pkt);
 const u32 *mtk_disp_exdma_get_formats(struct device *dev);

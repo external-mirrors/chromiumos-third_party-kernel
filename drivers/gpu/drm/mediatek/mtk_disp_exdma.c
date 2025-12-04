@@ -91,6 +91,8 @@
 #define OVL_EXDMA_MOUT_OUT_DATA				BIT(0)
 #define OVL_EXDMA_MOUT_BGCLR_OUT			BIT(1)
 
+#define OVL_EXDMA_MAX_SIZE			(8191)
+
 static const u32 formats[] = {
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_ARGB8888,
@@ -206,48 +208,11 @@ static unsigned int mtk_disp_exdma_color_convert(unsigned int color_encoding)
 void mtk_disp_exdma_start(struct device *dev)
 {
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
-	unsigned int tmp, val, mask;
+	unsigned int val = OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN |
+			   OVL_EXDMA_DATAPATH_CON_HDR_GCLAST_EN |
+			   OVL_EXDMA_DATAPATH_CON_GCLAST_EN;
 
-	/*
-	 * This configuration enables dynamic power switching mechanism for EXDMA,
-	 * also known as "SRT mode".
-	 * Such configuration allows the system to achieve better power efficiency.
-	 */
-	val = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
-	mask = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_EN |
-	       OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
-	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_RDMA_BURST_CON1);
-	tmp = (tmp & ~mask) | val;
-	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_RDMA_BURST_CON1);
-
-	/*
-	 * The dummy register is used in the configuration of the EXDMA engine to
-	 * signal ddren_request, and get ddren_ack before accessing the DRAM to
-	 * ensure data transfers occur normally.
-	 */
-	val = OVL_EXDMA_EXT_DDR_EN_OPT | OVL_EXDMA_FORCE_EXT_DDR_EN;
-	writel(val, priv->regs + DISP_REG_OVL_EXDMA_DUMMY_REG);
-
-	val = OVL_EXDMA_DATAPATH_CON_LAYER_SMI_ID_EN |
-	      OVL_EXDMA_DATAPATH_CON_HDR_GCLAST_EN |
-	      OVL_EXDMA_DATAPATH_CON_GCLAST_EN;
 	writel(val, priv->regs + DISP_REG_OVL_EXDMA_DATAPATH_CON);
-
-	val = OVL_EXDMA_MOUT_BGCLR_OUT;
-	mask = OVL_EXDMA_MOUT_BGCLR_OUT | OVL_EXDMA_MOUT_OUT_DATA;
-	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_MOUT);
-	tmp = (tmp & ~mask) | val;
-	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_MOUT);
-
-	writel(GENMASK(31, 0), priv->regs + DISP_REG_OVL_EXDMA_GDRDY_PRD);
-
-	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_RDMA0_CTRL);
-	tmp |= OVL_EXDMA_RDMA0_EN;
-	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_RDMA0_CTRL);
-	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_L0_EN);
-	tmp |= OVL_EXDMA_L0_EN;
-	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_L0_EN);
-
 	writel(OVL_EXDMA_EN, priv->regs + DISP_REG_OVL_EXDMA_EN);
 }
 
@@ -256,9 +221,7 @@ void mtk_disp_exdma_stop(struct device *dev)
 	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
 
 	writel(0, priv->regs + DISP_REG_OVL_EXDMA_EN);
-	writel(0, priv->regs + DISP_REG_OVL_EXDMA_RDMA0_CTRL);
 	writel(0, priv->regs + DISP_REG_OVL_EXDMA_DATAPATH_CON);
-	writel(0, priv->regs + DISP_REG_OVL_EXDMA_L0_EN);
 	writel(OVL_EXDMA_RST, priv->regs + DISP_REG_OVL_EXDMA_RST);
 	writel(0, priv->regs + DISP_REG_OVL_EXDMA_RST);
 }
@@ -272,6 +235,15 @@ void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *sta
 	bool csc_enable = (fmt_info) ? fmt_info->is_yuv : false;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 	unsigned int val;
+
+	if (!pending->enable || pending->height == 0 || pending->width == 0 ||
+	    pending->x > OVL_EXDMA_MAX_SIZE || pending->y > OVL_EXDMA_MAX_SIZE) {
+		mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
+				   DISP_REG_OVL_EXDMA_RDMA0_CTRL, OVL_EXDMA_RDMA0_EN);
+		mtk_ddp_write_mask(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs,
+				   DISP_REG_OVL_EXDMA_L0_EN, OVL_EXDMA_L0_EN);
+		return;
+	}
 
 	mtk_ddp_write(cmdq_pkt, pending->height << 16 | pending->width, &priv->cmdq_reg,
 		      priv->regs, DISP_REG_OVL_EXDMA_ROI_SIZE);
@@ -312,12 +284,49 @@ void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *sta
 			   OVL_EXDMA_CON_CLRFMT_MAN | OVL_EXDMA_CON_FLD_CLRFMT |
 			   OVL_EXDMA_CON_FLD_CLRFMT_NB);
 
-	val = OVL_EXDMA_OP_8BIT_MODE | OVL_EXDMA_HG_FOVL_CK_ON | OVL_EXDMA_HF_FOVL_CK_ON;
-	mtk_ddp_write(cmdq_pkt, val, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_EXDMA_EN_CON);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_RDMA0_EN, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_RDMA0_CTRL, OVL_EXDMA_RDMA0_EN);
+	mtk_ddp_write_mask(cmdq_pkt, OVL_EXDMA_L0_EN, &priv->cmdq_reg, priv->regs,
+			   DISP_REG_OVL_EXDMA_L0_EN, OVL_EXDMA_L0_EN);
+}
 
-	mtk_ddp_write(cmdq_pkt, OVL_EXDMA_RDMA0_L0_VCSEL, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_OVL_EXDMA_L0_GUSER_EXT);
+void mtk_disp_exdma_config(struct device *dev)
+{
+	struct mtk_disp_exdma *priv = dev_get_drvdata(dev);
+	unsigned int tmp, val, mask;
+
+	/*
+	 * This configuration enables dynamic power switching mechanism for EXDMA,
+	 * also known as "SRT mode".
+	 * Such configuration allows the system to achieve better power efficiency.
+	 */
+	val = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
+	mask = OVL_EXDMA_RDMA_BURST_CON1_BURST16_EN | OVL_EXDMA_RDMA_BURST_CON1_DDR_EN |
+	       OVL_EXDMA_RDMA_BURST_CON1_DDR_ACK_EN;
+	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_RDMA_BURST_CON1);
+	tmp = (tmp & ~mask) | val;
+	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_RDMA_BURST_CON1);
+
+	/*
+	 * The dummy register is used in the configuration of the EXDMA engine to
+	 * signal ddren_request, and get ddren_ack before accessing the DRAM to
+	 * ensure data transfers occur normally.
+	 */
+	val = OVL_EXDMA_EXT_DDR_EN_OPT | OVL_EXDMA_FORCE_EXT_DDR_EN;
+	writel(val, priv->regs + DISP_REG_OVL_EXDMA_DUMMY_REG);
+
+	val = OVL_EXDMA_MOUT_BGCLR_OUT;
+	mask = OVL_EXDMA_MOUT_BGCLR_OUT | OVL_EXDMA_MOUT_OUT_DATA;
+	tmp = readl(priv->regs + DISP_REG_OVL_EXDMA_MOUT);
+	tmp = (tmp & ~mask) | val;
+	writel(tmp, priv->regs + DISP_REG_OVL_EXDMA_MOUT);
+
+	writel(GENMASK(31, 0), priv->regs + DISP_REG_OVL_EXDMA_GDRDY_PRD);
+
+	val = OVL_EXDMA_HG_FOVL_CK_ON | OVL_EXDMA_HF_FOVL_CK_ON | OVL_EXDMA_OP_8BIT_MODE;
+	writel(val, priv->regs + DISP_REG_OVL_EXDMA_EN_CON);
+
+	writel(OVL_EXDMA_RDMA0_L0_VCSEL, priv->regs + DISP_REG_OVL_EXDMA_L0_GUSER_EXT);
 }
 
 const u32 *mtk_disp_exdma_get_formats(struct device *dev)

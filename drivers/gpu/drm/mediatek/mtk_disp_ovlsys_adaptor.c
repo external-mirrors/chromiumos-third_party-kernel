@@ -277,7 +277,6 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 	struct device *exdma;
 	struct device *blender;
 	const struct drm_format_info *fmt_info = drm_format_info(pending->format);
-	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
 
 	DRM_DEV_DEBUG_DRIVER(dev, "idx:%d enable:%d fmt:0x%x addr:0x%pad fb_w:%d {%d,%d,%d,%d}\n",
 			     idx, pending->enable, pending->format,
@@ -295,19 +294,8 @@ void mtk_ovlsys_adaptor_layer_config(struct device *dev, unsigned int idx,
 		return;
 	}
 
-	if (!pending->enable || pending->height == 0 || pending->width == 0 ||
-	    pending->x > priv->max_size || pending->y > priv->max_size) {
-		pending->enable = false;
-		mtk_disp_exdma_stop(exdma);
-		mtk_disp_blender_layer_config(blender, state, cmdq_pkt);
-		return;
-	}
-
 	mtk_disp_exdma_layer_config(exdma, state, cmdq_pkt);
 	mtk_disp_blender_layer_config(blender, state, cmdq_pkt);
-
-	mtk_disp_exdma_start(exdma);
-	mtk_disp_blender_start(blender);
 }
 
 size_t mtk_ovlsys_adaptor_crc_cnt(struct device *dev)
@@ -386,10 +374,12 @@ void mtk_ovlsys_adaptor_config(struct device *dev, unsigned int w,
 	struct mtk_disp_ovlsys_adaptor *priv = dev_get_drvdata(dev);
 	int i;
 
-	for (i = 0; i < priv->layer_nr; i++)
+	for (i = 0; i < priv->layer_nr; i++) {
+		mtk_disp_exdma_config(priv->ovl_adaptor_comp[priv->path[i * 2]]);
 		mtk_disp_blender_config(priv->ovl_adaptor_comp[priv->path[i * 2 + 1]], w, h,
 					i == (priv->layer_nr - 1),
 					i == 0);
+	}
 
 	mtk_disp_outproc_config(priv->ovl_adaptor_comp[priv->path[priv->layer_nr * 2]], w, h);
 }

@@ -75,6 +75,8 @@
 #define DISP_REG_OVL_BLD_L0_CLR				0x20c
 #define OVL_BLD_BGCLR_BLACK					(0xff000000)
 
+#define OVL_BLD_MAX_SIZE				(8191)
+
 struct mtk_disp_blender {
 	void __iomem		*regs;
 	struct clk		*clk;
@@ -156,7 +158,8 @@ void mtk_disp_blender_layer_config(struct device *dev, struct mtk_plane_state *s
 	unsigned int alpha, clrfmt, ignore_pixel_alpha = 0;
 	unsigned int blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
 
-	if (!pending->enable) {
+	if (!pending->enable || pending->height == 0 || pending->width == 0 ||
+	    pending->x > OVL_BLD_MAX_SIZE || pending->y > OVL_BLD_MAX_SIZE) {
 		mtk_ddp_write(cmdq_pkt, 0, &priv->cmdq_reg, priv->regs, DISP_REG_OVL_BLD_L_EN);
 		return;
 	}

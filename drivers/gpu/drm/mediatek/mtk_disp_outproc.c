@@ -163,9 +163,6 @@ void mtk_disp_outproc_start(struct device *dev)
 	mtk_crtc_start_crc_cmdq(&priv->crc);
 #endif
 
-	writel(OVL_OUTPROC_RST, priv->regs + DISP_REG_OVL_OUTPROC_RST);
-	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_RST);
-
 	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_INTSTA);
 	writel(OVL_OUTPROC_OVL_EN, priv->regs + DISP_REG_OVL_OUTPROC_EN);
 
@@ -186,6 +183,8 @@ void mtk_disp_outproc_stop(struct device *dev)
 
 	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_INTEN);
 	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_EN);
+	writel(OVL_OUTPROC_RST, priv->regs + DISP_REG_OVL_OUTPROC_RST);
+	writel(0, priv->regs + DISP_REG_OVL_OUTPROC_RST);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	mtk_crtc_stop_crc_cmdq(&priv->crc);
