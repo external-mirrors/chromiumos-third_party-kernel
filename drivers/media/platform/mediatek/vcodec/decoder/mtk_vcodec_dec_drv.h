@@ -130,6 +130,7 @@ struct mtk_vcodec_dec_pdata {
 
 	bool is_subdev_supported;
 	bool uses_stateless_api;
+	bool secure_mode_support;
 	bool has_dvfs;
 };
 

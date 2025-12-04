@@ -787,7 +787,10 @@ static int mtk_vcodec_dec_ctrls_setup(struct mtk_vcodec_dec_ctx *ctx)
 {
 	unsigned int i;
 
-	v4l2_ctrl_handler_init(&ctx->ctrl_hdl, NUM_CTRLS + 2);
+	if (ctx->dev->vdec_pdata->secure_mode_support)
+		v4l2_ctrl_handler_init(&ctx->ctrl_hdl, NUM_CTRLS + 2);
+	else
+		v4l2_ctrl_handler_init(&ctx->ctrl_hdl, NUM_CTRLS);
 	if (ctx->ctrl_hdl.error) {
 		mtk_v4l2_vdec_err(ctx, "v4l2_ctrl_handler_init failed\n");
 		return ctx->ctrl_hdl.error;
@@ -806,10 +809,12 @@ static int mtk_vcodec_dec_ctrls_setup(struct mtk_vcodec_dec_ctx *ctx)
 		}
 	}
 
-	v4l2_ctrl_new_std(&ctx->ctrl_hdl, &mtk_vcodec_dec_ctrl_ops,
-			  V4L2_CID_MPEG_MTK_GET_SECURE_HANDLE, 0, 65535, 1, 0);
-	v4l2_ctrl_new_std(&ctx->ctrl_hdl, &mtk_vcodec_dec_ctrl_ops,
-			  V4L2_CID_MPEG_MTK_SET_SECURE_MODE, 0, 65535, 1, 0);
+	if (ctx->dev->vdec_pdata->secure_mode_support) {
+		v4l2_ctrl_new_std(&ctx->ctrl_hdl, &mtk_vcodec_dec_ctrl_ops,
+				  V4L2_CID_MPEG_MTK_GET_SECURE_HANDLE, 0, 65535, 1, 0);
+		v4l2_ctrl_new_std(&ctx->ctrl_hdl, &mtk_vcodec_dec_ctrl_ops,
+				  V4L2_CID_MPEG_MTK_SET_SECURE_MODE, 0, 65535, 1, 0);
+	}
 
 	v4l2_ctrl_handler_setup(&ctx->ctrl_hdl);
 
@@ -1051,5 +1056,6 @@ const struct mtk_vcodec_dec_pdata mtk_lat_sig_core_dvfs_pdata = {
 	.get_cap_buffer = vdec_get_cap_buffer,
 	.is_subdev_supported = true,
 	.hw_arch = MTK_VDEC_LAT_SINGLE_CORE,
+	.secure_mode_support = true,
 	.has_dvfs = true,
 };
