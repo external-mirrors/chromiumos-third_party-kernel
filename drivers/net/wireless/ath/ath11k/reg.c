@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/rtnetlink.h>
 
@@ -207,14 +207,17 @@ int ath11k_reg_update_chan_list(struct ath11k *ar, bool wait)
 	}
 
 	if (wait) {
-		spin_lock_bh(&ar->channel_update_lock);
+		spin_lock_bh(&ar->data_lock);
 		list_add_tail(&params->list, &ar->channel_update_queue);
-		spin_unlock_bh(&ar->channel_update_lock);
+		spin_unlock_bh(&ar->data_lock);
+
 		queue_work(ar->ab->workqueue, &ar->channel_update_work);
-	} else {
-		ret = ath11k_wmi_send_scan_chan_list_cmd(ar, params);
-		kfree(params);
+
+		return 0;
 	}
+
+	ret = ath11k_wmi_send_scan_chan_list_cmd(ar, params);
+	kfree(params);
 
 	return ret;
 }
@@ -803,14 +806,9 @@ void ath11k_regd_update_chan_list_work(struct work_struct *work)
 
 	INIT_LIST_HEAD(&local_update_list);
 
-	spin_lock_bh(&ar->channel_update_lock);
-	while ((params = list_first_entry_or_null(&ar->channel_update_queue,
-						  struct scan_chan_list_params,
-						  list))) {
-		list_del(&params->list);
-		list_add_tail(&params->list, &local_update_list);
-	}
-	spin_unlock_bh(&ar->channel_update_lock);
+	spin_lock_bh(&ar->data_lock);
+	list_splice_tail_init(&ar->channel_update_queue, &local_update_list);
+	spin_unlock_bh(&ar->data_lock);
 
 	while ((params = list_first_entry_or_null(&local_update_list,
 						  struct scan_chan_list_params,
@@ -823,6 +821,7 @@ void ath11k_regd_update_chan_list_work(struct work_struct *work)
 					   "failed to receive 11d scan complete: timed out\n");
 				ar->state_11d = ATH11K_11D_IDLE;
 			}
+
 			ath11k_dbg(ar->ab, ATH11K_DBG_REG,
 				   "reg 11d scan wait left time %d\n", left);
 		}
