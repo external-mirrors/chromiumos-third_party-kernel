@@ -137,7 +137,12 @@ void mtk_aal_gamma_set(struct device *dev, struct drm_crtc_state *state)
 void mtk_aal_start(struct device *dev)
 {
 	struct mtk_disp_aal *aal = dev_get_drvdata(dev);
+	u32 cfg_val;
 
+	cfg_val = readl(aal->regs + DISP_AAL_CFG);
+	cfg_val |= AAL_RELAY_MODE;
+
+	writel(cfg_val, aal->regs + DISP_AAL_CFG);
 	writel(AAL_EN, aal->regs + DISP_AAL_EN);
 }
 
