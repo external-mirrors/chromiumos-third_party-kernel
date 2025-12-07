@@ -61,11 +61,10 @@ void mtk_ccorr_config(struct device *dev, unsigned int w,
 			     unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_ccorr *ccorr = dev_get_drvdata(dev);
+	u32 cfg_val = CCORR_ENGINE_EN | CCORR_RELAY_MODE | CCORR_GAMMA_OFF;
 
-	mtk_ddp_write(cmdq_pkt, w << 16 | h, &ccorr->cmdq_reg, ccorr->regs,
-		      DISP_CCORR_SIZE);
-	mtk_ddp_write(cmdq_pkt, CCORR_ENGINE_EN, &ccorr->cmdq_reg, ccorr->regs,
-		      DISP_CCORR_CFG);
+	mtk_ddp_write(cmdq_pkt, w << 16 | h, &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_SIZE);
+	mtk_ddp_write(cmdq_pkt, cfg_val, &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_CFG);
 }
 
 void mtk_ccorr_start(struct device *dev)
@@ -112,8 +111,8 @@ void mtk_ccorr_ctm_set(struct device *dev, struct drm_crtc_state *state)
 	const u64 *input;
 	uint16_t coeffs[9] = { 0 };
 	int i;
-	struct cmdq_pkt *cmdq_pkt = NULL;
 	u32 matrix_bits = ccorr->data->matrix_bits;
+	u32 cfg_val = 0;
 
 	if (!blob)
 		return;
@@ -142,16 +141,16 @@ void mtk_ccorr_ctm_set(struct device *dev, struct drm_crtc_state *state)
 					& GENMASK(matrix_bits + 1, 0);
 	}
 
-	mtk_ddp_write(cmdq_pkt, coeffs[0] << 16 | coeffs[1],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_0);
-	mtk_ddp_write(cmdq_pkt, coeffs[2] << 16 | coeffs[3],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_1);
-	mtk_ddp_write(cmdq_pkt, coeffs[4] << 16 | coeffs[5],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_2);
-	mtk_ddp_write(cmdq_pkt, coeffs[6] << 16 | coeffs[7],
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_3);
-	mtk_ddp_write(cmdq_pkt, coeffs[8] << 16,
-		      &ccorr->cmdq_reg, ccorr->regs, DISP_CCORR_COEF_4);
+	writel(coeffs[0] << 16 | coeffs[1], ccorr->regs + DISP_CCORR_COEF_0);
+	writel(coeffs[2] << 16 | coeffs[3], ccorr->regs + DISP_CCORR_COEF_1);
+	writel(coeffs[4] << 16 | coeffs[5], ccorr->regs + DISP_CCORR_COEF_2);
+	writel(coeffs[6] << 16 | coeffs[7], ccorr->regs + DISP_CCORR_COEF_3);
+	writel(coeffs[8] << 16, ccorr->regs + DISP_CCORR_COEF_4);
+
+	cfg_val = readl(ccorr->regs + DISP_CCORR_CFG);
+	/* Disable RELAY mode to pass the processed image */
+	cfg_val &= ~CCORR_RELAY_MODE;
+	writel(cfg_val, ccorr->regs + DISP_CCORR_CFG);
 }
 
 static int mtk_disp_ccorr_bind(struct device *dev, struct device *master,

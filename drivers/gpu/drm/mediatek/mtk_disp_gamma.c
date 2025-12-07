@@ -124,9 +124,11 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 	struct drm_color_lut *lut;
 	unsigned int i;
 
-	/* If there's no gamma lut there's nothing to do here. */
-	if (!state->gamma_lut)
+	/* If there's no gamma lut there's need relay gamma. */
+	if (!state->gamma_lut) {
+		writel(GAMMA_RELAY_MODE, gamma->regs + DISP_GAMMA_CFG);
 		return;
+	}
 
 	num_lut_banks = gamma->data->lut_size / gamma->data->lut_bank_size;
 	lut = (struct drm_color_lut *)state->gamma_lut->data;
