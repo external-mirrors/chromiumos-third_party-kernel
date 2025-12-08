@@ -205,10 +205,28 @@ static int ucsi_psy_get_current_now(struct ucsi_connector *con,
 {
 	u16 flags = con->status.flags;
 
-	if (UCSI_CONSTAT_PWR_OPMODE(flags) == UCSI_CONSTAT_PWR_OPMODE_PD)
-		val->intval = rdo_op_current(con->rdo) * 1000;
-	else
+	if (!(flags & UCSI_CONSTAT_CONNECTED)) {
 		val->intval = 0;
+		return 0;
+	}
+
+	switch (UCSI_CONSTAT_PWR_OPMODE(flags)) {
+	case UCSI_CONSTAT_PWR_OPMODE_PD:
+		val->intval = rdo_op_current(con->rdo) * 1000;
+		break;
+	case UCSI_CONSTAT_PWR_OPMODE_TYPEC1_5:
+		val->intval = UCSI_TYPEC_1_5_CURRENT * 1000;
+		break;
+	case UCSI_CONSTAT_PWR_OPMODE_TYPEC3_0:
+		val->intval = UCSI_TYPEC_3_0_CURRENT * 1000;
+		break;
+	case UCSI_CONSTAT_PWR_OPMODE_BC:
+	case UCSI_CONSTAT_PWR_OPMODE_DEFAULT:
+	/* UCSI can't tell b/w DCP/CDP or USB2/3x1/3x2 SDP chargers */
+	default:
+		val->intval = UCSI_TYPEC_DEFAULT_CURRENT * 1000;
+		break;
+	}
 	return 0;
 }
 
