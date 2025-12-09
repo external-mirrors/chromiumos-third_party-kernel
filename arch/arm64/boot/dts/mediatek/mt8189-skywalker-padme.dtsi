@@ -6,16 +6,6 @@
 #include "mt8189-skywalker.dtsi"
 
 / {
-	pp5800_mipi_disp: pp5800-mipi-disp {
-		compatible = "regulator-fixed";
-		regulator-name = "pp5800_mipi_disp";
-		gpio = <&pio 14 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		pinctrl-names = "default";
-		pinctrl-0 = <&en_pp6000_mipi_disp>;
-		vin-supply = <&pp5000_z1>;
-	};
-
 	tboard_thermistor1: thermal-sensor1 {
 		compatible = "generic-adc-thermal";
 		#thermal-sensor-cells = <0>;
@@ -106,7 +96,26 @@
 };
 
 &ap_i2c_hdmi {
-	status = "disabled";
+	aw37503_regulator: aw37503-regulator@3e {
+		compatible = "awinic,aw37503";
+		reg = <0x3e>;
+
+		pp5900_mipi_disp_avdd: outp {
+			regulator-name = "aw37503-outp";
+			regulator-min-microvolt = <5900000>;
+			regulator-max-microvolt = <5900000>;
+			enable-active-high;
+			enable-gpios = <&pio 14 GPIO_ACTIVE_HIGH>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&en_pp5900_mipi_disp>;
+		};
+
+		pp5900_mipi_disp_avee: outn {
+			regulator-name = "aw37503-outn";
+			regulator-min-microvolt = <5900000>;
+			regulator-max-microvolt = <5900000>;
+		};
+	};
 };
 
 &ap_i2c_tchscr {
@@ -144,8 +153,8 @@
 		enable-gpios = <&pio 25 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&panel_default_pins>;
-		avdd-supply = <&pp5800_mipi_disp>;
-		avee-supply = <&pp5800_mipi_disp>;
+		avdd-supply = <&pp5900_mipi_disp_avdd>;
+		avee-supply = <&pp5900_mipi_disp_avee>;
 		pp1800-supply = <&mt6359_vcn18_ldo_reg>;
 		backlight = <&backlight>;
 		rotation = <270>;
@@ -497,7 +506,7 @@
 		"SPMI_SDA",
 		"EMI_RESET_N";
 
-	en_pp6000_mipi_disp: en-pp6000-mipi-disp {
+	en_pp5900_mipi_disp: en-pp5900-mipi-disp {
 		pins-en {
 			pinmux = <PINMUX_GPIO14__FUNC_GPIO14>;
 			output-low;
