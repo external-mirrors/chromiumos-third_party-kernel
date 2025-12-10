@@ -39,6 +39,31 @@ baze:
         mask: 0x4
         value: 0x4
 
+dooku:
+  dtb:
+    mt8189-skywalker-dooku.dtb: {}
+  dtbo:
+    mt8189-skywalker-dooku-kb-backlight.dtbo:
+      fw_config:
+        mask: 0x1
+        value: 0x0
+    mt8189-skywalker-dooku-touchscreen.dtbo:
+      fw_config:
+        mask: 0x2
+        value: 0x2
+    mt8189-skywalker-dooku-kb-us2.dtbo:
+      fw_config:
+        mask: 0x4
+        value: 0x4
+    mt8189-skywalker-dooku-usbhub-bypass.dtbo:
+      fw_config:
+        mask: 0x8
+        value: 0x8
+    mt8189-skywalker-dooku-emmc.dtbo:
+      fw_config:
+        mask: 0xC0000000
+        value: 0x80000000
+
 grogu:
   dtb:
     mt8189-skywalker-grogu-sku1114112.dtb:

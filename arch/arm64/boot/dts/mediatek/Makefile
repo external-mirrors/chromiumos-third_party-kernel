@@ -2,6 +2,7 @@
 
 DTC_FLAGS_mt8189-skywalker-anakin += -@
 DTC_FLAGS_mt8189-skywalker-baze += -@
+DTC_FLAGS_mt8189-skywalker-dooku += -@
 DTC_FLAGS_mt8189-skywalker-obiwan += -@
 DTC_FLAGS_mt8189-skywalker-tarkin += -@
 DTC_FLAGS_mt8189-skywalker-yoda += -@
@@ -125,6 +126,12 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1114112.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1114113.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1310720.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-grogu-sku1310722.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-kb-backlight.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-touchscreen.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-kb-us2.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-usbhub-bypass.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-emmc.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-kb-backlight.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-kb.dtbo
