@@ -2378,6 +2378,7 @@ int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift)
 	lru_add_drain();
 	tlb_gather_mmu(&tlb, mm);
 	next = vma_next(&vmi);
+
 	if (new_end > old_start) {
 		/*
 		 * when the old and new regions overlap clear from new_end.
