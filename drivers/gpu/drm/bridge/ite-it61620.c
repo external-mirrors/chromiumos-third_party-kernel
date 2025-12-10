@@ -3158,6 +3158,9 @@ static void it61620_bridge_atomic_disable(struct drm_bridge *bridge,
 	if (it61620->powered) {
 		it61620_audio_update_connector_status(it61620);
 		it61620_stop_plugged_cb_work(it61620);
+		it61620_hdmi_enable_avmute(it61620, true);
+		/* wait at least one frame for AVMute to take effect*/
+		msleep(45);
 		it61620_stop_hdcp_work(it61620);
 		it61620_hdmi_disable_afe(it61620);
 		it61620_hdmi_powerdown(it61620);
