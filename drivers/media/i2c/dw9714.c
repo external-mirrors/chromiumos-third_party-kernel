@@ -260,7 +260,7 @@ static int  __maybe_unused dw9714_vcm_resume(struct device *dev)
 		dev_err(dev, "Failed to enable vcc: %d\n", ret);
 		return ret;
 	}
-	usleep_range(1000, 2000);
+	usleep_range(12000, 14000);
 
 	for (val = dw9714_dev->current_val % DW9714_CTRL_STEPS;
 	     val < dw9714_dev->current_val + DW9714_CTRL_STEPS - 1;
