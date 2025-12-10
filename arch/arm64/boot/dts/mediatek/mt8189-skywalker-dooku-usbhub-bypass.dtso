@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/phy/phy.h>
+
+&xhci0 {
+	phys = <&u2port0 PHY_TYPE_USB2>,
+		<&u3port0 PHY_TYPE_USB3>;
+	mediatek,u3p-dis-msk = <0x0>;
+	status = "okay";
+};
+
+&usb_a0 {
+	status = "disabled";
+};
+&usb_a1 {
+	status = "disabled";
+};
+&usb_hub_2_x {
+	status = "disabled";
+};
+&usb_hub_3_x {
+	status = "disabled";
+};
