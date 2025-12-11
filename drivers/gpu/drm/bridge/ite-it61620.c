@@ -3108,7 +3108,7 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	struct drm_atomic_state *state = old_state->base.state;
 	struct drm_crtc_state *crtc_state;
 	struct drm_connector_state *conn_state;
-	struct drm_display_mode *adj_mode;
+	struct drm_display_mode *mode;
 	struct drm_connector *connector;
 	int ret;
 
@@ -3127,14 +3127,14 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	if (WARN_ON(!crtc_state))
 		return;
 
-	adj_mode = &crtc_state->adjusted_mode;
-	if (WARN_ON(!adj_mode))
+	mode = &crtc_state->mode;
+	if (WARN_ON(!mode))
 		return;
 
 	if (it61620->is_hdmi) {
 		ret = drm_hdmi_avi_infoframe_from_display_mode(&it61620->avi_info,
 							       connector,
-							       adj_mode);
+							       mode);
 		if (ret)
 			drm_dbg(drm, "Failed to setup AVI infoframe: %d", ret);
 	}
@@ -3147,7 +3147,7 @@ static void it61620_bridge_atomic_enable(struct drm_bridge *bridge,
 	 * handle this case.
 	 */
 	it61620_check_audio(it61620);
-	it61620_hdmi_config_output(it61620, connector, adj_mode);
+	it61620_hdmi_config_output(it61620, connector, mode);
 }
 
 static void it61620_bridge_atomic_disable(struct drm_bridge *bridge,
@@ -3206,7 +3206,40 @@ static void it61620_bridge_mode_set(struct drm_bridge *bridge,
 {
 	struct it61620 *it61620 = bridge_to_it61620(bridge);
 
-	drm_display_mode_to_videomode(adj, &it61620->vm);
+	drm_display_mode_to_videomode(mode, &it61620->vm);
+}
+
+static int it61620_bridge_atomic_check(struct drm_bridge *bridge,
+				       struct drm_bridge_state *bridge_state,
+				       struct drm_crtc_state *crtc_state,
+				       struct drm_connector_state *conn_state)
+{
+	struct drm_display_mode *adj = &crtc_state->adjusted_mode;
+	struct drm_display_mode *mode = &crtc_state->mode;
+	struct videomode vm;
+	struct it61620 *it61620 = bridge_to_it61620(bridge);
+	u32 hfp, hsw, hbp;
+	u32 clock;
+	u32 hfp_check;
+
+	drm_display_mode_to_videomode(mode, &vm);
+	clock = vm.pixelclock / 1000;
+
+	hfp = vm.hfront_porch;
+	hsw = vm.hsync_len;
+	hbp = vm.hback_porch;
+
+	hfp_check = DIV_ROUND_UP(65 * clock, 1000000) + 4;
+	if (hfp >= hfp_check)
+		return 0;
+
+	drm_dbg(it61620->drm, "hfp_check %d", hfp_check);
+	if (hbp > hfp_check - hfp) {
+		adj->hsync_start = adj->hdisplay + hfp_check;
+		adj->hsync_end = adj->hsync_start + hsw;
+	}
+
+	return 0;
 }
 
 static const struct drm_bridge_funcs it61620_bridge_funcs = {
@@ -3222,6 +3255,7 @@ static const struct drm_bridge_funcs it61620_bridge_funcs = {
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
 	.atomic_reset = drm_atomic_helper_bridge_reset,
+	.atomic_check = it61620_bridge_atomic_check,
 
 	.edid_read = it61620_bridge_edid_read,
 	.mode_set = it61620_bridge_mode_set,
