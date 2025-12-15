@@ -121,6 +121,17 @@ static const struct chromeos_i2c_probe_data chromeos_i2c_probe_baze_touchscreen 
 	},
 };
 
+static const struct chromeos_i2c_probe_data chromeos_i2c_probe_dooku_touchscreen = {
+	.cfg = &chromeos_i2c_probe_simple_touchscreen_cfg,
+	.opts = &(const struct i2c_of_probe_simple_opts) {
+		.res_node_compatible = "ilitek,ili2901",
+		.supply_name = "vcc33",
+		.gpio_name = "reset",
+		.post_power_on_delay_ms = 10,
+		.post_gpio_config_delay_ms = 100,
+	},
+};
+
 static const struct chromeos_i2c_probe_data chromeos_i2c_probe_tarkin_touchscreen = {
 	.cfg = &chromeos_i2c_probe_simple_touchscreen_cfg,
 	.opts = &(const struct i2c_of_probe_simple_opts) {
@@ -201,6 +212,14 @@ static const struct hw_prober_entry hw_prober_platforms[] = {
 		.compatible = "google,baze",
 		.prober = chromeos_i2c_component_prober,
 		.data = &chromeos_i2c_probe_baze_touchscreen,
+	}, {
+		.compatible = "google,dooku",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_hana_trackpad,
+	}, {
+		.compatible = "google,dooku",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_dooku_touchscreen,
 	}, {
 		.compatible = "google,tarkin",
 		.prober = chromeos_i2c_component_prober,
