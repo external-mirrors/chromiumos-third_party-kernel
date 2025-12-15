@@ -968,12 +968,12 @@ static void mtk_crtc_ddp_hw_fini(struct mtk_crtc *mtk_crtc)
 	mtk_disp_pmqos_set_mmclk_by_pixclk(mtk_crtc->pmqos_dev, drm_crtc_index(crtc), 0, __func__);
 	pm_runtime_put_sync(drm->dev);
 
+	spin_lock_irqsave(&crtc->dev->event_lock, flags);
 	if (crtc->state->event && !crtc->state->active) {
-		spin_lock_irqsave(&crtc->dev->event_lock, flags);
 		drm_crtc_send_vblank_event(crtc, crtc->state->event);
 		crtc->state->event = NULL;
-		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 	}
+	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 }
 
 static void mtk_crtc_ddp_config(struct drm_crtc *crtc,
@@ -1172,6 +1172,7 @@ update_config_err:
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 update_config_out:
+	cmdq_handle = NULL;
 #endif
 
 	mutex_unlock(&mtk_crtc->hw_lock);
