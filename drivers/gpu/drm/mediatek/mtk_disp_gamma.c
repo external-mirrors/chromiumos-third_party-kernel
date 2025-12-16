@@ -326,7 +326,7 @@ static const struct of_device_id mtk_disp_gamma_driver_dt_match[] = {
 	{ .compatible = "mediatek,mt8183-disp-gamma",
 	  .data = &mt8183_gamma_driver_data},
 	{ .compatible = "mediatek,mt8189-disp-gamma",
-	  .data = &mt8183_gamma_driver_data},
+	  .data = &mt8195_gamma_driver_data},
 	{ .compatible = "mediatek,mt8195-disp-gamma",
 	  .data = &mt8195_gamma_driver_data},
 	{},
