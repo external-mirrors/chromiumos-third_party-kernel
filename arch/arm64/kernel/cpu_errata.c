@@ -220,6 +220,9 @@ static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
 	{
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_CORTEX_A55),
 	},
+	{
+		ERRATA_MIDR_ALL_VERSIONS(MIDR_QCOM_KRYO_4XX_SILVER),
+	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_2441009
 	{
