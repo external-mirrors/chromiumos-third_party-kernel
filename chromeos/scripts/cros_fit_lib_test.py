@@ -131,7 +131,11 @@ class TestCrosFitLib(unittest.TestCase):
         }
         model_dtb_configs = {
             "rauru": (
-                {"rauru.dtb": {"sku": [2]}},
+                {
+                    "rauru.dtb": {
+                        "fw_config": {"mask": 0x30, "value": 0x10},
+                    },
+                },
                 {},
             ),
         }
@@ -142,61 +146,6 @@ class TestCrosFitLib(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             cros_fit_lib.process_dtb_config("fake_dtb_config.yaml", "")
-
-    @mock.patch("cros_fit_lib._read_dtb_config")
-    def test_process_dtb_config_match_sku(self, mock_read_dtb_config):
-        """Test process_dtb_config with SKU matching."""
-        model_sku_configs = {
-            "rauru": [
-                cros_fit_lib.SkuConfig("rauru", 0, 0x00),
-                cros_fit_lib.SkuConfig("rauru", 1, 0x10),
-            ]
-        }
-        model_dtb_configs = {
-            "rauru": (
-                {
-                    "sku0.dtb": {"sku": [0]},
-                    "sku1.dtb": {"sku": [1]},
-                },
-                {},
-            )
-        }
-        mock_read_dtb_config.return_value = (
-            model_sku_configs,
-            model_dtb_configs,
-        )
-
-        fit_dtb_nodes, fit_config_nodes = cros_fit_lib.process_dtb_config(
-            "fake_dtb_config.yaml", ""
-        )
-
-        self.assertEqual(
-            len(fit_config_nodes), 2, "Wrong number of FIT config nodes"
-        )
-
-        config = fit_config_nodes[0]
-        self.assertEqual(
-            self._parse_compatible(config.compatible),
-            {"google,rauru-sku0"},
-            "Compatible string mismatch for sku 0",
-        )
-        self.assertEqual(
-            self._get_fdt_filenames(config, fit_dtb_nodes),
-            ["sku0.dtb"],
-            "FDT filenames mismatch for sku 0",
-        )
-
-        config = fit_config_nodes[1]
-        self.assertEqual(
-            self._parse_compatible(config.compatible),
-            {"google,rauru-sku1"},
-            "Compatible string mismatch for sku 1",
-        )
-        self.assertEqual(
-            self._get_fdt_filenames(config, fit_dtb_nodes),
-            ["sku1.dtb"],
-            "FDT filenames mismatch for sku 1",
-        )
 
     @mock.patch("cros_fit_lib._read_dtb_config")
     def test_process_dtb_config_match_fw_config(self, mock_read_dtb_config):

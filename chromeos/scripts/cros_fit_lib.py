@@ -134,13 +134,12 @@ def _get_revisions(dtb_config):
     return sorted(revs), rev_latest
 
 
-def _match_dtb(dtb_attr, rev, sku, fw_config):
+def _match_dtb(dtb_attr, rev, fw_config):
     """Match a DTB/DTBO.
 
     Args:
         dtb_attr: Matching attributes for the DTB.
         rev: Board revision.
-        sku: SKU ID.
         fw_config: Firmware configuration.
 
     Returns:
@@ -154,9 +153,6 @@ def _match_dtb(dtb_attr, rev, sku, fw_config):
             return False
         if rev_max is not None and rev > rev_max:
             return False
-    sku_attr = dtb_attr.get("sku")
-    if sku_attr and sku not in sku_attr:
-        return False
     fw_config_attr = dtb_attr.get("fw_config")
     if fw_config_attr:
         mask_attr = fw_config_attr["mask"]
@@ -278,7 +274,7 @@ def process_dtb_config(dtb_config_file: str, chromeos_config_file: str):
                 dtbs, dtbos = dtb_config
                 matched_dtbs = []
                 for dtb, attr in dtbs.items():
-                    if _match_dtb(attr, rev, sku, fw_config):
+                    if _match_dtb(attr, rev, fw_config):
                         matched_dtbs.append(dtb)
                 if not matched_dtbs:
                     raise ValueError(
@@ -293,7 +289,7 @@ def process_dtb_config(dtb_config_file: str, chromeos_config_file: str):
                 matched_dtb = matched_dtbs[0]
                 matched_dtbos = []
                 for dtbo, attr in dtbos.items():
-                    if _match_dtb(attr, rev, sku, fw_config):
+                    if _match_dtb(attr, rev, fw_config):
                         matched_dtbos.append(dtbo)
                 sku_dtb_configs[model][(rev, sku)] = (
                     matched_dtb,

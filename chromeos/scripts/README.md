@@ -51,8 +51,6 @@ skywalker:
       rev:  # Matches rev >= 1
         min: 1
   dtbo:
-    skywalker-sku8.dtbo:
-      sku: [8]
     skywalker-rt5682i.dtbo:
       fw_config:  # Matches codec RT5682I by "fw_config & 0x30 == 0x10"
         mask: 0x00000030
@@ -74,10 +72,6 @@ The following matching attributes are available:
   rev:
     min: 1  # Matches revision 1 and newer
     max: 5  # Matches revision 5 and older
-  ```
-- **`sku`**: A list of SKU IDs that this DTB/DTBO applies to.
-  ```yaml
-  sku: [0, 1, 2] # Matches if SKU is 0, 1, or 2
   ```
 - **`fw_config`**: Matches the firmware configuration.
   It has a `mask` and a `value`.
