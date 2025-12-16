@@ -6,6 +6,12 @@
 #include "mt8189-skywalker.dtsi"
 
 / {
+	model = "Google Padme board";
+	compatible = "google,padme", "mediatek,mt8189";
+
+	/delete-node/ connector-0;
+	/delete-node/ connector-1;
+
 	tboard_thermistor1: thermal-sensor1 {
 		compatible = "generic-adc-thermal";
 		#thermal-sensor-cells = <0>;
@@ -77,22 +83,6 @@
 
 &ap_i2c_aud {
 	/delete-node/ audio-codec@1a;
-
-	rt5682s: audio-codec@1a {
-		compatible = "realtek,rt5682s";
-		reg = <0x1a>;
-		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&audio_codec_pins>;
-		#sound-dai-cells = <0>;
-
-		AVDD-supply = <&mt6359_vio18_ldo_reg>;
-		DBVDD-supply = <&mt6359_vio18_ldo_reg>;
-		LDO1-IN-supply = <&mt6359_vio18_ldo_reg>;
-		MICVDD-supply = <&pp3300_z1>;
-		realtek,jd-src = <1>;
-		status = "okay";
-	};
 };
 
 &ap_i2c_hdmi {
@@ -119,6 +109,10 @@
 };
 
 &ap_i2c_tchscr {
+	status = "disabled";
+};
+
+&ap_sar_sensor {
 	status = "disabled";
 };
 
@@ -552,21 +546,7 @@
 };
 
 &sound {
-	compatible = "mediatek,mt8189-rt5682s-sound";
-	model = "mt8189_35l51_rt5682s";
-	status = "okay";
-
-	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
-			"I2SOUT0", "ETDMIN_HP_PIN",
-			"I2SOUT0", "ETDMOUT_HP_PIN",
-			"I2SIN0", "ETDMIN_HP_PIN",
-			"I2SIN0", "ETDMOUT_HP_PIN",
-			"IN1P", "Headset Mic",
-			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
-			"AP DMIC Capture", "AP_DMIC0_PIN",
-			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
-
-	/delete-node/ dai-link-6;
+	status = "disabled";
 
 	dai-link-0 {
 		link-name = "I2SOUT1_BE";
@@ -578,23 +558,8 @@
 		};
 	};
 
-	dai-link-1 {
-		link-name = "I2SOUT0_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s>;
-		};
-	};
-
-	dai-link-2 {
-		link-name = "I2SIN0_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt5682s>;
-		};
-	};
+	/delete-node/ dai-link-1;
+	/delete-node/ dai-link-2;
 
 	dai-link-3 {
 		link-name = "TDM_DPTX_BE";
@@ -603,6 +568,8 @@
 			sound-dai = <&dp_tx>;
 		};
 	};
+
+	/delete-node/ dai-link-6;
 };
 
 &spi1 {
@@ -701,4 +668,9 @@
 
 &xhci2 {
 	vbus-supply = <&mt6359_vpa_buck_reg>;
+};
+
+&xhci3 {
+	/delete-node/ hub@1;
+	/delete-node/ hub@2;
 };

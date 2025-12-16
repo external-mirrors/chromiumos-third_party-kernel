@@ -132,35 +132,24 @@ obiwan:
 
 padme:
   dtb:
-    mt8189-skywalker-padme-rev1-sku290.dtb:
+    mt8189-skywalker-padme.dtb: {}
+  dtbo:
+    mt8189-skywalker-padme-sar.dtbo:
+      fw_config:
+        mask: 0x1
+        value: 0x1
+    mt8189-skywalker-padme-rt5682s.dtbo:
+      fw_config:
+        mask: 0x1C00000
+        value: 0x0000000
+    mt8189-skywalker-padme-rt5682i.dtbo:
+      fw_config:
+        mask: 0x1C00000
+        value: 0x0400000
+    mt8189-skywalker-padme-rev1.dtbo:
       rev:
         min: 1
         max: 1
-      sku: [0x122, 0x622, 0xA22]
-    mt8189-skywalker-padme-rev1-sku546.dtb:
-      rev:
-        min: 1
-        max: 1
-      sku: [0x222, 0x422]
-    mt8189-skywalker-padme-rev1-sku802.dtb:
-      rev:
-        min: 1
-        max: 1
-      sku: [0x322, 0x722, 0x822, 0x922, 0xB22, 0x7FFFFF22]
-    mt8189-skywalker-padme-sku290.dtb:
-      rev:
-        min: 2
-      sku: [0x122, 0x622, 0xA22]
-    mt8189-skywalker-padme-sku546.dtb:
-      rev:
-        min: 2
-      sku: [0x222, 0x422]
-    mt8189-skywalker-padme-sku802.dtb:
-      rev:
-        min: 2
-      sku: [0x322, 0x722, 0x822, 0x922, 0xB22, 0x7FFFFF22]
-    mt8189-skywalker-padme-sku1314.dtb:
-      sku: [0x522]
 
 tarkin:
   dtb:
