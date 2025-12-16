@@ -1,22 +1,15 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /*
  * Copyright (C) 2025 Google Inc.
- *
- * Sku id: cached_sku_code & 0xFFFFFF00 | panel_id
- * panel_id:
- *	MIPI_TIANMA_TL121BVMS07_00 0x22
  */
 /dts-v1/;
-#include "mt8189-skywalker-padme.dtsi"
+/plugin/;
 
-/ {
-	model = "Google Padme rev1 sku546/sku1058 board";
-	compatible = "google,padme-rev1-sku546", "google,padme-rev1-sku1058",
-		     "google,padme", "mediatek,mt8189";
-};
+#include <dt-bindings/interrupt-controller/irq.h>
 
 &i2c2 {
-	/delete-node/ audio-codec@1a;
+	#address-cells = <1>;
+	#size-cells = <0>;
 
 	rt5682i: audio-codec@1a {
 		compatible = "realtek,rt5682i";

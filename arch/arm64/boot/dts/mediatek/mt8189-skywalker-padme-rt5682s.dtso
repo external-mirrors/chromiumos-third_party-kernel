@@ -1,31 +1,18 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /*
  * Copyright (C) 2025 Google Inc.
- *
- * Sku id: cached_sku_code & 0xFFFFFF00 | panel_id
- * panel_id:
- *	MIPI_TIANMA_TL121BVMS07_00 0x22
  */
 /dts-v1/;
-#include "mt8189-skywalker-padme.dtsi"
+/plugin/;
 
-/ {
-	model = "Google Padme sku1314 board";
-	compatible = "google,padme-sku1314", "google,padme", "mediatek,mt8189";
-
-	/delete-node/ connector-0;
-	/delete-node/ connector-1;
-};
-
-&ap_sar_sensor {
-	status = "disabled";
-};
+#include <dt-bindings/interrupt-controller/irq.h>
 
 &i2c2 {
-	/delete-node/ audio-codec@1a;
+	#address-cells = <1>;
+	#size-cells = <0>;
 
-	rt5682i: audio-codec@1a {
-		compatible = "realtek,rt5682i";
+	rt5682s: audio-codec@1a {
+		compatible = "realtek,rt5682s";
 		reg = <0x1a>;
 		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
 		pinctrl-names = "default";
@@ -42,8 +29,8 @@
 };
 
 &sound {
-	compatible = "mediatek,mt8189-rt5682i-sound";
-	model = "mt8189_35l51_rt5682i";
+	compatible = "mediatek,mt8189-rt5682s-sound";
+	model = "mt8189_35l51_rt5682s";
 	status = "okay";
 
 	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
@@ -61,7 +48,7 @@
 		mediatek,clk-provider = "cpu";
 
 		codec {
-			sound-dai = <&rt5682i>;
+			sound-dai = <&rt5682s>;
 		};
 	};
 
@@ -70,14 +57,7 @@
 		mediatek,clk-provider = "cpu";
 
 		codec {
-			sound-dai = <&rt5682i>;
+			sound-dai = <&rt5682s>;
 		};
 	};
-};
-
-/*This is a workaround; further analysis is needed to determine why disabling
-is not feasible.*/
-&xhci3 {
-	/delete-node/ hub@1;
-	/delete-node/ hub@2;
 };

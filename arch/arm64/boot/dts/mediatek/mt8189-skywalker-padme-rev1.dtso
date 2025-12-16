@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+&xhci3 {
+	/* 2.x hub on port 1 */
+	rev1_usb_hub_2_x: hub@1 {
+		compatible = "usbbda,5411";
+		reg = <1>;
+		vdd-supply = <&pp3300_s3>;
+		peer-hub = <&rev1_usb_hub_3_x>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@4 {
+				reg = <4>;
+
+				rev1_usb_hub_dsp4_hs: endpoint {
+					remote-endpoint = <&usb_c0_hs>;
+				};
+			};
+		};
+	};
+
+	/* 3.x hub on port 2 */
+	rev1_usb_hub_3_x: hub@2 {
+		compatible = "usbbda,411";
+		reg = <2>;
+		vdd-supply = <&pp3300_s3>;
+		peer-hub = <&rev1_usb_hub_2_x>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@1 {
+				reg = <1>;
+
+				rev1_usb_hub_dsp1_ss: endpoint {
+					remote-endpoint = <&usb_c0_ss>;
+				};
+			};
+		};
+	};
+};
+
+/* USB hub port 1 */
+&usb_c0_ss {
+	remote-endpoint = <&rev1_usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 4 */
+&usb_c0_hs {
+	remote-endpoint = <&rev1_usb_hub_dsp4_hs>;
+};
