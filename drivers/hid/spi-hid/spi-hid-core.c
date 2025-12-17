@@ -245,21 +245,21 @@ static const char *spi_hid_power_mode_string(enum hidspi_power_state power_state
 	}
 }
 
-static void spi_hid_suspend(struct spi_hid *shid)
+static int spi_hid_suspend(struct spi_hid *shid)
 {
-	int ret;
+	int ret = 0;
 	struct device *dev = &shid->spi->dev;
 
 	guard(mutex)(&shid->power_lock);
 	if (shid->power_state == HIDSPI_OFF)
-		return;
+		return ret;
 
 	if (shid->hid) {
 		ret = hid_driver_suspend(shid->hid, PMSG_SUSPEND);
 		if (ret) {
 			dev_err(dev, "%s failed to suspend hid driver: %d",
 				__func__, ret);
-			return;
+			return ret;
 		}
 	}
 
@@ -271,7 +271,6 @@ static void spi_hid_suspend(struct spi_hid *shid)
 			__func__);
 	}
 
-	/* hid_lock already taken. */
 	shid->ready = false;
 
 	if (!device_may_wakeup(dev)) {
@@ -284,21 +283,22 @@ static void spi_hid_suspend(struct spi_hid *shid)
 			dev_err(dev, "%s: could not power down.", __func__);
 			shid->regulator_error_count++;
 			shid->regulator_last_error = ret;
-			return;
+			return ret;
 		}
 
 		shid->power_state = HIDSPI_OFF;
 	}
+	return ret;
 }
 
-static void spi_hid_resume(struct spi_hid *shid)
+static int spi_hid_resume(struct spi_hid *shid)
 {
-	int ret;
+	int ret = 0;
 	struct device *dev = &shid->spi->dev;
 
 	guard(mutex)(&shid->power_lock);
 	if (shid->power_state == HIDSPI_ON)
-		return;
+		return ret;
 
 	if (!shid->irq_enabled) {
 		enable_irq(shid->spi->irq);
@@ -318,7 +318,7 @@ static void spi_hid_resume(struct spi_hid *shid)
 			dev_err(dev, "%s: could not power up.", __func__);
 			shid->regulator_error_count++;
 			shid->regulator_last_error = ret;
-			return;
+			return ret;
 		}
 		shid->power_state = HIDSPI_ON;
 
@@ -330,6 +330,82 @@ static void spi_hid_resume(struct spi_hid *shid)
 		if (ret)
 			dev_err(dev, "%s: failed to reset resume hid driver: %d.", __func__, ret);
 	}
+	return ret;
+}
+
+static void spi_hid_panel_follower_work(struct work_struct *work)
+{
+	struct spi_hid *shid = container_of(work, struct spi_hid,
+					    panel_follower_work);
+	int ret;
+
+	ret = spi_hid_resume(shid);
+	if (!ret)
+		WRITE_ONCE(shid->panel_follower_work_finished, true);
+
+	/*
+	 * The work APIs provide a number of memory ordering guarantees
+	 * including one that says that memory writes before schedule_work()
+	 * are always visible to the work function, but they don't appear to
+	 * guarantee that a write that happened in the work is visible after
+	 * cancel_work_sync(). We'll add a write memory barrier here to match
+	 * with spi_hid_panel_unpreparing() to ensure that our write to
+	 * panel_follower_work_finished is visible there.
+	 */
+	smp_wmb();
+}
+
+static int spi_hid_panel_follower_resume(struct drm_panel_follower *follower)
+{
+	struct spi_hid *shid = container_of(follower, struct spi_hid, panel_follower);
+
+	/*
+	 * Powering on a touchscreen can be a slow process. Queue the work to
+	 * the system workqueue so we don't block the panel's power up.
+	 */
+	WRITE_ONCE(shid->panel_follower_work_finished, false);
+	schedule_work(&shid->panel_follower_work);
+
+	return 0;
+}
+
+static int spi_hid_panel_follower_suspend(struct drm_panel_follower *follower)
+{
+	struct spi_hid *shid = container_of(follower, struct spi_hid, panel_follower);
+
+	cancel_work_sync(&shid->panel_follower_work);
+
+	/* Match with shid_core_panel_follower_work() */
+	smp_rmb();
+	if (!READ_ONCE(shid->panel_follower_work_finished))
+		return 0;
+
+	return spi_hid_suspend(shid);
+}
+
+static const struct drm_panel_follower_funcs
+				spi_hid_panel_follower_prepare_funcs = {
+	.panel_prepared = spi_hid_panel_follower_resume,
+	.panel_unpreparing = spi_hid_panel_follower_suspend,
+};
+
+static int spi_hid_register_panel_follower(struct spi_hid *shid)
+{
+	struct device *dev = &shid->spi->dev;
+
+	shid->panel_follower.funcs = &spi_hid_panel_follower_prepare_funcs;
+
+	/*
+	 * If we're not in control of our own power up/power down then we can't
+	 * do the logic to manage wakeups. Give a warning if a user thought
+	 * that was possible then force the capability off.
+	 */
+	if (device_can_wakeup(dev)) {
+		dev_warn(dev, "Can't wakeup if following panel\n");
+		device_set_wakeup_capable(dev, false);
+	}
+
+	return drm_panel_add_follower(dev, &shid->panel_follower);
 }
 
 static struct hid_device *spi_hid_disconnect_hid(struct spi_hid *shid)
@@ -1316,6 +1392,7 @@ int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 	shid->ops = ops;
 	shid->conf = conf;
 	shid->reset_pending = true;
+	shid->is_panel_follower = drm_is_panel_follower(&spi->dev);
 
 	spi_set_drvdata(spi, shid);
 
@@ -1340,6 +1417,7 @@ int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 	INIT_WORK(&shid->create_device_work, spi_hid_create_device_work);
 	INIT_WORK(&shid->refresh_device_work, spi_hid_refresh_device_work);
 	INIT_WORK(&shid->error_work, spi_hid_error_work);
+	INIT_WORK(&shid->panel_follower_work, spi_hid_panel_follower_work);
 
 	/* we need to allocate the buffer without knowing the maximum
 	 * size of the reports. Let's use SZ_2K, then we do the
@@ -1382,6 +1460,14 @@ int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 
 	shid->ops->deassert_reset(shid->ops);
 
+	if (shid->is_panel_follower) {
+		error = spi_hid_register_panel_follower(shid);
+		if (error) {
+			dev_err(dev, "%s: could not add panel follower.", __func__);
+			goto err_free_buffers;
+		}
+	}
+
 	dev_dbg(dev, "%s: d3 -> %s.", __func__,
 		spi_hid_power_mode_string(shid->power_state));
 
@@ -1400,6 +1486,9 @@ void spi_hid_core_remove(struct spi_device *spi)
 	struct device *dev = &spi->dev;
 
 	int error;
+
+	if (shid->is_panel_follower)
+		drm_panel_remove_follower(&shid->panel_follower);
 
 	spi_hid_stop_hid(shid);
 
@@ -1420,18 +1509,20 @@ static int spi_hid_core_pm_suspend(struct device *dev)
 {
 	struct spi_hid *shid = dev_get_drvdata(dev);
 
-	spi_hid_suspend(shid);
+	if (shid->is_panel_follower)
+		return 0;
 
-	return 0;
+	return spi_hid_suspend(shid);
 }
 
 static int spi_hid_core_pm_resume(struct device *dev)
 {
 	struct spi_hid *shid = dev_get_drvdata(dev);
 
-	spi_hid_resume(shid);
+	if (shid->is_panel_follower)
+		return 0;
 
-	return 0;
+	return spi_hid_resume(shid);
 }
 
 const struct dev_pm_ops spi_hid_core_pm = {
