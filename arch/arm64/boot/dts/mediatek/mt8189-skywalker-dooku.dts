@@ -76,6 +76,10 @@
 	/delete-node/ touchscreen@41;
 };
 
+&dp_tx {
+	/delete-property/ mediatek,phy-flip-gpios;
+};
+
 &dsi0 {
 	status = "disabled";
 };
