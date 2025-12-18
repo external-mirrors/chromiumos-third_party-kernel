@@ -91,6 +91,14 @@ grogu:
       fw_config:
         mask: 0x20
         value: 0x20
+    mt8189-skywalker-grogu-usb-a1.dtbo:
+      fw_config:
+        mask: 0xC
+        value: 0x4
+    mt8189-skywalker-grogu-usb-c1.dtbo:
+      fw_config:
+        mask: 0x3
+        value: 0x0
 
 obiwan:
   dtb:

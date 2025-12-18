@@ -388,3 +388,82 @@
 &ufshci {
 	status = "disabled";
 };
+
+/* Disable USB-A1 on DB side. */
+&usb_a1 {
+	status = "disabled";
+};
+
+/* Disable USB-C1 on MB side. */
+&usb_c1 {
+	status = "disabled";
+};
+
+/* USB hub port 1 */
+&usb_hub_dsp1_hs {
+	remote-endpoint = <&usb_c0_hs>;
+};
+
+&usb_c0_hs {
+	remote-endpoint = <&usb_hub_dsp1_hs>;
+};
+
+&usb_hub_dsp1_ss {
+	remote-endpoint = <&usb_c0_ss>;
+};
+
+&usb_c0_ss {
+	remote-endpoint = <&usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 2 */
+&usb_hub_dsp2_hs {
+	remote-endpoint = <&usb_c1_hs>;
+};
+
+&usb_c1_hs {
+	remote-endpoint = <&usb_hub_dsp2_hs>;
+};
+
+&usb_hub_dsp2_ss {
+	remote-endpoint = <&usb_c1_ss>;
+};
+
+&usb_c1_ss {
+	remote-endpoint = <&usb_hub_dsp2_ss>;
+};
+
+/* USB hub port 3 */
+&usb_hub_dsp3_hs {
+	remote-endpoint = <&usb_a0_hs>;
+};
+
+&usb_a0_hs {
+	remote-endpoint = <&usb_hub_dsp3_hs>;
+};
+
+&usb_hub_dsp3_ss {
+	remote-endpoint = <&usb_a0_ss>;
+};
+
+&usb_a0_ss {
+	remote-endpoint = <&usb_hub_dsp3_ss>;
+};
+
+/* USB hub port 4 */
+&usb_hub_dsp4_hs {
+	remote-endpoint = <&usb_a1_hs>;
+};
+
+&usb_a1_hs {
+	remote-endpoint = <&usb_hub_dsp4_hs>;
+};
+
+&usb_hub_dsp4_ss {
+	remote-endpoint = <&usb_a1_ss>;
+};
+
+&usb_a1_ss {
+	remote-endpoint = <&usb_hub_dsp4_ss>;
+};
+
