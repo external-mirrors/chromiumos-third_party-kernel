@@ -14,15 +14,8 @@
 	status = "okay";
 };
 
-&usb_a0 {
-	status = "disabled";
-};
-&usb_a1 {
-	status = "disabled";
-};
-&usb_hub_2_x {
-	status = "disabled";
-};
-&usb_hub_3_x {
-	status = "disabled";
+/*This is a workaround; Disabling the node doesn't work.*/
+&xhci3 {
+	/delete-node/ hub@1;
+	/delete-node/ hub@2;
 };
