@@ -108,7 +108,7 @@ padme:
       rev:
         min: 1
         max: 1
-      sku: [0x122, 0x622]
+      sku: [0x122, 0x622, 0xA22]
     mt8189-skywalker-padme-rev1-sku546.dtb:
       rev:
         min: 1
@@ -118,11 +118,11 @@ padme:
       rev:
         min: 1
         max: 1
-      sku: [0x322, 0x7FFFFF22]
+      sku: [0x322, 0x722, 0x822, 0x922, 0xB22, 0x7FFFFF22]
     mt8189-skywalker-padme-sku290.dtb:
       rev:
         min: 2
-      sku: [0x122, 0x622]
+      sku: [0x122, 0x622, 0xA22]
     mt8189-skywalker-padme-sku546.dtb:
       rev:
         min: 2
@@ -130,7 +130,7 @@ padme:
     mt8189-skywalker-padme-sku802.dtb:
       rev:
         min: 2
-      sku: [0x322, 0x7FFFFF22]
+      sku: [0x322, 0x722, 0x822, 0x922, 0xB22, 0x7FFFFF22]
     mt8189-skywalker-padme-sku1314.dtb:
       sku: [0x522]
 
