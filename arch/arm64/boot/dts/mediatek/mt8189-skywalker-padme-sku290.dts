@@ -12,7 +12,7 @@
 / {
 	model = "Google Padme sku290 board";
 	compatible = "google,padme-sku290", "google,padme-sku1570",
-		     "google,padme", "mediatek,mt8189";
+		     "google,padme-sku2594", "google,padme", "mediatek,mt8189";
 
 	/delete-node/ connector-0;
 	/delete-node/ connector-1;

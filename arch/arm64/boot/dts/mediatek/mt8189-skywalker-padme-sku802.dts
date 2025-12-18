@@ -12,6 +12,8 @@
 / {
 	model = "Google Padme unprovisioned/sku802 board";
 	compatible = "google,padme-sku2147483426", "google,padme-sku802",
+		     "google,padme-sku1826", "google,padme-sku2082",
+		     "google,padme-sku2338", "google,padme-sku2850",
 		     "google,padme", "mediatek,mt8189";
 
 	/delete-node/ connector-0;
