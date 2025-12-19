@@ -122,6 +122,10 @@
 	status = "disabled";
 };
 
+&backlight {
+	pwms = <&disp_pwm0 0 1000000>;
+};
+
 &cros_ec {
 	cbas {
 		compatible = "google,cros-cbas";
