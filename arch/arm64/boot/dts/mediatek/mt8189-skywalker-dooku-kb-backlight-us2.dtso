@@ -8,7 +8,11 @@
 #include <dt-bindings/input/cros-ec-keyboard.h>
 #include <dt-bindings/input/input.h>
 
-/* update when US2 KB available */
+&cros_ec {
+	keyboard-backlight {
+		compatible = "google,cros-kbd-led-backlight";
+	};
+};
 
 &keyboard_controller {
 	function-row-physmap = <
@@ -35,12 +39,12 @@
 		MATRIX_KEY(0x03, 0x04, KEY_SYSRQ)          /* T5 */
 		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN) /* T6 */
 		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)   /* T7 */
-		MATRIX_KEY(0x02, 0x09, KEY_PLAYPAUSE)      /* T8 */
-		MATRIX_KEY(0x01, 0x09, KEY_MICMUTE)        /* T9 */
-		MATRIX_KEY(0x00, 0x04, KEY_MUTE)           /* T10 */
-		MATRIX_KEY(0x00, 0x01, KEY_VOLUMEDOWN)     /* T11 */
-		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEUP)       /* T12 */
-		MATRIX_KEY(0x03, 0x05, KEY_CONTROLPANEL)   /* T13 */
+		MATRIX_KEY(0x02, 0x09, KEY_KBDILLUMTOGGLE) /* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_PLAYPAUSE)      /* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_MICMUTE)        /* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_MUTE)           /* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEDOWN)     /* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_VOLUMEUP)       /* T13 */
 		MATRIX_KEY(0x03, 0x00, KEY_LEFTMETA)       /* Search*/
 		MATRIX_KEY(0x01, 0x0e, KEY_LEFTCTRL)       /* Left Control*/
 		MATRIX_KEY(0x06, 0x0d, KEY_BACKSLASH)      /* KEY_BACKSLASH*/
@@ -49,4 +53,3 @@
 		MATRIX_KEY(0x04, 0x00, KEY_102ND)          /* KEY_102ND */
 	>;
 };
-

@@ -125,6 +125,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-kb.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-baze-touchscreen.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-kb-backlight.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-kb-backlight-us2.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-touchscreen.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-kb-us2.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-dooku-usbhub-bypass.dtbo
