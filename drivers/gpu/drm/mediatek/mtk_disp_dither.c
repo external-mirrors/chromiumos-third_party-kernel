@@ -79,7 +79,7 @@ void mtk_dither_bypass(struct device *dev, bool bypass, struct cmdq_pkt *cmdq_pk
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
 	unsigned int max_bits = MTK_DEFAULT_MAX_BPC;
 
-	if (dither->data)
+	if (dither->data && dither->data->max_bits)
 		max_bits = dither->data->max_bits;
 
 	if (bypass) {
@@ -103,11 +103,11 @@ void mtk_dither_set_common(void __iomem *regs, struct cmdq_client_reg *cmdq_reg,
 			   unsigned int bpc, unsigned int cfg,
 			   unsigned int dither_en, struct cmdq_pkt *cmdq_pkt)
 {
-
-	/* Dithering function is not enabled
-	 * when bpc is 0 or bpc is greater than or equal to max_bits
+	/*
+	 * Dithering function is not enabled
+	 * when bpc is 0 or bpc is greater than max_bits
 	 */
-	if (bpc == 0 || max_bits <= bpc)
+	if (bpc == 0 || max_bits < bpc)
 		return;
 
 	if (bpc >= MTK_MIN_BPC) {
@@ -148,7 +148,7 @@ void mtk_dither_config(struct device *dev, unsigned int w,
 	struct mtk_disp_dither *dither = dev_get_drvdata(dev);
 	unsigned int max_bits = MTK_DEFAULT_MAX_BPC;
 
-	if (dither->data)
+	if (dither->data && dither->data->max_bits)
 		max_bits = dither->data->max_bits;
 
 	dither->panel_bpc = bpc;
