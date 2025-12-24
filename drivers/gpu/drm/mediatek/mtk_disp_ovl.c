@@ -152,6 +152,7 @@ struct mtk_disp_ovl_data {
 	const u32 *formats;
 	size_t num_formats;
 	bool supports_clrfmt_ext;
+	unsigned int max_size;
 };
 
 /*
@@ -508,7 +509,9 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 	unsigned int ignore_pixel_alpha = 0;
 	unsigned int con;
 
-	if (!pending->enable || !pending->height || !pending->width) {
+	if (!pending->enable || !pending->height || !pending->width
+		|| pending->x > ovl->data->max_size
+		|| pending->y > ovl->data->max_size) {
 		mtk_ovl_layer_off(dev, idx, cmdq_pkt);
 		return;
 	}
@@ -682,6 +685,7 @@ static const struct mtk_disp_ovl_data mt2701_ovl_driver_data = {
 	.fmt_rgb565_is_0 = false,
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.max_size = 4096,
 };
 
 static const struct mtk_disp_ovl_data mt8173_ovl_driver_data = {
@@ -700,6 +704,7 @@ static const struct mtk_disp_ovl_data mt8183_ovl_driver_data = {
 	.fmt_rgb565_is_0 = true,
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.max_size = 4096,
 };
 
 static const struct mtk_disp_ovl_data mt8183_ovl_2l_driver_data = {
@@ -709,6 +714,7 @@ static const struct mtk_disp_ovl_data mt8183_ovl_2l_driver_data = {
 	.fmt_rgb565_is_0 = true,
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.max_size = 4096,
 };
 
 static const struct mtk_disp_ovl_data mt8189_ovl_driver_data = {
@@ -724,6 +730,7 @@ static const struct mtk_disp_ovl_data mt8189_ovl_driver_data = {
 	.formats = mt8195_formats,
 	.num_formats = ARRAY_SIZE(mt8195_formats),
 	.supports_clrfmt_ext = true,
+	.max_size = 4096,
 };
 
 static const struct mtk_disp_ovl_data mt8192_ovl_driver_data = {
@@ -737,6 +744,7 @@ static const struct mtk_disp_ovl_data mt8192_ovl_driver_data = {
 		       BIT(DRM_MODE_BLEND_PIXEL_NONE),
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.max_size = 4096,
 };
 
 static const struct mtk_disp_ovl_data mt8192_ovl_2l_driver_data = {
@@ -750,6 +758,7 @@ static const struct mtk_disp_ovl_data mt8192_ovl_2l_driver_data = {
 		       BIT(DRM_MODE_BLEND_PIXEL_NONE),
 	.formats = mt8173_formats,
 	.num_formats = ARRAY_SIZE(mt8173_formats),
+	.max_size = 4096,
 };
 
 static const struct mtk_disp_ovl_data mt8195_ovl_driver_data = {
@@ -765,6 +774,7 @@ static const struct mtk_disp_ovl_data mt8195_ovl_driver_data = {
 	.formats = mt8195_formats,
 	.num_formats = ARRAY_SIZE(mt8195_formats),
 	.supports_clrfmt_ext = true,
+	.max_size = 4096,
 };
 
 static const struct of_device_id mtk_disp_ovl_driver_dt_match[] = {
