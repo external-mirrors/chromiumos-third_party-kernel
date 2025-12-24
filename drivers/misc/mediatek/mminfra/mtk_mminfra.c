@@ -75,7 +75,7 @@ static bool mtk_mminfra_check_scmi_status(struct mtk_mminfra_data *data)
 	return true;
 }
 
-static void mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
+static int mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
 {
 	int err;
 
@@ -100,6 +100,8 @@ static void mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
 			mdelay(3);
 		}
 	}
+
+	return err;
 }
 
 static int mtk_mminfra_clk_enable(struct mtk_mminfra_data *data)
@@ -118,13 +120,23 @@ static void mtk_mminfra_clk_disable(struct mtk_mminfra_data *data)
 	clk_bulk_disable_unprepare(MTK_MMINFRA_CLK_NR_MAX, data->clks);
 }
 
-static void mtk_mminfra_cg_check(bool is_on, struct mtk_mminfra_data *data)
+static int mtk_mminfra_cg_check(bool is_on, struct mtk_mminfra_data *data)
 {
 	u32 con0_val;
 	u32 con1_val_gce;
+	int ret;
 
-	regmap_read(data->regmap, MMINFRA_CG_CON0, &con0_val);
-	regmap_read(data->regmap, MMINFRA_CG_CON1, &con1_val_gce);
+	ret = regmap_read(data->regmap, MMINFRA_CG_CON0, &con0_val);
+	if (ret) {
+		dev_err(data->dev, "fail read mminfra cg con0 val, ret = %d\n", ret);
+		return ret;
+	}
+	ret = regmap_read(data->regmap, MMINFRA_CG_CON1, &con1_val_gce);
+	if (ret) {
+		dev_err(data->dev, "fail read mminfra cg con1 val, ret = %d\n", ret);
+		return ret;
+	}
+
 	con0_val &= (SMI_CG_BIT | GCEM_CG_BIT | GCED_CG_BIT);
 	con1_val_gce &= GCE26M_CG_BIT;
 
@@ -132,18 +144,22 @@ static void mtk_mminfra_cg_check(bool is_on, struct mtk_mminfra_data *data)
 		/* SMI CG still off */
 		dev_err(data->dev, "%s cg still off, CG_CON0:0x%x CG_CON1:0x%x\n",
 			__func__, con0_val, con1_val_gce);
+		ret = -EFAULT;
 	} else if (!is_on && (!con0_val || !con1_val_gce)) {
 		/* SMI CG still on */
 		dev_err(data->dev, "%s cg still on, CG_CON0:0x%x CG_CON1:0x%x\n",
 			__func__, con0_val, con1_val_gce);
+		ret = -EFAULT;
 	}
+
+	return ret;
 }
 
 static int mtk_mminfra_pd_callback(struct notifier_block *nb,
 				   unsigned long flags, void *data)
 {
 	struct mtk_mminfra_data *mminfra_data;
-	int ret;
+	int ret = NOTIFY_OK;
 	u32 val;
 
 	mminfra_data = container_of(nb, struct mtk_mminfra_data, pd_nb);
@@ -151,36 +167,71 @@ static int mtk_mminfra_pd_callback(struct notifier_block *nb,
 	switch (flags) {
 	case GENPD_NOTIFY_ON:
 		ret = mtk_mminfra_clk_enable(mminfra_data);
-		if (ret)
+		if (ret) {
+			ret = NOTIFY_BAD;
 			break;
-		mtk_mminfra_cg_check(true, mminfra_data);
+		}
+		ret = mtk_mminfra_cg_check(true, mminfra_data);
+		if (ret) {
+			ret = NOTIFY_BAD;
+			break;
+		}
 
 		if (mminfra_data->plat_data->bkrs_enable) {
-			mtk_do_mminfra_bkrs(true, mminfra_data);
-			regmap_read(mminfra_data->regmap, MMINFRA_AID_REMAP, &val);
+			ret = mtk_do_mminfra_bkrs(true, mminfra_data);
+			if (ret) {
+				ret = NOTIFY_BAD;
+				break;
+			}
+			ret = regmap_read(mminfra_data->regmap,
+					  MMINFRA_AID_REMAP, &val);
+			if (ret) {
+				dev_err(mminfra_data->dev, "fail read aid reg val, ret = %d\n", ret);
+				ret = NOTIFY_BAD;
+				break;
+			}
 			if (val != mminfra_data->backup_val) {
 				dev_err(mminfra_data->dev,
 					"%s: HRE restore fail val:0x%x\n",
 					__func__, val);
 				WARN_ON_ONCE(1);
+				ret = NOTIFY_BAD;
+				break;
 			}
 		}
 		dev_dbg(mminfra_data->dev, "%s: enable clk\n", __func__);
+		ret = NOTIFY_OK;
 		break;
 	case GENPD_NOTIFY_PRE_OFF:
-		regmap_read(mminfra_data->regmap, MMINFRA_AID_REMAP, &mminfra_data->backup_val);
-		if (mminfra_data->plat_data->bkrs_enable)
-			mtk_do_mminfra_bkrs(false, mminfra_data);
+		ret = regmap_read(mminfra_data->regmap, MMINFRA_AID_REMAP,
+				  &mminfra_data->backup_val);
+		if (ret) {
+			dev_err(mminfra_data->dev, "fail read aid reg val to backup, ret = %d\n", ret);
+			ret = NOTIFY_BAD;
+			break;
+		}
+		if (mminfra_data->plat_data->bkrs_enable) {
+			ret = mtk_do_mminfra_bkrs(false, mminfra_data);
+			if (ret) {
+				ret = NOTIFY_BAD;
+				break;
+			}
+		}
 
 		mtk_mminfra_clk_disable(mminfra_data);
-		mtk_mminfra_cg_check(false, mminfra_data);
+		ret = mtk_mminfra_cg_check(false, mminfra_data);
+		if (ret) {
+			ret = NOTIFY_BAD;
+			break;
+		}
 		dev_dbg(mminfra_data->dev, "%s: disable clk\n", __func__);
+		ret = NOTIFY_OK;
 		break;
 	default:
 		break;
 	}
 
-	return NOTIFY_OK;
+	return ret;
 }
 
 static int mtk_mminfra_dts_clk_init(struct device *dev,
