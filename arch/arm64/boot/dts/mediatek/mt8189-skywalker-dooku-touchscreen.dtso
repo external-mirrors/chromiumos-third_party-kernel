@@ -12,7 +12,7 @@
 	status = "okay";
 
 	touchscreen_elan_10: touchscreen@10 {
-		compatible = "elan,ekth5015m", "elan,ekth6915";
+		compatible = "elan,ekth3500";
 		reg = <0x10>;
 		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
