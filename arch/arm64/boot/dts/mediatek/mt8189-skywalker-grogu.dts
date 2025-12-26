@@ -392,6 +392,11 @@
 	status = "disabled";
 };
 
+&threshold {
+	temperature = <65000>;
+	hysteresis = <5000>;
+};
+
 /* Disable WCAM */
 &u2phy1 {
 	status = "disabled";
