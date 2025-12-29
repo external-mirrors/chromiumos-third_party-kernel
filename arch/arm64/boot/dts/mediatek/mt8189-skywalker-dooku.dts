@@ -168,6 +168,10 @@
 	status = "okay";
 };
 
+&ufshci {
+	status = "disabled";
+};
+
 &usb_a1 {
 	status = "disabled";
 };

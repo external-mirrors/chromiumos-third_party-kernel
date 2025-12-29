@@ -62,10 +62,18 @@ dooku:
       fw_config:
         mask: 0x8
         value: 0x8
+    mt8189-skywalker-dooku-ufs.dtbo:
+      fw_config:
+        mask: 0xC0000000
+        value: 0x00000000
     mt8189-skywalker-dooku-emmc.dtbo:
       fw_config:
         mask: 0xC0000000
         value: 0x80000000
+    mt8189-skywalker-dooku-storage-unprovision.dtbo:
+      fw_config:
+        mask: 0xC0000000
+        value: 0xC0000000
 
 grogu:
   dtb:
