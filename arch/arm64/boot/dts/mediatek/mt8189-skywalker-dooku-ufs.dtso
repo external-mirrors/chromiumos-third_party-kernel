@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+&ufshci {
+	vcc-supply = <&mt6359_vemc_1_ldo_reg>;
+	vccq-supply = <&mt6359_vio18_ldo_reg>;
+	vccq2-supply = <&mt6359_vufs_ldo_reg>;
+
+	status = "okay";
+};

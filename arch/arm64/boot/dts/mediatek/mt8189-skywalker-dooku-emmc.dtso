@@ -11,7 +11,3 @@
 
         status = "okay";
 };
-
-&ufshci {
-	status = "disabled";
-};
