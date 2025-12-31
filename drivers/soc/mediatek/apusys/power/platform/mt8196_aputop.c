@@ -337,6 +337,19 @@ static int mt8196_apu_top_probe(struct platform_device *pdev)
 
 	dev_set_drvdata(dev, apupw);
 
+	/*
+	 * During APU init, apu_top is powered on without a matching power-off.
+	 * Other devices, like apusys_rv and apu_iommu, power on or off as needed.
+	 * When the APU microP firmware boots, it clears the power reference count to correct it.
+	 * Sometimes, the clear happens after other devices powered on apu, causing count errors.
+	 * To fix this, we power off apu_top after init for symmetry without clear ref count.
+	 */
+	ret = apusys_pwr_smc_call(dev, MTK_APUSYS_KERNEL_OP_APUSYS_PWR_TOP_OFF, 0);
+	if (!ret)
+		dev_dbg(dev, "%s: APU power off success\n", __func__);
+	else
+		dev_err(dev, "%s: APU power off fail(%d)\n", __func__, ret);
+
 	return ret;
 }
 

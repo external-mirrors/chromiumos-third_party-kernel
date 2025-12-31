@@ -108,12 +108,6 @@ static int mt8196_cold_boot_power_on(struct mtk_apu *apu)
 		return -EINVAL;
 	}
 
-	ret = mtk_apu_rv_smc_call(dev, MTK_APUSYS_KERNEL_OP_APUSYS_COLD_BOOT_CLR_MBOX_DUMMY, 0);
-	if (ret) {
-		dev_err(dev, "Failed to clear mailbox dummy register, ret=%d\n", ret);
-		return ret;
-	}
-
 	ret = pm_runtime_resume_and_get(power_dev);
 	if (ret < 0) {
 		dev_err(dev, "Failed to power on APU, ret=%d\n", ret);
