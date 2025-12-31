@@ -165,8 +165,6 @@ static void mtk_mipi_tx_power_on_signal(struct phy *phy)
 
 	mtk_phy_update_field(base + MIPITX_VOLTAGE_SEL, RG_DSI_HSTX_LDO_REF_SEL,
 			     (mipi_tx->mipitx_drive - 3000) / 200);
-	if (mipi_tx->is_cphy)
-		mtk_phy_update_field(base + MIPITX_VOLTAGE_SEL, RG_DSI_HSTX_LDO_REF_SEL, 0xd);
 
 	mtk_mipi_tx_config_calibration_data(mipi_tx);
 	if (mipi_tx->is_cphy)
