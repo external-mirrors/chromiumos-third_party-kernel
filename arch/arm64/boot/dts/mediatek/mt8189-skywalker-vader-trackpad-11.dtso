@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&ap_i2c_tchpad {
+        trackpad_elan: trackpad@15 {
+                compatible = "elan,ekth3000";
+                reg = <0x15>;
+                interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&trackpad_pins>;
+                wakeup-source;
+                vcc-supply = <&pp3300_s3>;
+                status = "fail-needs-probe";
+        };
+
+	trackpad_cirque: trackpad@2c {
+                compatible = "hid-over-i2c";
+                reg = <0x2c>;
+                interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&trackpad_pins>;
+                post-power-on-delay-ms = <20>;
+                wakeup-source;
+                hid-descr-addr = <0x0020>;
+                vdd-supply = <&pp3300_s3>;
+                status = "fail-needs-probe";
+        };
+};

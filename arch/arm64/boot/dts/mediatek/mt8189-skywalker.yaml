@@ -171,6 +171,19 @@ tarkin:
         mask: 0x0000000E
         value: 0x0000000A
 
+vader:
+  dtb:
+    mt8189-skywalker-vader.dtb: {}
+  dtbo:
+    mt8189-skywalker-vader-trackpad-11.dtbo:
+      fw_config:
+        mask: 0x00000002
+        value: 0x00000000
+    mt8189-skywalker-vader-trackpad-14.dtbo:
+      fw_config:
+        mask: 0x00000002
+        value: 0x00000002
+
 yoda:
   dtb:
     mt8189-skywalker-yoda.dtb: {}
