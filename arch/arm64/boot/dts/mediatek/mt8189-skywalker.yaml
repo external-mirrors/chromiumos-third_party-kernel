@@ -98,19 +98,24 @@ grogu:
 obiwan:
   dtb:
     mt8189-skywalker-obiwan-sku131072.dtb:
-      sku: [0x20000, 0x20002]
+      sku: [0x20000, 0x20002, 0x20007, 0x20008]
     mt8189-skywalker-obiwan-sku131073.dtb:
       sku: [0x20001, 0x20003, 0x20004, 0x20005]
     mt8189-skywalker-obiwan-sku131078.dtb:
       sku: [0x20006]
     mt8189-skywalker-quigon-sku196608.dtb:
-      sku: [0x30000, 0x30003, 0x3000a, 0x7FFFFFFF]
+      sku: [0x30000, 0x30003, 0x3000a, 0x3000b,
+            0x3000c, 0x3000d, 0x30018, 0x30019, 0x7FFFFFFF]
     mt8189-skywalker-quigon-sku196609.dtb:
-      sku: [0x30001, 0x30002, 0x30007, 0x30008]
+      sku: [0x30001, 0x30002, 0x30007, 0x30008,
+            0x3000e, 0x3000f, 0x30010, 0x3001a,
+            0x3001b, 0x3001c]
     mt8189-skywalker-quigon-sku196612.dtb:
-      sku: [0x30004, 0x30005]
+      sku: [0x30004, 0x30005, 0x30015, 0x30016,
+            0x30017, 0x30020, 0x30021, 0x30022]
     mt8189-skywalker-quigon-sku196614.dtb:
-      sku: [0x30006]
+      sku: [0x30006, 0x30011, 0x30012, 0x30013,
+            0x30014, 0x3001d, 0x3001e, 0x3001f]
     mt8189-skywalker-quigon-sku196617.dtb:
       sku: [0x30009]
 

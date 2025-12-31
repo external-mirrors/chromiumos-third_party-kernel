@@ -6,9 +6,12 @@
 #include "mt8189-skywalker-obiwan.dtsi"
 
 / {
-	model = "Google Quigon sku196614 board";
-	compatible = "google,obiwan-sku196614", "google,obiwan",
-		     "mediatek,mt8189";
+	model = "Google Quigon sku196614/196625/196626/196627/196628/196637/196638/196639 board";
+	compatible = "google,obiwan-sku196614", "google,obiwan-sku196625",
+		     "google,obiwan-sku196626", "google,obiwan-sku196627",
+		     "google,obiwan-sku196628", "google,obiwan-sku196637",
+		     "google,obiwan-sku196638", "google,obiwan-sku196639",
+		     "google,obiwan", "mediatek,mt8189";
 };
 
 &keyboard_controller {

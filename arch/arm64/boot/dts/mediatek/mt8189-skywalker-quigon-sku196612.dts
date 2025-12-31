@@ -6,8 +6,11 @@
 #include "mt8189-skywalker-obiwan.dtsi"
 
 / {
-	model = "Google Quigon sku196612/196613 board";
+	model = "Google Quigon sku196612/196613/196629/196630/196631/196640/196641/196642 board";
 	compatible = "google,obiwan-sku196612", "google,obiwan-sku196613",
+		     "google,obiwan-sku196629", "google,obiwan-sku196630",
+		     "google,obiwan-sku196631", "google,obiwan-sku196640",
+		     "google,obiwan-sku196641", "google,obiwan-sku196642",
 		     "google,obiwan", "mediatek,mt8189";
 };
 

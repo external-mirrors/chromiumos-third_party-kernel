@@ -6,8 +6,9 @@
 #include "mt8189-skywalker-obiwan.dtsi"
 
 / {
-	model = "Google Obiwan sku131072/131074 board";
+	model = "Google Obiwan sku131072/131074/131079/131080 board";
 	compatible = "google,obiwan-sku131072", "google,obiwan-sku131074",
+		     "google,obiwan-sku131079", "google,obiwan-sku131080",
 		     "google,obiwan", "mediatek,mt8189";
 };
 
