@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2025 MediaTek Inc.
- * Author: zhengnan chen <zhengnan.chen@mediatek.com>
+ * Author: Zhengnan Chen <zhengnan.chen@mediatek.com>
  */
 
 #include <linux/clk.h>
@@ -17,17 +17,15 @@
 #include <linux/slab.h>
 #include "tinysys-scmi.h"
 
-#define MMINFRA_CG_CON0		0x100
-#define GCED_CG_BIT		BIT(0)
-#define GCEM_CG_BIT		BIT(1)
-#define SMI_CG_BIT		BIT(2)
-
-#define MMINFRA_CG_CON1		0x110
-#define GCE26M_CG_BIT		BIT(17)
-
-#define MMINFRA_AID_REMAP	0x864
-
-#define MMINFRA_SCMI_MTCMOS_CB	2
+#define GCED_CG_BIT			BIT(0)
+#define GCEM_CG_BIT			BIT(1)
+#define GCE26M_CG_BIT			BIT(17)
+#define MMINFRA_AID_REMAP		0x864
+#define MMINFRA_CG_CON0			0x100
+#define MMINFRA_CG_CON1			0x110
+#define MMINFRA_SCMI_MTCMOS_CB		2
+#define MMINFRA_SCMI_TIMEOUT_DELAY_MS	3
+#define SMI_CG_BIT			BIT(2)
 
 static const char * const mtk_mminfra_clks[] = {"gce_d", "gce_m", "gce_26m"};
 #define MTK_MMINFRA_CLK_NR_MAX		ARRAY_SIZE(mtk_mminfra_clks)
@@ -81,7 +79,7 @@ static int mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
 
 	err = scmi_tinysys_common_set(data->tinfo->ph, data->feature_id,
 				      MMINFRA_SCMI_MTCMOS_CB,
-				      (is_restore)? 0 : 1, 0, 0, 0);
+				      (is_restore) ? 0 : 1, 0, 0, 0);
 	if (err) {
 		dev_err(data->dev, "%s: call scmi(%d) err=%d\n",
 			__func__, is_restore, err);
@@ -97,7 +95,7 @@ static int mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
 			 * Therefore, a 3ms wait is required to allow sspm
 			 * to complete the mminfra cmd.
 			 */
-			mdelay(3);
+			mdelay(MMINFRA_SCMI_TIMEOUT_DELAY_MS);
 		}
 	}
 
