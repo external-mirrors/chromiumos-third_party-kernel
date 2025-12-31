@@ -6,6 +6,7 @@ DTC_FLAGS_mt8189-skywalker-dooku += -@
 DTC_FLAGS_mt8189-skywalker-grogu += -@
 DTC_FLAGS_mt8189-skywalker-obiwan += -@
 DTC_FLAGS_mt8189-skywalker-tarkin += -@
+DTC_FLAGS_mt8189-skywalker-vader += -@
 DTC_FLAGS_mt8189-skywalker-yoda += -@
 
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt2712-evb.dtb
@@ -154,6 +155,9 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-kb-cm1406.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-kb-cm1505-backlight.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-kb-cm1505.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-tarkin-touchscreen.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-vader.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-vader-trackpad-11.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-vader-trackpad-14.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-rt5682i.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-rt5682s.dtbo

@@ -1,0 +1,228 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker.dtsi"
+
+/ {
+	model = "Google Vader board";
+	compatible = "google,vader", "mediatek,mt8189";
+
+	connector-hdmi {
+		status = "disabled";
+	};
+};
+
+&ap_i2c_aud {
+	/delete-node/ audio-codec@1a;
+
+	rt5650: audio-codec@1a {
+		compatible = "realtek,rt5650";
+		reg = <0x1a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		cbj-sleeve-gpio = <&pio 30 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		#sound-dai-cells = <0>;
+		realtek,dmic1-data-pin = <2>;
+		realtek,jd-mode = <2>;
+		status = "okay";
+	};
+};
+
+&ap_i2c_tchpad {
+	/delete-node/ trackpad@15;
+};
+
+&ap_i2c_tchscr {
+	status = "okay";
+	/delete-node/ touchscreen@41;
+
+	touchscreen_elan_10: touchscreen@10 {
+		compatible = "elan,ekth3500";
+		reg = <0x10>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+
+	touchscreen_elan: touchscreen@16 {
+		compatible = "elan,ekth6a12nay";
+		reg = <0x16>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+
+	touchscreen_weida_2c: touchscreen@2c {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		hid-descr-addr = <0x0020>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		post-power-on-delay-ms = <10>;
+		status = "fail-needs-probe";
+	};
+
+	touchscreen_weida_3c: touchscreen@3c {
+		compatible = "hid-over-i2c";
+		reg = <0x3c>;
+		hid-descr-addr = <0x0020>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		post-power-on-delay-ms = <10>;
+		status = "fail-needs-probe";
+	};
+
+	touchscreen_g2touch: touchscreen@40 {
+		compatible = "ilitek,ili2901";
+		reg = <0x40>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+
+	touchscreen_goodix: touchscreen@5d {
+		compatible = "goodix,gt7986u", "goodix,gt7375p";
+		reg = <0x5d>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&pp3300_tchscr_x>;
+		status = "fail-needs-probe";
+	};
+};
+
+&ap_sar_sensor {
+	status = "disabled";
+};
+
+&ap_i2c_hdmi {
+	status = "disabled";
+};
+
+&mmc0 {
+	vmmc-supply = <&mt6359_vemc_1_ldo_reg>;
+	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
+	status = "okay";
+};
+
+&mmc1 {
+	status = "disabled";
+};
+
+&mt6359_vufs_ldo_reg {
+	regulator-always-on;
+};
+
+&rt9123 {
+	status = "disabled";
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5650-sound";
+	model = "mt8189_rt5650";
+
+	dai-link-0 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+	/delete-node/ dai-link-2;
+};
+
+&spi1 {
+	status = "disabled";
+};
+
+&usb_a1 {
+	status = "disabled";
+};
+
+/* USB hub port 1 */
+&usb_hub_dsp1_hs {
+	remote-endpoint = <&usb_c0_hs>;
+};
+
+&usb_c0_hs {
+	remote-endpoint = <&usb_hub_dsp1_hs>;
+};
+
+&usb_hub_dsp1_ss {
+	remote-endpoint = <&usb_c0_ss>;
+};
+
+&usb_c0_ss {
+	remote-endpoint = <&usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 2 */
+&usb_hub_dsp2_hs {
+	remote-endpoint = <&usb_c1_hs>;
+};
+
+&usb_c1_hs {
+	remote-endpoint = <&usb_hub_dsp2_hs>;
+};
+
+&usb_hub_dsp2_ss {
+	remote-endpoint = <&usb_c1_ss>;
+};
+
+&usb_c1_ss {
+	remote-endpoint = <&usb_hub_dsp2_ss>;
+};
+
+/* USB hub port 3 */
+&usb_hub_dsp3_hs {
+	remote-endpoint = <&usb_a0_hs>;
+};
+
+&usb_a0_hs {
+	remote-endpoint = <&usb_hub_dsp3_hs>;
+};
+
+&usb_hub_dsp3_ss {
+	remote-endpoint = <&usb_a0_ss>;
+};
+
+&usb_a0_ss {
+	remote-endpoint = <&usb_hub_dsp3_ss>;
+};
+
+/* USB hub port 4 is for on-board WWAN card */
+
