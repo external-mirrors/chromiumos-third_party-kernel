@@ -87,7 +87,8 @@ static void panic_print_deprecated(void)
 static int sysctl_panic_print_handler(struct ctl_table *table, int write,
 			   void *buffer, size_t *lenp, loff_t *ppos)
 {
-	panic_print_deprecated();
+	if (write)
+		panic_print_deprecated();
 	return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
 }
 
@@ -832,7 +833,6 @@ static int panic_print_set(const char *val, const struct kernel_param *kp)
 
 static int panic_print_get(char *val, const struct kernel_param *kp)
 {
-	panic_print_deprecated();
 	return  param_get_ulong(val, kp);
 }
 
