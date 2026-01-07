@@ -216,3 +216,7 @@ yoda:
       fw_config:
         mask: 0x4
         value: 0x4
+    mt8189-skywalker-yoda-mace.dtbo:
+      fw_config:
+        mask: 0x20
+        value: 0x20
