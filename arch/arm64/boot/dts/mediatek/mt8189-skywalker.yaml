@@ -79,6 +79,14 @@ grogu:
   dtb:
     mt8189-skywalker-grogu.dtb: {}
   dtbo:
+    mt8189-skywalker-grogu-kb.dtbo:
+      fw_config:
+        mask: 0x10
+        value: 0x00
+    mt8189-skywalker-grogu-kb-ca-fr.dtbo:
+      fw_config:
+        mask: 0x10
+        value: 0x10
     mt8189-skywalker-grogu-touchscreen.dtbo:
       fw_config:
         mask: 0x20
