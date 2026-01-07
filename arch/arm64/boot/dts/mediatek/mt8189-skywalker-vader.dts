@@ -123,6 +123,11 @@
 	status = "disabled";
 };
 
+/* Disable support HDMI for MIPI DSI */
+&dsi0 {
+	status = "disabled";
+};
+
 &mmc0 {
 	vmmc-supply = <&mt6359_vemc_1_ldo_reg>;
 	vqmmc-supply = <&mt6359_vufs_ldo_reg>;
@@ -163,6 +168,7 @@
 		};
 	};
 	/delete-node/ dai-link-2;
+	/delete-node/ dai-link-6;
 };
 
 &spi1 {
