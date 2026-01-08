@@ -104,6 +104,10 @@
 	};
 };
 
+&gpio_keys {
+	status = "disabled";
+};
+
 &i2c_tunnel {
 	google,remote-bus = <1>;
 	battery: sbs-battery@b {
