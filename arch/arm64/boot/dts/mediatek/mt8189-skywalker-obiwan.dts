@@ -21,13 +21,14 @@
 		vin-supply = <&pp3300_z1>;
 	};
 
-	rt1019p: audio-codec {
+	rt1019p: audio-rt1019p {
 		compatible = "realtek,rt1019p";
 		label = "rt1019p";
 		#sound-dai-cells = <0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&audio_spk_en_pins>;
 		sdb-gpios = <&pio 5 GPIO_ACTIVE_HIGH>;
+		status = "disabled";
 	};
 };
 
@@ -337,16 +338,12 @@
     /delete-node/ mt6359codec;
 };
 
+&rt9123 {
+	status = "disabled";
+};
+
 &sound {
-	dai-link-0 {
-		link-name = "I2SOUT1_BE";
-		mediatek,clk-provider = "cpu";
-
-		codec {
-			sound-dai = <&rt1019p>;
-		};
-	};
-
+	/delete-node/ dai-link-0;
 	/delete-node/ dai-link-1;
 	/delete-node/ dai-link-2;
 
