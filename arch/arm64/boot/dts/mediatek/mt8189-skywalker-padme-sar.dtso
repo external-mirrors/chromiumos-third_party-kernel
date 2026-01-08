@@ -6,5 +6,9 @@
 /plugin/;
 
 &ap_sar_sensor {
+	semtech,ph1-pin = <3 1 3>;
+	semtech,ph01-resolution = <1024>;
+	semtech,cs-idle-sleep = "gnd";
+	semtech,ph01-proxraw-strength = <3>;
 	status = "okay";
 };
