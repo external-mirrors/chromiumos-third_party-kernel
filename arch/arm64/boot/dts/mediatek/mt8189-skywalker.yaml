@@ -121,14 +121,14 @@ obiwan:
       fw_config:
         mask: 0x2
         value: 0x2
-    mt8189-skywalker-obiwan-rt5682i.dtbo:
+    mt8189-skywalker-obiwan-rt5682i-rt1019p.dtbo:
       fw_config:
-        mask: 0x1C00000
-        value: 0x0800000
-    mt8189-skywalker-obiwan-rt5682s.dtbo:
+        mask: 0xFC00000
+        value: 0x2800000
+    mt8189-skywalker-obiwan-rt5682s-rt1019p.dtbo:
       fw_config:
-        mask: 0x1C00000
-        value: 0x0400000
+        mask: 0xFC00000
+        value: 0x2400000
 
 padme:
   dtb:

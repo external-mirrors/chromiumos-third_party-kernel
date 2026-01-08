@@ -28,6 +28,10 @@
 	};
 };
 
+&rt1019p {
+	status = "okay";
+};
+
 &sound {
 	compatible = "mediatek,mt8189-rt5682i-sound";
 	model = "mt8189_1019_rt5682i";
@@ -41,6 +45,15 @@
 			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
 			"AP DMIC Capture", "AP_DMIC0_PIN",
 			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
+
+	dai-link-0 {
+		link-name = "I2SOUT1_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt1019p>;
+		};
+	};
 
 	dai-link-1 {
 		link-name = "I2SOUT0_BE";
