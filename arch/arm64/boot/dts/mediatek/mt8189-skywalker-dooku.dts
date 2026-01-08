@@ -168,6 +168,14 @@
 	status = "disabled";
 };
 
+&u2port0 {
+	mediatek,pre-emphasis = <2>;
+};
+
+&u2port4 {
+	mediatek,pre-emphasis = <1>;
+};
+
 &u3phy0 {
 	status = "okay";
 };
