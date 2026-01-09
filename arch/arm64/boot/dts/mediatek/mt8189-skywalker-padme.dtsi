@@ -300,6 +300,8 @@
 &mipi_tx_config0 {
 	mediatek,is-cphy;
 	mediatek,pre-emphasis-en;
+
+	drive-strength-microamp = <6000>;
 };
 
 &mmc0 {
