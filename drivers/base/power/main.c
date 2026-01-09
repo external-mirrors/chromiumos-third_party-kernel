@@ -506,7 +506,7 @@ struct dpm_watchdog {
 #define DECLARE_DPM_WATCHDOG_ON_STACK(wd) \
 	struct dpm_watchdog wd
 
-static bool __read_mostly dpm_watchdog_all_cpu_backtrace;
+static bool __read_mostly dpm_watchdog_all_cpu_backtrace = true;
 module_param(dpm_watchdog_all_cpu_backtrace, bool, 0644);
 MODULE_PARM_DESC(dpm_watchdog_all_cpu_backtrace,
 		 "Backtrace all CPUs on DPM watchdog timeout");
