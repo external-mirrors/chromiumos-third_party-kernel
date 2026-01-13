@@ -169,7 +169,7 @@
 };
 
 &u2port0 {
-	mediatek,pre-emphasis = <2>;
+	mediatek,pre-emphasis = <1>;
 };
 
 &u2port4 {
