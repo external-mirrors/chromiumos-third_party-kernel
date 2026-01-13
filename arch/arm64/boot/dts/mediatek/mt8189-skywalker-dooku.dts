@@ -268,3 +268,7 @@
 };
 
 /* USB hub port 4 is empty */
+
+&xhci1 {
+	status = "disabled";
+};
