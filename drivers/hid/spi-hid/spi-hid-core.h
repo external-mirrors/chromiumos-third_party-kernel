@@ -90,6 +90,8 @@ struct spihid_ops {
 	int (*assert_reset)(struct spihid_ops *ops);
 	int (*deassert_reset)(struct spihid_ops *ops);
 	void (*sleep_minimal_reset_delay)(struct spihid_ops *ops);
+
+	u32 response_timeout_ms;	/* Output report response timeout in ms. */
 };
 
 /* Driver context */
@@ -109,6 +111,8 @@ struct spi_hid {
 
 	u16 response_length;
 	u16 bufsize;
+
+	unsigned long quirks;	/* Various quirks. */
 
 	enum hidspi_power_state power_state;
 

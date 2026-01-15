@@ -41,7 +41,11 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 
+#include "../hid-ids.h"
 #include "spi-hid-core.h"
+
+/* quirks to control the device */
+#define SPI_HID_QUIRK_MODE_SWITCH	BIT(0)
 
 /* Protocol constants */
 #define SPI_HID_READ_APPROVAL_CONSTANT		0xff
@@ -52,8 +56,41 @@
 #define SPI_HID_OUTPUT_REPORT_CONTENT_ID_DESC_REQUEST	0x00
 
 #define SPI_HID_MAX_RESET_ATTEMPTS	3
+#define SPI_HID_RESPONSE_TIMEOUT_MS	1000
+
+static const struct spi_hid_quirks {
+	__u16 idVendor;
+	__u16 idProduct;
+	__u32 quirks;
+} spi_hid_quirks[] = {
+	{ USB_VENDOR_ID_ILITEK, HID_ANY_ID,
+		SPI_HID_QUIRK_MODE_SWITCH },
+	{ 0, 0 }
+};
 
 static struct hid_ll_driver spi_hid_ll_driver;
+
+/*
+ * spi_hid_lookup_quirk: return any quirks associated with a SPI HID device
+ * @idVendor: the 16-bit vendor ID
+ * @idProduct: the 16-bit product ID
+ *
+ * Returns: a u32 quirks value.
+ */
+static u32 spi_hid_lookup_quirk(const u16 idVendor, const u16 idProduct)
+{
+	u32 quirks = 0;
+	int n;
+
+	for (n = 0; spi_hid_quirks[n].idVendor; n++)
+		if (spi_hid_quirks[n].idVendor == idVendor &&
+		    (spi_hid_quirks[n].idProduct == (__u16)HID_ANY_ID ||
+		     spi_hid_quirks[n].idProduct == idProduct))
+			quirks = spi_hid_quirks[n].quirks;
+
+	return quirks;
+}
+
 
 static void spi_hid_populate_read_approvals(const struct spi_hid_conf *conf,
 					    u8 *header_buf, u8 *body_buf)
@@ -307,18 +344,41 @@ out:
 	return ret;
 }
 
+static const u32 spi_hid_get_timeout(struct spi_hid *shid)
+{
+	struct device *dev = &shid->spi->dev;
+	u32 timeout;
+
+	timeout = READ_ONCE(shid->ops->response_timeout_ms);
+
+	if (timeout < SPI_HID_RESPONSE_TIMEOUT_MS || timeout > 10000) {
+		dev_warn(dev, "Response timeout is out of range, using default %d",
+			SPI_HID_RESPONSE_TIMEOUT_MS);
+		timeout = SPI_HID_RESPONSE_TIMEOUT_MS;
+	}
+
+	return timeout;
+}
+
 static int spi_hid_sync_request(struct spi_hid *shid,
 				struct spi_hid_output_report *report)
 {
 	struct device *dev = &shid->spi->dev;
+	u32 timeout;
 	int ret = 0;
 
 	ret = spi_hid_send_output_report(shid, report);
 	if (ret)
 		return ret;
+
+	if (shid->quirks & SPI_HID_QUIRK_MODE_SWITCH)
+		timeout = spi_hid_get_timeout(shid);
+	else
+		timeout = SPI_HID_RESPONSE_TIMEOUT_MS;
+
 	mutex_lock(&shid->data_lock);
 	ret = wait_for_completion_interruptible_timeout(&shid->output_done,
-							msecs_to_jiffies(1000));
+							msecs_to_jiffies(timeout));
 	mutex_unlock(&shid->data_lock);
 	if (ret == 0) {
 		dev_err(dev, "Response timed out.");
@@ -471,6 +531,8 @@ static int spi_hid_create_device(struct spi_hid *shid)
 	hid->version = shid->desc.hid_version;
 	hid->vendor = shid->desc.vendor_id;
 	hid->product = shid->desc.product_id;
+
+	shid->quirks = spi_hid_lookup_quirk(hid->vendor, hid->product);
 
 	snprintf(hid->name, sizeof(hid->name), "spi %04X:%04X",
 		 hid->vendor, hid->product);
@@ -757,6 +819,15 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 	if (shid->power_state == HIDSPI_OFF) {
 		dev_warn(dev, "Device is off after header was received.");
 		goto out;
+	}
+
+	if (shid->quirks & SPI_HID_QUIRK_MODE_SWITCH) {
+		u32 timeout = spi_hid_get_timeout(shid);
+
+		if (timeout > SPI_HID_RESPONSE_TIMEOUT_MS)
+			shid->reset_pending = true;
+		else
+			shid->reset_pending = false;
 	}
 
 	if (shid->input_message.status < 0) {
