@@ -91,6 +91,7 @@ struct mtk_disp_rdma {
 	void				(*vblank_cb)(void *data);
 	void				*vblank_cb_data;
 	u32				fifo_size;
+	unsigned int disable_underflow;
 };
 
 static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
@@ -233,9 +234,16 @@ void mtk_rdma_config(struct device *dev, unsigned int width,
 		threshold = RDMA_THRESHOLD_SIZE(rdma);
 	else
 		threshold = rdma_fifo_size * 7 / 10;
-	reg = RDMA_FIFO_UNDERFLOW_EN |
-	      RDMA_FIFO_PSEUDO_SIZE(rdma_fifo_size) |
-	      RDMA_OUTPUT_VALID_FIFO_THRESHOLD(threshold);
+
+	if (rdma->disable_underflow) {
+		reg = RDMA_FIFO_PSEUDO_SIZE(rdma_fifo_size) |
+		      RDMA_OUTPUT_VALID_FIFO_THRESHOLD(threshold);
+	} else {
+		reg = RDMA_FIFO_UNDERFLOW_EN |
+		      RDMA_FIFO_PSEUDO_SIZE(rdma_fifo_size) |
+		      RDMA_OUTPUT_VALID_FIFO_THRESHOLD(threshold);
+	}
+
 	mtk_ddp_write(cmdq_pkt, reg, &rdma->cmdq_reg, rdma->regs, DISP_REG_RDMA_FIFO_CON);
 
 	if (rdma->data->need_ultra) {
@@ -384,6 +392,16 @@ static int mtk_disp_rdma_probe(struct platform_device *pdev)
 					   &priv->fifo_size);
 		if (ret) {
 			dev_err(dev, "Failed to get rdma fifo size\n");
+			return ret;
+		}
+	}
+
+	if (of_find_property(dev->of_node, "mediatek,dis-underflow", &ret)) {
+		ret = of_property_read_u32(dev->of_node,
+					   "mediatek,dis-underflow",
+					   &priv->disable_underflow);
+		if (ret) {
+			dev_err(dev, "Failed to get rdma disable_underflow\n");
 			return ret;
 		}
 	}
