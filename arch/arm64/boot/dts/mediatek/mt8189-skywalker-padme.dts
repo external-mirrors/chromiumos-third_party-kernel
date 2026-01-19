@@ -132,6 +132,14 @@
 	status = "disabled";
 };
 
+&disp_rdma0 {
+	mediatek,dis-underflow = <1>;
+};
+
+&disp_rdma1 {
+	mediatek,dis-underflow = <1>;
+};
+
 &dispsys_config {
 	compatible = "mediatek,mt8189-padme-mmsys", "syscon";
 };
