@@ -1472,7 +1472,7 @@ static const struct proc_ops mmqos_debug_fops = {
 
 int mtk_mmqos_probe(struct platform_device *pdev)
 {
-	struct device *larb_imu_dev[MTK_LARB_NR_MAX];
+	struct device *larb_imu_dev[MTK_LARB_NR_MAX] = {0};
 	struct proc_dir_entry *dir, *proc, *last_proc;
 	const struct mtk_mmqos_desc *mmqos_desc;
 	struct common_port_node *comm_port_node;
@@ -1548,7 +1548,11 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 		if (of_property_read_u32(np, "mediatek,larb-id", &id))
 			id = num_larbs;
 
-		larb_imu_dev[id] = &larb_pdev->dev;
+		if (id < MTK_LARB_NR_MAX)
+			larb_imu_dev[id] = &larb_pdev->dev;
+		else
+			dev_err(&larb_pdev->dev, "bad larb-id:%d\n", id);
+
 		num_larbs += 1;
 	}
 
