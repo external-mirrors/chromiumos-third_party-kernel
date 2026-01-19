@@ -14,6 +14,11 @@
 	};
 };
 
+/* Disable support UFS */
+&ufshci {
+	status = "disabled";
+};
+
 &ap_i2c_aud {
 	/delete-node/ audio-codec@1a;
 
