@@ -1205,7 +1205,7 @@ int hci_setup_ext_adv_instance_sync(struct hci_dev *hdev, u8 instance)
 	 * instance if it is active. This call may fail if the instance
 	 * has been removed from the controller.
 	 */
-	if (adv && !adv->pending) {
+	if (adv) {
 		err = hci_disable_ext_adv_instance_sync(hdev, instance);
 		if (err)
 			bt_dev_dbg(hdev, "Error code %d while disabling \
