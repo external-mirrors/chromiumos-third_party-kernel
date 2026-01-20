@@ -319,7 +319,7 @@ static ssize_t ext4_handle_inode_extension(struct inode *inode, loff_t offset,
 		 * list if it has been added prematurely, due to writeback of
 		 * delalloc blocks.
 		 */
-		if (!list_empty(&EXT4_I(inode)->i_orphan) && inode->i_nlink) {
+		if (ext4_inode_orphan_tracked(inode) && inode->i_nlink) {
 			handle = ext4_journal_start(inode, EXT4_HT_INODE, 2);
 
 			if (IS_ERR(handle)) {
