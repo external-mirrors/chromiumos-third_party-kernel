@@ -231,44 +231,19 @@
 	>;
 };
 
-/* USB hub port 1 */
-&usb_hub_dsp1_hs {
-	remote-endpoint = <&usb_c0_hs>;
+&xhci0 {
+	phys = <&u2port0 PHY_TYPE_USB2>,
+		<&u3port0 PHY_TYPE_USB3>;
+	mediatek,u3p-dis-msk = <0x0>;
+	status = "okay";
 };
-
-&usb_c0_hs {
-	remote-endpoint = <&usb_hub_dsp1_hs>;
-};
-
-&usb_hub_dsp1_ss {
-	remote-endpoint = <&usb_c0_ss>;
-};
-
-&usb_c0_ss {
-	remote-endpoint = <&usb_hub_dsp1_ss>;
-};
-
-/* USB hub port 2 is empty */
-
-/* USB hub port 3 */
-&usb_hub_dsp3_hs {
-	remote-endpoint = <&usb_a0_hs>;
-};
-
-&usb_a0_hs {
-	remote-endpoint = <&usb_hub_dsp3_hs>;
-};
-
-&usb_hub_dsp3_ss {
-	remote-endpoint = <&usb_a0_ss>;
-};
-
-&usb_a0_ss {
-	remote-endpoint = <&usb_hub_dsp3_ss>;
-};
-
-/* USB hub port 4 is empty */
 
 &xhci1 {
 	status = "disabled";
+};
+
+/*This is a workaround; Disabling the node doesn't work.*/
+&xhci3 {
+	/delete-node/ hub@1;
+	/delete-node/ hub@2;
 };
