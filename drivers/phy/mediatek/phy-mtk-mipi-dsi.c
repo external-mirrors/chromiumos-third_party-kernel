@@ -58,9 +58,33 @@ static int mtk_mipi_tx_power_off(struct phy *phy)
 	return 0;
 }
 
+/*
+ * mtk_mipi_tx_set_mode - Set PHY mode wrapper
+ * @phy: PHY instance
+ * @mode: PHY mode
+ * @submode: PHY submode
+ *
+ * Wrapper function that calls chip-specific set_mode implementation
+ * if available.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if not supported, other negative
+ *         error codes on failure
+ */
+static int mtk_mipi_tx_set_mode(struct phy *phy, enum phy_mode mode, int submode)
+{
+	struct mtk_mipi_tx *mipi_tx = phy_get_drvdata(phy);
+
+	/* Check if this chip variant supports set_mode */
+	if (!mipi_tx->driver_data->mipi_tx_set_mode)
+		return -EOPNOTSUPP;
+
+	return mipi_tx->driver_data->mipi_tx_set_mode(phy, mode, submode);
+}
+
 static const struct phy_ops mtk_mipi_tx_ops = {
 	.power_on = mtk_mipi_tx_power_on,
 	.power_off = mtk_mipi_tx_power_off,
+	.set_mode = mtk_mipi_tx_set_mode,
 	.owner = THIS_MODULE,
 };
 
@@ -185,7 +209,7 @@ static const struct of_device_id mtk_mipi_tx_match[] = {
 	{ .compatible = "mediatek,mt2701-mipi-tx", .data = &mt2701_mipitx_data },
 	{ .compatible = "mediatek,mt8173-mipi-tx", .data = &mt8173_mipitx_data },
 	{ .compatible = "mediatek,mt8183-mipi-tx", .data = &mt8183_mipitx_data },
-	{ .compatible = "mediatek,mt8189-mipi-tx", .data = &mt8183_mipitx_data },
+	{ .compatible = "mediatek,mt8189-mipi-tx", .data = &mt8189_mipitx_data },
 	{ .compatible = "mediatek,mt8196-mipi-tx", .data = &mt8196_mipitx_data },
 	{ /* sentinel */ }
 };
