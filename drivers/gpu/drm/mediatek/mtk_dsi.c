@@ -214,6 +214,14 @@
 
 #define NS_TO_CYCLE(n, c)    ((n) / (c) + (((n) % (c)) ? 1 : 0))
 
+/*
+ * MIPI PHY signal control submodes for phy_set_mode_ext()
+ * These values must match the implementation in phy-mtk-mipi-dsi-mt8183.c
+ */
+#define MIPI_TX_PHY_LANE_SW_MODE_DISABLE	0	/* Hardware control (default) */
+#define MIPI_TX_PHY_LANE_SW_MODE_LP00		1	/* Low Power 00 state */
+#define MIPI_TX_PHY_LANE_SW_MODE_LP11		2	/* Low Power 11 state */
+
 #define MTK_DSI_HOST_IS_READ(type) \
 	((type == MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM) || \
 	(type == MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM) || \
@@ -272,6 +280,7 @@ struct mtk_dsi_driver_data {
 	const u32 urgent_lo_fifo_us;
 	const u32 urgent_hi_fifo_us;
 	const u32 output_valid_fifo_us;
+	bool support_phy_sw_lane_mode;
 };
 
 struct mtk_dsi {
@@ -1105,6 +1114,9 @@ static void mtk_dsi_lane_ready(struct mtk_dsi *dsi)
 {
 	if (!dsi->lanes_ready) {
 		dsi->lanes_ready = true;
+		if (dsi->driver_data->support_phy_sw_lane_mode)
+			phy_set_mode_ext(dsi->phy, PHY_MODE_MIPI_DPHY,
+					 MIPI_TX_PHY_LANE_SW_MODE_DISABLE);
 		mtk_dsi_rxtx_control(dsi);
 		usleep_range(30, 100);
 		mtk_dsi_reset_dphy(dsi);
@@ -1134,7 +1146,9 @@ static void mtk_output_dsi_disable(struct mtk_dsi *dsi)
 {
 	if (!dsi->enabled)
 		return;
-
+	if (dsi->driver_data->support_phy_sw_lane_mode)
+		phy_set_mode_ext(dsi->phy, PHY_MODE_MIPI_DPHY,
+				 MIPI_TX_PHY_LANE_SW_MODE_LP00);
 	dsi->enabled = false;
 }
 
@@ -1705,6 +1719,7 @@ static const struct mtk_dsi_driver_data mt8189_dsi_driver_data = {
 	.support_per_frame_lp = true,
 	.dsi_vm_cmd_con = 0x200,
 	.max_linkrate_kbps = 2500000,
+	.support_phy_sw_lane_mode = true,
 };
 
 static const struct mtk_dsi_driver_data mt8196_dsi_driver_data = {

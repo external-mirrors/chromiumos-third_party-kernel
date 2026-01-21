@@ -16,11 +16,17 @@
 #include <linux/phy/phy.h>
 #include <linux/slab.h>
 
+/* MIPI TX signal control submodes */
+#define MTK_MIPI_TX_SUBMODE_SW_MODE_DISABLE    0
+#define MTK_MIPI_TX_SUBMODE_SW_MODE_LP00       1
+#define MTK_MIPI_TX_SUBMODE_SW_MODE_LP11       2
+
 struct mtk_mipitx_data {
 	const u32 mppll_preserve;
 	const struct clk_ops *mipi_tx_clk_ops;
 	void (*mipi_tx_enable_signal)(struct phy *phy);
 	void (*mipi_tx_disable_signal)(struct phy *phy);
+	int (*mipi_tx_set_mode)(struct phy *phy, enum phy_mode mode, int submode);
 };
 
 struct mtk_mipi_tx {
@@ -44,6 +50,7 @@ unsigned long mtk_mipi_tx_pll_recalc_rate(struct clk_hw *hw,
 extern const struct mtk_mipitx_data mt2701_mipitx_data;
 extern const struct mtk_mipitx_data mt8173_mipitx_data;
 extern const struct mtk_mipitx_data mt8183_mipitx_data;
+extern const struct mtk_mipitx_data mt8189_mipitx_data;
 extern const struct mtk_mipitx_data mt8196_mipitx_data;
 
 #endif
