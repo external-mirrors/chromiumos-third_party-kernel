@@ -871,9 +871,6 @@ int iwl_mld_remove_link(struct iwl_mld *mld,
 	ret = iwl_mld_rm_link_from_fw(mld, bss_conf);
 	/* Continue cleanup on failure */
 
-	if (!is_deflink)
-		kfree_rcu(link, rcu_head);
-
 	RCU_INIT_POINTER(mld_vif->link[bss_conf->link_id], NULL);
 
 	wiphy_delayed_work_cancel(mld->wiphy, &link->rx_omi.finished_work);
@@ -882,6 +879,9 @@ int iwl_mld_remove_link(struct iwl_mld *mld,
 		return -EINVAL;
 
 	RCU_INIT_POINTER(mld->fw_id_to_bss_conf[link->fw_id], NULL);
+
+	if (!is_deflink)
+		kfree_rcu(link, rcu_head);
 
 	return ret;
 }
