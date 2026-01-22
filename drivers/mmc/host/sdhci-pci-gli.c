@@ -9,6 +9,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/dmi.h>
 #include <linux/pci.h>
 #include <linux/mmc/mmc.h>
 #include <linux/delay.h>
@@ -1492,6 +1493,25 @@ static int gli_probe_slot_gl9763e(struct sdhci_pci_slot *slot)
 	struct pci_dev *pdev = slot->chip->pdev;
 	struct sdhci_host *host = slot->host;
 	u32 value;
+
+	/*
+	 * b/390038076: For Google volteer/lillipup devices,
+	 * make sure it does not go into d3cold to avoid hung_task crash.
+	 */
+	const struct dmi_system_id d3cold_blocklist[] = {
+		{
+			.ident = "volteer/lillipup",
+			.matches = {
+				DMI_MATCH(DMI_BOARD_VENDOR, "Google"),
+				DMI_MATCH(DMI_BOARD_NAME, "Lindar"),
+			}
+		},
+		{}
+	};
+	if (dmi_check_system(d3cold_blocklist)) {
+		pr_notice("HACK: disabling d3cold for gl9763e due to b/390038076.\n");
+		pci_d3cold_disable(pdev);
+	}
 
 	host->mmc->caps |= MMC_CAP_8_BIT_DATA |
 			   MMC_CAP_1_8V_DDR |
