@@ -794,7 +794,7 @@ static void mtk_dsi_set_cmd_mode(struct mtk_dsi *dsi)
 
 static void mtk_dsi_set_interrupt_enable(struct mtk_dsi *dsi)
 {
-	u32 inten = LPRX_RD_RDY_INT_FLAG | CMD_DONE_INT_FLAG | VM_DONE_INT_FLAG;
+	u32 inten = LPRX_RD_RDY_INT_FLAG | CMD_DONE_INT_FLAG;
 
 	writel(inten, dsi->regs + DSI_INTEN);
 }
@@ -934,7 +934,7 @@ static irqreturn_t mtk_dsi_irq(int irq, void *dev_id)
 {
 	struct mtk_dsi *dsi = dev_id;
 	u32 status, tmp;
-	u32 flag = LPRX_RD_RDY_INT_FLAG | CMD_DONE_INT_FLAG | VM_DONE_INT_FLAG;
+	u32 flag = LPRX_RD_RDY_INT_FLAG | CMD_DONE_INT_FLAG;
 
 	status = readl(dsi->regs + DSI_INTSTA) & flag;
 
@@ -952,10 +952,9 @@ static irqreturn_t mtk_dsi_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static s32 mtk_dsi_switch_to_cmd_mode(struct mtk_dsi *dsi, u8 irq_flag)
+static s32 mtk_dsi_switch_to_cmd_mode(struct mtk_dsi *dsi)
 {
 	int ret;
-	mtk_dsi_irq_data_clear(dsi, irq_flag);
 	mtk_dsi_stop(dsi);
 	ret = mtk_dsi_wait_for_idle(dsi);
 	if (ret)
@@ -1078,7 +1077,7 @@ static void mtk_dsi_poweroff(struct mtk_dsi *dsi)
 
 	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data));
 	if (dsi_mode & MODE) {
-		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG);
+		ret = mtk_dsi_switch_to_cmd_mode(dsi);
 		if (ret)
 			dev_err(dsi->dev, "power off switch cmd mode fail\n");
 		else
@@ -1506,7 +1505,7 @@ static ssize_t mtk_dsi_host_transfer(struct mipi_dsi_host *host,
 
 	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data));
 	if (dsi_mode & MODE) {
-		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG);
+		ret = mtk_dsi_switch_to_cmd_mode(dsi);
 		if (ret)
 			goto restore_dsi_mode;
 	}
@@ -1645,7 +1644,7 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 
 	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data));
 	if (dsi_mode & MODE) {
-		ret = mtk_dsi_switch_to_cmd_mode(dsi, VM_DONE_INT_FLAG);
+		ret = mtk_dsi_switch_to_cmd_mode(dsi);
 		if (ret)
 			dev_err(dsi->dev, "Probe switch cmd mode fail\n");
 		else
