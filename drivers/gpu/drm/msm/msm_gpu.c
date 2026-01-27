@@ -17,6 +17,7 @@
 #include <linux/string_helpers.h>
 #include <linux/devcoredump.h>
 #include <linux/sched/task.h>
+#include <linux/sched/mm.h>
 
 /*
  * gpu-boost, get notified of input events to get a head start on booting
@@ -512,6 +513,7 @@ static void recover_worker(struct kthread_work *work)
 	struct msm_gem_submit *submit;
 	struct msm_ringbuffer *cur_ring = gpu->funcs->active_ring(gpu);
 	char *comm = NULL, *cmd = NULL;
+	unsigned int noreclaim_flag;
 	int i;
 
 	mutex_lock(&gpu->lock);
@@ -532,6 +534,8 @@ static void recover_worker(struct kthread_work *work)
 	if (submit->aspace)
 		submit->aspace->faults++;
 
+	noreclaim_flag = memalloc_noreclaim_save();
+
 	get_comm_cmdline(submit, &comm, &cmd);
 
 	if (comm && cmd) {
@@ -549,6 +553,8 @@ static void recover_worker(struct kthread_work *work)
 	/* Record the crash state */
 	pm_runtime_get_sync(&gpu->pdev->dev);
 	msm_gpu_crashstate_capture(gpu, submit, comm, cmd);
+
+	memalloc_noreclaim_restore(noreclaim_flag);
 
 	kfree(cmd);
 	kfree(comm);
@@ -608,12 +614,15 @@ static void fault_worker(struct kthread_work *work)
 	struct msm_gem_submit *submit;
 	struct msm_ringbuffer *cur_ring = gpu->funcs->active_ring(gpu);
 	char *comm = NULL, *cmd = NULL;
+	unsigned int noreclaim_flag;
 
 	mutex_lock(&gpu->lock);
 
 	submit = find_submit(cur_ring, cur_ring->memptrs->fence + 1);
 	if (submit && submit->fault_dumped)
 		goto resume_smmu;
+
+	noreclaim_flag = memalloc_noreclaim_save();
 
 	if (submit) {
 		get_comm_cmdline(submit, &comm, &cmd);
@@ -629,6 +638,8 @@ static void fault_worker(struct kthread_work *work)
 	pm_runtime_get_sync(&gpu->pdev->dev);
 	msm_gpu_crashstate_capture(gpu, submit, comm, cmd);
 	pm_runtime_put_sync(&gpu->pdev->dev);
+
+	memalloc_noreclaim_restore(noreclaim_flag);
 
 	kfree(cmd);
 	kfree(comm);
