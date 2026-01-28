@@ -87,6 +87,18 @@ static int tianma_il79900a_init(struct il79900a *ili)
 
 	il79900a_switch_page(&ctx, 0x06);
 	mipi_dsi_dcs_write_seq_multi(&ctx, 0x3e, 0x62);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0x8f, 0xf0);
+
+	il79900a_switch_page(&ctx, 0x08);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0x82, 0x13);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0x7d, 0xaf);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0x7f, 0xda);
+
+	il79900a_switch_page(&ctx, 0x06);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0x90, 0x55);
+
+	il79900a_switch_page(&ctx, 0x05);
+	mipi_dsi_dcs_write_seq_multi(&ctx, 0x3f, 0x47);
 
 	il79900a_switch_page(&ctx, 0x01);
 	mipi_dsi_dcs_write_seq_multi(&ctx, 0xb0, 0x00);
