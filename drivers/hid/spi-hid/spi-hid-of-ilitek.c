@@ -3075,6 +3075,246 @@ void ilitek_spi_remove(struct spi_device *spi)
 	}
 }
 
+static int ili_tp_data_mode_ctrl(u8 *cmd)
+{
+	int ret = 0;
+
+	ILI_INFO("cmd = %d\n", cmd[0]);
+
+	switch (cmd[0]) {
+	case AP_MODE:
+		if (ilits->actual_tp_mode == P5_X_FW_TEST_MODE) {
+			if (ili_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
+				ILI_ERR("Failed to switch demo mode\n");
+				ret = -ENOTTY;
+			}
+		} else {
+			if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, &cmd[1]) < 0) {
+				ILI_ERR("Failed to switch demo mode\n");
+				ret = -ENOTTY;
+			}
+		}
+		break;
+	case TEST_MODE:
+		if (ili_switch_tp_mode(P5_X_FW_TEST_MODE) < 0) {
+			ILI_ERR("Failed to switch test mode\n");
+			ret = -ENOTTY;
+		}
+		break;
+	default:
+		ILI_ERR("Unknown TP mode ctrl\n");
+		ret = -ENOTTY;
+		break;
+	}
+	ilits->tp_data_mode = cmd[0];
+
+	return ret;
+}
+
+static long ilitek_node_ioctl(struct file *filp, unsigned int cmd,
+			unsigned long arg)
+{
+	int ret = 0;
+	u8 *szBuf = NULL;
+	static u16 i2c_rw_length;
+	u8 *wrap_rbuf = NULL, wrap_int = 0;
+	u16 wrap_wlen = 0, wrap_rlen = 0;
+	bool spi_irq = false, i2c_irq = false;
+
+	if (atomic_read(&ilits->tp_reset) == START) {
+		ILI_ERR("ignore request! tp reset atomic is START.\n");
+		return -EINVAL;
+	}
+
+	if (_IOC_TYPE(cmd) != ILITEK_IOCTL_MAGIC) {
+		ILI_ERR("The Magic number doesn't match\n");
+		return -ENOTTY;
+	}
+
+	if (_IOC_NR(cmd) > ILITEK_IOCTL_MAXNR) {
+		ILI_ERR("The number of ioctl doesn't match\n");
+		return -ENOTTY;
+	}
+
+	ILI_DBG("cmd = %d\n", _IOC_NR(cmd));
+
+	szBuf = kcalloc(IOCTL_I2C_BUFF, sizeof(u8), GFP_KERNEL);
+	if (ERR_ALLOC_MEM(szBuf)) {
+		ILI_ERR("Failed to allocate mem\n");
+		ret = -ENOMEM;
+		goto out;
+	}
+	switch (cmd) {
+	case ILITEK_IOCTL_I2C_SET_WRITE_LENGTH:
+	case ILITEK_IOCTL_I2C_SET_READ_LENGTH:
+		i2c_rw_length = arg;
+		ILI_INFO("i2c_rw_length=%d\n", i2c_rw_length);
+		break;
+	case ILITEK_IOCTL_TP_MODE_CTRL:
+		if (copy_from_user(szBuf, (u8 *) arg, 12)) {
+			ILI_ERR("Failed to copy data from user space\n");
+			ret = -ENOTTY;
+			break;
+		}
+		ILI_DBG("ioctl: switch fw format = %d\n", szBuf[0]);
+		ret = ili_tp_data_mode_ctrl(szBuf);
+		break;
+	case ILITEK_IOCTL_WRAPPER_RW:
+		ILI_DBG("ioctl: wrapper rw\n");
+
+		if (i2c_rw_length > IOCTL_I2C_BUFF || i2c_rw_length == 0) {
+			ILI_ERR("ERROR! i2c_rw_length is invalid\n");
+			ret = -ENOTTY;
+			break;
+		}
+
+		if (copy_from_user(szBuf, (u8 *)arg, i2c_rw_length)) {
+			ILI_ERR("Failed to copy data from user space\n");
+			ret = -ENOTTY;
+			break;
+		}
+
+		wrap_int = szBuf[0];
+		wrap_rlen = (szBuf[1] << 8) | szBuf[2];
+		wrap_wlen = (szBuf[3] << 8) | szBuf[4];
+
+		ILI_DBG("wrap_int = %d, wrap_rlen = %d, wrap_wlen = %d\n",
+					wrap_int, wrap_rlen, wrap_wlen);
+
+		if (wrap_wlen > IOCTL_I2C_BUFF || wrap_rlen > IOCTL_I2C_BUFF) {
+			ILI_ERR("ERROR! R/W len is largn than ioctl buf\n");
+			ret = -ENOTTY;
+			break;
+		}
+
+		if (wrap_rlen > 0) {
+			wrap_rbuf =
+				kcalloc(IOCTL_I2C_BUFF, sizeof(u8), GFP_KERNEL);
+			if (ERR_ALLOC_MEM(wrap_rbuf)) {
+				ILI_ERR("Failed to allocate mem\n");
+				ret = -ENOMEM;
+				break;
+			}
+		}
+
+		if (wrap_int == 1) {
+			i2c_irq = ON;
+			spi_irq = ON;
+		} else if (wrap_int == 2) {
+			i2c_irq = OFF;
+			spi_irq = OFF;
+		} else {
+			i2c_irq = OFF;
+			spi_irq = (wrap_rlen > 0 ? ON : OFF);
+		}
+
+		ILI_DBG("i2c_irq = %d, spi_irq = %d\n", i2c_irq, spi_irq);
+
+		ilits->wrapper(szBuf + 5, wrap_wlen, wrap_rbuf, wrap_rlen,
+					spi_irq, i2c_irq);
+
+		print_hex_dump(KERN_INFO, "wrap_wbuf: ",
+			DUMP_PREFIX_OFFSET,
+			16,
+			1,
+			szBuf + 5,
+			wrap_wlen,
+			false);
+		print_hex_dump(KERN_INFO, "wrap_rbuf: ",
+			DUMP_PREFIX_OFFSET,
+			16,
+			1,
+			wrap_rbuf,
+			wrap_rlen,
+			false);
+
+		if (copy_to_user((u8 *)arg, wrap_rbuf, wrap_rlen)) {
+			ILI_ERR("Failed to copy driver ver to user space\n");
+			ret = -ENOTTY;
+		}
+		break;
+	case ILITEK_IOCTL_INTERFACE_GET:
+		szBuf[0] = 0x01;
+		ILI_INFO("ioctl: get interface is %d\n", szBuf[0]);
+		if (copy_to_user((u8 *) arg, szBuf, 1)) {
+			ILI_ERR("Failed to copy data to user space\n");
+			ret = -ENOTTY;
+		}
+		break;
+	default:
+		ret = -ENOTTY;
+		break;
+	}
+
+	ipio_kfree((void **)&szBuf);
+	ipio_kfree((void **)&wrap_rbuf);
+
+out:
+	return ret;
+}
+
+static struct proc_dir_entry *proc_dir_ilitek;
+
+struct ilitek_proc_node  {
+	char *name;
+	struct proc_dir_entry *node;
+	const struct proc_ops *fops;
+	bool isCreated;
+};
+
+static const struct proc_ops proc_ioctl_fops = {
+		.proc_ioctl = ilitek_node_ioctl,
+		.proc_lseek = default_llseek,
+};
+
+static struct ilitek_proc_node iliproc[] = {
+	{ "ioctl", NULL, &proc_ioctl_fops, false },
+};
+
+void ili_node_init(void)
+{
+	int i = 0;
+
+	proc_dir_ilitek = proc_mkdir("ilitek", NULL);
+
+	for (; i < ARRAY_SIZE(iliproc); i++) {
+		iliproc[i].node = proc_create(
+								iliproc[i].name,
+								0644,
+								proc_dir_ilitek,
+								iliproc[i].fops);
+
+		if (iliproc[i].node == NULL) {
+			iliproc[i].isCreated = false;
+			ILI_ERR("Failed to create %s under /proc\n", iliproc[i].name);
+		} else {
+			iliproc[i].isCreated = true;
+			ILI_INFO("Succeed to create %s under /proc\n", iliproc[i].name);
+		}
+	}
+}
+
+void ili_node_remove(struct ilitek_ts_hid_data *ts)
+{
+	int i = 0;
+
+	/* Remove nodes under /proc/ilitek */
+	for (; i < ARRAY_SIZE(iliproc); i++) {
+		if (iliproc[i].isCreated && iliproc[i].node) {
+			proc_remove(iliproc[i].node);
+			iliproc[i].node = NULL;
+			iliproc[i].isCreated = false;
+		}
+	}
+
+	if (proc_dir_ilitek) {
+		proc_remove(proc_dir_ilitek);
+		proc_dir_ilitek = NULL;
+	}
+
+	ILI_INFO("Remove TP filesystem node.\n");
+}
+
 /* core.c */
 void ili_tp_reset(void)
 {
@@ -3448,6 +3688,8 @@ int ili_tddi_init(void)
 
 	ili_update_tp_module_info();
 
+	ili_node_init();
+
 	ilits->ili_upg_wakelock = wakeup_source_register(NULL, "ili_upg_wakelock");
 	if (!ilits->ili_upg_wakelock)
 		ILI_ERR("wakeup source request failed\n");
@@ -3461,6 +3703,8 @@ void ili_dev_remove(void)
 
 	if (!ilits)
 		return;
+
+	ili_node_remove(ilits);
 
 	if (ilits->ili_upg_wakelock) {
 		wakeup_source_unregister(ilits->ili_upg_wakelock);

@@ -26,6 +26,7 @@
 #include <linux/gpio.h>
 #include <linux/spi/spi.h>
 #include <linux/firmware.h>
+#include <linux/proc_fs.h>
 
 #ifdef CONFIG_OF
 #include <linux/of_device.h>
@@ -38,6 +39,14 @@
 #define DEF_FW_FILP_PATH		"/sdcard/ILITEK_FW"
 #define DEF_FW_REQUEST_PATH "ilitek_fff1.bin"
 extern unsigned char CTPM_FW_DEF[];
+
+#define ILITEK_IOCTL_MAGIC 				100
+#define ILITEK_IOCTL_MAXNR 				41
+#define ILITEK_IOCTL_I2C_SET_WRITE_LENGTH		_IOWR(ILITEK_IOCTL_MAGIC, 1, int)
+#define ILITEK_IOCTL_I2C_SET_READ_LENGTH		_IOWR(ILITEK_IOCTL_MAGIC, 3, int)
+#define ILITEK_IOCTL_TP_MODE_CTRL			_IOWR(ILITEK_IOCTL_MAGIC, 17, u8 *)
+#define ILITEK_IOCTL_WRAPPER_RW				_IOWR(ILITEK_IOCTL_MAGIC, 25, u8 *)
+#define ILITEK_IOCTL_INTERFACE_GET			_IOWR(ILITEK_IOCTL_MAGIC, 35, uint8_t *)
 
 #define UPDATE_PASS 0
 #define UPDATE_FAIL -1
@@ -521,6 +530,7 @@ struct ilitek_ts_hid_data {
 	u8 *spi_rx;
 	struct firmware tp_fw;
 	int actual_tp_mode;
+	int tp_data_mode;
 	int tp_data_format;
 	int wait_int_timeout;
 	struct gpio_desc *reset_gpiod;
