@@ -3887,6 +3887,24 @@ static int spi_hid_of_ilitek_deassert_reset(struct spihid_ops *ops)
 	return 0;
 }
 
+static int spi_hid_of_ilitek_plat_init(struct spihid_ops *ops)
+{
+	int ret;
+	struct spi_hid_of_ilitek_config *conf = container_of(ops,
+							struct spi_hid_of_ilitek_config,
+							ops);
+	ret = ilitek_plat_dev_init(conf->spi);
+	if (ret < 0) {
+		ILI_ERR("Ilitek spi plat probe error, remove registered resources\n");
+		goto err;
+	}
+
+	return 0;
+err:
+	ilitek_plat_remove();
+	return ret;
+}
+
 static void spi_hid_of_ilitek_sleep_minimal_reset_delay(struct spihid_ops *ops)
 {
 	struct spi_hid_of_ilitek_config *conf = container_of(ops,
@@ -3902,18 +3920,14 @@ static int spi_hid_of_delayed_probe(struct spi_device *spi)
 	int ret;
 	struct spi_hid_of_ilitek_config *config = &ilits->config;
 
+	config->spi = spi;
 	config->ops.power_up = spi_hid_of_ilitek_power_up;
 	config->ops.power_down = spi_hid_of_ilitek_power_down;
 	config->ops.assert_reset = spi_hid_of_ilitek_assert_reset;
 	config->ops.deassert_reset = spi_hid_of_ilitek_deassert_reset;
 	config->ops.sleep_minimal_reset_delay = spi_hid_of_ilitek_sleep_minimal_reset_delay;
+	config->ops.plat_init = spi_hid_of_ilitek_plat_init;
 	config->ops.response_timeout_ms = AP_INT_TIMEOUT;
-
-	ret = ilitek_plat_dev_init(spi);
-	if (ret < 0) {
-		ILI_ERR("Ilitek spi plat probe error, remove registered resources\n");
-		goto err;
-	}
 
 	ret = spi_hid_of_ilitek_populate_config(config, dev);
 	if (ret) {
@@ -3930,35 +3944,11 @@ static int spi_hid_of_delayed_probe(struct spi_device *spi)
 	return 0;
 
 err_plat_dev_fail:
-	ilitek_plat_remove();
-err:
 	return ret;
-}
-
-static void ilitek_delayed_work(struct work_struct *work)
-{
-	struct ilitek_delayed_probe *dp =
-		container_of(to_delayed_work(work),
-			struct ilitek_delayed_probe, dwork);
-
-	if (!dp->spi)
-		return;
-
-	if (spi_hid_of_delayed_probe(dp->spi) == 0)
-		dp->core_probed = true;
-}
-
-static void ilitek_cancel_delayed_work(void *data)
-{
-	struct ilitek_delayed_probe *dp = data;
-
-	cancel_delayed_work(&dp->dwork);
 }
 
 static int spi_hid_of_ilitek_probe(struct spi_device *spi)
 {
-	int ret;
-
 	ilits = devm_kzalloc(&spi->dev, sizeof(*ilits), GFP_KERNEL);
 	if (!ilits)
 		return -ENOMEM;
@@ -3966,16 +3956,9 @@ static int spi_hid_of_ilitek_probe(struct spi_device *spi)
 	ilits->dp.spi = spi;
 	ilits->dp.core_probed = false;
 
-	INIT_DELAYED_WORK(&ilits->dp.dwork, ilitek_delayed_work);
+	if (spi_hid_of_delayed_probe(ilits->dp.spi) == 0)
+		ilits->dp.core_probed = true;
 
-	ret = devm_add_action_or_reset(&spi->dev,
-									ilitek_cancel_delayed_work,
-									&ilits->dp);
-	if (ret)
-		return ret;
-
-	schedule_delayed_work(&ilits->dp.dwork, msecs_to_jiffies(5000));
-	dev_info(&spi->dev, "Ilitek deferred probe scheduled\n");
 	return 0;
 }
 

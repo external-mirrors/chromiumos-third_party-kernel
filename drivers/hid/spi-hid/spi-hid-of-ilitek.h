@@ -393,6 +393,7 @@ struct spi_hid_of_ilitek_config {
 	struct gpio_desc *reset_gpio;
 	struct regulator *supply;
 	bool supply_enabled;
+	struct spi_device *spi;
 };
 
 /* Firmware upgrade */
