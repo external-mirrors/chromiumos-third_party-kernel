@@ -66,5 +66,6 @@
 		MATRIX_KEY(0x07, 0x10, KEY_KP0)			/* 99 */
 		MATRIX_KEY(0x04, 0x10, KEY_KPDOT)		/* 104 */
 		MATRIX_KEY(0x07, 0x11, KEY_KPENTER)		/* 108 */
+		MATRIX_KEY(0x04, 0x0a, KEY_FN)		/* FN */
 	>;
 };
