@@ -95,7 +95,7 @@ struct mtk_ddp_comp_funcs {
 	void (*bgclr_in_on)(struct device *dev);
 	void (*bgclr_in_off)(struct device *dev);
 	void (*ctm_set)(struct device *dev,
-			struct drm_crtc_state *state);
+			struct drm_crtc_state *state, struct cmdq_pkt *cmdq_pkt);
 	struct device * (*dma_dev_get)(struct device *dev);
 	u32 (*get_blend_modes)(struct device *dev);
 	const u32 *(*get_formats)(struct device *dev);
@@ -281,10 +281,10 @@ static inline void mtk_ddp_comp_bgclr_in_off(struct mtk_ddp_comp *comp)
 }
 
 static inline void mtk_ddp_ctm_set(struct mtk_ddp_comp *comp,
-				   struct drm_crtc_state *state)
+				   struct drm_crtc_state *state, struct cmdq_pkt *cmdq_pkt)
 {
 	if (comp->funcs && comp->funcs->ctm_set)
-		comp->funcs->ctm_set(comp->dev, state);
+		comp->funcs->ctm_set(comp->dev, state, cmdq_pkt);
 }
 
 static inline struct device *mtk_ddp_comp_dma_dev_get(struct mtk_ddp_comp *comp)

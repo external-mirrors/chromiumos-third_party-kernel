@@ -1200,6 +1200,11 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 	if (cmdq_client.chan && cmdq_handle) {
 		cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
 		cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
+
+		if (crtc->state->color_mgmt_changed)
+			for (i = 0; i < mtk_crtc->ddp_comp_nr; i++)
+				mtk_ddp_ctm_set(mtk_crtc->ddp_comp[i], crtc->state, cmdq_handle);
+
 		mtk_crtc_ddp_config(crtc, cmdq_handle);
 		if (mtk_crtc->sec_on)
 			cmdq_sec_insert_backup_cookie(cmdq_handle);
@@ -1645,8 +1650,11 @@ static void mtk_crtc_atomic_flush(struct drm_crtc *crtc,
 	if (crtc->state->color_mgmt_changed)
 		for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 			mtk_ddp_gamma_set(mtk_crtc->ddp_comp[i], crtc->state);
-			mtk_ddp_ctm_set(mtk_crtc->ddp_comp[i], crtc->state);
+
+			if (!mtk_crtc->cmdq_client.chan)
+				mtk_ddp_ctm_set(mtk_crtc->ddp_comp[i], crtc->state, NULL);
 		}
+
 	mtk_crtc_update_config(mtk_crtc, !!mtk_crtc->event);
 }
 
