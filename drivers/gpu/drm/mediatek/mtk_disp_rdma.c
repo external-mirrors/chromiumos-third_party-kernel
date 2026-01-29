@@ -29,6 +29,7 @@
 #define DISP_REG_RDMA_GLOBAL_CON		0x0010
 #define RDMA_ENGINE_EN					BIT(0)
 #define RDMA_MODE_MEMORY				BIT(1)
+#define RDMA_10BIT_MODE					BIT(3)
 #define DISP_REG_RDMA_SIZE_CON_0		0x0014
 #define RDMA_MATRIX_ENABLE				BIT(17)
 #define RDMA_MATRIX_INT_MTX_SEL				GENMASK(23, 20)
@@ -254,6 +255,8 @@ void mtk_rdma_config(struct device *dev, unsigned int width,
 		mtk_ddp_write(cmdq_pkt, val, &rdma->cmdq_reg, rdma->regs,
 			      DISP_RDMA_MEM_GMC_SETTING_1);
 	}
+	mtk_ddp_write_mask(cmdq_pkt, RDMA_10BIT_MODE, &rdma->cmdq_reg, rdma->regs,
+			   DISP_REG_RDMA_GLOBAL_CON, RDMA_10BIT_MODE);
 }
 
 static unsigned int rdma_fmt_convert(struct mtk_disp_rdma *rdma,

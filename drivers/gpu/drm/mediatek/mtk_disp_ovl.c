@@ -59,6 +59,7 @@
 #define OVL_CON_RGB_SWAP	BIT(25)
 #define OVL_EN			BIT(0)
 #define OVL_OP_8BIT_MODE	BIT(4)
+#define OVL_OP_10BIT_MODE	BIT(5)
 
 #define OVL_CON_CLRFMT_RGB	(1 << 12)
 #define OVL_CON_CLRFMT_ARGB8888	(2 << 12)
@@ -311,6 +312,11 @@ static void mtk_ovl_set_bit_depth(struct device *dev, int idx, u32 format,
 
 	mtk_ddp_write(cmdq_pkt, reg, &ovl->cmdq_reg,
 		      ovl->regs, DISP_REG_OVL_CLRFMT_EXT);
+
+	mtk_ddp_write_mask(cmdq_pkt,
+			   is_10bit_rgb(format) ? OVL_OP_10BIT_MODE : OVL_OP_8BIT_MODE,
+			   &ovl->cmdq_reg, ovl->regs,
+			   DISP_REG_OVL_EN, OVL_OP_10BIT_MODE | OVL_OP_8BIT_MODE);
 }
 
 void mtk_ovl_config(struct device *dev, unsigned int w,
