@@ -50,6 +50,7 @@
 
 /* quirks to control the device */
 #define SPI_HID_QUIRK_MODE_SWITCH	BIT(0)
+#define SPI_HID_QUIRK_READ_DELAY	BIT(1)
 
 /* Protocol constants */
 #define SPI_HID_READ_APPROVAL_CONSTANT		0xff
@@ -68,11 +69,13 @@ static const struct spi_hid_quirks {
 	__u32 quirks;
 } spi_hid_quirks[] = {
 	{ USB_VENDOR_ID_ILITEK, HID_ANY_ID,
-		SPI_HID_QUIRK_MODE_SWITCH },
+		SPI_HID_QUIRK_MODE_SWITCH | SPI_HID_QUIRK_READ_DELAY },
 	{ 0, 0 }
 };
 
 static struct hid_ll_driver spi_hid_ll_driver;
+
+static int spi_hid_core_init(struct spi_hid *shid);
 
 /*
  * spi_hid_lookup_quirk: return any quirks associated with a SPI HID device
@@ -339,7 +342,10 @@ static void spi_hid_panel_follower_work(struct work_struct *work)
 					    panel_follower_work);
 	int ret;
 
-	ret = spi_hid_resume(shid);
+	if (!shid->desc.hid_version)
+		ret = spi_hid_core_init(shid);
+	else
+		ret = spi_hid_resume(shid);
 	if (!ret)
 		WRITE_ONCE(shid->panel_follower_work_finished, true);
 
@@ -485,6 +491,9 @@ static int spi_hid_send_output_report(struct spi_hid *shid,
 	u16 padded_length;
 	u8 padding;
 	int ret;
+
+	if (shid->quirks & SPI_HID_QUIRK_READ_DELAY)
+		usleep_range(2000, 2100);
 
 	guard(mutex)(&shid->output_lock);
 	if (report->content_length > shid->desc.max_output_length) {
@@ -988,6 +997,8 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 	struct device *dev = &shid->spi->dev;
 	struct spi_hid_input_header header;
 	int ret = 0;
+	u32 timeout = 0;
+	bool mode_active = false;
 
 	trace_spi_hid_dev_irq(shid, irq);
 	trace_spi_hid_header_transfer(shid);
@@ -1005,12 +1016,17 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 	}
 
 	if (shid->quirks & SPI_HID_QUIRK_MODE_SWITCH) {
-		u32 timeout = spi_hid_get_timeout(shid);
+		/*
+		* Update reset_pending on mode transitions inferred from
+		* response timeout (entering/exiting the mode).
+		*/
+		timeout = spi_hid_get_timeout(shid);
+		mode_active = timeout > SPI_HID_RESPONSE_TIMEOUT_MS;
 
-		if (timeout > SPI_HID_RESPONSE_TIMEOUT_MS)
-			shid->reset_pending = true;
-		else
-			shid->reset_pending = false;
+		if (mode_active != shid->prev_mode_active)
+			shid->reset_pending = mode_active;
+
+		shid->prev_mode_active = mode_active;
 	}
 
 	trace_spi_hid_input_header_complete(shid,
@@ -1044,6 +1060,9 @@ static irqreturn_t spi_hid_dev_irq(int irq, void *_shid)
 		}
 		goto out;
 	}
+
+	if (shid->quirks & SPI_HID_QUIRK_READ_DELAY)
+		usleep_range(2000, 2100);
 
 	ret = spi_hid_input_sync(shid, shid->input->body, header.report_length,
 				 false);
@@ -1367,12 +1386,63 @@ static struct attribute *spi_hid_attrs[] = {
 };
 ATTRIBUTE_GROUPS(spi_hid);
 
+static int spi_hid_core_init(struct spi_hid *shid)
+{
+	/*
+	 * At the end of probe we initialize the device:
+	 *   0) Platform initialization
+	 *   1) Default pinctrl in DT: assert reset, bias the interrupt line
+	 *   2) sleep minimal reset delay
+	 *   3) request IRQ
+	 *   4) power up the device
+	 *   5) deassert reset (high)
+	 * After this we expect an IRQ with a reset response.
+	 */
+
+	struct spi_device *spi = shid->spi;
+	struct device *dev = &spi->dev;
+	unsigned long irqflags;
+	int error;
+
+	shid->ops->plat_init(shid->ops);
+
+	shid->ops->assert_reset(shid->ops);
+
+	shid->ops->sleep_minimal_reset_delay(shid->ops);
+
+	irqflags = irq_get_trigger_type(spi->irq) | IRQF_ONESHOT;
+	error = devm_request_threaded_irq(dev, spi->irq, NULL, spi_hid_dev_irq,
+			irqflags, dev_name(&spi->dev), shid);
+	if (error) {
+		dev_err(dev, "%s: unable to request threaded IRQ.", __func__);
+		goto err;
+	}
+	shid->irq_enabled = true;
+
+	error = shid->ops->power_up(shid->ops);
+	if (error) {
+		dev_err(dev, "%s: could not power up.", __func__);
+		shid->regulator_error_count++;
+		shid->regulator_last_error = error;
+		goto err;
+	}
+
+	shid->ops->deassert_reset(shid->ops);
+
+	dev_dbg(dev, "%s: d3 -> %s.", __func__,
+		spi_hid_power_mode_string(shid->power_state));
+
+	return 0;
+
+err:
+	return error;
+}
+
 int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 		       struct spi_hid_conf *conf)
 {
 	struct device *dev = &spi->dev;
 	struct spi_hid *shid;
-	unsigned long irqflags;
 	int error;
 
 	if (spi->irq <= 0) {
@@ -1393,6 +1463,7 @@ int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 	shid->conf = conf;
 	shid->reset_pending = true;
 	shid->is_panel_follower = drm_is_panel_follower(&spi->dev);
+	shid->prev_mode_active = false;
 
 	spi_set_drvdata(spi, shid);
 
@@ -1427,49 +1498,19 @@ int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 	if (error < 0)
 		goto err;
 
-	/*
-	 * At the end of probe we initialize the device:
-	 *   0) Default pinctrl in DT: assert reset, bias the interrupt line
-	 *   1) sleep minimal reset delay
-	 *   2) request IRQ
-	 *   3) power up the device
-	 *   4) deassert reset (high)
-	 * After this we expect an IRQ with a reset response.
-	 */
-
-	shid->ops->assert_reset(shid->ops);
-
-	shid->ops->sleep_minimal_reset_delay(shid->ops);
-
-	irqflags = irq_get_trigger_type(spi->irq) | IRQF_ONESHOT;
-	error = devm_request_threaded_irq(dev, spi->irq, NULL, spi_hid_dev_irq,
-			irqflags, dev_name(&spi->dev), shid);
-	if (error) {
-		dev_err(dev, "%s: unable to request threaded IRQ.", __func__);
-		goto err_free_buffers;
-	}
-	shid->irq_enabled = true;
-
-	error = shid->ops->power_up(shid->ops);
-	if (error) {
-		dev_err(dev, "%s: could not power up.", __func__);
-		shid->regulator_error_count++;
-		shid->regulator_last_error = error;
-		goto err_free_buffers;
-	}
-
-	shid->ops->deassert_reset(shid->ops);
-
 	if (shid->is_panel_follower) {
 		error = spi_hid_register_panel_follower(shid);
 		if (error) {
 			dev_err(dev, "%s: could not add panel follower.", __func__);
 			goto err_free_buffers;
 		}
+	} else {
+		error = spi_hid_core_init(shid);
+		if (error) {
+			goto err_free_buffers;
+		}
 	}
 
-	dev_dbg(dev, "%s: d3 -> %s.", __func__,
-		spi_hid_power_mode_string(shid->power_state));
 
 	return 0;
 

@@ -92,6 +92,7 @@ struct spihid_ops {
 	int (*assert_reset)(struct spihid_ops *ops);
 	int (*deassert_reset)(struct spihid_ops *ops);
 	void (*sleep_minimal_reset_delay)(struct spihid_ops *ops);
+	int (*plat_init)(struct spihid_ops *ops);
 
 	u32 response_timeout_ms;	/* Output report response timeout in ms. */
 };
@@ -142,6 +143,8 @@ struct spi_hid {
 	 * dropped and will not cause error handling.
 	 */
 	bool reset_pending;
+
+	bool prev_mode_active;	/* Previous device mode state for transition tracking */
 
 	bool irq_enabled;
 
