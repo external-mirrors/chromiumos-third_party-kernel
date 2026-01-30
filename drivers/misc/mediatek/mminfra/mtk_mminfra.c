@@ -81,10 +81,8 @@ static int mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
 				      MMINFRA_SCMI_MTCMOS_CB,
 				      (is_restore) ? 0 : 1, 0, 0, 0);
 	if (err) {
-		dev_err(data->dev, "%s: call scmi(%d) err=%d\n",
-			__func__, is_restore, err);
 		if (err == -ETIMEDOUT) {
-			dev_err(data->dev, "%s: call scmi(%d) timeout\n",
+			dev_info(data->dev, "%s: call scmi(%d) timeout\n",
 				__func__, is_restore);
 			/* sspm is sometimes slow in processing scmi cmd, and
 			 * the Linux kernel may continue running before sspm
@@ -96,6 +94,14 @@ static int mtk_do_mminfra_bkrs(bool is_restore, struct mtk_mminfra_data *data)
 			 * to complete the mminfra cmd.
 			 */
 			mdelay(MMINFRA_SCMI_TIMEOUT_DELAY_MS);
+
+			/* If a timeout occurs, we consider it an exception
+			 * but within expectations, and return 0 directly.
+			 */
+			err = 0;
+		} else {
+			dev_err(data->dev, "%s: call scmi(%d) err=%d\n",
+				__func__, is_restore, err);
 		}
 	}
 
