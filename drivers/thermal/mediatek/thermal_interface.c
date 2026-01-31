@@ -29,7 +29,9 @@ struct therm_intf_info {
 	void __iomem *thermal_cputcm_base;
 };
 
-static struct therm_intf_info tm_data;
+static struct therm_intf_info tm_data = {
+	.lock = __MUTEX_INITIALIZER(tm_data.lock),
+};
 
 static void therm_intf_write_cputcm(unsigned int val, int offset)
 {
@@ -221,8 +223,6 @@ static int therm_intf_probe(struct platform_device *pdev)
 
 	/* apply init value to ttj */
 	write_ttj(init_ttj_cpu, init_ttj_gpu, init_ttj_npu);
-
-	mutex_init(&tm_data.lock);
 
 	tm_data.sw_ready = 1;
 
