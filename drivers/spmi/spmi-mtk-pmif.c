@@ -836,12 +836,16 @@ static const struct irq_chip rcs_irq_chip_p = {
 	.irq_set_wake 		= rcs_irq_p_set_wake,
 };
 
+static struct lock_class_key rcs_irq_lock_class, rcs_irq_request_class;
+
 static int rcs_irq_map(struct irq_domain *d, unsigned int virq,
 			irq_hw_number_t hw)
 {
 	struct pmif *arb = d->host_data;
 
 	irq_set_chip_data(virq, arb);
+	irq_set_lockdep_class(virq, &rcs_irq_lock_class,
+			      &rcs_irq_request_class);
 	irq_set_chip(virq, &arb->irq_chip);
 	irq_set_nested_thread(virq, 1);
 	irq_set_parent(virq, arb->rcs_irq);
