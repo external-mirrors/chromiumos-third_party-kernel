@@ -55,6 +55,7 @@
 #define XSP_USBPHYACR5		((SSUSB_SIFSLV_U2PHY_COM) + 0x014)
 #define P2A5_RG_HSTX_SRCAL_EN	BIT(15)
 #define P2A5_RG_HSTX_SRCTRL		GENMASK(14, 12)
+#define P2A6_RG_U2_SQD		GENMASK(23, 22)
 
 #define XSP_USBPHYACR6		((SSUSB_SIFSLV_U2PHY_COM) + 0x018)
 #define PA6_RG_U2_PRE_EMP		GENMASK(31, 30)
@@ -62,6 +63,7 @@
 #define P2A6_RG_BC11_SW_EN	BIT(23)
 #define P2A6_RG_OTG_VBUSCMP_EN	BIT(20)
 #define PA6_RG_U2_DISCTH	GENMASK(7, 4)
+#define P2A6_RG_U2_SQTH		GENMASK(3, 0)
 
 #define XSP_U2PHYDTM1		((SSUSB_SIFSLV_U2PHY_COM) + 0x06C)
 #define P2D_FORCE_IDDIG		BIT(9)
@@ -100,6 +102,8 @@ struct xsphy_instance {
 	int eye_term;
 	int discth;
 	int pre_emphasis;
+	int host_rx_sqd;
+	int host_rx_sqth;
 };
 
 struct mtk_xsphy {
@@ -253,9 +257,14 @@ static void phy_parse_property(struct mtk_xsphy *xsphy,
 					 &inst->discth);
 		device_property_read_u32(dev, "mediatek,pre-emphasis",
 					 &inst->pre_emphasis);
-		dev_dbg(dev, "intr:%d, src:%d, vrt:%d, term:%d, discth:%d, pre-emphasis:%d\n",
+		device_property_read_u32(dev, "mediatek,host-rx-sqth",
+					 &inst->host_rx_sqth);
+		device_property_read_u32(dev, "mediatek,host-rx-sqd",
+					 &inst->host_rx_sqd);
+		dev_dbg(dev, "intr:%d, src:%d, vrt:%d, term:%d, discth:%d, pre-emphasis:%d, host-rx-sqth:%d, host-rx-sqd:%d\n",
 			inst->efuse_intr, inst->eye_src, inst->eye_vrt,
-			inst->eye_term, inst->discth, inst->pre_emphasis);
+			inst->eye_term, inst->discth, inst->pre_emphasis,
+			inst->host_rx_sqth, inst->host_rx_sqd);
 		break;
 	case PHY_TYPE_USB3:
 		device_property_read_u32(dev, "mediatek,efuse-intr",
@@ -300,6 +309,12 @@ static void u2_phy_props_set(struct mtk_xsphy *xsphy,
 	if (inst->pre_emphasis)
 		mtk_phy_update_bits(pbase + XSP_USBPHYACR6, PA6_RG_U2_PRE_EMP,
 				    PA6_RG_U2_PRE_EMP_VAL(inst->pre_emphasis));
+	if (inst->host_rx_sqth)
+		mtk_phy_update_field(pbase + XSP_USBPHYACR6, P2A6_RG_U2_SQTH,
+				     inst->host_rx_sqth);
+	if (inst->host_rx_sqd)
+		mtk_phy_update_field(pbase + XSP_USBPHYACR5, P2A6_RG_U2_SQD,
+				     inst->host_rx_sqd);
 }
 
 static void u3_phy_props_set(struct mtk_xsphy *xsphy,
