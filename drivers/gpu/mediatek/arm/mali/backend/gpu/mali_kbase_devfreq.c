@@ -259,7 +259,8 @@ static int kbase_devfreq_status(struct device *dev, struct devfreq_dev_status *s
 	stat->current_frequency = kbdev->current_nominal_freq;
 	stat->private_data = NULL;
 
-#if MALI_USE_CSF && defined CONFIG_DEVFREQ_THERMAL
+#if MALI_USE_CSF && defined(CONFIG_DEVFREQ_THERMAL) && \
+	!defined(MALI_MTK_DEVFREQ_THERMAL)
 	kbase_ipa_reset_data(kbdev);
 #endif
 
