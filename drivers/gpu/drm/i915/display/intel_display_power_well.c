@@ -176,6 +176,48 @@ int intel_power_well_refcount(struct i915_power_well *power_well)
 	return power_well->count;
 }
 
+static u32 dss_pipe_gating_bits(u8 irq_pipe_mask)
+{
+	u32 bits = 0;
+
+	if (irq_pipe_mask & BIT(PIPE_A))
+		bits |= DSS_PIPE_A_GATING_DISABLED;
+	if (irq_pipe_mask & BIT(PIPE_B))
+		bits |= DSS_PIPE_B_GATING_DISABLED;
+	if (irq_pipe_mask & BIT(PIPE_C))
+		bits |= DSS_PIPE_C_GATING_DISABLED;
+	if (irq_pipe_mask & BIT(PIPE_D))
+		bits |= DSS_PIPE_D_GATING_DISABLED;
+
+	return bits;
+}
+
+static void dss_pipe_gating_enable_disable(struct drm_i915_private *dev_priv,
+					   u8 irq_pipe_mask,
+					   bool disable)
+{
+	u32 bits = dss_pipe_gating_bits(irq_pipe_mask);
+	u32 clear, set;
+
+	if (!bits)
+		return;
+
+	/*
+	 * Single intel_de_rmw() for both enable/disable:
+	 *  - disable == true, set bits (disable clock gating)
+	 *  - disable == false, clear bits (re-enable clock gating)
+	 */
+	set = disable ? bits : 0;
+	clear = disable ? 0 : bits;
+
+	intel_de_rmw(dev_priv, CLKGATE_DIS_DSSDSC, clear, set);
+
+	drm_dbg_kms(&dev_priv->drm,
+		    "DSS clock gating %sd for pipe_mask=0x%x (CLKGATE_DIS_DSSDSC=0x%08x)\n",
+		    str_enable_disable(!disable), irq_pipe_mask,
+		    intel_de_read(dev_priv, CLKGATE_DIS_DSSDSC));
+}
+
 /*
  * Starting with Haswell, we have a "Power Down Well" that can be turned off
  * when not needed anymore. We have 4 registers that can request the power well
@@ -188,15 +230,25 @@ static void hsw_power_well_post_enable(struct drm_i915_private *dev_priv,
 	if (has_vga)
 		intel_vga_reset_io_mem(dev_priv);
 
-	if (irq_pipe_mask)
+	if (irq_pipe_mask) {
 		gen8_irq_power_well_post_enable(dev_priv, irq_pipe_mask);
+
+		/* Wa_22021048059: Re-enable DSS clock gating after power well enable */
+		if (DISPLAY_VER(dev_priv) >= 14)
+			dss_pipe_gating_enable_disable(dev_priv, irq_pipe_mask, false);
+	}
 }
 
 static void hsw_power_well_pre_disable(struct drm_i915_private *dev_priv,
 				       u8 irq_pipe_mask)
 {
-	if (irq_pipe_mask)
+	if (irq_pipe_mask) {
+		/* Wa_22021048059: Disable DSS clock gating before power well disable */
+		if (DISPLAY_VER(dev_priv) >= 14)
+			dss_pipe_gating_enable_disable(dev_priv, irq_pipe_mask, true);
+
 		gen8_irq_power_well_pre_disable(dev_priv, irq_pipe_mask);
+	}
 }
 
 #define ICL_AUX_PW_TO_CH(pw_idx)	\
