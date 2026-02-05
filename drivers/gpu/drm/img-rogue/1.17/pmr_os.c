@@ -176,7 +176,7 @@ static int MMapVAccess(struct vm_area_struct *ps_vma, unsigned long addr,
 	{
 		if (!BITMASK_HAS(ps_vma->vm_flags, VM_WRITE))
 		{
-			PVR_DPF((PVR_DBG_ERROR, "%s: Attempt to write to read only vma.",
+			PVR_DPF((PVR_DBG_ERROR, "%s: Attempt to write vma without flag set.",
 									__func__));
 			return -EACCES;
 		}
@@ -189,6 +189,13 @@ static int MMapVAccess(struct vm_area_struct *ps_vma, unsigned long addr,
 	}
 	else
 	{
+		if (!BITMASK_HAS(ps_vma->vm_flags, VM_READ))
+		{
+			PVR_DPF((PVR_DBG_ERROR, "%s: Attempt to read vma without flag set.",
+									__func__));
+			return -EACCES;
+		}
+
 		eError = PMR_ReadBytes(psPMR,
 				       (IMG_DEVMEM_OFFSET_T) ulOffset,
 				       buf,
