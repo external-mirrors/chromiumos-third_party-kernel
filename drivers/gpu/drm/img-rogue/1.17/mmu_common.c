@@ -1235,6 +1235,55 @@ static void _PxMemFree(MMU_CONTEXT *psMMUContext,
 	_MMU_PhysMemFree(psMMUContext->psPhysMemCtx, psMemDesc);
 }
 
+/*************************************************************************/ /*!
+@Function      _PxMemUpdate8
+
+@Description   Update the 8 byte physical address(es) associated with the
+               given virtual address and handle special-casing required for
+               differing CPU vs GPU address sizes. In particular the 32bit
+               CPU update of a 64bit physical address which requires
+               explicit ordering to avoid an invalid physical address being
+               passed to the GPU.
+
+@Input         pui64Px         Virtual address base to receive new physical
+@Input         ui64PxE64       Physical value to be used for update
+@Input         uiIndex         Index into the PxE table we are updating.
+
+@Return        Nothing
+ */
+/*****************************************************************************/
+
+static INLINE void _PxMemUpdate8(IMG_UINT64            *pui64Px,
+                                 IMG_UINT64            ui64PxE64,
+                                 IMG_UINT32            uiIndex)
+{
+#if (__SIZEOF_POINTER__ == 4)
+	/* Reference the target of this update - the writes to pui64Pxp[index]
+	 * must be split into a 'high' and 'low' write operation.
+	 * If we're mapping the address we have to explicitly clear the 'low'
+	 * field, then write 'high' and then write 'low' to ensure correct
+	 * values are presented without the GPU encountering a badly formed
+	 * 'valid' address.
+	 */
+	IMG_UINT32 *pui32PxLo = (IMG_UINT32 *)&pui64Px[uiIndex];
+	IMG_UINT32 *pui32PxHi = (IMG_UINT32 *)IMG_OFFSET_ADDR(pui32PxLo, sizeof(IMG_UINT32));
+
+	/* Handle 32bit CPU access to 64bit quantity explicitly:
+	 * 1. Always write low-order 32bits as 0
+	 * 2. Write high-order 32bits (from ui64PxE64)
+	 * 3. Write low-order 32bits from ui64PxE64.
+	 */
+	*pui32PxLo = 0U;
+	OSWriteMemoryBarrier(pui32PxLo);
+	*pui32PxHi = ((IMG_UINT32)((ui64PxE64) >> 32) & 0xFFFFFFFF);
+	OSWriteMemoryBarrier(pui32PxHi);
+	*pui32PxLo = ((IMG_UINT32)(ui64PxE64 & 0xFFFFFFFF));
+#else
+	pui64Px[uiIndex] = ui64PxE64;
+#endif
+
+}
+
 static INLINE PVRSRV_ERROR _SetupPTE(MMU_CONTEXT *psMMUContext,
                                      MMU_Levelx_INFO *psLevel,
                                      IMG_UINT32 uiIndex,
@@ -1282,8 +1331,7 @@ static INLINE PVRSRV_ERROR _SetupPTE(MMU_CONTEXT *psMMUContext,
 			/* Don't remap */
 			return  PVRSRV_ERROR_MMU_REMAP_BLOCKED;
 		}
-
-		pui64Px[uiIndex] = ui64PxE64;
+		_PxMemUpdate8(pui64Px, ui64PxE64, uiIndex);
 	}
 	else if (psConfig->uiBytesPerEntry == 4)
 	{
@@ -1466,7 +1514,6 @@ static PVRSRV_ERROR _SetupPxE(MMU_CONTEXT *psMMUContext,
 		}
 		case 8:
 		{
-			IMG_UINT64 *pui64Px = psMemDesc->pvCpuVAddr; /* Give the virtual base address of Px */
 			IMG_UINT64 ui64PxE64;
 
 			ui64PxE64 = psDevPAddr->uiAddr             /* Calculate the offset to that base */
@@ -1474,8 +1521,7 @@ static PVRSRV_ERROR _SetupPxE(MMU_CONTEXT *psMMUContext,
 					<< psConfig->uiAddrShift      /* Shift back to fit address in the Px entry */
 					& psConfig->uiAddrMask;       /* Delete unused higher bits */
 			ui64PxE64 |= pfnDerivePxEProt8(uiProtFlags, uiLog2DataPageSize);
-
-			pui64Px[uiIndex] = ui64PxE64;
+			_PxMemUpdate8(psMemDesc->pvCpuVAddr, ui64PxE64, uiIndex);
 
 			HTBLOGK(HTB_SF_MMU_PAGE_OP_TABLE,
 			        HTBLOG_PTR_BITS_HIGH(psLevel), HTBLOG_PTR_BITS_LOW(psLevel),
@@ -4008,7 +4054,9 @@ MMU_UnmapPMRFastUnlocked(MMU_CONTEXT *psMMUContext,
 		/* Set the PT entry to invalid and poison it with a bad address */
 		if (psConfig->uiBytesPerEntry == 8)
 		{
-			((IMG_UINT64*)psLevel->sMemDesc.pvCpuVAddr)[uiPTEIndex] = uiEntry;
+
+			_PxMemUpdate8(psLevel->sMemDesc.pvCpuVAddr,uiEntry, uiPTEIndex);
+
 		}
 		else
 		{
