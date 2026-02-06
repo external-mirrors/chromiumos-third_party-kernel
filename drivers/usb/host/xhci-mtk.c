@@ -306,14 +306,19 @@ static int xhci_mtk_host_disable(struct xhci_hcd_mtk *mtk)
 		writel(value, &ippc->u2_ctrl_p[i]);
 	}
 
-	/* power down host ip */
-	value = readl(&ippc->ip_pw_ctr1);
-	value |= CTRL1_IP_HOST_PDN;
-	writel(value, &ippc->ip_pw_ctr1);
+	for (i = 1; i <= 8; i++) {
+		/* power down host ip */
+		value = readl(&ippc->ip_pw_ctr1);
+		value |= CTRL1_IP_HOST_PDN;
+		writel(value, &ippc->ip_pw_ctr1);
 
-	/* wait for host ip to sleep */
-	ret = readl_poll_timeout(&ippc->ip_pw_sts1, value,
-			  (value & STS1_IP_SLEEP_STS), 100, 100000);
+		/* wait for host ip to sleep */
+		ret = readl_poll_timeout(&ippc->ip_pw_sts1, value,
+				  (value & STS1_IP_SLEEP_STS), 100, 100000);
+		if (!ret)
+			break;
+		dev_err(mtk->dev, "%d attempt to sleep failed!!!\n", i);
+	}
 	if (ret)
 		dev_err(mtk->dev, "ip sleep failed!!!\n");
 	else /* workaound for platforms using low level latch */
