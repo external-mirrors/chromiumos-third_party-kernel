@@ -714,7 +714,6 @@ static int __maybe_unused xhci_mtk_suspend(struct device *dev)
 	struct xhci_hcd_mtk *mtk = dev_get_drvdata(dev);
 	struct usb_hcd *hcd = mtk->hcd;
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
-	int ret;
 
 	xhci_dbg(xhci, "%s: stop port polling\n", __func__);
 	clear_bit(HCD_FLAG_POLL_RH, &hcd->flags);
@@ -722,21 +721,11 @@ static int __maybe_unused xhci_mtk_suspend(struct device *dev)
 	clear_bit(HCD_FLAG_POLL_RH, &xhci->shared_hcd->flags);
 	del_timer_sync(&xhci->shared_hcd->rh_timer);
 
-	ret = xhci_mtk_host_disable(mtk);
-	if (ret)
-		goto restart_poll_rh;
+	xhci_mtk_host_disable(mtk);
 
 	clk_bulk_disable_unprepare(BULK_CLKS_NUM, mtk->clks);
 	usb_wakeup_set(mtk, true);
 	return 0;
-
-restart_poll_rh:
-	xhci_dbg(xhci, "%s: restart port polling\n", __func__);
-	set_bit(HCD_FLAG_POLL_RH, &xhci->shared_hcd->flags);
-	usb_hcd_poll_rh_status(xhci->shared_hcd);
-	set_bit(HCD_FLAG_POLL_RH, &hcd->flags);
-	usb_hcd_poll_rh_status(hcd);
-	return ret;
 }
 
 static int __maybe_unused xhci_mtk_resume(struct device *dev)
