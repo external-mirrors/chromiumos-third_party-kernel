@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2026 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&ap_sar_sensor {
+	compatible = "tyhx,hx9023s";
+	interrupts-extended = <&pio 9 IRQ_TYPE_EDGE_FALLING>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	status = "okay";
+
+	channel@1 {
+		reg = <1>;
+		single-channel = <1>;
+	};
+};
