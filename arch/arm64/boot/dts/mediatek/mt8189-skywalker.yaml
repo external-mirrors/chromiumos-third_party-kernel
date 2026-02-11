@@ -134,10 +134,18 @@ padme:
   dtb:
     mt8189-skywalker-padme.dtb: {}
   dtbo:
-    mt8189-skywalker-padme-sar.dtbo:
+    mt8189-skywalker-padme-sar-sx9324.dtbo:
       fw_config:
-        mask: 0x1
+        mask: 0x3
         value: 0x1
+    mt8189-skywalker-padme-sar-hx9023.dtbo:
+      fw_config:
+        mask: 0x3
+        value: 0x2
+    mt8189-skywalker-padme-kb-ca-fr.dtbo:
+      fw_config:
+        mask: 0x4
+        value: 0x4
     mt8189-skywalker-padme-rt5682s.dtbo:
       fw_config:
         mask: 0x1C00000
