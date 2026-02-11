@@ -10,5 +10,6 @@
 	semtech,ph01-resolution = <1024>;
 	semtech,cs-idle-sleep = "gnd";
 	semtech,ph01-proxraw-strength = <3>;
+
 	status = "okay";
 };
