@@ -51,7 +51,7 @@ int mausb_modifyep0_event_from_user(struct mausb_device *dev,
 				    struct mausb_event *event);
 int mausb_setusbdevaddress_event_to_user(struct mausb_device *dev,
 					 u16 device_handle,
-					 u16 response_timeout);
+					 unsigned int response_timeout);
 int mausb_setusbdevaddress_event_from_user(struct mausb_device *dev,
 					   struct mausb_event *event);
 int mausb_updatedev_event_to_user(struct mausb_device *dev,

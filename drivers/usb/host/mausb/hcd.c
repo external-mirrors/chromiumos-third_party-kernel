@@ -208,7 +208,8 @@ static void mausb_get_hub_status(struct usb_hcd *hcd, u16 type_req,
 				 u16 length);
 static int mausb_add_endpoint(struct usb_hcd *hcd, struct usb_device *dev,
 			      struct usb_host_endpoint *endpoint);
-static int mausb_address_device(struct usb_hcd *hcd, struct usb_device *dev);
+static int mausb_address_device(struct usb_hcd *hcd, struct usb_device *dev,
+				unsigned int timeout_ms);
 static int mausb_alloc_dev(struct usb_hcd *hcd, struct usb_device *dev);
 static int mausb_check_bandwidth(struct usb_hcd *hcd, struct usb_device *dev);
 static void mausb_reset_bandwidth(struct usb_hcd *hcd, struct usb_device *dev);
@@ -1021,12 +1022,13 @@ free_dev:
 }
 
 static int mausb_device_assign_address(struct mausb_device *dev,
-				       struct mausb_usb_device_ctx *usb_dev_ctx)
+				       struct mausb_usb_device_ctx *usb_dev_ctx,
+				       unsigned int timeout_ms)
 {
 	int status =
 		mausb_setusbdevaddress_event_to_user(dev,
 						     usb_dev_ctx->dev_handle,
-						     RESPONSE_TIMEOUT_MS);
+						     timeout_ms);
 
 	usb_dev_ctx->addressed = (status == 0);
 
@@ -1066,7 +1068,8 @@ mausb_alloc_device_ctx(struct hub_ctx *hub, struct usb_device *dev,
 	return usb_device_ctx;
 }
 
-static int mausb_address_device(struct usb_hcd *hcd, struct usb_device *dev)
+static int mausb_address_device(struct usb_hcd *hcd, struct usb_device *dev,
+				unsigned int timeout_ms)
 {
 	u8	port_number;
 	int	status;
@@ -1112,7 +1115,8 @@ static int mausb_address_device(struct usb_hcd *hcd, struct usb_device *dev)
 	}
 
 	if (!usb_device_ctx->addressed) {
-		status = mausb_device_assign_address(ma_dev, usb_device_ctx);
+		status = mausb_device_assign_address(ma_dev, usb_device_ctx,
+						     timeout_ms);
 		if (status < 0)
 			return status;
 	}
@@ -1409,7 +1413,8 @@ static int mausb_enable_device(struct usb_hcd *hcd, struct usb_device *dev)
 						      usb_device_ctx);
 
 	if (!usb_device_ctx->addressed)
-		return mausb_device_assign_address(ma_dev, usb_device_ctx);
+		return mausb_device_assign_address(ma_dev, usb_device_ctx,
+						   RESPONSE_TIMEOUT_MS);
 
 	dev_vdbg(mausb_host_dev.this_device, "Device assigned and addressed, usb_device_ctx=%p, dev_handle=%#x",
 		 usb_device_ctx, usb_device_ctx->dev_handle);
