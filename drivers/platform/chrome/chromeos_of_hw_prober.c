@@ -77,12 +77,31 @@ static const struct chromeos_i2c_probe_data chromeos_i2c_probe_hana_trackpad = {
 	},
 };
 
+static const struct chromeos_i2c_probe_data chromeos_i2c_probe_jaina_trackpad = {
+	.cfg = &chromeos_i2c_probe_simple_trackpad_cfg,
+	.opts = &(const struct i2c_of_probe_simple_opts) {
+		.res_node_compatible = "hid-over-i2c",
+		.supply_name = "vdd",
+		.post_power_on_delay_ms = 30,
+	},
+};
+
 static const struct chromeos_i2c_probe_data chromeos_i2c_probe_vader_trackpad = {
 	.cfg = &chromeos_i2c_probe_simple_trackpad_cfg,
 	.opts = &(const struct i2c_of_probe_simple_opts) {
 		.res_node_compatible = "elan,ekth3000",
 		.supply_name = "vcc",
 		.post_power_on_delay_ms = 0,
+	},
+};
+
+static const struct chromeos_i2c_probe_data chromeos_i2c_probe_jaina_touchscreen = {
+	.cfg = &chromeos_i2c_probe_simple_touchscreen_cfg,
+	.opts = &(const struct i2c_of_probe_simple_opts) {
+		.res_node_compatible = "elan,ekth3500",
+		.supply_name = "vcc33",
+		.gpio_name = "reset",
+		.post_power_on_delay_ms = 150,
 	},
 };
 
@@ -183,6 +202,14 @@ static const struct hw_prober_entry hw_prober_platforms[] = {
 		.compatible = "google,hana",
 		.prober = chromeos_i2c_component_prober,
 		.data = &chromeos_i2c_probe_hana_trackpad,
+	}, {
+		.compatible = "google,jaina",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_jaina_touchscreen,
+	}, {
+		.compatible = "google,jaina",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_jaina_trackpad,
 	}, {
 		.compatible = "google,spherion",
 		.prober = chromeos_i2c_component_prober,

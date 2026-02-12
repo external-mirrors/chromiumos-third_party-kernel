@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&ap_i2c_tchpad {
+	status = "okay";
+
+	/* ELAN S9653D-24HM */
+	trackpad_elan_11: trackpad@15 {
+		compatible = "hid-over-i2c";
+		reg = <0x15>;
+		hid-descr-addr = <0x0001>;
+		post-power-on-delay-ms = <30>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		vdd-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
+
+	/* Goodix GTM0H010 */
+	trackpad_goodix: trackpad@2c {
+		compatible = "hid-over-i2c";
+		reg = <0x2c>;
+		hid-descr-addr = <0x0020>;
+		post-power-on-delay-ms = <300>;
+		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&trackpad_pins>;
+		wakeup-source;
+		vdd-supply = <&pp3300_s3>;
+		status = "fail-needs-probe";
+	};
+};
