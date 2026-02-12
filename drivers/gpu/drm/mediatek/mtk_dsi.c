@@ -315,6 +315,12 @@ struct mtk_dsi {
 	bool dsc_enable;
 	u32 data_phy_cycle;
 	bool is_cphy;
+
+	/* PHY timing adjustments from DTS */
+	s32 phy_timing_da_hs_prepare_adj;
+	s32 phy_timing_da_hs_zero_adj;
+	s32 phy_timing_clk_hs_prepare_adj;
+	s32 phy_timing_clk_hs_zero_adj;
 };
 
 static int mtk_dsi_wait_for_idle(struct mtk_dsi *dsi);
@@ -408,8 +414,10 @@ static void mtk_dsi_phy_timconfig(struct mtk_dsi *dsi)
 
 	timing->lpx = (60 * data_rate_mhz / (8 * 1000)) + 1;
 	timing->da_hs_prepare = (80 * data_rate_mhz + 4 * 1000) / 8000;
+	timing->da_hs_prepare += dsi->phy_timing_da_hs_prepare_adj;
 	timing->da_hs_zero = (170 * data_rate_mhz + 10 * 1000) / 8000 + 1 -
 			     timing->da_hs_prepare;
+	timing->da_hs_zero += dsi->phy_timing_da_hs_zero_adj;
 	timing->da_hs_trail = timing->da_hs_prepare + 1;
 
 	timing->ta_go = 4 * timing->lpx - 2;
@@ -418,9 +426,11 @@ static void mtk_dsi_phy_timconfig(struct mtk_dsi *dsi)
 	timing->da_hs_exit = 2 * timing->lpx + 1;
 
 	timing->clk_hs_prepare = 70 * data_rate_mhz / (8 * 1000);
+	timing->clk_hs_prepare += dsi->phy_timing_clk_hs_prepare_adj;
 	timing->clk_hs_post = timing->clk_hs_prepare + 8;
 	timing->clk_hs_trail = timing->clk_hs_prepare;
 	timing->clk_hs_zero = timing->clk_hs_trail * 4;
+	timing->clk_hs_zero += dsi->phy_timing_clk_hs_zero_adj;
 	timing->clk_hs_exit = 2 * timing->clk_hs_trail;
 
 	timcon0 = FIELD_PREP(LPX, timing->lpx) |
@@ -1630,6 +1640,17 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(dsi->phy), "Failed to get MIPI-DPHY\n");
 
 	dsi->is_cphy = of_property_read_bool(dev->of_node, "mediatek,is-cphy");
+
+	/* Parse PHY timing adjustments (optional, default 0) */
+	of_property_read_s32(dev->of_node, "mediatek,phy-timing-da-hs-prepare",
+			     &dsi->phy_timing_da_hs_prepare_adj);
+	of_property_read_s32(dev->of_node, "mediatek,phy-timing-da-hs-zero",
+			     &dsi->phy_timing_da_hs_zero_adj);
+	of_property_read_s32(dev->of_node, "mediatek,phy-timing-clk-hs-prepare",
+			     &dsi->phy_timing_clk_hs_prepare_adj);
+	of_property_read_s32(dev->of_node, "mediatek,phy-timing-clk-hs-zero",
+			     &dsi->phy_timing_clk_hs_zero_adj);
+
 	irq_num = platform_get_irq(pdev, 0);
 	if (irq_num < 0)
 		return irq_num;
