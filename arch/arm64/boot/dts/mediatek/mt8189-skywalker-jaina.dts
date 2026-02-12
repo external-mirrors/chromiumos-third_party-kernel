@@ -1,0 +1,194 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+#include "mt8189-skywalker.dtsi"
+
+/ {
+	model = "Google Jaina board";
+	compatible = "google,jaina", "mediatek,mt8189";
+
+	connector-hdmi {
+		status = "disabled";
+	};
+};
+
+&ufshci {
+	status = "disabled";
+};
+
+&mmc1 {
+	status = "disabled";
+};
+
+&ap_i2c_tchpad {
+	/delete-node/ trackpad@15;
+};
+
+&ap_i2c_tchscr {
+	/delete-node/ touchscreen@41;
+};
+
+&ap_i2c_aud {
+	/delete-node/ audio-codec@1a;
+
+	rt5650: audio-codec@1a {
+		compatible = "realtek,rt5650";
+		reg = <0x1a>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		cbj-sleeve-gpio = <&pio 30 GPIO_ACTIVE_HIGH>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_EDGE_BOTH>;
+		#sound-dai-cells = <0>;
+		realtek,dmic1-data-pin = <2>;
+		realtek,jd-mode = <2>;
+		status = "okay";
+	};
+};
+
+&ap_sar_sensor {
+	status = "disabled";
+};
+
+&keyboard_controller {
+	keypad,num-columns = <18>;
+
+	function-row-physmap = <
+		MATRIX_KEY(0x00, 0x02, 0)        /* T1 */
+		MATRIX_KEY(0x03, 0x02, 0)        /* T2 */
+		MATRIX_KEY(0x02, 0x02, 0)        /* T3 */
+		MATRIX_KEY(0x01, 0x02, 0)        /* T4 */
+		MATRIX_KEY(0x04, 0x04, 0)        /* T5 */
+		MATRIX_KEY(0x02, 0x04, 0)        /* T6 */
+		MATRIX_KEY(0x01, 0x04, 0)        /* T7 */
+		MATRIX_KEY(0x02, 0x0b, 0)        /* T8 */
+		MATRIX_KEY(0x01, 0x09, 0)        /* T9 */
+		MATRIX_KEY(0x00, 0x04, 0)        /* T10 */
+		MATRIX_KEY(0x00, 0x01, 0)        /* T11 */
+		MATRIX_KEY(0x01, 0x05, 0)        /* T12 */
+		MATRIX_KEY(0x03, 0x05, 0)        /* T13 */
+	>;
+
+	linux,keymap = <
+
+		CROS_TOP_ROW_KEYMAP_V30
+		CROS_MAIN_KEYMAP_V30
+
+		MATRIX_KEY(0x00, 0x02, KEY_BACK)		/* T1 */
+		MATRIX_KEY(0x03, 0x02, KEY_REFRESH)		/* T2 */
+		MATRIX_KEY(0x02, 0x02, KEY_ZOOM)		/* T3 */
+		MATRIX_KEY(0x01, 0x02, KEY_SCALE)		/* T4 */
+		MATRIX_KEY(0x04, 0x04, KEY_SYSRQ)		/* T5 */
+		MATRIX_KEY(0x02, 0x04, KEY_BRIGHTNESSDOWN)	/* T6 */
+		MATRIX_KEY(0x01, 0x04, KEY_BRIGHTNESSUP)	/* T7 */
+		MATRIX_KEY(0x02, 0x0b, KEY_DICTATE)		/* T8 */
+		MATRIX_KEY(0x01, 0x09, KEY_PLAYPAUSE)	/* T9 */
+		MATRIX_KEY(0x00, 0x04, KEY_MICMUTE)		/* T10 */
+		MATRIX_KEY(0x00, 0x01, KEY_MUTE)		/* T11 */
+		MATRIX_KEY(0x01, 0x05, KEY_VOLUMEDOWN)		/* T12 */
+		MATRIX_KEY(0x03, 0x05, KEY_VOLUMEUP)		/* T13 */
+
+		/* Define keys missing from standard_v30.c for OS-level recognition */
+		MATRIX_KEY(0x00, 0x0d, KEY_RIGHTALT)		/* Right Alt */
+		MATRIX_KEY(0x06, 0x0f, KEY_CAPSLOCK)		/*CAPS LOCK*/
+	>;
+};
+
+/* &ufshci's  vccq2-supply */
+&mt6359_vufs_ldo_reg {
+	regulator-always-on;
+};
+
+&rt9123 {
+	status = "disabled";
+};
+
+&sound {
+	compatible = "mediatek,mt8189-rt5650-sound";
+	model = "mt8189_rt5650";
+
+	dai-link-0 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt5650>;
+		};
+	};
+	/delete-node/ dai-link-2;
+	/delete-node/ dai-link-6;
+};
+
+/* &spi1 is Fingerprint */
+&spi1 {
+	status = "disabled";
+};
+
+&usb_a1 {
+	status = "disabled";
+};
+
+
+/* USB hub port 1 */
+&usb_hub_dsp1_hs {
+	remote-endpoint = <&usb_c0_hs>;
+};
+
+&usb_c0_hs {
+	remote-endpoint = <&usb_hub_dsp1_hs>;
+};
+
+&usb_hub_dsp1_ss {
+	remote-endpoint = <&usb_c0_ss>;
+};
+
+&usb_c0_ss {
+	remote-endpoint = <&usb_hub_dsp1_ss>;
+};
+
+/* USB hub port 2 */
+&usb_hub_dsp2_hs {
+	remote-endpoint = <&usb_c1_hs>;
+};
+
+&usb_c1_hs {
+	remote-endpoint = <&usb_hub_dsp2_hs>;
+};
+
+&usb_hub_dsp2_ss {
+	remote-endpoint = <&usb_c1_ss>;
+};
+
+&usb_c1_ss {
+	remote-endpoint = <&usb_hub_dsp2_ss>;
+};
+
+/* USB hub port 3 */
+&usb_hub_dsp3_hs {
+	remote-endpoint = <&usb_a0_hs>;
+};
+
+&usb_a0_hs {
+	remote-endpoint = <&usb_hub_dsp3_hs>;
+};
+
+&usb_hub_dsp3_ss {
+	remote-endpoint = <&usb_a0_ss>;
+};
+
+&usb_a0_ss {
+	remote-endpoint = <&usb_hub_dsp3_ss>;
+};
+
+/* USB hub port 4 is for on-board WWAN card */
+

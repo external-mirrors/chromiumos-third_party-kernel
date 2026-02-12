@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2026 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&ap_i2c_tchscr {
+	status = "okay";
+
+	/* ELAN eKTH5015M Pure i2c*/
+	touchscreen@10 {
+		compatible = "elan,ekth3500";
+		reg = <0x10>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+
+	/* ELAN eKTH5015M HID-i2c*/
+	touchscreen@15 {
+		compatible = "elan,ekth6915";
+		reg = <0x15>;
+		hid-descr-addr = <0x0001>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		post-power-on-delay-ms = <150>;
+		status = "fail-needs-probe";
+	};
+
+	/* LX Semicon SW42101A */
+	touchscreen@34 {
+		compatible = "elan,ekth6915";
+		reg = <0x34>;
+		hid-descr-addr = <0x0000>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+
+	/* G2 STM32L432 */
+	touchscreen@40 {
+		compatible = "elan,ekth6915";
+		reg = <0x40>;
+		hid-descr-addr = <0x0001>;
+		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_pins>;
+		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
+		vcc33-supply = <&pp3300_tchscr_x>;
+		vccio-supply = <&pp1800_tchscr_report_disable>;
+		status = "fail-needs-probe";
+	};
+};

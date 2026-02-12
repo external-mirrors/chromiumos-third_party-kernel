@@ -96,6 +96,35 @@ grogu:
         mask: 0x3
         value: 0x0
 
+jaina:
+  dtb:
+    mt8189-skywalker-jaina.dtb: {}
+  dtbo:
+    mt8189-skywalker-jaina-ufs.dtbo:
+      fw_config:
+        mask: 0xC0000000
+        value: 0x00000000
+    mt8189-skywalker-jaina-emmc.dtbo:
+      fw_config:
+        mask: 0xC0000000
+        value: 0x80000000
+    mt8189-skywalker-jaina-touchscreen-11.dtbo:
+      fw_config:
+        mask: 0x00000003
+        value: 0x00000002
+    mt8189-skywalker-jaina-touchscreen-14.dtbo:
+      fw_config:
+        mask: 0x00000003
+        value: 0x00000003
+    mt8189-skywalker-jaina-trackpad-11.dtbo:
+      fw_config:
+        mask: 0x00000001
+        value: 0x00000000
+    mt8189-skywalker-jaina-trackpad-14.dtbo:
+      fw_config:
+        mask: 0x00000001
+        value: 0x00000001
+
 obiwan:
   dtb:
     mt8189-skywalker-obiwan.dtb: {}
