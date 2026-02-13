@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright 2024 Google LLC
+ *
+ * Panel ID: 0xa (Taiguan-Ilitek2900)
+ * Unprovisioned SKU: 0x7FFFFFF0UL | 0x0a
+ */
+
+/dts-v1/;
+#include "mt8186-corsola-wugtrio.dtsi"
+
+/ {
+	model = "Google wugtrio sku6/unprovisioned board";
+	compatible = "google,wugtrio-sku6", "google,wugtrio-sku2147483642",
+		     "google,wugtrio-sku7", "google,wugtrio", "mediatek,mt8186";
+};
+
+&panel {
+	compatible = "taiguanck,xti05101-01a";
+	/delete-property/ enable-gpios;
+	/delete-property/ pp3300-supply;
+	reset-gpios = <&pio 98 0>;
+	vccio-supply = <&en_pp6000_mipi_disp>;
+};

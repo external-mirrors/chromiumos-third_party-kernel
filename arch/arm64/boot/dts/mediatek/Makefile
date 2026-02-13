@@ -93,6 +93,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-voltorb-sku589825.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-wugtrio-sku0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-wugtrio-sku1.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-wugtrio-sku3.dtb
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-wugtrio-sku6.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-wyrdeer-sku65542.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-wyrdeer-sku65545.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8186-corsola-tentacruel-sku262144.dtb
