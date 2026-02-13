@@ -64,7 +64,6 @@ struct il79900a {
 	struct drm_dsc_config dsc;
 	bool dsc_enable;
 	char pps_table[128];
-	bool first_boot;
 };
 
 static inline struct il79900a *to_il79900a(struct drm_panel *panel)
@@ -238,21 +237,6 @@ static int il79900a_prepare(struct drm_panel *panel)
 		return ret;
 
 	usleep_range(3000, 5000);
-
-	if(ili->first_boot) {
-		ret = regulator_disable(ili->pp1800);
-		if (ret < 0)
-			return ret;
-
-		usleep_range(5000, 10000);
-
-		ret = regulator_enable(ili->pp1800);
-		if (ret < 0)
-			return ret;
-
-		usleep_range(3000, 5000);
-		ili->first_boot = false;
-	}
 
 	ret = regulator_enable(ili->avdd);
 	if (ret < 0)
@@ -495,7 +479,6 @@ static int il79900a_probe(struct mipi_dsi_device *dsi)
 	ili->dsc = *desc->dsc;
 	dsi->dsc = &ili->dsc;
 	ili->dsi = dsi;
-	ili->first_boot = true;
 
 	ret = il79900a_add(ili);
 	if (ret < 0)
