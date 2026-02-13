@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/ilitek,ili79900a.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Ilitek ILI79900A Touchscreen
+
+maintainers:
+  - Aaron Ye <aaron_ye@ilitek.corp-partner.google.com>
+
+description: |
+  Ilitek ILI79900A touchscreen controller using the HID over SPI protocol.
+
+allOf:
+  - $ref: /schemas/input/touchscreen/touchscreen.yaml#
+
+properties:
+  compatible:
+    const: ilitek,ili79900a
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  reset-gpios:
+    description:
+      Reset GPIO for the touchscreen controller (active high).
+    maxItems: 1
+
+  panel:
+    description:
+      Associated display panel.
+
+  spi-cs-setup-delay-ns:
+    description:
+      SPI chip select setup delay in nanoseconds.
+
+  vdd-supply:
+    description:
+      Regulator for the VDD supply voltage.
+
+  input-report-header-address:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 0xffffff
+    description:
+      A value to be included in the Read Approval packet, listing an address of
+      the input report header to be put on the SPI bus. This address has 24
+      bits.
+
+  input-report-body-address:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 0xffffff
+    description:
+     A value to be included in the Read Approval packet, listing an address of
+      the input report body to be put on the SPI bus. This address has 24 bits.
+
+  output-report-address:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 0xffffff
+    description:
+      A value to be included in the Output Report sent by the host, listing an
+      address where the output report on the SPI bus is to be written to. This
+      address has 24 bits.
+
+  post-power-on-delay-ms:
+    description:
+      Optional time in ms required by the device after enabling its regulators
+      or powering it on, before it is ready for communication.
+
+  minimal-reset-delay-ms:
+    description:
+      Optional minimum amount of time in ms that device needs to be in reset
+      state for the reset to take effect.
+
+  read-opcode:
+  $ref: /schemas/types.yaml#/definitions/uint8
+    description:
+      Value to be used in Read Approval packets. 1 byte.
+
+  write-opcode:
+  $ref: /schemas/types.yaml#/definitions/uint8
+    description:
+      Value to be used in Write Approval packets. 1 byte.
+
+
+required:
+  - compatible
+  - interrupts
+  - reset-gpios
+  - panel
+  - spi-cs-setup-delay-ns
+  - input-report-header-address
+  - input-report-body-address
+  - output-report-address
+  - post-power-on-delay-ms
+  - minimal-reset-delay-ms
+  - read-opcode
+  - write-opcode
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        touchscreen: touchscreen@0 {
+            compatible = "ilitek,ili79900a";
+            reg = <0>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&touchscreen_pins>;
+            reset-gpios = <&pio 126 GPIO_ACTIVE_HIGH>;
+            interrupts-extended = <&pio 15 IRQ_TYPE_EDGE_FALLING>;
+            spi-max-frequency = <3000000>;
+            spi-cs-setup-delay-ns = <2000>;
+            panel = <&mipi_panel>;
+
+            input-report-header-address = <0x001000>;
+            input-report-body-address   = <0x001000>;
+            output-report-address       = <0x002000>;
+            read-opcode  = <0x83>;
+            write-opcode = <0x82>;
+            post-power-on-delay-ms = <0>;
+            minimal-reset-delay-ms = <10>;
+            status = "okay";
+        };
+    };
