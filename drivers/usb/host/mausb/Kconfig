@@ -7,6 +7,7 @@
 
 config USB_HOST_MAUSB
 	tristate "Media Agnostic (MA) USB Host Driver"
+	depends on NET && INET
 	default y
 	help
 	  This is a Media Agnostic (MA) USB Host driver which enables host
