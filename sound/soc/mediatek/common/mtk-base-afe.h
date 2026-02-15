@@ -141,6 +141,8 @@ struct mtk_base_afe {
 	 */
 	int is_memif_bit_banding;
 
+	bool preallocate_buffers;
+
 	struct list_head sub_dais;
 	struct snd_soc_dai_driver *dai_drivers;
 	unsigned int num_dai_drivers;
