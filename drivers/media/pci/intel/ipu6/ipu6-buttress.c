@@ -344,7 +344,7 @@ irqreturn_t ipu6_buttress_isr(int irq, void *isp_ptr)
 	u32 i, count = 0;
 	int active;
 
-	active = pm_runtime_get_if_active(&isp->pdev->dev, true);
+	active = pm_runtime_get_if_active(&isp->pdev->dev);
 	if (!active)
 		return IRQ_NONE;
 
