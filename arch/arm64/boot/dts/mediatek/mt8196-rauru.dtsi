@@ -1361,6 +1361,11 @@ spi_ap_fp: &spi5 {
 	status = "okay";
 };
 
+&u2port0 {
+	mediatek,host-rx-sqth = <0xc>;
+	mediatek,host-rx-sqd = <0x3>;
+};
+
 &u3phy0 {
 	status = "okay";
 };
