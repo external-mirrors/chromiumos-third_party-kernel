@@ -121,6 +121,13 @@
 	};
 };
 
+&dsi0 {
+	mediatek,phy-timing-da-hs-prepare = <0>;
+	mediatek,phy-timing-da-hs-zero = <6>;
+	mediatek,phy-timing-clk-hs-prepare = <0>;
+	mediatek,phy-timing-clk-hs-zero = <0>;
+};
+
 &hdmibrdg {
 	ivdd-supply = <&mt6359_vpa_buck_reg>;
 };
