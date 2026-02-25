@@ -103,6 +103,13 @@
 	phy-params-hbr2 = <0x20181410 0x22241e18 0x00003028 0x10080400 0x020c0600 0x00000008>;
 };
 
+&dsi0 {
+	mediatek,phy-timing-da-hs-prepare = <0>;
+	mediatek,phy-timing-da-hs-zero = <6>;
+	mediatek,phy-timing-clk-hs-prepare = <0>;
+	mediatek,phy-timing-clk-hs-zero = <0>;
+};
+
 &edp_tx {
 	swing-level = <3>;
 };
