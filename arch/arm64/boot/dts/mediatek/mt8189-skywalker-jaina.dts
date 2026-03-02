@@ -8,10 +8,6 @@
 / {
 	model = "Google Jaina board";
 	compatible = "google,jaina", "mediatek,mt8189";
-
-	connector-hdmi {
-		status = "disabled";
-	};
 };
 
 &ufshci {
