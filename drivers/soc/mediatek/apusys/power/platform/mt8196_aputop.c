@@ -270,28 +270,42 @@ static int mt8196_apu_top_on(struct device *dev, struct mtk_apu_power *apupw)
 
 static int mt8196_apu_top_on_pm(struct device *dev)
 {
-	int ret = 0;
+	int ret = 0, val = 0;
+	struct mtk_apu_power *apupw = dev_get_drvdata(dev);
 
 	ret = apusys_pwr_smc_call(dev, MTK_APUSYS_KERNEL_OP_APUSYS_PWR_TOP_ON, 0);
-	if (!ret)
-		dev_dbg(dev, "%s: APU power on success\n", __func__);
-	else
+	if (ret) {
 		dev_err(dev, "%s: APU power on fail(%d)\n", __func__, ret);
+		return ret;
+	}
+	dev_dbg(dev, "%s: APU power on success\n", __func__);
+
+	ret = readl_relaxed_poll_timeout_atomic((apupw->regs[RPC] + MTK_APU_RPC_INTF_PWR_RDY),
+						val, (val & 0x1UL), 50, 10000);
+	if (ret)
+		dev_err(dev, "%s polling RPC timeout, ret %d, val=0x%x\n", __func__, ret, val);
 
 	return ret;
 }
 
 static int mt8196_apu_top_off_pm(struct device *dev)
 {
-	int ret = 0;
+	int ret = 0, val = 0;
+	struct mtk_apu_power *apupw = dev_get_drvdata(dev);
 
 	ret = apusys_pwr_smc_call(dev, MTK_APUSYS_KERNEL_OP_APUSYS_PWR_TOP_OFF, 0);
-	if (!ret)
-		dev_dbg(dev, "%s: APU power off success\n", __func__);
-	else
+	if (ret) {
 		dev_err(dev, "%s: APU power off fail(%d)\n", __func__, ret);
+		return ret;
+	}
+	dev_dbg(dev, "%s: APU power off success\n", __func__);
 
-	return ret;
+	ret = readl_relaxed_poll_timeout_atomic((apupw->regs[RPC] + MTK_APU_RPC_INTF_PWR_RDY),
+						    val, !(val & 0x1UL), 50, 10000);
+	if (ret)
+		dev_info(dev, "%s polling RPC timeout, ret %d, val=0x%x\n", __func__, ret, val);
+
+	return 0;
 }
 
 static int mt8196_apu_top_probe(struct platform_device *pdev)
