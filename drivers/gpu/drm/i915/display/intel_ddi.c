@@ -73,6 +73,7 @@
 #include "intel_quirks.h"
 #include "intel_snps_phy.h"
 #include "intel_tc.h"
+#include "intel_vrr.h"
 #include "intel_vdsc.h"
 #include "intel_vdsc_regs.h"
 #include "skl_scaler.h"
@@ -609,6 +610,9 @@ void intel_ddi_enable_transcoder_func(struct intel_encoder *encoder,
 	intel_de_write(dev_priv, TRANS_DDI_FUNC_CTL(cpu_transcoder),
 		       intel_ddi_transcoder_func_reg_val_get(encoder,
 							     crtc_state));
+
+	if (HAS_VRR(dev_priv))
+		intel_vrr_set_transcoder_timings(crtc_state);
 }
 
 /*

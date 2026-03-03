@@ -194,6 +194,20 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	/*
+	 * Bspec says:
+	 * "(note: VRR needs to be programmed after
+	 *  TRANS_DDI_FUNC_CTL and before TRANS_CONF)."
+	 *
+	 * In practice it turns out that ICL can hang if
+	 * TRANS_VRR_VMAX/FLIPLINE are written before
+	 * enabling TRANS_DDI_FUNC_CTL.
+	 */
+	drm_WARN_ON(&dev_priv->drm,
+		    !(intel_de_read(dev_priv,
+				    TRANS_DDI_FUNC_CTL(cpu_transcoder)) &
+		      TRANS_DDI_FUNC_ENABLE));
+
+	/*
 	 * TRANS_SET_CONTEXT_LATENCY with VRR enabled
 	 * requires this chicken bit on ADL/DG2.
 	 */
