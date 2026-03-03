@@ -190,6 +190,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	 */
 	vma_iter_init(&vmi, mm, oldbrk);
 	next = vma_find(&vmi, newbrk + PAGE_SIZE + stack_guard_gap);
+
 	if (next && newbrk + PAGE_SIZE > vm_start_gap(next))
 		goto out;
 
