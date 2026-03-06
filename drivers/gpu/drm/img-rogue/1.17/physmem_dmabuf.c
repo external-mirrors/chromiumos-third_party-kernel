@@ -86,6 +86,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 #include "kernel_compatibility.h"
+#include "rgx_memallocflags.h"
 
 #define IS_PMR_READABLE(ui64PMRFlags)  (PVRSRV_CHECK_CPU_READABLE(ui64PMRFlags)        || \
                                         PVRSRV_CHECK_CPU_READ_PERMITTED(ui64PMRFlags)  || \
@@ -978,7 +979,7 @@ fail_pmr_ref:
 }
 
 /* Validate permissions of dma_buf FD against PMR flags */
-static void
+static PVRSRV_ERROR
 ValidatePMRFlags(fmode_t uiDmaBufFileMode,
                  PVRSRV_MEMALLOCFLAGS_T ui64PMRFlags)
 {
@@ -1019,6 +1020,12 @@ ValidatePMRFlags(fmode_t uiDmaBufFileMode,
 		         uiDmaBufFileMode,
 		         ui64PMRFlags));
 	}
+
+	/* Disallow importing as PMMETA_PROTECT PMR */
+	PVR_LOG_RETURN_IF_FALSE((ui64PMRFlags & PVRSRV_MEMALLOCFLAG_DEVICE_FLAG(PMMETA_PROTECT)) == 0ULL,
+	                        "Tried to import a dma-buf as PMMETA_PROTECT PMR",
+	                        PVRSRV_ERROR_INVALID_FLAGS);
+	return PVRSRV_OK;
 }
 
 static PVRSRV_MEMALLOCFLAGS_T
@@ -1212,7 +1219,13 @@ PhysmemImportSparseDmaBuf(CONNECTION_DATA *psConnection,
 		goto errUnlockReturn;
 	}
 
-	ValidatePMRFlags(psDmaBuf->file->f_mode, uiFlags);
+	eError = ValidatePMRFlags(psDmaBuf->file->f_mode, uiFlags);
+	if (eError != PVRSRV_OK)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: Validation of PMR flags failed", __func__));
+		goto errUnlockAndDMAPut;
+	}
+
 	uiFlags = GetAdjustedPMRAccessFlags(psDmaBuf->file->f_mode, uiFlags);
 
 	if (psDmaBuf->ops == &sPVRDmaBufOps)

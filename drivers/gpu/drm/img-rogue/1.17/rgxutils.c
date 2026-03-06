@@ -317,6 +317,15 @@ _ValidateCriticalPMR(PMR* psPMR, IMG_DEVMEM_SIZE_T ui64MinSize)
 		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, return_error);
 	}
 
+	if (PMR_GetType(psPMR) != PMR_TYPE_OSMEM &&
+	    PMR_GetType(psPMR) != PMR_TYPE_LMA)
+	{
+		PVR_DPF((PVR_DBG_ERROR,
+		         "%s: Critical PMR must be of OSMEM or LMA type",
+		         __func__));
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, return_error);
+	}
+
 	/* Critical PMR cannot be user CPU mappable */
 	if (PVRSRV_CHECK_CPU_READABLE(uiFlags) ||
 	    PVRSRV_CHECK_CPU_WRITEABLE(uiFlags))
