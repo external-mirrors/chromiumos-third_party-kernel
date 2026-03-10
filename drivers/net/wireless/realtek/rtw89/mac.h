@@ -908,6 +908,7 @@ struct rtw89_mac_gen_def {
 	struct rtw89_reg_def bfee_ctrl;
 	struct rtw89_reg_def narrow_bw_ru_dis;
 	struct rtw89_reg_def wow_ctrl;
+	struct rtw89_reg_def ra_agg_limit;
 
 	void (*hci_func_en)(struct rtw89_dev *rtwdev);
 	void (*dmac_func_pre_en)(struct rtw89_dev *rtwdev);
@@ -964,6 +965,14 @@ u32 rtw89_mac_reg_by_idx(struct rtw89_dev *rtwdev, u32 reg_base, u8 band)
 	const struct rtw89_mac_gen_def *mac = rtwdev->chip->mac_def;
 
 	return band == 0 ? reg_base : (reg_base + mac->band1_offset);
+}
+
+static inline void
+rtw89_write32_idx(struct rtw89_dev *rtwdev, u32 addr, u32 mask, u32 data, u8 band)
+{
+	addr = rtw89_mac_reg_by_idx(rtwdev, addr, band);
+
+	rtw89_write32_mask(rtwdev, addr, mask, data);
 }
 
 static inline
