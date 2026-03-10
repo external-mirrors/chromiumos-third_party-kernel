@@ -494,6 +494,8 @@ const struct rtw89_mac_gen_def rtw89_mac_gen_be = {
 		.mask = B_BE_RXTRIG_RU26_DIS,
 	},
 	.wow_ctrl = {.addr = R_BE_WOW_CTRL, .mask = B_BE_WOW_WOWEN,},
+	.ra_agg_limit = {.addr = R_BE_AMPDU_AGG_LIMIT,
+			 .mask = B_BE_RA_TRY_RATE_AGG_LMT_MASK,},
 
 	.bf_assoc = rtw89_mac_bf_assoc_be,
 
