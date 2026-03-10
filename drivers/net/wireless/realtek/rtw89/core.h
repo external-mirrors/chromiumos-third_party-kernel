@@ -1081,6 +1081,7 @@ struct rtw89_rx_desc_info {
 	bool addr_cam_valid;
 	u8 addr_cam_id;
 	u8 sec_cam_id;
+	u8 sec_type;
 	u8 mac_id;
 	u16 offset;
 	u16 rxd_len;
@@ -5542,6 +5543,12 @@ struct rtw89_mcc_info {
 	struct rtw89_mcc_config config;
 };
 
+struct rtw89_tid_stats {
+	s64 last_pn;
+	u16 last_sn;
+	bool started;
+};
+
 struct rtw89_dev {
 	struct ieee80211_hw *hw;
 	struct device *dev;
@@ -5562,6 +5569,8 @@ struct rtw89_dev {
 	struct rtw89_efuse efuse;
 	struct rtw89_traffic_stats stats;
 	struct rtw89_rfe_data *rfe_data;
+
+	struct rtw89_sta_link __rcu *assoc_link_on_macid[RTW89_MAX_MAC_ID_NUM];
 
 	/* ensures exclusive access from mac80211 callbacks */
 	struct mutex mutex;
@@ -5714,6 +5723,7 @@ struct rtw89_sta {
 	struct sk_buff_head roc_queue;
 
 	struct rtw89_ampdu_params ampdu_params[IEEE80211_NUM_TIDS];
+	struct rtw89_tid_stats tid_rx_stats[IEEE80211_NUM_TIDS];
 	DECLARE_BITMAP(ampdu_map, IEEE80211_NUM_TIDS);
 
 	u8 links_inst_valid_num;
@@ -5784,6 +5794,31 @@ u8 rtw89_sta_link_inst_get_index(struct rtw89_sta_link *rtwsta_link)
 	struct rtw89_sta *rtwsta = rtwsta_link->rtwsta;
 
 	return rtwsta_link - rtwsta->links_inst;
+}
+
+static inline void rtw89_assoc_link_set(struct rtw89_sta_link *rtwsta_link)
+{
+	struct rtw89_sta *rtwsta = rtwsta_link->rtwsta;
+	struct rtw89_dev *rtwdev = rtwsta->rtwdev;
+
+	rcu_assign_pointer(rtwdev->assoc_link_on_macid[rtwsta_link->mac_id],
+			   rtwsta_link);
+}
+
+static inline void rtw89_assoc_link_clr(struct rtw89_sta_link *rtwsta_link)
+{
+	struct rtw89_sta *rtwsta = rtwsta_link->rtwsta;
+	struct rtw89_dev *rtwdev = rtwsta->rtwdev;
+
+	rcu_assign_pointer(rtwdev->assoc_link_on_macid[rtwsta_link->mac_id],
+			   NULL);
+	synchronize_rcu();
+}
+
+static inline struct rtw89_sta_link *
+rtw89_assoc_link_rcu_dereference(struct rtw89_dev *rtwdev, u8 macid)
+{
+	return rcu_dereference(rtwdev->assoc_link_on_macid[macid]);
 }
 
 static inline void rtw89_tx_wait_release(struct rtw89_tx_wait_info *wait)
@@ -6975,6 +7010,9 @@ int rtw89_core_sta_link_remove(struct rtw89_dev *rtwdev,
 void rtw89_core_set_tid_config(struct rtw89_dev *rtwdev,
 			       struct ieee80211_sta *sta,
 			       struct cfg80211_tid_config *tid_config);
+void rtw89_core_tid_rx_stats_ctrl(struct rtw89_dev *rtwdev, struct rtw89_sta *rtwsta,
+				  struct ieee80211_ampdu_params *params, bool enable);
+void rtw89_core_tid_rx_stats_reset(struct rtw89_dev *rtwdev);
 void rtw89_core_rfkill_poll(struct rtw89_dev *rtwdev, bool force);
 void rtw89_check_quirks(struct rtw89_dev *rtwdev, const struct dmi_system_id *quirks);
 int rtw89_core_init(struct rtw89_dev *rtwdev);
