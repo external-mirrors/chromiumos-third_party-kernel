@@ -6,6 +6,8 @@
 #ifndef __LINUX_REVOCABLE_H
 #define __LINUX_REVOCABLE_H
 
+#include <linux/cleanup.h>
+
 struct device;
 struct revocable;
 struct revocable_provider;
@@ -19,11 +21,6 @@ struct revocable *revocable_alloc(struct revocable_provider *rp);
 void revocable_free(struct revocable *rev);
 void *revocable_try_access(struct revocable *rev) __acquires(&rev->rp->srcu);
 void revocable_release(struct revocable *rev) __releases(&rev->rp->srcu);
-
-#define DEFINE_FREE(_name, _type, _free) \
-	static inline void __free_##_name(void *p) { _type _T = *(_type *)p; _free; }
-#define __free(_name)	__cleanup(__free_##_name)
-#define __cleanup(func)	__attribute__((__cleanup__(func)))
 
 DEFINE_FREE(revocable, struct revocable *, if (_T) revocable_release(_T))
 
