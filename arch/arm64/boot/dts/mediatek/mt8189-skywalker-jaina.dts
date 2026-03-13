@@ -47,6 +47,11 @@
 	status = "disabled";
 };
 
+&mipi_tx_config0 {
+	mediatek,ssc-enable;
+	mediatek,ssc-range = <7>;
+};
+
 /* &ufshci's  vccq2-supply */
 &mt6359_vufs_ldo_reg {
 	regulator-always-on;
