@@ -4,6 +4,9 @@
  * Copyright (C) 2018-2024 Intel Corporation
  */
 
+#include <linux/cleanup.h>
+#include <linux/rcupdate.h>
+
 /* backport wiphy_ext_feature_set/_isset
  *
  * To do so, define our own versions thereof that check for a negative
@@ -315,23 +318,6 @@ static inline void backport_netif_napi_add(struct net_device *dev,
 #define ieee80211_amsdu_to_8023s(skb, list, addr, type, headroom, check_sa, check_da, mesh) \
 	ieee80211_amsdu_to_8023s(skb, list, addr, type, headroom, check_sa, check_da)
 
-#include <linux/cleanup.h>
-DEFINE_FREE(kfree, void *, if (!IS_ERR_OR_NULL(_T)) kfree(_T))
-
-DEFINE_LOCK_GUARD_0(rcu,
-	do {
-		rcu_read_lock();
-		/*
-		 * sparse doesn't call the cleanup function,
-		 * so just release immediately and don't track
-		 * the context. We don't need to anyway, since
-		 * the whole point of the guard is to not need
-		 * the explicit unlock.
-		 */
-		__release(RCU);
-	} while (0),
-	rcu_read_unlock())
-
 #define SKB_CONSUMED (SKB_DROP_REASON_MAX + 1)
 #define VISIBLE_IF_KUNIT static
 #define EXPORT_SYMBOL_IF_KUNIT(...)
@@ -431,10 +417,6 @@ static inline void backport_led_trigger_blink(struct led_trigger *trigger,
 	led_trigger_blink(trigger, &delay_on, &delay_off);
 }
 #define led_trigger_blink LINUX_BACKPORT(led_trigger_blink)
-
-#ifndef __cleanup
-#define __cleanup(func) __attribute__((__cleanup__(func)))
-#endif
 
 static inline u32
 iwl7000_ieee80211_mandatory_rates(struct ieee80211_supported_band *sband)
