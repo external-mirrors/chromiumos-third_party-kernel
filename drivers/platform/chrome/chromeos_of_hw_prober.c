@@ -101,7 +101,8 @@ static const struct chromeos_i2c_probe_data chromeos_i2c_probe_jaina_touchscreen
 		.res_node_compatible = "elan,ekth3500",
 		.supply_name = "vcc33",
 		.gpio_name = "reset",
-		.post_power_on_delay_ms = 150,
+		.post_power_on_delay_ms = 10,
+		.post_gpio_config_delay_ms = 150,
 	},
 };
 
