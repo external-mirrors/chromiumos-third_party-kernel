@@ -9,6 +9,8 @@
 #include <linux/prefetch.h>
 #include <linux/srcu.h>
 
+#include <linux/sched/sysctl.h>
+
 struct blk_mq_tags;
 struct blk_flush_queue;
 
@@ -136,6 +138,9 @@ struct request {
 	struct bio_crypt_ctx *crypt_ctx;
 	struct blk_crypto_keyslot *crypt_keyslot;
 #endif
+
+	/* Task that allocated this request. */
+	pid_t alloc_pid;
 
 	unsigned short ioprio;
 
@@ -832,6 +837,10 @@ void blk_mq_end_request_batch(struct io_comp_batch *ib);
  */
 static inline bool blk_mq_need_time_stamp(struct request *rq)
 {
+	/* Always have time-stamp when watchdog is active */
+	if (sysctl_hung_task_timeout_secs)
+		return true;
+
 	return (rq->rq_flags & (RQF_IO_STAT | RQF_STATS | RQF_USE_SCHED));
 }
 

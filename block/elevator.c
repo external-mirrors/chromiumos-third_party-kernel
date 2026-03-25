@@ -641,6 +641,8 @@ void elevator_init_mq(struct request_queue *q)
 
 	err = blk_mq_init_sched(q, e);
 
+	/* restart stall-watchdog after blk_mq_cancel_work_sync() */
+	blk_mq_start_stall_watchdog(q);
 	blk_mq_unfreeze_queue(q);
 
 	if (err) {

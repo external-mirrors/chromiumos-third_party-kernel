@@ -468,6 +468,8 @@ struct request_queue {
 	struct timer_list	timeout;
 	struct work_struct	timeout_work;
 
+	struct delayed_work	stall_work;
+
 	atomic_t		nr_active_requests_shared_tags;
 
 	struct blk_mq_tags	*sched_shared_tags;
