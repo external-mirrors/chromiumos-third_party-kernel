@@ -109,6 +109,8 @@ struct request {
 #endif
 	/* Time that this request was allocated for this IO. */
 	u64 start_time_ns;
+	/* Task that allocated this request. */
+	pid_t alloc_pid;
 	/* Time that I/O was submitted to the device. */
 	u64 io_start_time_ns;
 

@@ -374,6 +374,7 @@ static struct request *blk_mq_rq_ctx_init(struct blk_mq_alloc_data *data,
 	}
 	rq->timeout = 0;
 
+	rq->alloc_pid = current->pid;
 	rq->part = NULL;
 	rq->io_start_time_ns = 0;
 	rq->stats_sectors = 0;
@@ -1689,6 +1690,100 @@ static void blk_mq_timeout_work(struct work_struct *work)
 		}
 	}
 	blk_queue_exit(q);
+}
+
+static unsigned long blk_stall_warn_timeout(struct request_queue *q)
+{
+	unsigned long timeout = READ_ONCE(q->rq_timeout);
+
+	return max(timeout, sysctl_hung_task_timeout_secs * HZ / 2);
+}
+
+struct blk_stall_info {
+	u64		now;
+	unsigned int	threshold;
+	unsigned int	nr_inflight;
+	unsigned int	nr_stalled;
+};
+
+static unsigned int blk_rq_nr_bios(struct request *rq)
+{
+	unsigned int nr = 0;
+	struct bio *bio;
+
+	__rq_for_each_bio(bio, rq)
+		nr++;
+	return nr;
+}
+
+static bool blk_stall_check_rq(struct request *rq, void *priv)
+{
+	struct blk_stall_info *info = priv;
+	struct task_struct *task;
+	u64 age_ms;
+
+	if (blk_mq_rq_state(rq) != MQ_RQ_IN_FLIGHT)
+		return true;
+
+	info->nr_inflight++;
+
+	age_ms = div_u64(info->now - rq->start_time_ns, NSEC_PER_MSEC);
+	if (age_ms < jiffies_to_msecs(info->threshold))
+		return true;
+
+	info->nr_stalled++;
+
+	rcu_read_lock();
+	task = find_task_by_vpid(rq->alloc_pid);
+	pr_warn("  rq: tag=%d hctx=%u op=%s sector=%llu len=%u bios=%u age=%llu ms pid=%d comm=%s state=%c\n",
+		rq->tag, rq->mq_hctx->queue_num,
+		blk_op_str(req_op(rq)),
+		(unsigned long long)blk_rq_pos(rq),
+		blk_rq_bytes(rq), blk_rq_nr_bios(rq),
+		age_ms, rq->alloc_pid,
+		task ? task->comm : "(exited)",
+		task ? task_state_to_char(task) : '?');
+	rcu_read_unlock();
+
+	return true;
+}
+
+static void blk_stall_watchdog(struct work_struct *work)
+{
+	struct request_queue *q =
+		container_of(work, struct request_queue, stall_work.work);
+	const char *disk_name = "?";
+	unsigned int timeout;
+	struct blk_stall_info info = { };
+
+	timeout = blk_stall_warn_timeout(q);
+
+	if (blk_queue_dying(q))
+		return;
+
+	if (blk_queue_quiesced(q))
+		goto resched;
+
+	if (!percpu_ref_tryget(&q->q_usage_counter))
+		goto resched;
+
+	info.now = ktime_get_ns();
+	info.threshold = timeout;
+
+	blk_mq_queue_tag_busy_iter(q, blk_stall_check_rq, &info);
+
+	if (info.nr_stalled) {
+		if (q->disk)
+			disk_name = q->disk->disk_name;
+
+		pr_warn("blk: queue stall on %s: %u inflight, %u stalled (threshold %u ms)\n",
+			disk_name, info.nr_inflight, info.nr_stalled,
+			jiffies_to_msecs(timeout));
+	}
+	blk_queue_exit(q);
+
+resched:
+	kblockd_mod_delayed_work_on(WORK_CPU_UNBOUND, &q->stall_work, timeout);
 }
 
 struct flush_busy_ctx_data {
@@ -4407,6 +4502,10 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 
 	q->tag_set = set;
 
+	INIT_DELAYED_WORK(&q->stall_work, blk_stall_watchdog);
+	kblockd_mod_delayed_work_on(WORK_CPU_UNBOUND, &q->stall_work,
+				    blk_stall_warn_timeout(q));
+
 	q->queue_flags |= QUEUE_FLAG_MQ_DEFAULT;
 	blk_mq_update_poll_flag(q);
 
@@ -5002,6 +5101,7 @@ void blk_mq_cancel_work_sync(struct request_queue *q)
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
+	cancel_delayed_work_sync(&q->stall_work);
 	cancel_delayed_work_sync(&q->requeue_work);
 
 	queue_for_each_hw_ctx(q, hctx, i)
