@@ -3645,6 +3645,7 @@
 					<&dvfsrc MT6873_MASTER_HRT_MMSYS
 					 &dvfsrc MT6873_SLAVE_HRT_DDR_EMI>;
 			interconnect-names = "icc-bw", "icc-hrt-bw";
+			#interconnect-cells = <1>;
 			#mtk-interconnect-cells = <1>;
 			mediatek,larbs-supply = <&smi_larb0 &smi_larb1  &smi_larb2
 						 &smi_larb3  &smi_larb4  &smi_larb5  &smi_larb6
