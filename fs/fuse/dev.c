@@ -61,7 +61,12 @@ static bool request_expired(struct fuse_conn *fc, struct list_head *list)
 	req = list_first_entry_or_null(list, struct fuse_req, list);
 	if (!req)
 		return false;
-	return time_after(jiffies, req->create_time + fuse_watchdog_timeout());
+	if (time_after(jiffies, req->create_time + fuse_watchdog_timeout())) {
+		pr_warn("%s: request (opcode %u, unique: %llu) expired\n",
+			current->comm, req->in.h.opcode, req->in.h.unique);
+		return true;
+	}
+	return false;
 }
 
 static struct task_struct *fuse_watchdog_detach(struct fuse_conn *fc)
