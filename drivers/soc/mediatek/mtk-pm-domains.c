@@ -359,6 +359,11 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 	bool tmp;
 	int ret;
 
+	if (!scpsys_domain_is_on(pd)) {
+		dev_dbg(scpsys->dev, "%s: already off, skipping\n", genpd->name);
+		return 0;
+	}
+
 	ret = scpsys_bus_protect_enable(pd);
 	if (ret < 0)
 		return ret;

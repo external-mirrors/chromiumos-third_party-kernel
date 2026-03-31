@@ -653,7 +653,7 @@ static const struct scpsys_domain_data scpsys_domain_data_mt8188[] = {
 			SMI_RESET_WR(MT8188_SMI_LARB17A_RESET,
 				    MT8188_SMI_LARB17A_RESET_ADDR),
 		},
-		.caps = MTK_SCPD_KEEP_DEFAULT_OFF | MTK_SCPD_CLAMP_PROTECTION,
+		.caps = MTK_SCPD_KEEP_DEFAULT_OFF | MTK_SCPD_ACTIVE_WAKEUP | MTK_SCPD_CLAMP_PROTECTION,
 	},
 	[MT8188_POWER_DOMAIN_CAM_SUBB] = {
 		.name = "cam_subb",
@@ -675,7 +675,7 @@ static const struct scpsys_domain_data scpsys_domain_data_mt8188[] = {
 			SMI_RESET_WR(MT8188_SMI_LARB17B_RESET,
 				    MT8188_SMI_LARB17B_RESET_ADDR),
 		},
-		.caps = MTK_SCPD_KEEP_DEFAULT_OFF | MTK_SCPD_CLAMP_PROTECTION,
+		.caps = MTK_SCPD_KEEP_DEFAULT_OFF | MTK_SCPD_ACTIVE_WAKEUP | MTK_SCPD_CLAMP_PROTECTION,
 	},
 };
 

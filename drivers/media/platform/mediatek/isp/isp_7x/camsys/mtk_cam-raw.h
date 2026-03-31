@@ -227,9 +227,6 @@ struct mtk_raw_device {
 	void __iomem *yuv_base;
 	unsigned int num_clks;
 	struct clk_bulk_data *clk_b;
-#ifdef CONFIG_PM_SLEEP
-	struct notifier_block pm_notifier;
-#endif
 
 	unsigned int	fifo_size;
 	void		*msg_buffer;

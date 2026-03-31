@@ -55,8 +55,6 @@ static int debug_dump_fbc;
 module_param(debug_dump_fbc, int, 0644);
 MODULE_PARM_DESC(debug_dump_fbc, "debug: dump fbc");
 
-#define MTK_RAW_STOP_HW_TIMEOUT			(33)
-
 #define MTK_CAMSYS_RES_IDXMASK		0xF0
 #define MTK_CAMSYS_RES_BIN_TAG		0x10
 #define MTK_CAMSYS_RES_FRZ_TAG		0x20
@@ -2157,82 +2155,6 @@ static void raw_irq_handle_tg_overrun_err(struct mtk_raw_device *raw_dev,
 	}
 }
 
-static int mtk_raw_pm_suspend_prepare(struct mtk_raw_device *dev)
-{
-	u32 val;
-	int ret;
-
-	dev_dbg(dev->dev, "- %s\n", __func__);
-
-	if (pm_runtime_suspended(dev->dev))
-		return 0;
-
-	/* Disable ISP's view finder and wait for TG idle */
-	dev_dbg(dev->dev, "cam suspend, disable VF\n");
-	val = readl(dev->base + REG_TG_VF_CON);
-	writel(val & (~TG_VFDATA_EN), dev->base + REG_TG_VF_CON);
-	ret = readl_poll_timeout_atomic(dev->base + REG_TG_INTER_ST, val,
-					(val & TG_CAM_CS_MASK) == TG_IDLE_ST,
-					USEC_PER_MSEC, MTK_RAW_STOP_HW_TIMEOUT);
-	if (ret)
-		dev_dbg(dev->dev, "can't stop HW:%d:0x%x\n", ret, val);
-
-	/* Disable CMOS */
-	val = readl(dev->base + REG_TG_SEN_MODE);
-	writel(val & (~TG_SEN_MODE_CMOS_EN), dev->base + REG_TG_SEN_MODE);
-
-	/* Force ISP HW to idle */
-	ret = pm_runtime_force_suspend(dev->dev);
-	return ret;
-}
-
-static int mtk_raw_pm_post_suspend(struct mtk_raw_device *dev)
-{
-	u32 val;
-	int ret;
-
-	dev_dbg(dev->dev, "- %s\n", __func__);
-
-	if (pm_runtime_suspended(dev->dev))
-		return 0;
-
-	/* Force ISP HW to resume */
-	ret = pm_runtime_force_resume(dev->dev);
-	if (ret)
-		return ret;
-
-	/* Enable CMOS */
-	dev_dbg(dev->dev, "cam resume, enable CMOS/VF\n");
-	val = readl(dev->base + REG_TG_SEN_MODE);
-	writel(val | TG_SEN_MODE_CMOS_EN, dev->base + REG_TG_SEN_MODE);
-
-	/* Enable VF */
-	val = readl(dev->base + REG_TG_VF_CON);
-	writel(val | TG_VFDATA_EN, dev->base + REG_TG_VF_CON);
-
-	return 0;
-}
-
-static int raw_pm_notifier(struct notifier_block *nb,
-			   unsigned long action, void *data)
-{
-	struct mtk_raw_device *raw_dev =
-			container_of(nb, struct mtk_raw_device, pm_notifier);
-
-	switch (action) {
-	case PM_SUSPEND_PREPARE:
-		mtk_raw_pm_suspend_prepare(raw_dev);
-		break;
-	case PM_POST_SUSPEND:
-		mtk_raw_pm_post_suspend(raw_dev);
-		break;
-	default:
-		break;
-	}
-
-	return NOTIFY_OK;
-}
-
 static int mtk_raw_of_probe(struct platform_device *pdev,
 			    struct mtk_raw_device *raw)
 {
@@ -2321,14 +2243,6 @@ static int mtk_raw_of_probe(struct platform_device *pdev,
 	raw->num_clks = n_clks;
 	dev_info(dev, "clk_num:%d\n", raw->num_clks);
 
-#ifdef CONFIG_PM_SLEEP
-	raw->pm_notifier.notifier_call = raw_pm_notifier;
-	ret = register_pm_notifier(&raw->pm_notifier);
-	if (ret) {
-		dev_info(dev, "failed to register notifier block.\n");
-		return ret;
-	}
-#endif
 	return 0;
 }
 
@@ -4976,8 +4890,6 @@ static int mtk_raw_remove(struct platform_device *pdev)
 	struct v4l2_subdev *sd = &raw_dev->subdev;
 
 	dev_dbg(dev, "camsys | start %s\n", __func__);
-
-	unregister_pm_notifier(&raw_dev->pm_notifier);
 
 	pm_runtime_disable(dev);
 

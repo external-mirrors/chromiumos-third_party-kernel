@@ -3010,10 +3010,89 @@ static int __maybe_unused mtk_cam_pm_suspend(struct device *dev)
 {
 	struct mtk_cam_device *cam_dev = dev_get_drvdata(dev);
 	struct mtk_cam_ctx *ctx = cam_dev->ctxs;
+	struct mtk_raw_device *raw_dev;
+	unsigned int val;
+	int ret;
 
-	dev_dbg(dev, "- %s\n", __func__);
+	dev_dbg(dev, "%s: enter\n", __func__);
 
 	mtk_ctx_watchdog_stop(ctx);
+
+	if (!ctx->streaming || !ctx->pipe) {
+		dev_info(dev, "%s: camera not streaming, skip TG/VF disable\n",
+			 __func__);
+		return 0;
+	}
+
+	raw_dev = get_main_raw_dev(cam_dev, ctx->pipe);
+	if (!raw_dev || !raw_dev->base) {
+		dev_info(dev, "%s: no active raw device\n", __func__);
+		return 0;
+	}
+
+	if (pm_runtime_suspended(raw_dev->dev)) {
+		dev_info(dev, "%s: raw device already runtime suspended\n",
+			 __func__);
+		return 0;
+	}
+
+	dev_dbg(dev, "%s: disabling TG/VF for raw_dev %d\n",
+		 __func__, raw_dev->id);
+
+	val = readl(raw_dev->base + REG_TG_VF_CON);
+	writel(val & (~TG_VFDATA_EN), raw_dev->base + REG_TG_VF_CON);
+
+	ret = readl_poll_timeout_atomic(raw_dev->base + REG_TG_INTER_ST, val,
+					(val & TG_CAM_CS_MASK) == TG_IDLE_ST,
+					USEC_PER_MSEC, MTK_RAW_STOP_HW_TIMEOUT);
+	if (ret)
+		dev_warn(dev, "%s: TG idle timeout: 0x%x\n", __func__, val);
+
+	val = readl(raw_dev->base + REG_TG_SEN_MODE);
+	writel(val & (~TG_SEN_MODE_CMOS_EN), raw_dev->base + REG_TG_SEN_MODE);
+
+	dev_dbg(dev, "%s: TG/VF disabled, TG_VF_CON=0x%x TG_SEN_MODE=0x%x\n",
+		 __func__,
+		 readl(raw_dev->base + REG_TG_VF_CON),
+		 readl(raw_dev->base + REG_TG_SEN_MODE));
+
+	if (ctx->pipe->res_config.raw_num_used > 1) {
+		struct mtk_raw_device *raw_dev_sub =
+			get_sub_raw_dev(cam_dev, ctx->pipe);
+
+		if (raw_dev_sub && raw_dev_sub->base &&
+		    !pm_runtime_suspended(raw_dev_sub->dev)) {
+			val = readl(raw_dev_sub->base + REG_TG_VF_CON);
+			writel(val & (~TG_VFDATA_EN),
+			       raw_dev_sub->base + REG_TG_VF_CON);
+
+			val = readl(raw_dev_sub->base + REG_TG_SEN_MODE);
+			writel(val & (~TG_SEN_MODE_CMOS_EN),
+			       raw_dev_sub->base + REG_TG_SEN_MODE);
+
+			dev_dbg(dev, "%s: disabled TG/VF for sub raw_dev %d\n",
+				 __func__, raw_dev_sub->id);
+		}
+
+		if (ctx->pipe->res_config.raw_num_used == 3) {
+			struct mtk_raw_device *raw_dev_sub2 =
+				get_sub2_raw_dev(cam_dev, ctx->pipe);
+
+			if (raw_dev_sub2 && raw_dev_sub2->base &&
+			    !pm_runtime_suspended(raw_dev_sub2->dev)) {
+				val = readl(raw_dev_sub2->base + REG_TG_VF_CON);
+				writel(val & (~TG_VFDATA_EN),
+				       raw_dev_sub2->base + REG_TG_VF_CON);
+
+				val = readl(raw_dev_sub2->base + REG_TG_SEN_MODE);
+				writel(val & (~TG_SEN_MODE_CMOS_EN),
+				       raw_dev_sub2->base + REG_TG_SEN_MODE);
+
+				dev_dbg(dev, "%s: disabled TG/VF for sub2 raw_dev %d\n",
+					 __func__, raw_dev_sub2->id);
+			}
+		}
+	}
 
 	return 0;
 }
@@ -3022,10 +3101,85 @@ static int __maybe_unused mtk_cam_pm_resume(struct device *dev)
 {
 	struct mtk_cam_device *cam_dev = dev_get_drvdata(dev);
 	struct mtk_cam_ctx *ctx = cam_dev->ctxs;
+	struct mtk_raw_device *raw_dev;
+	unsigned int val;
 
-	dev_dbg(dev, "- %s\n", __func__);
+	dev_dbg(dev, "%s: enter\n", __func__);
 
-	mtk_ctx_watchdog_start(ctx, 4);
+	if (!ctx->streaming || !ctx->pipe) {
+		dev_info(dev, "%s: camera not streaming, skip TG/VF enable\n",
+			 __func__);
+		goto restart_watchdog;
+	}
+
+	raw_dev = get_main_raw_dev(cam_dev, ctx->pipe);
+	if (!raw_dev || !raw_dev->base) {
+		dev_info(dev, "%s: no active raw device\n", __func__);
+		goto restart_watchdog;
+	}
+
+	if (pm_runtime_suspended(raw_dev->dev)) {
+		dev_info(dev, "%s: raw device runtime suspended\n", __func__);
+		goto restart_watchdog;
+	}
+
+	dev_dbg(dev, "%s: enabling TG/VF for raw_dev %d\n",
+		 __func__, raw_dev->id);
+
+	val = readl(raw_dev->base + REG_TG_SEN_MODE);
+	writel(val | TG_SEN_MODE_CMOS_EN, raw_dev->base + REG_TG_SEN_MODE);
+
+	val = readl(raw_dev->base + REG_TG_VF_CON);
+	writel(val | TG_VFDATA_EN, raw_dev->base + REG_TG_VF_CON);
+
+	dev_dbg(dev, "%s: TG/VF enabled, TG_VF_CON=0x%x TG_SEN_MODE=0x%x\n",
+		 __func__,
+		 readl(raw_dev->base + REG_TG_VF_CON),
+		 readl(raw_dev->base + REG_TG_SEN_MODE));
+
+	if (ctx->pipe->res_config.raw_num_used > 1) {
+		struct mtk_raw_device *raw_dev_sub =
+			get_sub_raw_dev(cam_dev, ctx->pipe);
+
+		if (raw_dev_sub && raw_dev_sub->base &&
+		    !pm_runtime_suspended(raw_dev_sub->dev)) {
+			val = readl(raw_dev_sub->base + REG_TG_SEN_MODE);
+			writel(val | TG_SEN_MODE_CMOS_EN,
+			       raw_dev_sub->base + REG_TG_SEN_MODE);
+
+			val = readl(raw_dev_sub->base + REG_TG_VF_CON);
+			writel(val | TG_VFDATA_EN,
+			       raw_dev_sub->base + REG_TG_VF_CON);
+
+			dev_dbg(dev, "%s: enabled TG/VF for sub raw_dev %d\n",
+				 __func__, raw_dev_sub->id);
+		}
+
+		if (ctx->pipe->res_config.raw_num_used == 3) {
+			struct mtk_raw_device *raw_dev_sub2 =
+				get_sub2_raw_dev(cam_dev, ctx->pipe);
+
+			if (raw_dev_sub2 && raw_dev_sub2->base &&
+			    !pm_runtime_suspended(raw_dev_sub2->dev)) {
+				val = readl(raw_dev_sub2->base + REG_TG_SEN_MODE);
+				writel(val | TG_SEN_MODE_CMOS_EN,
+				       raw_dev_sub2->base + REG_TG_SEN_MODE);
+
+				val = readl(raw_dev_sub2->base + REG_TG_VF_CON);
+				writel(val | TG_VFDATA_EN,
+				       raw_dev_sub2->base + REG_TG_VF_CON);
+
+				dev_dbg(dev, "%s: enabled TG/VF for sub2 raw_dev %d\n",
+					 __func__, raw_dev_sub2->id);
+			}
+		}
+	}
+
+restart_watchdog:
+	if (watchdog_scenario(ctx)) {
+		dev_info(dev, "%s: restarting watchdog\n", __func__);
+		mtk_ctx_watchdog_start(ctx, 4);
+	}
 
 	return 0;
 }
