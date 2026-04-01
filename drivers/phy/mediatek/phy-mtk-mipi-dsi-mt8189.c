@@ -53,6 +53,12 @@
 #define RG_DSI_PLL_EN			BIT(4)
 #define RG_DSI_PLL_POSDIV		GENMASK(10, 8)
 
+#define RG_DSI_PLL_SDM_SSC_EN		BIT(1)
+#define RG_DSI_PLL_SDM_SSC_PRD		GENMASK(31, 16)
+#define RG_DSI_PLL_SDM_SSC_DELTA1	GENMASK(15, 0)
+#define RG_DSI_PLL_SDM_SSC_DELTA	GENMASK(31, 16)
+#define SSC_PRD_VALUE			0x1b1
+
 static int mtk_mipi_tx_pll_enable(struct clk_hw *hw)
 {
 	struct mtk_mipi_tx *mipi_tx = mtk_mipi_tx_from_clk_hw(hw);
@@ -96,6 +102,27 @@ static int mtk_mipi_tx_pll_enable(struct clk_hw *hw)
 	writel(pcw, base + MIPITX_PLL_CON0);
 	mtk_phy_update_field(base + MIPITX_PLL_CON1, RG_DSI_PLL_POSDIV, txdiv0);
 	mtk_phy_set_bits(base + MIPITX_PLL_CON1, RG_DSI_PLL_EN);
+
+	if (mipi_tx->ssc_enable) {
+		unsigned int data_rate_mbps = mipi_tx->data_rate / 1000000;
+		unsigned int delta1 = mipi_tx->ssc_range ? mipi_tx->ssc_range : 5;
+		u16 pdelta1;
+
+		pdelta1 = (u16)div_u64((u64)data_rate_mbps * txdiv * delta1 * 262144, 26ULL * 1000 * 433);
+
+		mtk_phy_update_bits(base + MIPITX_PLL_CON3,
+				    RG_DSI_PLL_SDM_SSC_DELTA1, pdelta1);
+		mtk_phy_update_bits(base + MIPITX_PLL_CON3,
+				    RG_DSI_PLL_SDM_SSC_DELTA,
+				    FIELD_PREP(RG_DSI_PLL_SDM_SSC_DELTA, pdelta1));
+		mtk_phy_update_bits(base + MIPITX_PLL_CON2,
+				    RG_DSI_PLL_SDM_SSC_PRD,
+				    FIELD_PREP(RG_DSI_PLL_SDM_SSC_PRD, SSC_PRD_VALUE));
+		mtk_phy_set_bits(base + MIPITX_PLL_CON2, RG_DSI_PLL_SDM_SSC_EN);
+
+		dev_dbg(mipi_tx->dev, "SSC: rate=%uMbps txdiv=%u pdelta1=0x%x\n",
+			data_rate_mbps, txdiv, pdelta1);
+	}
 
 	return 0;
 }

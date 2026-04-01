@@ -174,6 +174,9 @@ static int mtk_mipi_tx_probe(struct platform_device *pdev)
 	mipi_tx->is_cphy = of_property_read_bool(dev->of_node, "mediatek,is-cphy");
 	mipi_tx->pre_emphasis_en = of_property_read_bool(dev->of_node,
 							"mediatek,pre-emphasis-en");
+	mipi_tx->ssc_enable = of_property_read_bool(dev->of_node, "mediatek,ssc-enable");
+	if (of_property_read_u32(dev->of_node, "mediatek,ssc-range", &mipi_tx->ssc_range) < 0)
+		mipi_tx->ssc_range = 5;
 	ref_clk_name = __clk_get_name(ref_clk);
 
 	ret = of_property_read_string(dev->of_node, "clock-output-names",

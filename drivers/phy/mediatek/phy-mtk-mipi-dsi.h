@@ -39,6 +39,8 @@ struct mtk_mipi_tx {
 	struct clk_hw pll_hw;
 	bool is_cphy;
 	bool pre_emphasis_en;
+	bool ssc_enable;
+	u32 ssc_range;
 };
 
 struct mtk_mipi_tx *mtk_mipi_tx_from_clk_hw(struct clk_hw *hw);
