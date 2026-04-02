@@ -56,6 +56,7 @@
 		MATRIX_KEY(0x03, 0x0c, KEY_MUHENKAN)                    /* 63: 英數 */
 		MATRIX_KEY(0x01, 0x0c, KEY_RIGHTALT)                    /* 62: Right Alt */
 		MATRIX_KEY(0x05, 0x0f, KEY_HENKAN)                      /* 65: かな */
+		MATRIX_KEY(0x04, 0x0a, KEY_FN)                          /* 127: Left FN */
 		MATRIX_KEY(0x06, 0x0f, KEY_CAPSLOCK)                    /* 128: CAPS LOCK */
 		MATRIX_KEY(0x03, 0x00, KEY_LEFTMETA)                    /* 30: G KEY (Search) */
 	>;
