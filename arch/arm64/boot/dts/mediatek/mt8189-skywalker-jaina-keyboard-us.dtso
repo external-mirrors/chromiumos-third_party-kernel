@@ -50,6 +50,7 @@
 
 		/* Define keys missing from standard_v30.c for OS-level recognition */
 		MATRIX_KEY(0x00, 0x0d, KEY_RIGHTALT)                    /* 62: Right Alt */
+		MATRIX_KEY(0x04, 0x0a, KEY_FN)                          /* 127: Left FN */
 		MATRIX_KEY(0x06, 0x0f, KEY_CAPSLOCK)                    /* 128: CAPS LOCK */
 		MATRIX_KEY(0x03, 0x00, KEY_LEFTMETA)                    /* 30: G KEY (Search) */
 	>;
