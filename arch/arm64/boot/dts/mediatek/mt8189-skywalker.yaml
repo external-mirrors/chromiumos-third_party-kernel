@@ -219,6 +219,30 @@ tarkin:
       fw_config:
         mask: 0x0000000E
         value: 0x0000000A
+    mt8189-skywalker-tarkin-ca-kb-cm1406.dtbo:
+      fw_config:
+        mask: 0x0000001E
+        value: 0x00000010
+    mt8189-skywalker-tarkin-ca-kb-cm1406-backlight.dtbo:
+      fw_config:
+        mask: 0x0000001E
+        value: 0x00000012
+    mt8189-skywalker-tarkin-ca-kb-cm1405.dtbo:
+      fw_config:
+        mask: 0x0000001E
+        value: 0x00000014
+    mt8189-skywalker-tarkin-ca-kb-cm1405-backlight.dtbo:
+      fw_config:
+        mask: 0x0000001E
+        value: 0x00000016
+    mt8189-skywalker-tarkin-ca-kb-cm1505.dtbo:
+      fw_config:
+        mask: 0x0000001E
+        value: 0x00000018
+    mt8189-skywalker-tarkin-ca-kb-cm1505-backlight.dtbo:
+      fw_config:
+        mask: 0x0000001E
+        value: 0x0000001A
 
 vader:
   dtb:
