@@ -78,7 +78,6 @@
 		};
 	};
 	/delete-node/ dai-link-2;
-	/delete-node/ dai-link-6;
 };
 
 /* &spi1 is Fingerprint */
