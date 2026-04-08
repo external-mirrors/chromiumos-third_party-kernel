@@ -124,7 +124,7 @@
 	cbas {
 		compatible = "google,cros-cbas";
 		disable-whisker-input;
-		hid-i2c-tp = <&trackpad>;
+		hid-i2c-tp = <&touchpad>;
 	};
 };
 
@@ -201,7 +201,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchpad_pins>;
 		wakeup-source;
-		status = "okay";
+		status = "disabled";
 	};
 };
 
