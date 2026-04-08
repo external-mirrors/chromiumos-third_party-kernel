@@ -5893,17 +5893,6 @@ static int intel_atomic_check_bigjoiner(struct intel_atomic_state *state,
 			return -EINVAL;
 		}
 
-		/*
-		 * The state copy logic assumes the master crtc gets processed
-		 * before the slave crtc during the main compute_config loop.
-		 * This works because the crtcs are created in pipe order,
-		 * and the hardware requires master pipe < slave pipe as well.
-		 * Should that change we need to rethink the logic.
-		 */
-		if (WARN_ON(drm_crtc_index(&master_crtc->base) >
-			    drm_crtc_index(&slave_crtc->base)))
-			return -EINVAL;
-
 		drm_dbg_kms(&i915->drm,
 			    "[CRTC:%d:%s] Used as slave for big joiner master [CRTC:%d:%s]\n",
 			    slave_crtc->base.base.id, slave_crtc->base.name,
@@ -6305,9 +6294,7 @@ static int intel_atomic_check_config(struct intel_atomic_state *state,
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
 		if (!intel_crtc_needs_modeset(new_crtc_state)) {
-			if (intel_crtc_is_bigjoiner_slave(new_crtc_state))
-				copy_bigjoiner_crtc_state_nomodeset(state, crtc);
-			else
+			if (!intel_crtc_is_bigjoiner_slave(new_crtc_state))
 				intel_crtc_copy_uapi_to_hw_state_nomodeset(state, crtc);
 			continue;
 		}
@@ -6439,8 +6426,11 @@ int intel_atomic_check(struct drm_device *dev,
 		goto fail;
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
-		if (!intel_crtc_needs_modeset(new_crtc_state))
+		if (!intel_crtc_needs_modeset(new_crtc_state)) {
+			if (intel_crtc_is_bigjoiner_slave(new_crtc_state))
+				copy_bigjoiner_crtc_state_nomodeset(state, crtc);
 			continue;
+		}
 
 		if (intel_crtc_is_bigjoiner_slave(new_crtc_state)) {
 			drm_WARN_ON(&dev_priv->drm, new_crtc_state->uapi.enable);
