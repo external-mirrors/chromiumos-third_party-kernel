@@ -50,7 +50,7 @@
 
 		/* Define keys missing from standard_v30.c for OS-level recognition */
 		MATRIX_KEY(0x02, 0x0a, KEY_YEN)                         /* 14: ￥ */
-		MATRIX_KEY(0x06, 0x0a, KEY_RIGHTBRACE)                  /* 42: ] } */
+		MATRIX_KEY(0x06, 0x0a, KEY_BACKSLASH)                   /* 42: 」*/
 		MATRIX_KEY(0x00, 0x06, KEY_RO)                          /* 56: \ _ */
 		MATRIX_KEY(0x00, 0x0d, KEY_FN)                          /* 66: right FN */
 		MATRIX_KEY(0x03, 0x0c, KEY_MUHENKAN)                    /* 63: 英數 */
