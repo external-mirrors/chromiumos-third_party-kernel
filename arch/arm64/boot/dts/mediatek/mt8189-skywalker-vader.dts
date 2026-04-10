@@ -122,10 +122,6 @@
 	};
 };
 
-&target {
-	temperature = <95000>;
-};
-
 &ap_sar_sensor {
 	status = "disabled";
 };
