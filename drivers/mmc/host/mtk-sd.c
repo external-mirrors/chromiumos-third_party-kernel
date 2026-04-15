@@ -424,6 +424,14 @@ struct msdc_delay_phase {
 	u8 final_phase;
 };
 
+/* Simple state tracking for req_timeout delayed_work */
+enum msdc_timeout_state {
+	MSDC_TIMEOUT_IDLE = 0,
+	MSDC_TIMEOUT_SCHEDULED,
+	MSDC_TIMEOUT_EXECUTING,
+	MSDC_TIMEOUT_AFTER_REMOVE,
+};
+
 struct msdc_host {
 	struct device *dev;
 	const struct mtk_mmc_compatible *dev_comp;
@@ -451,6 +459,8 @@ struct msdc_host {
 	struct pinctrl_state *pins_uhs;
 	struct pinctrl_state *pins_eint;
 	struct delayed_work req_timeout;
+	enum msdc_timeout_state timeout_state;
+	spinlock_t timeout_lock;  /* Protects timeout_state */
 	int irq;		/* host interrupt */
 	int eint_irq;		/* interrupt from sdio device for waking up system */
 	struct reset_control *reset;
@@ -1075,11 +1085,15 @@ static void msdc_start_data(struct msdc_host *host, struct mmc_request *mrq,
 			    struct mmc_command *cmd, struct mmc_data *data)
 {
 	bool read;
+	unsigned long flags;
 
 	WARN_ON(host->data);
 	host->data = data;
 	read = data->flags & MMC_DATA_READ;
 
+	spin_lock_irqsave(&host->timeout_lock, flags);
+	host->timeout_state = MSDC_TIMEOUT_SCHEDULED;
+	spin_unlock_irqrestore(&host->timeout_lock, flags);
 	mod_delayed_work(system_wq, &host->req_timeout, DAT_TIMEOUT);
 	msdc_dma_setup(host, &host->dma, data);
 	sdr_set_bits(host->base + MSDC_INTEN, data_ints_mask);
@@ -1170,6 +1184,10 @@ static void msdc_request_done(struct msdc_host *host, struct mmc_request *mrq)
 	 * path will go here!
 	 */
 	cancel_delayed_work(&host->req_timeout);
+	/* Work was successfully cancelled, reset state to IDLE */
+	spin_lock_irqsave(&host->timeout_lock, flags);
+	host->timeout_state = MSDC_TIMEOUT_IDLE;
+	spin_unlock_irqrestore(&host->timeout_lock, flags);
 
 	spin_lock_irqsave(&host->lock, flags);
 	host->mrq = NULL;
@@ -1300,6 +1318,9 @@ static void msdc_start_command(struct msdc_host *host,
 	WARN_ON(host->cmd);
 	host->cmd = cmd;
 
+	spin_lock_irqsave(&host->timeout_lock, flags);
+	host->timeout_state = MSDC_TIMEOUT_SCHEDULED;
+	spin_unlock_irqrestore(&host->timeout_lock, flags);
 	mod_delayed_work(system_wq, &host->req_timeout, DAT_TIMEOUT);
 	if (!msdc_cmd_is_ready(host, mrq, cmd))
 		return;
@@ -1537,6 +1558,26 @@ static void msdc_request_timeout(struct work_struct *work)
 {
 	struct msdc_host *host = container_of(work, struct msdc_host,
 			req_timeout.work);
+	unsigned long flags;
+
+	spin_lock_irqsave(&host->timeout_lock, flags);
+
+	if (host->timeout_state == MSDC_TIMEOUT_IDLE) {
+		spin_unlock_irqrestore(&host->timeout_lock, flags);
+		return;
+	}
+
+	/* Detect if we're executing after remove */
+	if (host->timeout_state == MSDC_TIMEOUT_AFTER_REMOVE) {
+		host->timeout_state = MSDC_TIMEOUT_IDLE;
+		spin_unlock_irqrestore(&host->timeout_lock, flags);
+		dev_err(host->dev, "DETECT: timeout work executed after msdc_drv_remove()!\n");
+		/* Don't proceed to prevent the crash */
+		return;
+	}
+	/* Safe to proceed - if remove starts now, it will wait for us via cancel_delayed_work_sync() */
+	host->timeout_state = MSDC_TIMEOUT_EXECUTING;
+	spin_unlock_irqrestore(&host->timeout_lock, flags);
 
 	/* simulate HW timeout status */
 	dev_err(host->dev, "%s: aborting cmd/data/mrq\n", __func__);
@@ -1556,6 +1597,10 @@ static void msdc_request_timeout(struct work_struct *work)
 					host->data);
 		}
 	}
+	/* Reset state to indicate work is no longer running */
+	spin_lock_irqsave(&host->timeout_lock, flags);
+	host->timeout_state = MSDC_TIMEOUT_IDLE;
+	spin_unlock_irqrestore(&host->timeout_lock, flags);
 }
 
 static void __msdc_enable_sdio_irq(struct msdc_host *host, int enb)
@@ -2824,6 +2869,8 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	}
 	msdc_init_gpd_bd(host, &host->dma);
 	INIT_DELAYED_WORK(&host->req_timeout, msdc_request_timeout);
+	host->timeout_state = MSDC_TIMEOUT_IDLE;
+	spin_lock_init(&host->timeout_lock);
 	spin_lock_init(&host->lock);
 
 	platform_set_drvdata(pdev, mmc);
@@ -2895,14 +2942,33 @@ static int msdc_drv_remove(struct platform_device *pdev)
 {
 	struct mmc_host *mmc;
 	struct msdc_host *host;
+	unsigned long flags;
 
 	mmc = platform_get_drvdata(pdev);
 	host = mmc_priv(mmc);
 
 	pm_runtime_get_sync(host->dev);
 
-	platform_set_drvdata(pdev, NULL);
+	/* Remove the module first to ensure no new request could arrive */
 	mmc_remove_host(mmc);
+
+	/* Mark that remove has started - if timeout work fires after this, it's a bug */
+	spin_lock_irqsave(&host->timeout_lock, flags);
+	if (host->timeout_state == MSDC_TIMEOUT_SCHEDULED) {
+		dev_err(host->dev, "DETECT: timeout work still SCHEDULED at remove!\n");
+	} else if (host->timeout_state == MSDC_TIMEOUT_EXECUTING) {
+		dev_err(host->dev, "DETECT: timeout work is EXECUTING during remove!\n");
+	}
+	host->timeout_state = MSDC_TIMEOUT_AFTER_REMOVE;
+	spin_unlock_irqrestore(&host->timeout_lock, flags);
+
+	/* Cancel any pending timeout work and wait for running work to complete.
+	 * If work is running, it will see AFTER_REMOVE state and abort safely.
+	 */
+	cancel_delayed_work_sync(&host->req_timeout);
+
+	platform_set_drvdata(pdev, NULL);
+
 	msdc_deinit_hw(host);
 	msdc_gate_clock(host);
 
