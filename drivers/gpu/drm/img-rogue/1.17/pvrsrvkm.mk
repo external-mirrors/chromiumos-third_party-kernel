@@ -1,4 +1,4 @@
-pvrsrvkm_1_17-y += \
+pvrsrvkm-y += \
  client_cache_direct_bridge.o \
  server_cache_bridge.o \
  server_cmm_bridge.o \
@@ -136,11 +136,11 @@ pvrsrvkm_1_17-y += \
  interrupt_support.o \
  dma_support.o \
  vmm_type_stub.o
-pvrsrvkm_1_17-$(CONFIG_DRM_POWERVR_ROGUE_DEBUG) += \
+pvrsrvkm-$(CONFIG_DRM_POWERVR_ROGUE_DEBUG) += \
  client_ri_direct_bridge.o \
  server_ri_bridge.o \
  ri_server.o
-pvrsrvkm_1_17-$(CONFIG_DRM_POWERVR_ROGUE_PDUMP) += \
+pvrsrvkm-$(CONFIG_DRM_POWERVR_ROGUE_PDUMP) += \
  client_pdump_direct_bridge.o \
  server_pdump_bridge.o \
  client_pdumpctrl_direct_bridge.o \
@@ -156,11 +156,11 @@ pvrsrvkm_1_17-$(CONFIG_DRM_POWERVR_ROGUE_PDUMP) += \
  devicemem_pdump.o \
  devicememx_pdump.o
 ifneq ($(CONFIG_DRM_POWERVR_ROGUE_PDUMP),y)
-pvrsrvkm_1_17-y += \
+pvrsrvkm-y += \
  physmem_test.o
 endif
-pvrsrvkm_1_17-$(CONFIG_ARM)   += osfunc_arm.o
-pvrsrvkm_1_17-$(CONFIG_ARM64) += osfunc_arm64.o
-pvrsrvkm_1_17-$(CONFIG_EVENT_TRACING) += trace_events.o
-pvrsrvkm_1_17-$(CONFIG_RISCV) += osfunc_riscv.c
-pvrsrvkm_1_17-$(CONFIG_X86)   += osfunc_x86.o
+pvrsrvkm-$(CONFIG_ARM)   += osfunc_arm.o
+pvrsrvkm-$(CONFIG_ARM64) += osfunc_arm64.o
+pvrsrvkm-$(CONFIG_EVENT_TRACING) += trace_events.o
+pvrsrvkm-$(CONFIG_RISCV) += osfunc_riscv.c
+pvrsrvkm-$(CONFIG_X86)   += osfunc_x86.o

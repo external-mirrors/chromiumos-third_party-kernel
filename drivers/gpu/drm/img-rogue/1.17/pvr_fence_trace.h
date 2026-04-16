@@ -40,7 +40,7 @@
  */
 
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM pvr_fence_1_17
+#define TRACE_SYSTEM pvr_fence
 
 #if !defined(_TRACE_PVR_FENCE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_PVR_FENCE_H
