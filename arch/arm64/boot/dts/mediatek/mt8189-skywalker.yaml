@@ -204,6 +204,31 @@ padme:
         min: 1
         max: 1
 
+sheev:
+  dtb:
+    mt8189-skywalker-sheev.dtb: {}
+  dtbo:
+    mt8189-skywalker-sheev-kb.dtbo:
+      fw_config:
+        mask: 0x10
+        value: 0x00
+    mt8189-skywalker-sheev-kb-ca-fr.dtbo:
+      fw_config:
+        mask: 0x10
+        value: 0x10
+    mt8189-skywalker-sheev-touchscreen.dtbo:
+      fw_config:
+        mask: 0x20
+        value: 0x20
+    mt8189-skywalker-sheev-usb-a1.dtbo:
+      fw_config:
+        mask: 0xC
+        value: 0x4
+    mt8189-skywalker-sheev-usb-c1.dtbo:
+      fw_config:
+        mask: 0x3
+        value: 0x0
+
 tarkin:
   dtb:
     mt8189-skywalker-tarkin.dtb: {}
