@@ -72,8 +72,9 @@
 };
 
 &i2c6 {
-	status = "okay";
 	clock-frequency = <400000>;
+	vbus-supply = <&mt6359_vrf18_ldo_reg>;
+	status = "okay";
 
     //================================================
 #if HI1339_GT9768
@@ -161,14 +162,14 @@
 		reg = <0x58>;
 		pagesize = <32>;
 		vcc-supply = <&mt6359_vibr_ldo_reg>;
-		dovdd-supply = <&mt6359_vrf18_ldo_reg>;
 		device-id = <0>;
 	};
 };
 
 &i2c5 {
-	status = "okay";
 	clock-frequency = <400000>;
+	vbus-supply = <&mt6359_vcamio_ldo_reg>;
+	status = "okay";
 
     //================================================
 	camera-sub-sensor@31 {

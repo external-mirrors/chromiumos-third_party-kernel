@@ -86,8 +86,9 @@
 };
 
 &i2c5 {
-	status = "okay";
 	clock-frequency = <400000>;
+	vbus-supply = <&mt6359_vcamio_ldo_reg>;
+	status = "okay";
 
 	camera-sub-sensor@37 {
 		compatible =  "galaxycore,gc05a2";
@@ -124,8 +125,9 @@
 };
 
 &i2c6 {
-	status = "okay";
 	clock-frequency = <400000>;
+	vbus-supply = <&mt6359_vrf18_ldo_reg>;
+	status = "okay";
 
 	camera_main_lens: camera-main-lens@c {
 		compatible = "giantec,gt9769";
@@ -167,7 +169,6 @@
 		reg = <0x58>;
 		pagesize = <32>;
 		vcc-supply = <&mt6359_vibr_ldo_reg>;
-		dovdd-supply = <&mt6359_vrf18_ldo_reg>;
 		device-id = <0>;
 	};
 };
