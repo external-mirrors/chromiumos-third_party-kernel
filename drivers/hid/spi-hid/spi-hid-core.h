@@ -172,6 +172,7 @@ struct spi_hid {
 	u32 bus_error_count;
 	int bus_last_error;
 	u32 dir_count;
+	bool device_init_status;
 };
 
 int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,

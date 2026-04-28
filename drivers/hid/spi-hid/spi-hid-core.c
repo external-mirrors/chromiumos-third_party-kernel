@@ -364,6 +364,8 @@ static void spi_hid_panel_follower_work(struct work_struct *work)
 static int spi_hid_panel_follower_resume(struct drm_panel_follower *follower)
 {
 	struct spi_hid *shid = container_of(follower, struct spi_hid, panel_follower);
+	if (!shid->device_init_status)
+		return -ENODEV;
 
 	/*
 	 * Powering on a touchscreen can be a slow process. Queue the work to
@@ -378,6 +380,8 @@ static int spi_hid_panel_follower_resume(struct drm_panel_follower *follower)
 static int spi_hid_panel_follower_suspend(struct drm_panel_follower *follower)
 {
 	struct spi_hid *shid = container_of(follower, struct spi_hid, panel_follower);
+	if (!shid->device_init_status)
+		return -ENODEV;
 
 	cancel_work_sync(&shid->panel_follower_work);
 
@@ -1404,7 +1408,11 @@ static int spi_hid_core_init(struct spi_hid *shid)
 	unsigned long irqflags;
 	int error;
 
-	shid->ops->plat_init(shid->ops);
+	error = shid->ops->plat_init(shid->ops);
+	if (error) {
+		dev_err(dev, "%s: unable to init device: ret = %d.", __func__, error);
+		goto err;
+	}
 
 	shid->ops->assert_reset(shid->ops);
 
@@ -1432,9 +1440,11 @@ static int spi_hid_core_init(struct spi_hid *shid)
 	dev_dbg(dev, "%s: d3 -> %s.", __func__,
 		spi_hid_power_mode_string(shid->power_state));
 
+	shid->device_init_status = true;
 	return 0;
 
 err:
+	shid->device_init_status = false;
 	return error;
 }
 
@@ -1499,6 +1509,7 @@ int spi_hid_core_probe(struct spi_device *spi, struct spihid_ops *ops,
 		goto err;
 
 	if (shid->is_panel_follower) {
+		shid->device_init_status = true;
 		error = spi_hid_register_panel_follower(shid);
 		if (error) {
 			dev_err(dev, "%s: could not add panel follower.", __func__);

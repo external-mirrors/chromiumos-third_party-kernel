@@ -3375,6 +3375,8 @@ int ilitek_plat_probe(void)
 int ilitek_plat_remove(void)
 {
 	ILI_INFO("remove plat dev\n");
+	if (!ilits)
+		return 0;
 
 	ili_dev_remove();
 
