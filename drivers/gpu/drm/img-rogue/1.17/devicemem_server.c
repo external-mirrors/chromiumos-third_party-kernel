@@ -1339,7 +1339,7 @@ DevmemIntMapPMR2(DEVMEMINT_HEAP *psDevmemHeap,
 	if (eRemapPolicy == MMU_PTE_REMAP_POLICY_BLOCK && bIsSparse)
 	{
 		/* Don't allow sparse mappings if remap is disallowed */
-		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, ErrorReturnError);
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, ErrorUnlockPhysAddr);
 	}
 
 	if (bIsSparse)
