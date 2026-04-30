@@ -43,7 +43,7 @@
 	touchscreen@34 {
 		compatible = "elan,ekth6915";
 		reg = <0x34>;
-		hid-descr-addr = <0x0000>;
+		hid-descr-addr = <0x0001>;
 		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins>;
