@@ -42,8 +42,56 @@
 
 static int mtk_atomic_check(struct drm_device *dev, struct drm_atomic_state *state);
 
+/**
+ * mtk_atomic_commit_tail - Custom atomic commit tail for MediaTek DRM
+ * @state: atomic state
+ *
+ * This function extends the standard atomic commit tail to wait for CMDQ
+ * (GCE) completion. The standard drm_atomic_helper_wait_for_vblanks() only
+ * waits for one vblank interrupt, but CMDQ may take more than 1 vblank to
+ * complete hardware updates. We must wait for CMDQ callback before marking
+ * hardware as done to prevent EBUSY errors on subsequent pageflips.
+ */
+static void mtk_atomic_commit_tail(struct drm_atomic_state *state)
+{
+	struct drm_device *dev = state->dev;
+	struct drm_crtc *crtc;
+	struct drm_crtc_state *new_crtc_state;
+	int i;
+
+	/* Standard atomic commit sequence */
+	drm_atomic_helper_commit_modeset_disables(dev, state);
+	drm_atomic_helper_commit_modeset_enables(dev, state);
+	drm_atomic_helper_commit_planes(dev, state,
+					DRM_PLANE_COMMIT_ACTIVE_ONLY);
+
+	/* Wait for one vblank (standard behavior) */
+	drm_atomic_helper_wait_for_vblanks(dev, state);
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	/*
+	 * MTK-specific: Wait for CMDQ completion
+	 * CMDQ executes asynchronously on GCE hardware and may take multiple
+	 * vblanks to complete. We must wait for the callback before declaring
+	 * hardware done.
+	 */
+	for_each_new_crtc_in_state(state, crtc, new_crtc_state, i)
+		mtk_crtc_atomic_commit_complete(crtc);
+#endif
+
+	/*
+	 * Mark hardware as done only after CMDQ completion.
+	 * This ensures subsequent operations won't see stale busy state.
+	 * Must be called before cleanup_planes as it's unsafe to touch
+	 * new_crtc_state after hw_done.
+	 */
+	drm_atomic_helper_commit_hw_done(state);
+
+	drm_atomic_helper_cleanup_planes(dev, state);
+}
+
 static const struct drm_mode_config_helper_funcs mtk_drm_mode_config_helpers = {
-	.atomic_commit_tail = drm_atomic_helper_commit_tail_rpm,
+	.atomic_commit_tail = mtk_atomic_commit_tail,
 };
 
 static struct drm_framebuffer *
