@@ -10,3 +10,7 @@
 	model = "Google Ponyta sku4096 board";
 	compatible = "google,ponyta-sku4096", "google,ponyta", "mediatek,mt8186";
 };
+
+&usb_c1 {
+	status = "disabled";
+};
