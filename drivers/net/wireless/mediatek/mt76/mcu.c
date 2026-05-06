@@ -81,6 +81,11 @@ int mt76_mcu_skb_send_and_get_msg(struct mt76_dev *dev, struct sk_buff *skb,
 
 	mutex_lock(&dev->mcu.mutex);
 
+	if (mt76_is_mmio(dev) && atomic_read(&dev->bus_hung)) {
+		ret = -EIO;
+		goto out;
+	}
+
 	ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb, cmd, &seq);
 	if (ret < 0)
 		goto out;
