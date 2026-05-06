@@ -194,6 +194,17 @@ static const struct chromeos_i2c_probe_data chromeos_i2c_probe_grogu_touchscreen
 	},
 };
 
+static const struct chromeos_i2c_probe_data chromeos_i2c_probe_sheev_touchscreen = {
+	.cfg = &chromeos_i2c_probe_simple_touchscreen_cfg,
+	.opts = &(const struct i2c_of_probe_simple_opts) {
+		.res_node_compatible = "elan,ekth6a12nay",
+		.supply_name = "vcc33",
+		.gpio_name = "reset",
+		.post_power_on_delay_ms = 10,
+		.post_gpio_config_delay_ms = 100,
+	},
+};
+
 static const struct hw_prober_entry hw_prober_platforms[] = {
 	{
 		.compatible = "google,hana",
@@ -290,6 +301,14 @@ static const struct hw_prober_entry hw_prober_platforms[] = {
 		.data = &chromeos_i2c_probe_grogu_touchscreen,
 	}, {
 		.compatible = "google,grogu",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_dumb_trackpad,
+	}, {
+		.compatible = "google,sheev",
+		.prober = chromeos_i2c_component_prober,
+		.data = &chromeos_i2c_probe_sheev_touchscreen,
+	}, {
+		.compatible = "google,sheev",
 		.prober = chromeos_i2c_component_prober,
 		.data = &chromeos_i2c_probe_dumb_trackpad,
 	}
