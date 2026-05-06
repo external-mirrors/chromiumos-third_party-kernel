@@ -834,6 +834,8 @@ struct mt76_dev {
 		struct mt76_usb usb;
 		struct mt76_sdio sdio;
 	};
+
+	atomic_t bus_hung;
 };
 
 struct mt76_power_limits {
