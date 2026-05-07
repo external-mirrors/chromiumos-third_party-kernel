@@ -361,8 +361,7 @@
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&dpi_pins_default>;
 	pinctrl-1 = <&dpi_pins_sleep>;
-	/* TODO Re-enable after DP to Type-C port muxing can be described */
-	status = "disabled";
+	status = "okay";
 };
 
 &dpi_out {
