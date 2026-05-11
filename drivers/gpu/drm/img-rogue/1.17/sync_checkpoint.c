@@ -1834,7 +1834,7 @@ IMG_UINT32 SyncCheckpointStateFromUFO(PPVRSRV_DEVICE_NODE psDevNode,
 {
 	SYNC_CHECKPOINT *psSyncCheckpointInt;
 	PDLLIST_NODE psNode, psNext;
-	IMG_UINT32 ui32State = 0;
+	IMG_UINT32 ui32State = PVRSRV_SYNC_CHECKPOINT_SIGNALLED;
 	OS_SPINLOCK_FLAGS uiFlags;
 
 	OSSpinLockAcquire(psDevNode->hSyncCheckpointListLock, uiFlags);

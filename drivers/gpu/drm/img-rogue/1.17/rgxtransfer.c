@@ -962,6 +962,15 @@ PVRSRV_ERROR PVRSRVRGXSubmitTransferKM(RGX_SERVER_TQ_CONTEXT	*psTransferContext,
 		{
 			goto fail_prepare_loop;
 		}
+
+		eError = SyncAddrListAppendQBSsFromSyncBlocks(psSyncAddrListUpdate,
+		                                                        &ui32IntClientUpdateCount,
+		                                                        papauiClientUpdateUFODevVarBlock[i]);
+		if (eError != PVRSRV_OK)
+		{
+			goto fail_prepare_loop;
+		}
+
 		if (!pauiIntUpdateUFOAddress)
 		{
 			pauiIntUpdateUFOAddress = psSyncAddrListUpdate->pasFWAddrs;
@@ -1553,11 +1562,14 @@ PVRSRV_ERROR PVRSRVRGXSubmitTransferKM(RGX_SERVER_TQ_CONTEXT	*psTransferContext,
 */
 fail_cmdacquire:
 fail_prepare_loop:
+	/* Rollback current iteration */
+	SyncAddrListRollbackQBSs(&psTransferContext->asSyncAddrListUpdate[i]);
 
 	PVR_ASSERT(eError != PVRSRV_OK);
 
 	for (i=0;i<ui32PreparesDone;i++)
 	{
+		SyncAddrListRollbackQBSs(&psTransferContext->asSyncAddrListUpdate[i]);
 		SyncAddrListRollbackCheckpoints(psDeviceNode, &psTransferContext->asSyncAddrListFence[i]);
 		SyncAddrListRollbackCheckpoints(psDeviceNode, &psTransferContext->asSyncAddrListUpdate[i]);
 	}

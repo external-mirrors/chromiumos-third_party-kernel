@@ -54,6 +54,7 @@ pvrsrvkm_1_17-y += \
  pvrsrv_pool.o \
  srvcore.o \
  sync_checkpoint.o \
+ sync_qbs.o \
  sync_server.o \
  tlintern.o \
  tlserver.o \

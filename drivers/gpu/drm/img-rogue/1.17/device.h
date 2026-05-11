@@ -49,6 +49,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "ra.h"			/* RA_ARENA */
 #include "pvrsrv_device.h"
 #include "sync_checkpoint.h"
+#include "sync_qbs.h"
 #include "srvkm.h"
 #include "physheap.h"
 #include "sync_internal.h"
@@ -453,6 +454,7 @@ typedef struct _PVRSRV_DEVICE_NODE_
 	DLLIST_NODE				sSyncCheckpointSyncsList;
 
 	PSYNC_CHECKPOINT_CONTEXT hSyncCheckpointContext;
+	SYNC_QBS_CONTEXT		*hQBSContext;
 	PSYNC_PRIM_CONTEXT		hSyncPrimContext;
 
 	/* With this sync-prim we make sure the MMU cache is flushed

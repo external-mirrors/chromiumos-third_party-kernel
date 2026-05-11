@@ -323,10 +323,17 @@ PVRSRV_ERROR PVRSRVRGXKickSyncKM(RGX_SERVER_KICKSYNC_CONTEXT * psKickSyncContext
 							ui32ClientUpdateCount,
 							pauiClientUpdateUFODevVarBlock,
 							paui32ClientUpdateOffset);
-
 	if (eError != PVRSRV_OK)
 	{
 		goto fail_syncaddrlist;
+	}
+
+	eError = SyncAddrListAppendQBSsFromSyncBlocks(&psKickSyncContext->sSyncAddrListUpdate,
+	                                              &ui32ClientUpdateCount,
+	                                              pauiClientUpdateUFODevVarBlock);
+	if (eError != PVRSRV_OK)
+	{
+		goto fail_append_qbs;
 	}
 
 	if (ui32ClientUpdateCount > 0)
@@ -783,8 +790,10 @@ fail_create_output_fence:
 		SyncCheckpointFreeCheckpointListMem(apsFenceSyncCheckpoints);
 	}
 fail_resolve_fence:
-fail_syncaddrlist:
 out_unlock:
+	SyncAddrListRollbackQBSs(&psKickSyncContext->sSyncAddrListUpdate);
+fail_append_qbs:
+fail_syncaddrlist:
 	OSLockRelease(psKickSyncContext->hLock);
 	return eError;
 }

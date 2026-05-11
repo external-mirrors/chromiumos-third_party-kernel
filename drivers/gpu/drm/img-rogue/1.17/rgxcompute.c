@@ -510,6 +510,15 @@ PVRSRV_ERROR PVRSRVRGXKickCDMKM(RGX_SERVER_COMPUTE_CONTEXT	*psComputeContext,
 	{
 		goto err_populate_sync_addr_list;
 	}
+
+	eError = SyncAddrListAppendQBSsFromSyncBlocks(&psComputeContext->sSyncAddrListUpdate,
+	                                              &ui32IntClientUpdateCount,
+	                                              pauiClientUpdateUFODevVarBlock);
+	if (eError != PVRSRV_OK)
+	{
+		goto fail_append_qbs;
+	}
+
 	if (ui32IntClientUpdateCount && !pauiIntUpdateUFOAddress)
 	{
 		pauiIntUpdateUFOAddress = psComputeContext->sSyncAddrListUpdate.pasFWAddrs;
@@ -1072,7 +1081,6 @@ fail_free_buffer_sync_data:
 fail_resolve_input_fence:
 #endif /* defined(SUPPORT_BUFFER_SYNC) */
 
-err_populate_sync_addr_list:
 	/* Free the memory that was allocated for the sync checkpoint list returned by ResolveFence() */
 	if (apsFenceSyncCheckpoints)
 	{
@@ -1084,6 +1092,11 @@ err_populate_sync_addr_list:
 		OSFreeMem(pui32IntAllocatedUpdateValues);
 		pui32IntAllocatedUpdateValues = NULL;
 	}
+
+	SyncAddrListRollbackQBSs(&psComputeContext->sSyncAddrListUpdate);
+
+fail_append_qbs:
+err_populate_sync_addr_list:
 	OSLockRelease(psComputeContext->hLock);
 	return eError;
 }

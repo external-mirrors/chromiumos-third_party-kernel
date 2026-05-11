@@ -2533,8 +2533,6 @@ PVRSRV_ERROR PVRSRVCommonDeviceDestroy(PVRSRV_DEVICE_NODE *psDeviceNode)
 
 	SyncCheckpointDeinit(psDeviceNode);
 
-	SyncServerDeinit(psDeviceNode);
-
 	MMU_DeInitDevice(psDeviceNode);
 
 #if defined(SUPPORT_RGX)
@@ -2569,6 +2567,8 @@ PVRSRV_ERROR PVRSRVCommonDeviceDestroy(PVRSRV_DEVICE_NODE *psDeviceNode)
 		PvzConnectionDeInit();
 	}
 	SysDevDeInit(psDeviceNode->psDevConfig);
+
+	SyncServerDeinit(psDeviceNode);
 
 	PVRSRVCleanupThreadWaitForDevice(psDeviceNode);
 

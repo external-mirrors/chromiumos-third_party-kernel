@@ -626,6 +626,15 @@ PVRSRV_ERROR PVRSRVRGXTDMSubmitTransferKM(
 		{
 			goto fail_populate_sync_addr_list;
 		}
+
+		eError = SyncAddrListAppendQBSsFromSyncBlocks(&psTransferContext->sSyncAddrListUpdate,
+		                                              &ui32IntClientUpdateCount,
+		                                              pauiClientUpdateUFODevVarBlock);
+		if (eError != PVRSRV_OK)
+		{
+			goto fail_append_qbs;
+		}
+
 		paui32IntUpdateValue    = paui32ClientUpdateValue;
 		pauiIntUpdateUFOAddress = psTransferContext->sSyncAddrListUpdate.pasFWAddrs;
 
@@ -1166,7 +1175,8 @@ fail_resolve_input_fence:
 		kfree(apsBufferFenceSyncCheckpoints);
 	}
 #endif /* defined(SUPPORT_BUFFER_SYNC) */
-
+fail_append_qbs:
+	SyncAddrListRollbackQBSs(&psTransferContext->sSyncAddrListUpdate);
 fail_populate_sync_addr_list:
 	PVR_ASSERT(eError != PVRSRV_OK);
 	OSFreeMem(psCmdHelper);
