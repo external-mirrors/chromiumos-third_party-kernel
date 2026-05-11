@@ -1323,11 +1323,44 @@ static enum blk_eh_timer_return nvme_timeout(struct request *req)
 	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
 	struct nvme_queue *nvmeq = req->mq_hctx->driver_data;
 	struct nvme_dev *dev = nvmeq->dev;
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+	struct pci_dev *rp_dev = pcie_find_root_port(pdev);
 	struct request *abort_req;
 	struct nvme_command cmd = { };
-	struct pci_dev *pdev = to_pci_dev(dev->dev);
 	u32 csts = readl(dev->bar + NVME_REG_CSTS);
+	u32 l1sub = 0;
+	u32 intel_ltssm = 0xFFFFFFFF;
+	int l1ss_cap;
+	u16 lnksta = 0;
+	u16 lnkctl = 0;
+	u16 rp_lnksta = 0;
+	u16 rp_lnkctl = 0;
 
+	/* Read standard Endpoint PCIe Link Status and Control */
+	pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
+	pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &lnkctl);
+
+	/* Read upstream Root Port status and vendor-specific Intel LTSSM register */
+	if (rp_dev) {
+		pcie_capability_read_word(rp_dev, PCI_EXP_LNKSTA, &rp_lnksta);
+		pcie_capability_read_word(rp_dev, PCI_EXP_LNKCTL, &rp_lnkctl);
+		if (rp_dev->vendor == PCI_VENDOR_ID_INTEL)
+			pci_read_config_dword(rp_dev, 0xFC, &intel_ltssm);
+	}
+
+	/* Read L1 Substates link capability if present */
+	l1ss_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_L1SS);
+	if (l1ss_cap)
+		pci_read_config_dword(pdev, l1ss_cap + PCI_L1SS_CTL1, &l1sub);
+
+	dev_warn_ratelimited(dev->ctrl.device,
+		"NVMe FIELD TRACE:\n"
+		"   -> ENDPOINT  [Slot: %s]: CSTS=0x%08x, LNKSTA=0x%04x (DLL=%s), LnkCtl=0x%04x, L1Sub=0x%08x, PwrStateRaw=%d\n"
+		"   -> ROOT PORT [Slot: %s]: LNKSTA=0x%04x (DLL=%s), LnkCtl=0x%04x, RawLTSSM=0x%08x (State=%d)\n",
+		pci_name(pdev), csts, lnksta, (lnksta & PCI_EXP_LNKSTA_DLLLA) ? "Active" : "Down", lnkctl, l1sub, (int)pdev->current_state,
+		rp_dev ? pci_name(rp_dev) : "UNKNOWN", rp_lnksta, (rp_lnksta & PCI_EXP_LNKSTA_DLLLA) ? "Active" : "Down", rp_lnkctl, intel_ltssm, (intel_ltssm & 0x3F));
+
+	WARN_ON(1);
 	/*
 	 * Shutdown the device immediately if we see it is disconnected. This
 	 * unblocks PCIe error handling if the nvme driver is waiting in

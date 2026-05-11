@@ -588,6 +588,10 @@ static void pci_pm_bridge_power_up_actions(struct pci_dev *pci_dev)
 		 * devices below as disconnected to make sure we don't
 		 * attempt to resume them.
 		 */
+		dev_warn_ratelimited(&pci_dev->dev,
+				     "PCIe bridge resume timeout: ret=%d, state=%d\n",
+				     ret, pci_dev->current_state);
+
 		pci_walk_bus(pci_dev->subordinate, pci_dev_set_disconnected,
 			     NULL);
 		return;

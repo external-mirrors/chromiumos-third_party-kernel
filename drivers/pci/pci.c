@@ -5008,6 +5008,9 @@ static int pcie_wait_for_link_status(struct pci_dev *pdev,
 		msleep(1);
 	} while (time_before(jiffies, end_jiffies));
 
+	dev_warn_ratelimited(&pdev->dev, "PCIe link timeout: LNKSTA=0x%04x (Target:%s)\n",
+			     lnksta, active ? "Active" : "Inactive");
+
 	return -ETIMEDOUT;
 }
 
