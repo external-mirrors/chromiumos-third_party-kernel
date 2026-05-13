@@ -176,6 +176,7 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 		kfree(cmdq_handle);
 		return;
 	}
+	init_completion(&cmdq_handle->done);
 
 	if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
 		dev_err(crtc->dev->dev, "mtk_crtc %d failed to create secure cmdq packet data\n",
@@ -215,22 +216,24 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 				   cmdq_handle->cmd_buf_size,
 				   DMA_TO_DEVICE);
 
-	/*
-	 * Reinit completion before sending CMDQ command to ensure proper
-	 * sequencing. This prevents race where callback completes before
-	 * we start waiting.
-	 */
-	reinit_completion(&mtk_crtc->sec_cmdq_complete);
-
 	mbox_send_message(mtk_crtc->sec_cmdq_client.chan, cmdq_handle);
 	mbox_client_txdone(mtk_crtc->sec_cmdq_client.chan, 0);
 
 	/* Wait for sec state to be disabled by cmdq */
-	ret = wait_for_completion_timeout(&mtk_crtc->sec_cmdq_complete,
-					  msecs_to_jiffies(500));
-	if (ret == 0)
+	ret = wait_for_completion_timeout(&cmdq_handle->done, msecs_to_jiffies(500));
+	if (ret == 0) {
 		DRM_WARN("CRTC %d: secure CMDQ completion timeout after 500ms\n",
 			 drm_crtc_index(crtc));
+		/*
+		 * If timeout, flush to abort the pending command and ensure
+		 * callback won't be called after we free cmdq_handle.
+		 */
+		mbox_flush(mtk_crtc->sec_cmdq_client.chan, 2000);
+	}
+
+	/* Free secure cmdq packet after completion */
+	mtk_drm_cmdq_pkt_destroy(cmdq_handle);
+	kfree(cmdq_handle);
 
 	mutex_lock(&mtk_crtc->hw_lock);
 	mtk_crtc->sec_on = false;
@@ -690,13 +693,8 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 	unsigned long flags;
 	bool is_secure = (data->pkt && data->pkt->sec_data);
 
-	if (data->sta < 0) {
-		if (is_secure) {
-			mtk_drm_cmdq_pkt_destroy(data->pkt);
-			kfree(data->pkt);
-		}
+	if (data->sta < 0)
 		return;
-	}
 
 	if (is_secure)
 		mtk_crtc = container_of(cmdq_cl, struct mtk_crtc, sec_cmdq_client);
@@ -744,22 +742,13 @@ ddp_cmdq_cb_out:
 
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
-	if (is_secure) {
-		mtk_drm_cmdq_pkt_destroy(data->pkt);
-		kfree(data->pkt);
-	}
-
 	/*
-	 * The new mtk_crtc_update_config() will do the pre update HRT earlier than
-	 * the ddp_cmdq_cb() called from mtk_crtc_disable_secure_state(), that may
-	 * cause the underflow issue if mtk_crtc_post_update_hrt_state() scales down
-	 * the HRT for the non-disabled layer in mtk_crtc_disable_secure_state().
-	 * So skip triggering the post update HRT to avoid this timing issue.
+	 * For non-secure commands, trigger post update HRT.
+	 * Secure commands skip this to avoid underflow issues when
+	 * mtk_crtc_update_config() does pre-update HRT earlier than
+	 * this callback.
 	 */
-	if (is_secure) {
-		complete(&mtk_crtc->sec_cmdq_complete);
-	} else {
-		/* For post update HRT */
+	if (!is_secure) {
 		atomic_set(&mtk_crtc->cmdq_done, 1);
 		wake_up(&mtk_crtc->cmdq_done_wq);
 	}
@@ -767,19 +756,10 @@ ddp_cmdq_cb_out:
 	mtk_crtc->cmdq_vblank_cnt = 0;
 
 	/*
-	 * Signal atomic commit completion immediately in IRQ context for
-	 * responsive frame submission. The kthread will still handle HRT/QoS
-	 * updates asynchronously.
+	 * Signal completion. For secure packets, the packet will be freed
+	 * after wait_for_completion_timeout() returns in the caller.
 	 */
-	complete(&mtk_crtc->cmdq_complete);
-
-	if (state->fast_modeset) {
-		/*
-		 * Signal dedicated completion to distinguish fast_modeset
-		 * from normal update_config operations.
-		 */
-		complete(&mtk_crtc->fast_modeset_done);
-	}
+	complete(&data->pkt->done);
 }
 #endif
 
@@ -1138,16 +1118,20 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 				  drm_crtc_index(&mtk_crtc->base));
 			goto update_config_err;
 		}
+		init_completion(&cmdq_handle->done);
+
 		if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
 			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet data\n",
 				  drm_crtc_index(&mtk_crtc->base));
 			goto update_config_err;
 		}
 
+		mtk_crtc->sec_cmdq_handle = cmdq_handle;
 		cmdq_client = mtk_crtc->sec_cmdq_client;
 	} else if (mtk_crtc->cmdq_client.chan) {
 		mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
 		mtk_crtc->cmdq_handle.cmd_buf_size = 0;
+		reinit_completion(&mtk_crtc->cmdq_handle.done);
 
 		cmdq_client =  mtk_crtc->cmdq_client;
 		cmdq_handle = &mtk_crtc->cmdq_handle;
@@ -1157,6 +1141,8 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 	}
 
 	if (cmdq_client.chan && cmdq_handle) {
+		mtk_crtc->cmdq_complete = &cmdq_handle->done;
+
 		cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
 		cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
 
@@ -1184,13 +1170,6 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 		mtk_crtc->config_updating = false;
 		spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
-
-		/*
-		 * Reinit completion before sending CMDQ command to ensure proper
-		 * sequencing. This prevents race where callback completes before
-		 * we start waiting.
-		 */
-		reinit_completion(&mtk_crtc->cmdq_complete);
 
 		mbox_send_message(cmdq_client.chan, cmdq_handle);
 		mbox_client_txdone(cmdq_client.chan, 0);
@@ -1599,6 +1578,7 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 				cmdq_handle = &mtk_crtc->cmdq_handle;
 				mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
 				cmdq_handle->cmd_buf_size = 0;
+				reinit_completion(&cmdq_handle->done);
 				cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
 				cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
 			}
@@ -1614,10 +1594,9 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 							   cmdq_handle->pa_base,
 							   cmdq_handle->cmd_buf_size,
 							   DMA_TO_DEVICE);
-				reinit_completion(&mtk_crtc->fast_modeset_done);
 				mbox_send_message(mtk_crtc->cmdq_client.chan, cmdq_handle);
 				mbox_client_txdone(mtk_crtc->cmdq_client.chan, 0);
-				ret = wait_for_completion_timeout(&mtk_crtc->fast_modeset_done,
+				ret = wait_for_completion_timeout(&cmdq_handle->done,
 								  msecs_to_jiffies(50));
 				if (!ret)
 					dev_warn(crtc->dev->dev,
@@ -2044,8 +2023,6 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 	}
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	init_completion(&mtk_crtc->fast_modeset_done);
-	init_completion(&mtk_crtc->cmdq_complete);
 	mtk_crtc->cmdq_client.client.dev = mtk_crtc->mmsys_dev[priv->data->mmsys_id];
 	mtk_crtc->cmdq_client.client.tx_block = false;
 	mtk_crtc->cmdq_client.client.knows_txdone = true;
@@ -2078,6 +2055,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 					drm_crtc_index(&mtk_crtc->base));
 				goto cmdq_err;
 			}
+			init_completion(&mtk_crtc->cmdq_handle.done);
 		}
 
 		/* for callback to kthread communication */
@@ -2106,11 +2084,8 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 			mtk_crtc->sec_cmdq_client.chan = NULL;
 		}
 
-		if (mtk_crtc->sec_cmdq_client.chan) {
-			/* for sending blocking cmd in crtc disable */
-			init_completion(&mtk_crtc->sec_cmdq_complete);
+		if (mtk_crtc->sec_cmdq_client.chan)
 			priv->sec_mbox_index++;
-		}
 	}
 
 cmdq_err:
@@ -2171,6 +2146,15 @@ void mtk_crtc_atomic_commit_complete(struct drm_crtc *crtc)
 		return;
 
 	/*
+	 * Skip if no pending CMDQ command.
+	 * cmdq_complete is set by mtk_crtc_update_config() when sending a command,
+	 * and cleared by mtk_crtc_atomic_commit_complete() after waiting for completion.
+	 * This prevents double-waiting and waiting on stale completion.
+	 */
+	if (!mtk_crtc->cmdq_complete)
+		return;
+
+	/*
 	 * Wait for CMDQ completion using completion API.
 	 * This provides independent synchronization per atomic commit without
 	 * interfering with the callback-kthread communication mechanism.
@@ -2186,12 +2170,33 @@ void mtk_crtc_atomic_commit_complete(struct drm_crtc *crtc)
 	 * Note: reinit_completion() is called in mtk_crtc_update_config() before
 	 * sending the CMDQ command to ensure proper sequencing.
 	 */
-	ret = wait_for_completion_timeout(&mtk_crtc->cmdq_complete,
+	ret = wait_for_completion_timeout(mtk_crtc->cmdq_complete,
 					  msecs_to_jiffies(500));
+
+	/*
+	 * Clear cmdq_complete immediately after waiting to prevent:
+	 * 1. Double-waiting from mtk_atomic_commit_tail() after disable
+	 * 2. Use-After-Free when sec_cmdq_handle is freed below
+	 */
+	mtk_crtc->cmdq_complete = NULL;
 
 	if (ret == 0)
 		DRM_WARN("CRTC %d: CMDQ completion timeout after 500ms\n",
 			 drm_crtc_index(crtc));
+
+	/* Free secure cmdq packet after completion */
+	if (mtk_crtc->sec_cmdq_handle) {
+		/*
+		 * If timeout, flush to abort the pending command and ensure
+		 * callback won't be called after we free sec_cmdq_handle.
+		 */
+		if (ret == 0)
+			mbox_flush(mtk_crtc->sec_cmdq_client.chan, 2000);
+
+		mtk_drm_cmdq_pkt_destroy(mtk_crtc->sec_cmdq_handle);
+		kfree(mtk_crtc->sec_cmdq_handle);
+		mtk_crtc->sec_cmdq_handle = NULL;
+	}
 }
 
 void mtk_crtc_destroy_crc_cmdq(struct mtk_crtc_crc *crc)

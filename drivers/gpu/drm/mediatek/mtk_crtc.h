@@ -82,11 +82,10 @@ struct mtk_crtc {
 	wait_queue_head_t		cmdq_done_wq;
 	struct task_struct		*cmdq_done_task;
 	atomic_t			cmdq_done;
-	struct completion               fast_modeset_done;
-	struct completion		cmdq_complete;
+	struct completion		*cmdq_complete;
 
 	struct cmdq_client		sec_cmdq_client;
-	struct completion		sec_cmdq_complete;
+	struct cmdq_pkt			*sec_cmdq_handle;
 #endif
 
 	struct device			*mmsys_dev[MAX_MMSYS];
