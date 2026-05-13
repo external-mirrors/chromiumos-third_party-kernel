@@ -35,9 +35,10 @@ static void mtk_apu_update_power_dtime(int dtime)
 	power_dtime = dtime;
 }
 
-static void mtk_apu_timer_callback(struct timer_list *timer)
+static void mtk_apu_power_off_work(struct work_struct *work)
 {
-	struct mtk_apu *apu = container_of(timer, struct mtk_apu, power_off_timer);
+	struct mtk_apu *apu = container_of(to_delayed_work(work),
+					   struct mtk_apu, power_off_work);
 
 	mtk_apu_power_on_off(apu->pdev, MTK_APU_IPI_MIDDLEWARE, 0, 1);
 }
@@ -46,12 +47,11 @@ static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 {
 	uint64_t ts = div_u64(sched_clock(), NSEC_PER_MSEC);
 	uint64_t dtime_ts;
-	unsigned long power_dtime = 0;
+	unsigned long power_dtime_jiffies;
 	struct device *power_dev = &(apu->power_pdev)->dev;
 	int ret;
 
-	dtime = (dtime > MAX_DTIME)? MAX_DTIME: dtime;
-	dtime = (dtime < MIN_DTIME)? MIN_DTIME: dtime;
+	dtime = clamp_val(dtime, MIN_DTIME, MAX_DTIME);
 
 	dtime_ts = ts + dtime;
 	if (apu->cur_dtime_ts < dtime_ts)
@@ -59,16 +59,29 @@ static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 	else
 		return;
 
-	if (timer_pending(&apu->power_off_timer)) {
+	/*
+	 * A later IPI extended the power-off deadline, so cancel the
+	 * pending work and re-arm it further out below.
+	 */
+	if (cancel_delayed_work_sync(&apu->power_off_work)) {
+		/*
+		 * The cancelled work would have run mtk_apu_power_on_off()
+		 * with off=1, dropping the runtime PM reference that the
+		 * previous IPI send took when it scheduled the work. Since
+		 * we prevented the work from running, release that reference
+		 * here to keep get/put balanced -- the re-armed work below
+		 * will then pair with the get taken by the current IPI send.
+		 * Without this put the refcount would only ever grow and the
+		 * device would never actually power off.
+		 */
 		ret = pm_runtime_put_sync(power_dev);
 		if (ret != 0)
 			dev_err(apu->dev, "%s: power off fail id=%d, ret=%d\n",
 				__func__, MTK_APU_IPI_MIDDLEWARE, ret);
 	}
 
-	power_dtime = msecs_to_jiffies(apu->cur_dtime_ts - ts);
-
-	mod_timer(&apu->power_off_timer, jiffies + power_dtime);
+	power_dtime_jiffies = msecs_to_jiffies(apu->cur_dtime_ts - ts);
+	schedule_delayed_work(&apu->power_off_work, power_dtime_jiffies);
 }
 
 static uint32_t calculate_csum(void *data, uint32_t len)
@@ -564,7 +577,7 @@ int mtk_apu_ipi_init(struct platform_device *pdev, struct mtk_apu *apu)
 		goto remove_rpmsg_subdev;
 	}
 
-	timer_setup(&apu->power_off_timer, mtk_apu_timer_callback, 0);
+	INIT_DELAYED_WORK(&apu->power_off_work, mtk_apu_power_off_work);
 	mtk_apu_init_mdw_dtime_setting(mtk_apu_update_power_dtime);
 
 	return 0;
@@ -578,8 +591,7 @@ remove_rpmsg_subdev:
 
 void mtk_apu_ipi_remove(struct mtk_apu *apu)
 {
-	if (timer_pending(&apu->power_off_timer))
-		del_timer(&apu->power_off_timer);
+	cancel_delayed_work_sync(&apu->power_off_work);
 
 	if (!IS_ERR(apu->ch))
 		mbox_free_channel(apu->ch);

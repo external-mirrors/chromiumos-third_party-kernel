@@ -165,7 +165,7 @@ struct mtk_apu {
 	void *resv_mem_va;
 
 	/* delay power off */
-	struct timer_list power_off_timer;
+	struct delayed_work power_off_work;
 	uint64_t cur_dtime_ts;
 
 	struct regmap_field *config_regmap_field;

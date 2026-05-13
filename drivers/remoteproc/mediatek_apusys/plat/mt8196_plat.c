@@ -227,11 +227,15 @@ static int mt8196_apu_suspend(struct mtk_apu *apu)
 		apu->forbid_ipi_send = true;
 		mutex_unlock(&apu->forbid_ipi_lock);
 
-		// Cancel current timer and do power off if needed
-		if (timer_pending(&apu->power_off_timer)) {
-			del_timer(&apu->power_off_timer);
+		/*
+		 * Cancel any pending delayed power-off. If we cancelled a
+		 * still-pending work, the runtime PM reference it would have
+		 * dropped is still held, so do the synchronous power-off here.
+		 * If the work already ran (returns 0), the device is (or will
+		 * shortly be) powered off and no further action is needed.
+		 */
+		if (cancel_delayed_work_sync(&apu->power_off_work))
 			mt8196_power_on_off(apu, MTK_APU_IPI_MIDDLEWARE, 0, 1);
-		}
 	}
 
 	return 0;
