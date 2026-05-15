@@ -626,6 +626,15 @@ intel_pxp_ioctl_io_message(struct intel_pxp *pxp, struct drm_file *drmfile,
 		goto end;
 	}
 
+	/*
+	 * For the mei-pxp backend the first byte of msg_out carries the MEI
+	 * vtag for this transaction (see intel_pxp_tee_io_message()). For the
+	 * gsccs backend this byte is ignored. Best-effort copy: on failure
+	 * fall back to the kzalloc'd zero (vtag=0, default channel).
+	 */
+	if (copy_from_user(msg_out, u64_to_user_ptr(params->msg_out), params->msg_out_buf_size))
+		drm_dbg(&i915->drm, "Failed to copy_from_user for TEE vtag output message\n");
+
 	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
 		ret = intel_pxp_gsccs_client_io_msg(pxp, drmfile,
 						    msg_in, params->msg_in_size,
