@@ -96,7 +96,7 @@ int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 		/* flag on next msg to drop interrupted msg */
 		if (ret == -EINTR)
 			pxp->mei_pxp_last_msg_interrupted = true;
-		drm_err(&i915->drm, "Failed to send PXP TEE message\n");
+		drm_err(&i915->drm, "Failed to send PXP TEE message: ret=%d, vtag=%u\n", ret, vtag);
 		goto unlock;
 	}
 
@@ -106,7 +106,9 @@ int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 		/* flag on next msg to drop interrupted msg */
 		if (ret == -EINTR)
 			pxp->mei_pxp_last_msg_interrupted = true;
-		drm_err(&i915->drm, "Failed to receive PXP TEE message\n");
+		drm_err(&i915->drm,
+			"Failed to receive PXP TEE message: ret=%d, vtag=%u\n",
+			ret, vtag);
 		goto unlock;
 	}
 
