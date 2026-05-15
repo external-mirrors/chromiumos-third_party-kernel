@@ -244,9 +244,10 @@ static u32 guc_ctl_feature_flags(struct intel_guc *guc)
 
 	/*
 	 * Enable PXP GuC autoteardown flow.
-	 * NB: MTL does things differently.
+	 * NB: MTL does things differently, and Tiger Lake PXP firmware
+	 * has timing/stability issues with autoteardown so we disable it there.
 	 */
-	if (HAS_PXP(gt->i915) && !IS_METEORLAKE(gt->i915))
+	if (HAS_PXP(gt->i915) && !IS_METEORLAKE(gt->i915) && !IS_TIGERLAKE(gt->i915))
 		flags |= GUC_CTL_ENABLE_GUC_PXP_CTL;
 
 	if (!intel_guc_submission_is_used(guc))
