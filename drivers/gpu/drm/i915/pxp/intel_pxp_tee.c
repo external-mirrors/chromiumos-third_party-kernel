@@ -83,7 +83,7 @@ int intel_pxp_tee_io_message(struct intel_pxp *pxp,
 	if (pxp->mei_pxp_last_msg_interrupted) {
 		/* read and drop data from the previous iteration */
 		ret = pxp_component->ops->recv(pxp_component->tee_dev, &tmp_drop_buf, 64,
-					       1, PXP_TRANSPORT_TIMEOUT_MS);
+					       vtag, PXP_TRANSPORT_TIMEOUT_MS);
 		if (ret == -EINTR)
 			goto unlock;
 
