@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2019-2024 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2019-2026 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -1189,6 +1189,7 @@ static u32 delete_hoarded_chunks(struct kbase_csf_tiler_heap *heap)
 
 	if (can_read_hw_gpu_buffer_heap(heap, &chunk_gpu_va)) {
 		u64 chunk_hdr_val;
+		u64 head_chunk_gpu_va;
 		u64 *hw_hdr;
 
 		if (!chunk_gpu_va) {
@@ -1215,12 +1216,17 @@ static u32 delete_hoarded_chunks(struct kbase_csf_tiler_heap *heap)
 		WARN((chunk->region->flags & KBASE_REG_CPU_CACHED),
 		     "Cannot support CPU cached chunks without sync operations");
 		hw_hdr = chunk->map.addr;
+		head_chunk_gpu_va = chunk->gpu_va;
 
 		/* Move onto the next chunk relevant information */
 		chunk_hdr_val = *hw_hdr;
 		chunk_gpu_va = chunk_hdr_val & CHUNK_ADDR_MASK;
 
-		while (chunk_gpu_va && heap->chunk_count > HEAP_SHRINK_STOP_LIMIT) {
+		/* hw_hdr points at the head chunk header, which is rewritten after
+		 * the scan. Do not let the scan delete that head chunk first.
+		 */
+		while (chunk_gpu_va && chunk_gpu_va != head_chunk_gpu_va &&
+		       heap->chunk_count > HEAP_SHRINK_STOP_LIMIT) {
 			bool success =
 				delete_chunk_physical_pages(heap, chunk_gpu_va, &chunk_hdr_val);
 
