@@ -470,8 +470,10 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 			struct drm_i915_gem_object *obj,
 			bool assign)
 {
-	if (!intel_pxp_is_active(pxp))
+	if (!intel_pxp_is_active(pxp)) {
+		drm_err_ratelimited(&pxp->ctrl_gt->i915->drm, "PXP key_check failed: PXP not active!\n");
 		return -ENODEV;
+	}
 
 	if (!i915_gem_object_is_protected(obj))
 		return -EINVAL;
@@ -487,8 +489,11 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 	if (!obj->pxp_key_instance && assign)
 		obj->pxp_key_instance = pxp->key_instance;
 
-	if (obj->pxp_key_instance != pxp->key_instance)
+	if (obj->pxp_key_instance != pxp->key_instance) {
+		drm_err_ratelimited(&pxp->ctrl_gt->i915->drm, "PXP key_check failed: key mismatch! obj key=%u, pxp key=%u\n",
+			obj->pxp_key_instance, pxp->key_instance);
 		return -ENOEXEC;
+	}
 
 	return 0;
 }
