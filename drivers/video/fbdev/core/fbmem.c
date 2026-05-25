@@ -1647,6 +1647,8 @@ static void do_unregister_framebuffer(struct fb_info *fb_info)
 		fb_info->pixmap.addr = NULL;
 	}
 
+
+	fbcon_delete_modelist(&fb_info->modelist);
 	fb_destroy_modelist(&fb_info->modelist);
 	registered_fb[fb_info->node] = NULL;
 	num_registered_fb--;
