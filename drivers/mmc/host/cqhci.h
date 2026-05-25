@@ -280,6 +280,7 @@ struct cqhci_host_ops {
 	void (*dumpregs)(struct mmc_host *mmc);
 	void (*write_l)(struct cqhci_host *host, u32 val, int reg);
 	u32 (*read_l)(struct cqhci_host *host, int reg);
+	void (*trace_cqhci_timeout)(struct cqhci_host *cq_host);
 	void (*enable)(struct mmc_host *mmc);
 	void (*disable)(struct mmc_host *mmc, bool recovery);
 	void (*update_dcmd_desc)(struct mmc_host *mmc, struct mmc_request *mrq,

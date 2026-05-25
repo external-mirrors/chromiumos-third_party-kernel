@@ -235,6 +235,31 @@ static void sdhci_pci_dumpregs(struct mmc_host *mmc)
 	sdhci_dumpregs(mmc_priv(mmc));
 }
 
+static void sdhci_pci_trace_cqhci_timeout(struct cqhci_host *cq_host)
+{
+	struct sdhci_host *host = mmc_priv(cq_host->mmc);
+	struct sdhci_pci_slot *slot = sdhci_priv(host);
+	struct pci_dev *pdev = (slot && slot->chip) ? slot->chip->pdev : NULL;
+	u16 lnksta = 0xffff, lnkctl = 0xffff;
+	u32 l1sub = 0;
+	int l1ss_cap;
+
+	if (!pdev)
+		return;
+
+	if (pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta))
+		lnksta = 0xffff;
+	if (pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &lnkctl))
+		lnkctl = 0xffff;
+
+	l1ss_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_L1SS);
+	if (l1ss_cap)
+		pci_read_config_dword(pdev, l1ss_cap + PCI_L1SS_CTL1, &l1sub);
+
+	pci_warn(pdev, "CQHCI Timeout Trace: LnkSta=0x%04x (DLL=%s), LnkCtl=0x%04x, L1Sub=0x%08x, PwrStateRaw=%d\n",
+		 lnksta, (lnksta & PCI_EXP_LNKSTA_DLLLA) ? "Active" : "Down",
+		 lnkctl, l1sub, (int)pdev->current_state);
+}
 static void sdhci_cqhci_reset(struct sdhci_host *host, u8 mask)
 {
 	if ((host->mmc->caps2 & MMC_CAP2_CQE) && (mask & SDHCI_RESET_ALL) &&
@@ -949,6 +974,7 @@ static const struct cqhci_host_ops glk_cqhci_ops = {
 	.enable		= sdhci_cqe_enable,
 	.disable	= sdhci_cqe_disable,
 	.dumpregs	= sdhci_pci_dumpregs,
+	.trace_cqhci_timeout = sdhci_pci_trace_cqhci_timeout,
 };
 
 static int glk_emmc_add_host(struct sdhci_pci_slot *slot)
