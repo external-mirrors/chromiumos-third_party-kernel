@@ -496,8 +496,10 @@ struct mbox_chan *mbox_request_channel(struct mbox_client *cl, int index)
 	}
 
 	ret = __mbox_bind_client(chan, cl);
-	if (ret)
-		chan = ERR_PTR(ret);
+	if (ret) {
+		mutex_unlock(&con_mutex);
+		return ERR_PTR(ret);
+	}
 
 	if (chan->mbox->ops->power_put)
 		chan->mbox->ops->power_put(chan);
