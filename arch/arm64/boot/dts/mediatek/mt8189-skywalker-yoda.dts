@@ -102,6 +102,13 @@
 	phy-params-hbr2 = <0x20181410 0x20241E18 0x00003028 0x10080400 0x000C0600 0x00000008>;
 };
 
+&edp_pwr_pins {
+	pins-pwr {
+		pinmux = <PINMUX_GPIO25__FUNC_GPIO25>;
+		output-low;
+	};
+};
+
 &i2c2 {
 	/delete-node/ audio-codec@1a;
 };
@@ -144,6 +151,10 @@
 			output-low;
 		};
 	};
+};
+
+&pp3300_edp_x {
+	/delete-property/ regulator-boot-on;
 };
 
 &ap_i2c_tchpad  {

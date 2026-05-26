@@ -195,6 +195,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-rt5682i.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-rt5682s.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-wwan.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-mace.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-yoda-edp-pwr.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-asurada-hayato-r1.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-asurada-spherion-r0.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8192-evb.dtb

@@ -322,3 +322,7 @@ yoda:
       fw_config:
         mask: 0x20
         value: 0x20
+    mt8189-skywalker-yoda-edp-pwr.dtbo:
+      fw_config:
+        mask: 0x20
+        value: 0x00
