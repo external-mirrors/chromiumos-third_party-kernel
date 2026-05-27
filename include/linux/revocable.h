@@ -23,7 +23,6 @@ void revocable_release(struct revocable *rev) __releases(&rev->rp->srcu);
 #define DEFINE_FREE(_name, _type, _free) \
 	static inline void __free_##_name(void *p) { _type _T = *(_type *)p; _free; }
 #define __free(_name)	__cleanup(__free_##_name)
-#define __cleanup(func)	__attribute__((__cleanup__(func)))
 
 DEFINE_FREE(revocable, struct revocable *, if (_T) revocable_release(_T))
 
