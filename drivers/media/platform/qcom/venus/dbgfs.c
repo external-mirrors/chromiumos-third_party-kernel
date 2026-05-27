@@ -4,8 +4,13 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/fault-inject.h>
 
 #include "core.h"
+
+#ifdef CONFIG_FAULT_INJECTION
+DECLARE_FAULT_ATTR(venus_ssr_attr);
+#endif
 
 static int trigger_ssr_open(struct inode *inode, struct file *file)
 {
@@ -41,6 +46,10 @@ void venus_dbgfs_init(struct venus_core *core)
 	core->root = debugfs_create_dir("venus", NULL);
 	debugfs_create_x32("fw_level", 0644, core->root, &venus_fw_debug);
 	debugfs_create_file("trigger_ssr", 0200, core->root, core, &ssr_fops);
+
+#ifdef CONFIG_FAULT_INJECTION
+	fault_create_debugfs_attr("fail_ssr", core->root, &venus_ssr_attr);
+#endif
 }
 
 void venus_dbgfs_deinit(struct venus_core *core)
