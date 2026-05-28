@@ -2737,6 +2737,13 @@ PMR_IsGpuMultiMapped(PMR *psPMR)
 	return psPMR->iAssociatedResCount > 1;
 }
 
+IMG_INT32
+PMR_GetGpuMapCount(PMR *psPMR)
+{
+	PVR_ASSERT(psPMR != NULL);
+	return psPMR->iAssociatedResCount;
+}
+
 PVRSRV_DEVICE_NODE *
 PMR_DeviceNode(const PMR *psPMR)
 {
@@ -2798,6 +2805,14 @@ PMR_SetExclusiveUse(PMR *psPMR, IMG_BOOL bFlag)
 		_IntFlagClr(psPMR, PMR_FLAG_INTERNAL_IS_EXCLUSIVE);
 		return IMG_TRUE;
 	}
+}
+
+IMG_BOOL
+PMR_IsExclusiveUse(PMR *psPMR)
+{
+	PVR_ASSERT(psPMR != NULL);
+
+	return _IntFlagIsSet(psPMR, PMR_FLAG_INTERNAL_IS_EXCLUSIVE);
 }
 
 /* Function that alters the mutability property

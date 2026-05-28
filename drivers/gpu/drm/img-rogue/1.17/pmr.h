@@ -600,6 +600,15 @@ PMRGpuResCountDecr(PMR *psPMR);
 IMG_BOOL
 PMR_IsGpuMultiMapped(PMR *psPMR);
 
+/*
+ * PMR_GetGpuMapCount()
+ *
+ * Must be protected by PMR lock.
+ *
+ */
+IMG_INT32
+PMR_GetGpuMapCount(PMR *psPMR);
+
 PPVRSRV_DEVICE_NODE
 PMR_DeviceNode(const PMR *psPMR);
 
@@ -778,8 +787,28 @@ void
 PMRReviveZombieAndRef(PMR *psPMR);
 #endif /* defined(SUPPORT_PMR_DEFERRED_FREE) */
 
+/*
+ * PMR_SetExclusiveUse()
+ *
+ * Sets the exclusive use flag for the PMR. Flag is used to signal that the PMR
+ * is used by another bridge resource (such as freelist) and shouldn't be used
+ * by another instance of such object.
+ *
+ * Must be protected by PMR lock.
+ *
+ */
 IMG_BOOL
 PMR_SetExclusiveUse(PMR *psPMR, IMG_BOOL bFlag);
+
+/*
+ * PMR_IsExclusiveUse()
+ *
+ * Checks the exclusive use flag for the PMR.
+ * Must be protected by PMR lock.
+ *
+ */
+IMG_BOOL
+PMR_IsExclusiveUse(PMR *psPMR);
 
 /*
  * PMR_ChangeSparseMem()

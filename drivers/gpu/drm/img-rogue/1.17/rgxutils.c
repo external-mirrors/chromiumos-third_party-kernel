@@ -461,20 +461,29 @@ AcquireValidateRefCriticalBuffer(PVRSRV_DEVICE_NODE*     psDevNode,
 	    "%s: Validation of critical PMR failed: %s",
 	    __func__, PVRSRVGetErrorString(eError));
 
-	/* Check exclusive flag and set if possible */
-	if (!PMR_SetExclusiveUse(*ppsPMR, IMG_TRUE))
+
+	PMRLockPMR(*ppsPMR);
+
+	/* Check map count and exclusive flag and set if possible */
+	if ((PMR_GetGpuMapCount(*ppsPMR) > 1) ||
+	    !PMR_SetExclusiveUse(*ppsPMR, IMG_TRUE))
 	{
 		PVR_DPF((PVR_DBG_ERROR,
-		     "%s: Critical PMR already in use (exclusive flag)!",
+		     "%s: Critical PMR already in use (exclusive flag/map count)!",
 		     __func__));
-		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, RollbackReservationMapping);
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, RollbackPMRLock);
 	}
 
 	/* If no error on validation ref the PMR */
 	(void) PMRRefPMR(*ppsPMR);
 
+	/* Unlock here to simplify error handling */
+	PMRUnlockPMR(*ppsPMR);
+
 	return PVRSRV_OK;
 
+RollbackPMRLock:
+	PMRUnlockPMR(*ppsPMR);
 RollbackReservationMapping:
 	DevmemIntUnLockReservationMapping(psReservation);
 RollbackReservationAcquire:
@@ -494,8 +503,10 @@ void UnrefAndReleaseCriticalBuffer(DEVMEMINT_RESERVATION2* psReservation)
 	PVR_LOG_IF_ERROR_VA(PVR_DBG_ERROR, eError,
 	    "Error when trying to obtain reservation data in %s", __func__);
 
+	PMRLockPMR(psPMR);
 	/* Ignore return value. Clearing the flag cannot fail. */
 	PMR_SetExclusiveUse(psPMR, IMG_FALSE);
+	PMRUnlockPMR(psPMR);
 
 	eError = PMRUnrefPMR(psPMR);
 	PVR_LOG_IF_ERROR_VA(PVR_DBG_ERROR, eError, 
