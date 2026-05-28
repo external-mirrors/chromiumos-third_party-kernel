@@ -1325,6 +1325,13 @@ DevmemIntMapPMR2(DEVMEMINT_HEAP *psDevmemHeap,
 
 	PMRLockPMR(psPMR);
 
+	/* Don't allow repeated mappings of exclusive PMRs */
+	if (PMR_IsExclusiveUse(psPMR) && (PMR_GetGpuMapCount(psPMR) > 0))
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: PMR is exclusive use and already mapped.", __func__));
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, ErrorUnlockPhysAddr);
+	}
+
 	/* Increase reservation association count so we know if multiple mappings have been created
 	 * on the PMR
 	 */
@@ -1339,7 +1346,7 @@ DevmemIntMapPMR2(DEVMEMINT_HEAP *psDevmemHeap,
 	if (eRemapPolicy == MMU_PTE_REMAP_POLICY_BLOCK && bIsSparse)
 	{
 		/* Don't allow sparse mappings if remap is disallowed */
-		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, ErrorUnlockPhysAddr);
+		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_INVALID_PARAMS, ErrorDecrResCount);
 	}
 
 	if (bIsSparse)
@@ -1354,7 +1361,7 @@ DevmemIntMapPMR2(DEVMEMINT_HEAP *psDevmemHeap,
 		                      ui32NumDevPages,
 		                      NULL,
 		                      uiLog2HeapContiguity);
-		PVR_GOTO_IF_ERROR(eError, ErrorUnlockPhysAddr);
+		PVR_GOTO_IF_ERROR(eError, ErrorDecrResCount);
 
 		psDevPAddr = OSAllocMem(ui32NumDevPages * sizeof(IMG_DEV_PHYADDR));
 		PVR_LOG_GOTO_IF_NOMEM(psDevPAddr, eError, ErrorUnmapSparseMap);
@@ -1398,7 +1405,7 @@ DevmemIntMapPMR2(DEVMEMINT_HEAP *psDevmemHeap,
 		                        uiMapFlags,
 		                        uiLog2HeapContiguity,
 		                        eRemapPolicy);
-		PVR_GOTO_IF_ERROR(eError, ErrorUnlockPhysAddr);
+		PVR_GOTO_IF_ERROR(eError, ErrorDecrResCount);
 	}
 
 	psReservation->psMappedPMR = psPMR;
@@ -1419,8 +1426,11 @@ ErrorUnmapSparseMap:
 	                      ui32NumDevPages,
 	                      NULL,
 	                      uiLog2HeapContiguity);
-ErrorUnlockPhysAddr:
+
+ErrorDecrResCount:
 	PMRGpuResCountDecr(psPMR);
+
+ErrorUnlockPhysAddr:
 	PMRUnlockPMR(psPMR);
 
 	{
