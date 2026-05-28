@@ -15,7 +15,6 @@ Driver Model
    overview
    platform
    porting
-   revocable
 
 .. only::  subproject and html
 
