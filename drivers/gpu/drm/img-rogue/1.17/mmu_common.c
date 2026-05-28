@@ -4008,12 +4008,14 @@ MMU_MapPMRFast (MMU_CONTEXT *psMMUContext,
 	return PVRSRV_OK;
 
 unlock_mmu_context:
-	if (eError != PVRSRV_ERROR_MMU_REMAP_BLOCKED)
+	if (uiCount > 0)
 	{
-		/* Unmap starting from the address passed as an argument. */
+		/* Unmap starting from the address passed as an argument
+		 * on the number of pages mapped before the error occurred.
+		 */
 		(void) MMU_UnmapPMRFastUnlocked(psMMUContext,
 		                                sDevVAddrBase,
-		                                uiSizeBytes >> uiLog2HeapPageSize,
+		                                uiCount,
 		                                uiLog2HeapPageSize);
 	}
 	OSLockRelease(psMMUContext->hLock);
