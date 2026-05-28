@@ -43,6 +43,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <linux/smp.h>
 #include <linux/uaccess.h>
+#include <asm/asm.h>
 
 #include "pvrsrv_error.h"
 #include "img_types.h"
@@ -50,11 +51,41 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "osfunc.h"
 #include "pvr_debug.h"
 
+/* Macro to produce a clflush op with option to ignore faults.
+ * Faults should be ignored if address comes from UM.
+ * This is to ensure that kernel can't fault on UM range that was suddenly unmapped
+ * while cache op is in progress. There is a pre-validation step performed in
+ * CacheOpValidateUMVA().
+ * This allows for not holding of mm vma lock for the whole length of operation.
+ */
+
+#define CLFLUSH(ignore_fault, addr) \
+	do { \
+		if (ignore_fault) \
+		{ \
+			asm volatile( \
+			    "1:             \n" \
+			    "clflush %0     \n" \
+			    _ASM_EXTABLE(1b, 2f) \
+			    "2:             \n" \
+			    : "+m" (*(volatile char __force *)addr)); \
+		} \
+		else \
+		{ \
+			clflush(addr); \
+		} \
+	} while (0)
+
 static void x86_flush_cache_range(const void *pvStart, const void *pvEnd)
 {
 	IMG_BYTE *pbStart = (IMG_BYTE *)pvStart;
 	IMG_BYTE *pbEnd = (IMG_BYTE *)pvEnd;
 	IMG_BYTE *pbBase;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+	IMG_BOOL bFromUM = access_ok(VERIFY_READ, (const void __user *)pbStart, pbEnd - pbStart);
+#else
+	IMG_BOOL bFromUM = access_ok((const void __user *)pbStart, pbEnd - pbStart);
+#endif
 
 	pbEnd = (IMG_BYTE *)PVR_ALIGN((uintptr_t)pbEnd,
 	                              (uintptr_t)boot_cpu_data.x86_clflush_size);
@@ -62,16 +93,22 @@ static void x86_flush_cache_range(const void *pvStart, const void *pvEnd)
 	mb();
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,168))
-	__uaccess_begin();
+	if (bFromUM)
+	{
+		__uaccess_begin();
+	}
 #endif
 
 	for (pbBase = pbStart; pbBase < pbEnd; pbBase += boot_cpu_data.x86_clflush_size)
 	{
-		clflush(pbBase);
+		CLFLUSH(bFromUM, pbBase);
 	}
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,168))
-	__uaccess_end();
+	if (bFromUM)
+	{
+		__uaccess_end();
+	}
 #endif
 
 	mb();
