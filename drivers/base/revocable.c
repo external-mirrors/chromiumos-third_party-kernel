@@ -209,7 +209,7 @@ void *revocable_try_access(struct revocable *rev) __acquires(&rev->rp->srcu)
 	struct revocable_provider *rp = rev->rp;
 
 	rev->idx = srcu_read_lock(&rp->srcu);
-	return srcu_dereference(rp->res, &rp->srcu);
+	return rcu_dereference(rp->res);
 }
 EXPORT_SYMBOL_GPL(revocable_try_access);
 
