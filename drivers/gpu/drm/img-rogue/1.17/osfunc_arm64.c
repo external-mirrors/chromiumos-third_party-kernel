@@ -46,6 +46,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <asm/cacheflush.h>
 #include <linux/uaccess.h>
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0))
+#include <asm/asm-extable.h>
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0) */
+
 #include "pvrsrv_error.h"
 #include "img_types.h"
 #include "img_defs.h"
@@ -76,6 +80,43 @@ static inline void end_user_mode_access(void)
 #endif
 }
 
+/* Macro to produce a data cache op instruction of a certain type (cvac, ivac or civac)
+ * with option to ignore faults. Faults should be ignored if address comes from UM.
+ * This is to ensure that kernel can't fault on UM range that was suddenly unmapped
+ * while cache op is in progress. There is a pre-validation step performed in
+ * CacheOpValidateUMVA().
+ * This allows for not holding of mm vma lock for the whole length of operation.
+ */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
+#define _extable_internal _ASM_EXTABLE_UACCESS(1b, 2f)
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0))
+#define _extable_internal _ASM_EXTABLE(1b, 2f)
+#else
+#define _ASM_EXTABLE(from, to) \
+	"	.pushsection	__ex_table, \"a\"\n" \
+	"	.align		3\n" \
+	"	.long		(" #from " - .), (" #to " - .)\n" \
+	"	.popsection\n"
+#define _extable_internal _ASM_EXTABLE(1b, 2f)
+#endif
+
+#define DC_OP(op, ignore_fault, addr) \
+	do { \
+		if (ignore_fault) \
+		{ \
+			asm volatile( \
+			    "1:             \n" \
+			    "dc " #op ", %0 \n" \
+			    _extable_internal \
+			    "2:             \n" \
+			    :: "r" (addr)); \
+		} \
+		else \
+		{ \
+			asm volatile("dc " #op ", %0 \n" :: "r" (addr)); \
+		} \
+	} while (0)
+
 static inline void FlushRange(void *pvRangeAddrStart,
 							  void *pvRangeAddrEnd,
 							  PVRSRV_CACHE_OP eCacheOp)
@@ -84,6 +125,7 @@ static inline void FlushRange(void *pvRangeAddrStart,
 	IMG_BYTE *pbStart = pvRangeAddrStart;
 	IMG_BYTE *pbEnd = pvRangeAddrEnd;
 	IMG_BYTE *pbBase;
+	IMG_BOOL bFromUM = access_ok((const void __user *)pbStart, pbEnd - pbStart);
 
 	/*
 	  On arm64, the TRM states in D5.8.1 (data and unified caches) that if cache
@@ -94,7 +136,10 @@ static inline void FlushRange(void *pvRangeAddrStart,
 	  this is sufficient to maintain the CPU d-caches on arm64.
 	 */
 
-	begin_user_mode_access();
+	if (bFromUM)
+	{
+		begin_user_mode_access();
+	}
 
 	pbEnd = (IMG_BYTE *) PVR_ALIGN((uintptr_t)pbEnd, (uintptr_t)ui32CacheLineSize);
 	for (pbBase = pbStart; pbBase < pbEnd; pbBase += ui32CacheLineSize)
@@ -102,15 +147,15 @@ static inline void FlushRange(void *pvRangeAddrStart,
 		switch (eCacheOp)
 		{
 			case PVRSRV_CACHE_OP_CLEAN:
-				asm volatile ("dc cvac, %0" :: "r" (pbBase));
+				DC_OP(cvac, bFromUM, pbBase);
 				break;
 
 			case PVRSRV_CACHE_OP_INVALIDATE:
-				asm volatile ("dc ivac, %0" :: "r" (pbBase));
+				DC_OP(ivac, bFromUM, pbBase);
 				break;
 
 			case PVRSRV_CACHE_OP_FLUSH:
-				asm volatile ("dc civac, %0" :: "r" (pbBase));
+				DC_OP(civac, bFromUM, pbBase);
 				break;
 
 			default:
@@ -121,7 +166,10 @@ static inline void FlushRange(void *pvRangeAddrStart,
 		}
 	}
 
-	end_user_mode_access();
+	if (bFromUM)
+	{
+		end_user_mode_access();
+	}
 }
 
 void OSCPUCacheFlushRangeKM(PVRSRV_DEVICE_NODE *psDevNode,
