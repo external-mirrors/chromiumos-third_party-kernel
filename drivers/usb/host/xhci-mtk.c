@@ -297,9 +297,38 @@ static int xhci_mtk_host_disable(struct xhci_hcd_mtk *mtk)
 	/* wait for host ip to sleep */
 	ret = readl_poll_timeout(&ippc->ip_pw_sts1, value,
 			  (value & STS1_IP_SLEEP_STS), 100, 100000);
-	if (ret)
-		dev_err(mtk->dev, "ip sleep failed!!!\n");
-	else /* workaound for platforms using low level latch */
+	if (ret) {
+		dev_err(mtk->dev,
+			"ip sleep failed! sts1=%#x ctr1=%#x ctr2=%#x\n",
+			readl(&ippc->ip_pw_sts1),
+			readl(&ippc->ip_pw_ctr1),
+			readl(&ippc->ip_pw_ctr2));
+
+		/* Rollback: re-enable host ip to prevent half-powered state */
+		value = readl(&ippc->ip_pw_ctr1);
+		value &= ~CTRL1_IP_HOST_PDN;
+		writel(value, &ippc->ip_pw_ctr1);
+
+		/* Rollback: re-enable u3 ports */
+		for (i = 0; i < mtk->num_u3_ports; i++) {
+			if (BIT(i) & mtk->u3p_dis_msk)
+				continue;
+			value = readl(&ippc->u3_ctrl_p[i]);
+			value &= ~CTRL_U3_PORT_PDN;
+			writel(value, &ippc->u3_ctrl_p[i]);
+		}
+
+		/* Rollback: re-enable u2 ports */
+		for (i = 0; i < mtk->num_u2_ports; i++) {
+			if (BIT(i) & mtk->u2p_dis_msk)
+				continue;
+			value = readl(&ippc->u2_ctrl_p[i]);
+			value &= ~CTRL_U2_PORT_PDN;
+			writel(value, &ippc->u2_ctrl_p[i]);
+		}
+
+		dev_info(mtk->dev, "ip sleep failed, port power restored\n");
+	} else /* workaround for platforms using low level latch */
 		usleep_range(100, 200);
 
 	return ret;
@@ -762,9 +791,19 @@ static int __maybe_unused xhci_mtk_suspend(struct device *dev)
 	clear_bit(HCD_FLAG_POLL_RH, &xhci->shared_hcd->flags);
 	del_timer_sync(&xhci->shared_hcd->rh_timer);
 
+	/*
+	 * Disable wakeup before host_disable to prevent race condition:
+	 * if a wakeup signal arrives while ip is transitioning to sleep,
+	 * the conflicting requests can cause ip sleep to timeout.
+	 */
+	usb_wakeup_set(mtk, false);
+
 	ret = xhci_mtk_host_disable(mtk);
-	if (ret)
+	if (ret) {
+		dev_err(mtk->dev, "host_disable failed (%d), aborting suspend\n",
+			ret);
 		goto restart_poll_rh;
+	}
 
 	clk_bulk_disable_unprepare(BULK_CLKS_NUM, mtk->clks);
 	usb_wakeup_set(mtk, true);
