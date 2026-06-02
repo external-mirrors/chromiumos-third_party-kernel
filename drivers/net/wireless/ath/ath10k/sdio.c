@@ -2492,7 +2492,11 @@ void ath10k_sdio_fw_crashed_dump(struct ath10k *ar)
 	if (fast_dump)
 		ath10k_bmi_start(ar);
 
+	mutex_lock(&ar->dump_mutex);
+
+	spin_lock_bh(&ar->data_lock);
 	ar->stats.fw_crash_counter++;
+	spin_unlock_bh(&ar->data_lock);
 
 	ath10k_sdio_disable_intrs(ar);
 
@@ -2509,6 +2513,8 @@ void ath10k_sdio_fw_crashed_dump(struct ath10k *ar)
 	ath10k_sdio_dump_memory(ar, crash_data, fast_dump);
 
 	ath10k_sdio_enable_intrs(ar);
+
+	mutex_unlock(&ar->dump_mutex);
 
 	ath10k_core_start_recovery(ar);
 }
