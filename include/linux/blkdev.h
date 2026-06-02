@@ -214,6 +214,9 @@ struct request {
 	struct blk_ksm_keyslot *crypt_keyslot;
 #endif
 
+	/* Task that allocated this request. */
+	pid_t alloc_pid;
+
 	unsigned short write_hint;
 	unsigned short ioprio;
 
@@ -462,6 +465,8 @@ struct request_queue {
 
 	struct timer_list	timeout;
 	struct work_struct	timeout_work;
+
+	struct delayed_work	stall_work;
 
 	atomic_t		nr_active_requests_shared_sbitmap;
 

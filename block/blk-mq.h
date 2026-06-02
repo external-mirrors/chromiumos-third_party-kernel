@@ -130,6 +130,7 @@ extern void blk_mq_sysfs_unregister(struct request_queue *q);
 extern void blk_mq_hctx_kobj_init(struct blk_mq_hw_ctx *hctx);
 
 void blk_mq_cancel_work_sync(struct request_queue *q);
+void blk_mq_start_stall_watchdog(struct request_queue *q);
 
 void blk_mq_release(struct request_queue *q);
 
