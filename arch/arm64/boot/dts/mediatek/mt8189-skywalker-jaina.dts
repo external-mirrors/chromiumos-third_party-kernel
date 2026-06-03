@@ -59,7 +59,7 @@
 
 &mipi_tx_config0 {
 	mediatek,ssc-enable;
-	mediatek,ssc-range = <7>;
+	mediatek,ssc-range = <5>;
 };
 
 /* &ufshci's  vccq2-supply */
