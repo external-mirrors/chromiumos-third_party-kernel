@@ -295,7 +295,7 @@ static struct drm_plane *evdi_create_plane(
 	int ret;
 	char *plane_type = (type == DRM_PLANE_TYPE_CURSOR) ? "cursor" : "primary";
 
-	plane = kzalloc_obj_evdi(*plane, GFP_KERNEL);
+	plane = kzalloc_obj(*plane, GFP_KERNEL);
 	if (plane == NULL) {
 		EVDI_ERROR("Failed to allocate %s plane\n", plane_type);
 		return NULL;
@@ -332,7 +332,7 @@ static int evdi_crtc_init(struct drm_device *dev)
 	int status = 0;
 
 	EVDI_CHECKPT();
-	crtc = kzalloc_obj_evdi(*crtc, GFP_KERNEL);
+	crtc = kzalloc_obj(*crtc, GFP_KERNEL);
 	if (crtc == NULL)
 		return -ENOMEM;
 

@@ -396,7 +396,7 @@ static struct drm_pending_event *create_update_ready_event(void)
 {
 	struct evdi_event_update_ready_pending *event;
 
-	event = kzalloc_obj_evdi(*event, GFP_KERNEL);
+	event = kzalloc_obj(*event, GFP_KERNEL);
 	if (!event) {
 		EVDI_ERROR("Failed to create update ready event\n");
 		return NULL;
@@ -444,7 +444,7 @@ static struct drm_pending_event *create_cursor_set_event(
 	struct evdi_event_cursor_set_pending *event;
 	struct evdi_gem_object *eobj = NULL;
 
-	event = kzalloc_obj_evdi(*event, GFP_KERNEL);
+	event = kzalloc_obj(*event, GFP_KERNEL);
 	if (!event) {
 		EVDI_ERROR("Failed to create cursor set event\n");
 		return NULL;
@@ -491,7 +491,7 @@ static struct drm_pending_event *create_cursor_move_event(
 {
 	struct evdi_event_cursor_move_pending *event;
 
-	event = kzalloc_obj_evdi(*event, GFP_KERNEL);
+	event = kzalloc_obj(*event, GFP_KERNEL);
 	if (!event) {
 		EVDI_ERROR("Failed to create cursor move event\n");
 		return NULL;
@@ -523,7 +523,7 @@ static struct drm_pending_event *create_dpms_event(int mode)
 {
 	struct evdi_event_dpms_pending *event;
 
-	event = kzalloc_obj_evdi(*event, GFP_KERNEL);
+	event = kzalloc_obj(*event, GFP_KERNEL);
 	if (!event) {
 		EVDI_ERROR("Failed to create dpms event\n");
 		return NULL;
@@ -550,7 +550,7 @@ static struct drm_pending_event *create_mode_changed_event(
 {
 	struct evdi_event_mode_changed_pending *event;
 
-	event = kzalloc_obj_evdi(*event, GFP_KERNEL);
+	event = kzalloc_obj(*event, GFP_KERNEL);
 	if (!event) {
 		EVDI_ERROR("Failed to create mode changed event\n");
 		return NULL;
@@ -822,7 +822,7 @@ static void evdi_add_i2c_adapter(struct evdi_device *evdi)
 	struct platform_device *platdev = to_platform_device(ddev->dev);
 	int result = 0;
 
-	evdi->i2c_adapter = kzalloc_obj_evdi(*evdi->i2c_adapter, GFP_KERNEL);
+	evdi->i2c_adapter = kzalloc_obj(*evdi->i2c_adapter, GFP_KERNEL);
 
 	if (!evdi->i2c_adapter) {
 		EVDI_ERROR("(card%d) Failed to allocate for i2c adapter\n",
@@ -1248,7 +1248,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(evdi_painter_debug_test_ops, NULL, evdi_painter_debugfs
 int evdi_painter_init(struct evdi_device *dev)
 {
 	EVDI_CHECKPT();
-	dev->painter = kzalloc_obj_evdi(*dev->painter, GFP_KERNEL);
+	dev->painter = kzalloc_obj(*dev->painter, GFP_KERNEL);
 	if (dev->painter) {
 		mutex_init(&dev->painter->lock);
 		dev->painter->edid = NULL;
@@ -1329,7 +1329,7 @@ static struct drm_pending_event *create_ddcci_data_event(struct i2c_msg *msg)
 {
 	struct evdi_event_ddcci_data_pending *event;
 
-	event = kzalloc_obj_evdi(*event, GFP_KERNEL);
+	event = kzalloc_obj(*event, GFP_KERNEL);
 	if (!event || !msg) {
 		EVDI_ERROR("Failed to create ddcci data event\n");
 		return NULL;

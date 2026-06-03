@@ -58,7 +58,7 @@ int evdi_platform_device_probe(struct platform_device *pdev)
 	struct evdi_platform_device_data *data;
 
 	EVDI_CHECKPT();
-	data = kzalloc_obj_evdi(*data, GFP_KERNEL);
+	data = kzalloc_obj(*data, GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
