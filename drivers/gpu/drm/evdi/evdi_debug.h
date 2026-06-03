@@ -55,6 +55,6 @@
 void evdi_log_process(char *buf, size_t size);
 
 
-#define kzalloc_obj(obj, flags) kzalloc(sizeof(typeof(obj)), flags)
+#define kzalloc_obj_evdi(obj, flags) kzalloc(sizeof(typeof(obj)), flags)
 
 #endif /* EVDI_DEBUG_H */

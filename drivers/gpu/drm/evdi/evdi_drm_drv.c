@@ -104,7 +104,7 @@ static int evdi_drm_device_init(struct drm_device *dev)
 	int ret;
 
 	EVDI_CHECKPT();
-	evdi = kzalloc_obj(*evdi, GFP_KERNEL);
+	evdi = kzalloc_obj_evdi(*evdi, GFP_KERNEL);
 	if (!evdi)
 		return -ENOMEM;
 
