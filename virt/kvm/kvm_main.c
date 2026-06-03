@@ -2158,7 +2158,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		if ((mem->userspace_addr != old->userspace_addr) ||
 		    (npages != old->npages) ||
 		    ((mem->flags ^ old->flags) &
-		     (KVM_MEM_READONLY | KVM_MEM_NON_COHERENT_DMA)))
+		     (KVM_MEM_READONLY | KVM_MEM_GUEST_MEMFD | KVM_MEM_NON_COHERENT_DMA)))
 			return -EINVAL;
 
 		if (base_gfn != old->base_gfn)
