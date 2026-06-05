@@ -1525,7 +1525,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 							    (void *)private->mmsys_dev,
 							    sizeof(*private->mmsys_dev));
 		private->ddp_comp[DDP_COMPONENT_DRM_OVL_ADAPTOR].dev = &ovl_adaptor->dev;
-		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVL_ADAPTOR],
+		mtk_ddp_comp_init(dev, NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVL_ADAPTOR],
 				  DDP_COMPONENT_DRM_OVL_ADAPTOR);
 		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
 	}
@@ -1547,7 +1547,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 			platform_device_unregister(ovl_adaptor);
 			return -EPROBE_DEFER;
 		}
-		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0],
+		mtk_ddp_comp_init(dev, NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0],
 				  DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0);
 		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
 	}
@@ -1570,7 +1570,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		}
 
 		private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1].dev = &ovl_adaptor->dev;
-		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1],
+		mtk_ddp_comp_init(dev, NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1],
 				  DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1);
 		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
 	}
@@ -1592,7 +1592,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		}
 
 		private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2].dev = &ovl_adaptor->dev;
-		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2],
+		mtk_ddp_comp_init(dev, NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2],
 				  DDP_COMPONENT_DRM_OVLSYS_ADAPTOR2);
 		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
 	}
@@ -1677,7 +1677,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		dev_dbg(dev, "component type %d id %u %pOF\n",
 			 comp_type, comp_id, node);
 
-		ret = mtk_ddp_comp_init(node, &private->ddp_comp[comp_id], comp_id);
+		ret = mtk_ddp_comp_init(dev, node, &private->ddp_comp[comp_id], comp_id);
 		if (ret) {
 			of_node_put(node);
 			goto err_node;
