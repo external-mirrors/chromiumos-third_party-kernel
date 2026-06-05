@@ -475,7 +475,7 @@ static int mtk_dsc_probe(struct platform_device *pdev)
 		return comp_id;
 	}
 
-	ret = mtk_ddp_comp_init(dev->of_node, &dsc->ddp_comp, comp_id);
+	ret = mtk_ddp_comp_init(dev, dev->of_node, &dsc->ddp_comp, comp_id);
 	if (ret) {
 		dev_err(dev, "Failed to initialize component: %d\n", ret);
 		return ret;
