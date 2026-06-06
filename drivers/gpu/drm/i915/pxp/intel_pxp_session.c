@@ -4,6 +4,7 @@
  */
 
 #include <drm/i915_drm.h>
+#include <linux/delay.h>
 #include <linux/nospec.h>
 
 #include "i915_drv.h"
@@ -388,7 +389,7 @@ int intel_pxp_terminate_session(struct intel_pxp *pxp, u32 id)
 
 	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
 		intel_pxp_gsccs_end_fw_sessions(pxp, BIT(id));
-	else
+	else if (!IS_TIGERLAKE(pxp->ctrl_gt->i915))
 		intel_pxp_tee_end_fw_sessions(pxp, BIT(id));
 
 	return ret;
@@ -493,6 +494,14 @@ static void pxp_terminate_complete(struct intel_pxp *pxp)
 {
 	/* Re-create the arb session after teardown handle complete */
 	if (pxp->hw_state_invalidated) {
+		/*
+		 * WA: Insert delay to allow GuC/CSE to resume allowing session
+		 * inits after an explicit terminate before attempting to
+		 * reinitialize the arb session (see b/203226288).
+		 */
+		if (IS_TIGERLAKE(pxp->ctrl_gt->i915))
+			msleep(50);
+
                 drm_dbg(&pxp->ctrl_gt->i915->drm, "PXP: creating arb_session after invalidation");
 		pxp_create_arb_session(pxp);
 		pxp->hw_state_invalidated = false;

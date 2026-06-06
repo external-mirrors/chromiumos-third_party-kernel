@@ -2119,13 +2119,20 @@ static void check_protection(struct intel_plane_state *plane_state)
 	struct drm_i915_private *i915 = to_i915(plane->base.dev);
 	const struct drm_framebuffer *fb = plane_state->hw.fb;
 	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
+	int key_ret;
 
 	if (DISPLAY_VER(i915) < 11)
 		return;
 
-	plane_state->decrypt = intel_pxp_key_check(i915->pxp, obj, false) == 0;
+	key_ret = intel_pxp_key_check(i915->pxp, obj, false);
+	plane_state->decrypt = key_ret == 0;
 	plane_state->force_black = i915_gem_object_is_protected(obj) &&
 		!plane_state->decrypt;
+
+	if (plane_state->force_black)
+		drm_err_ratelimited(&i915->drm,
+				    "PXP: plane %s force_black set! key_ret=%d\n",
+				    plane->base.name, key_ret);
 }
 
 static int skl_plane_check(struct intel_crtc_state *crtc_state,

@@ -493,6 +493,13 @@ static int uvc_commit_video(struct uvc_streaming *stream,
  * Clocks and timestamps
  */
 
+/*
+ * The accuracy of the hardware timestamping depends on having enough data to
+ * interpolate between the different clock domains. This value is sof cycles,
+ * this is, milliseconds.
+ */
+#define UVC_MIN_HW_TIMESTAMP_DIFF 100
+
 static inline ktime_t uvc_video_get_time(void)
 {
 	if (uvc_clock_param == CLOCK_MONOTONIC)
@@ -516,7 +523,7 @@ static void uvc_video_clock_add_sample(struct uvc_clock *clock,
 
 	spin_lock_irqsave(&clock->lock, flags);
 
-	if (clock->count > 0 && clock->last_sof > sample->dev_sof) {
+	if (clock->count > 0 && clock->last_sof_processed > sample->dev_sof) {
 		/*
 		 * Remove data from the circular buffer that is older than the
 		 * last SOF overflow. We only support one SOF overflow per
@@ -534,6 +541,15 @@ static void uvc_video_clock_add_sample(struct uvc_clock *clock,
 	clock->count = min(clock->count + 1, clock->size);
 
 	spin_unlock_irqrestore(&clock->lock, flags);
+}
+
+static inline u16 sof_diff(u16 a, u16 b)
+{
+	/*
+	 * Because the result is modulo 2048 (via & 2047), we do not need a
+	 * special case for a < b.
+	 */
+	return (a - b) & 2047;
 }
 
 static void
@@ -582,15 +598,11 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	if (!has_scr)
 		return;
 
-	/*
-	 * To limit the amount of data, drop SCRs with an SOF identical to the
-	 * previous one. This filtering is also needed to support UVC 1.5, where
-	 * all the data packets of the same frame contains the same SOF. In that
-	 * case only the first one will match the host_sof.
-	 */
-	sample.dev_sof = get_unaligned_le16(&data[header_size - 2]);
-	if (sample.dev_sof == stream->clock.last_sof)
+	sample.dev_sof = get_unaligned_le16(&data[header_size - 2]) & 2047;
+	/* If the sample SOF is identical to the previous one, quit early. */
+	if (stream->clock.last_sof_raw == sample.dev_sof)
 		return;
+	stream->clock.last_sof_raw = sample.dev_sof;
 
 	sample.dev_stc = get_unaligned_le32(&data[header_size - 6]);
 
@@ -632,8 +644,6 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	if (stream->dev->quirks & UVC_QUIRK_INVALID_DEVICE_SOF)
 		sample.dev_sof = sample.host_sof;
 
-	sample.host_time = uvc_video_get_time();
-
 	/*
 	 * The UVC specification allows device implementations that can't obtain
 	 * the USB frame number to keep their own frame counters as long as they
@@ -663,15 +673,30 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	}
 
 	sample.dev_sof = (sample.dev_sof + stream->clock.sof_offset) & 2047;
+
+	/*
+	 * To limit the amount of data, drop SCRs with an SOF similar to the
+	 * previous one. This filtering is also needed to support UVC 1.5, where
+	 * all the data packets of the same frame contains the same SOF. In that
+	 * case only the first one will match the host_sof.
+	 */
+	if (sof_diff(sample.dev_sof, stream->clock.last_sof_processed) <=
+	    (UVC_MIN_HW_TIMESTAMP_DIFF / stream->clock.size))
+		return;
+
+	/* This is expensive, only do it if the sample will be added. */
+	sample.host_time = uvc_video_get_time();
+
 	uvc_video_clock_add_sample(&stream->clock, &sample);
-	stream->clock.last_sof = sample.dev_sof;
+	stream->clock.last_sof_processed = sample.dev_sof;
 }
 
 static void uvc_video_clock_reset(struct uvc_clock *clock)
 {
 	clock->head = 0;
 	clock->count = 0;
-	clock->last_sof = -1;
+	clock->last_sof_processed = -1;
+	clock->last_sof_raw = -1;
 	clock->last_sof_overflow = -1;
 	clock->sof_offset = -1;
 }
@@ -833,15 +858,22 @@ void uvc_video_clock_update(struct uvc_streaming *stream,
 		y2 += 2048 << 16;
 
 	/*
-	 * Have at least 1/4 of a second of timestamps before we
-	 * try to do any calculation. Otherwise we do not have enough
-	 * precision. This value was determined by running Android CTS
-	 * on different devices.
+	 * If the buffer is not full, we want to gather at least 1/4th of
+	 * timestamps before using HW timestamping. We do this to avoid jitter
+	 * on the initial frames.
 	 *
-	 * dev_sof runs at 1KHz, and we have a fixed point precision of
-	 * 16 bits.
+	 * If the buffer is full we would use it regardless of how much data
+	 * it represents. This could be solved with an infinite big circular
+	 * buffer, but RAM is expensive these days, specially the infinitely
+	 * big.
+	 *
+	 * The value of UVC_MIN_HW_TIMESTAMP_DIFF was determined by running
+	 * Android's CTS on different devices.
+	 *
+	 * y1 and y2 are dev_sof with a fixed point precision of 16 bits.
 	 */
-	if ((y2 - y1) < ((1000 / 4) << 16))
+	if (clock->size != clock->count &&
+	    (y2 - y1) < (UVC_MIN_HW_TIMESTAMP_DIFF << 16))
 		goto done;
 
 	y = (u64)(y2 - y1) * (1ULL << 31) + (u64)y1 * (u64)x2

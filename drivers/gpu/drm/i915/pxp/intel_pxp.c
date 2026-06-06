@@ -470,8 +470,10 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 			struct drm_i915_gem_object *obj,
 			bool assign)
 {
-	if (!intel_pxp_is_active(pxp))
+	if (!intel_pxp_is_active(pxp)) {
+		drm_err_ratelimited(&pxp->ctrl_gt->i915->drm, "PXP key_check failed: PXP not active!\n");
 		return -ENODEV;
+	}
 
 	if (!i915_gem_object_is_protected(obj))
 		return -EINVAL;
@@ -487,8 +489,11 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 	if (!obj->pxp_key_instance && assign)
 		obj->pxp_key_instance = pxp->key_instance;
 
-	if (obj->pxp_key_instance != pxp->key_instance)
+	if (obj->pxp_key_instance != pxp->key_instance) {
+		drm_err_ratelimited(&pxp->ctrl_gt->i915->drm, "PXP key_check failed: key mismatch! obj key=%u, pxp key=%u\n",
+			obj->pxp_key_instance, pxp->key_instance);
 		return -ENOEXEC;
+	}
 
 	return 0;
 }
@@ -625,6 +630,15 @@ intel_pxp_ioctl_io_message(struct intel_pxp *pxp, struct drm_file *drmfile,
 		ret = -EFAULT;
 		goto end;
 	}
+
+	/*
+	 * For the mei-pxp backend the first byte of msg_out carries the MEI
+	 * vtag for this transaction (see intel_pxp_tee_io_message()). For the
+	 * gsccs backend this byte is ignored. Best-effort copy: on failure
+	 * fall back to the kzalloc'd zero (vtag=0, default channel).
+	 */
+	if (copy_from_user(msg_out, u64_to_user_ptr(params->msg_out), params->msg_out_buf_size))
+		drm_dbg(&i915->drm, "Failed to copy_from_user for TEE vtag output message\n");
 
 	if (HAS_ENGINE(pxp->ctrl_gt, GSC0))
 		ret = intel_pxp_gsccs_client_io_msg(pxp, drmfile,

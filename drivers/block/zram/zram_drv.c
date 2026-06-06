@@ -2295,12 +2295,11 @@ static int zram_open(struct gendisk *disk, blk_mode_t mode)
 
 	/*
 	 * Chromium OS specific behavior:
-	 * sys_swapon opens the device once to populate its swapinfo->swap_file
-	 * and once when it claims the block device (blkdev_get).  By limiting
-	 * the maximum number of opens to 2, we ensure there are no prior open
-	 * references before swap is enabled.
+	 * swapon opens device once (the counter incremented after return).
+	 * We don't allow openers BEFORE nor AFTER swapon.  swapoff has a
+	 * special fallback logic to handle failed open().
 	 */
-	if (disk_openers(disk) > 1)
+	if (disk_openers(disk) > 0)
 		return -EBUSY;
 
 	/* zram was claimed to reset so open request fails */
