@@ -792,10 +792,6 @@ SyncCheckpointFinaliseFence(PPVRSRV_DEVICE_NODE psDevNode,
 #endif
 		eError = g_psSyncCheckpointPfnStruct->pfnFenceFinalise(hFence, pvFinaliseData);
 		PVR_LOG_IF_ERROR(eError, "g_psSyncCheckpointPfnStruct->pfnFenceFinalise returned error");
-
-		RGXSRV_HWPERF_ALLOC_FENCE(psDevNode, OSGetCurrentClientProcessIDKM(), hFence,
-		                          SyncCheckpointGetFirmwareAddr(psSyncCheckpoint),
-		                          pszName, OSStringLength(pszName));
 	}
 	return eError;
 }
