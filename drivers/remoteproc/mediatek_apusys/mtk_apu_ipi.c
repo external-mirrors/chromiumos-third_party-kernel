@@ -6,6 +6,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/dev_printk.h>
 #include <linux/irq.h>
+#include <linux/math64.h>
 #include <linux/pm_runtime.h>
 #include <linux/sched/clock.h>
 
@@ -43,7 +44,7 @@ static void mtk_apu_timer_callback(struct timer_list *timer)
 
 static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 {
-	uint64_t ts = sched_clock();
+	uint64_t ts = div_u64(sched_clock(), NSEC_PER_MSEC);
 	uint64_t dtime_ts;
 	unsigned long power_dtime = 0;
 	struct device *power_dev = &(apu->power_pdev)->dev;
