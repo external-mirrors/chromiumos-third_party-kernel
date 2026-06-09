@@ -36,6 +36,7 @@
 		vcc33-supply = <&pp3300_tchscr_x>;
 		vccio-supply = <&pp1800_tchscr_report_disable>;
 		post-power-on-delay-ms = <150>;
+		panel = <&panel>;
 		status = "fail-needs-probe";
 	};
 
