@@ -5,7 +5,7 @@
 
 #include <linux/container_of.h>
 #include <linux/dev_printk.h>
-#include <linux/sched/clock.h>
+#include <linux/ktime.h>
 #include <linux/workqueue.h>
 
 #include <linux/remoteproc/mtk_apu.h>
@@ -15,7 +15,7 @@ static void mtk_apu_send_timesync_request(struct mtk_apu *apu)
 	int ret;
 	u64 timesync_stamp;
 
-	timesync_stamp = sched_clock();
+	timesync_stamp = ktime_get_ns();
 	ret = mtk_apu_ipi_send(apu, MTK_APU_IPI_TIMESYNC, &timesync_stamp, sizeof(u64), 0);
 
 	if (ret)

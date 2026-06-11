@@ -6,8 +6,8 @@
 #include <asm/arch_timer.h>
 
 #include <linux/dma-mapping.h>
+#include <linux/ktime.h>
 #include <linux/math64.h>
-#include <linux/sched/clock.h>
 
 #include <linux/mailbox/mtk-apu-mailbox.h>
 #include <linux/remoteproc/mtk_apu.h>
@@ -74,7 +74,7 @@ int mtk_apu_config_setup(struct mtk_apu *apu)
 	}
 
 	spin_lock_irqsave(&apu->reg_lock, flags);
-	apu->conf_buf->time_offset = sched_clock();
+	apu->conf_buf->time_offset = ktime_get_ns();
 	timertick = arch_timer_read_counter();
 	spin_unlock_irqrestore(&apu->reg_lock, flags);
 

@@ -166,7 +166,7 @@ struct mtk_apu {
 
 	/* delay power off */
 	struct delayed_work power_off_work;
-	uint64_t cur_dtime_ts;
+	ktime_t cur_dtime_ts;
 
 	struct regmap_field *config_regmap_field;
 

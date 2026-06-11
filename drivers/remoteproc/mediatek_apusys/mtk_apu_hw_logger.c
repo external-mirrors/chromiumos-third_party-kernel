@@ -10,11 +10,11 @@
 #include <linux/delay.h>
 #include <linux/dev_printk.h>
 #include <linux/dma-mapping.h>
+#include <linux/ktime.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
-#include <linux/sched/clock.h>
 #include <linux/syscalls.h>
 
 #include <linux/firmware/mediatek/mtk-apu.h>
@@ -535,11 +535,11 @@ static irqreturn_t apu_logtop_irq_handler(int irq, void *dev_id)
 
 	bool lbc_full_flg, ovwrite_flg;
 	unsigned int ctrl_flag = 0;
-	unsigned long long irq_start_time;
+	u64 irq_start_time;
 	struct mtk_apu_hw_logger *hw_logger_data = dev_id;
 	struct device *dev = hw_logger_data->dev;
 
-	irq_start_time = sched_clock();
+	irq_start_time = ktime_get_ns();
 
 	apu_logtop_copy_buf(hw_logger_data);
 
@@ -564,7 +564,7 @@ static irqreturn_t apu_logtop_irq_handler(int irq, void *dev_id)
 	}
 
 	wake_up_all(&hw_logger_data->wq_data.apusys_hwlog_wait);
-	dev_dbg(dev, "irq_time = %lld ns\n", sched_clock() - irq_start_time);
+	dev_dbg(dev, "irq_time = %lld ns\n", ktime_get_ns() - irq_start_time);
 
 	return IRQ_HANDLED;
 }

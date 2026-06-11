@@ -6,9 +6,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/dev_printk.h>
 #include <linux/irq.h>
-#include <linux/math64.h>
+#include <linux/ktime.h>
 #include <linux/pm_runtime.h>
-#include <linux/sched/clock.h>
 
 #include <linux/remoteproc/mtk_apu.h>
 #include "mtk_apu_ipi_config.h"
@@ -45,19 +44,19 @@ static void mtk_apu_power_off_work(struct work_struct *work)
 
 static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 {
-	uint64_t ts = div_u64(sched_clock(), NSEC_PER_MSEC);
-	uint64_t dtime_ts;
+	ktime_t ts = ktime_get();
+	ktime_t dtime_ts;
 	unsigned long power_dtime_jiffies;
 	struct device *power_dev = &(apu->power_pdev)->dev;
 	int ret;
 
 	dtime = clamp_val(dtime, MIN_DTIME, MAX_DTIME);
 
-	dtime_ts = ts + dtime;
-	if (apu->cur_dtime_ts < dtime_ts)
-		apu->cur_dtime_ts = dtime_ts;
-	else
+	dtime_ts = ktime_add_ms(ts, dtime);
+	if (!ktime_before(apu->cur_dtime_ts, dtime_ts))
 		return;
+
+	apu->cur_dtime_ts = dtime_ts;
 
 	/*
 	 * A later IPI extended the power-off deadline, so cancel the
@@ -80,7 +79,7 @@ static void mtk_apu_power_dtime_handler(struct mtk_apu *apu, int dtime)
 				__func__, MTK_APU_IPI_MIDDLEWARE, ret);
 	}
 
-	power_dtime_jiffies = msecs_to_jiffies(apu->cur_dtime_ts - ts);
+	power_dtime_jiffies = msecs_to_jiffies(dtime);
 	schedule_delayed_work(&apu->power_off_work, power_dtime_jiffies);
 }
 
