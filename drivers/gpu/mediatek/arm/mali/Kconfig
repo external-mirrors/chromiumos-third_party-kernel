@@ -200,18 +200,15 @@ config MALI_MTK_LARGE_PAGE_SUPPORT
 config MALI_MTK_PAGE_MIGRATION_SUPPORT
 	bool "Enable support for page migration"
 	depends on MALI_MTK && MALI_MTK_EXPERT
-	default y
-	default n if ANDROID
+	default n
 	help
-	  Compile in support for page migration.
-	  If set to disabled ('n') then page migration cannot
-	  be enabled at all, and related symbols are not compiled in.
-	  If not set, page migration is compiled in by default, and
-	  if not explicitly enabled or disabled with the insmod parameter,
-	  page migration becomes automatically enabled with large pages.
+	 Allows runtime page migration to be operational (non-Android platforms).
 
-	  If in doubt, say Y. To strip out page migration symbols and support,
-	  say N.
+	 Note that this option only enables page migration on an experimental basis
+	 for non-Android builds. Enabling it on Android platforms will trigger a
+	 compile-time error and fail the build.
+
+	 If in doubt, say N.
 
 config MALI_MTK_CORESTACK
 	bool "Enable support of GPU core stack power control"
