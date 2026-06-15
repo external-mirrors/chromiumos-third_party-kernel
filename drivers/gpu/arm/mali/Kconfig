@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2012-2024 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2012-2026 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -200,6 +200,19 @@ config LARGE_PAGE_SUPPORT
 	 This depends on GPU support.
 
 	 If in doubt, say Y.
+
+config MALI_PAGE_MIGRATION
+	bool "Support for page migration"
+	depends on MALI_MIDGARD && MALI_EXPERT
+	default n
+	help
+	 Allows runtime page migration to be operational (non-Android platforms).
+
+	 Note that this option only enables page migration on an experimental basis
+	 for non-Android builds. Enabling it on Android platforms will trigger a
+	 compile-time error and fail the build.
+
+	 If in doubt, say N.
 
 config MALI_CORESTACK
 	bool "Enable support of GPU core stack power control"
