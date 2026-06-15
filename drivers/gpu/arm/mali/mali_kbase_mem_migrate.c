@@ -22,6 +22,7 @@
 /**
  * DOC: Base kernel page migration implementation.
  */
+#include <linux/build_bug.h>
 #include <linux/migrate.h>
 
 #include <mali_kbase.h>
@@ -672,17 +673,40 @@ void kbase_mem_migrate_init(struct kbase_device *kbdev)
 #else
 	struct kbase_mem_migrate *mem_migrate = &kbdev->mem_migrate;
 
-	/* Page migration support compiled in, either explicitly or
-	 * by default, so the default behaviour is to follow the choice
-	 * of large pages if not selected at insmod. Check insmod parameter
-	 * integer for a negative value to see if insmod parameter was
-	 * passed in at all (it will override the default negative value).
-	 */
-	if (kbase_page_migration_enabled < 0)
-		kbase_page_migration_enabled = kbdev->pagesize_2mb ? 1 : 0;
-	else
-		dev_info(kbdev->dev, "Page migration support explicitly %s at insmod.",
-			 kbase_page_migration_enabled ? "enabled" : "disabled");
+#ifdef __ANDROID_COMMON_KERNEL__
+	BUILD_BUG_ON_MSG(IS_ENABLED(CONFIG_MALI_PAGE_MIGRATION),
+			 "Mali does not support page migration on Android");
+#endif /* __ANDROID_COMMON_KERNEL__ */
+
+	if (IS_ENABLED(CONFIG_MALI_PAGE_MIGRATION)) {
+		/* Page migration should only be enabled if compaction is
+		 * enabled in the kernel otherwise pages cannot be marked as
+		 * movable.
+		 *
+		 * Page migration support compiled in, either explicitly or
+		 * by default, so the default behaviour is to follow the choice
+		 * of large pages if not selected at insmod. Check insmod parameter
+		 * integer for a negative value to see if insmod parameter was
+		 * passed in at all (it will override the default negative value).
+		 */
+		if (IS_ENABLED(CONFIG_COMPACTION)) {
+			if (kbase_page_migration_enabled < 0)
+				kbase_page_migration_enabled = kbdev->pagesize_2mb ? 1 : 0;
+			else
+				dev_info(kbdev->dev, "Page migration support explicitly %s at insmod.",
+					 kbase_page_migration_enabled ? "enabled" : "disabled");
+
+			if (kbase_is_page_migration_enabled())
+				dev_warn(kbdev->dev,
+					 "Mali page migration feature is for EXPERIMENTAL use only.");
+		} else if (kbase_page_migration_enabled > 0) {
+			kbase_page_migration_enabled = 0;
+			dev_warn(kbdev->dev,
+				 "No CONFIG_COMPACTION. 'page migration support enable' ignored.");
+		}
+	} else {
+		kbase_page_migration_enabled = 0;
+	}
 
 	spin_lock_init(&mem_migrate->free_pages_lock);
 	INIT_LIST_HEAD(&mem_migrate->free_pages_list);
