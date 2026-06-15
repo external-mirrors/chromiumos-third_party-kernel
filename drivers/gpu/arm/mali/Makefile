@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 #
-# (C) COPYRIGHT 2010-2024 ARM Limited. All rights reserved.
+# (C) COPYRIGHT 2010-2026 ARM Limited. All rights reserved.
 #
 # This program is free software and is provided to you under the terms of the
 # GNU General Public License version 2 as published by the Free Software
@@ -104,6 +104,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
             # Prevent misuse when CONFIG_MALI_EXPERT=n
             CONFIG_MALI_CORESTACK = n
             CONFIG_LARGE_PAGE_SUPPORT = y
+            CONFIG_MALI_PAGE_MIGRATION = n
             CONFIG_MALI_PWRSOFT_765 = n
             CONFIG_MALI_JOB_DUMP = n
             CONFIG_MALI_NO_MALI = n
@@ -167,6 +168,7 @@ ifeq ($(MALI_KCONFIG_EXT_PREFIX),)
         CONFIG_MALI_EXPERT \
         CONFIG_MALI_CORESTACK \
         CONFIG_LARGE_PAGE_SUPPORT \
+        CONFIG_MALI_PAGE_MIGRATION \
         CONFIG_MALI_PWRSOFT_765 \
         CONFIG_MALI_JOB_DUMP \
         CONFIG_MALI_NO_MALI \
