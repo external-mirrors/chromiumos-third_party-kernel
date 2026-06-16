@@ -400,7 +400,7 @@ static int iommu_init_device(struct amd_iommu *iommu, struct device *dev)
 	 */
 	if ((iommu_default_passthrough() || !amd_iommu_force_isolation) &&
 	    dev_is_pci(dev) && pci_iommuv2_capable(to_pci_dev(dev))) {
-		dev_data->iommu_v2 = iommu->is_iommu_v2;
+		dev_data->iommu_v2 = iommu->is_iommu_v2 && IS_ENABLED(CONFIG_AMD_IOMMU_V2);
 	}
 
 	dev_iommu_priv_set(dev, dev_data);
