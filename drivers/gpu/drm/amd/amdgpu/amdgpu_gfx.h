@@ -126,6 +126,13 @@ enum amdgpu_unmap_queues_action {
 	PREEMPT_QUEUES_NO_UNMAP,
 };
 
+enum amdgpu_gfxoff_status {
+	AMDGPU_GFXOFF_STATUS_POWER_DOWN = 0,
+	AMDGPU_GFXOFF_STATUS_TRANSITION_UP = 1,
+	AMDGPU_GFXOFF_STATUS_POWER_UP = 2,
+	AMDGPU_GFXOFF_STATUS_TRANSITION_DOWN = 3,
+};
+
 struct kiq_pm4_funcs {
 	/* Support ASIC-specific kiq pm4 packets*/
 	void (*kiq_set_resources)(struct amdgpu_ring *kiq_ring,
@@ -513,7 +520,9 @@ void amdgpu_gfx_bit_to_me_queue(struct amdgpu_device *adev, int bit,
 				int *me, int *pipe, int *queue);
 bool amdgpu_gfx_is_me_queue_enabled(struct amdgpu_device *adev, int me,
 				    int pipe, int queue);
+
 void amdgpu_gfx_off_ctrl(struct amdgpu_device *adev, bool enable);
+void amdgpu_gfx_wait_for_gfxoff_disabled(struct amdgpu_device *adev);
 int amdgpu_get_gfx_off_status(struct amdgpu_device *adev, uint32_t *value);
 int amdgpu_gfx_ras_late_init(struct amdgpu_device *adev, struct ras_common_if *ras_block);
 void amdgpu_gfx_ras_fini(struct amdgpu_device *adev);
