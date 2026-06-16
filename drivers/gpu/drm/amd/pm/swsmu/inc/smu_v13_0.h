@@ -203,6 +203,8 @@ int smu_v13_0_set_xgmi_pstate(struct smu_context *smu,
 
 int smu_v13_0_gfx_off_control(struct smu_context *smu, bool enable);
 
+
+
 int smu_v13_0_register_irq_handler(struct smu_context *smu);
 
 int smu_v13_0_set_azalia_d3_pme(struct smu_context *smu);

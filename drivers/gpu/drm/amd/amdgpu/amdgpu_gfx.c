@@ -24,6 +24,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/iopoll.h>
 #include "amdgpu.h"
 #include "amdgpu_gfx.h"
 #include "amdgpu_rlc.h"
@@ -670,6 +671,21 @@ int amdgpu_gfx_enable_kgq(struct amdgpu_device *adev, int xcc_id)
 	return r;
 }
 
+void amdgpu_gfx_wait_for_gfxoff_disabled(struct amdgpu_device *adev)
+{
+	uint32_t status = 0;
+	int r;
+
+	r = read_poll_timeout(amdgpu_dpm_get_status_gfxoff, r,
+			      r || status == AMDGPU_GFXOFF_STATUS_POWER_UP,
+			      1000, 50000, true, adev, &status);
+
+	if (r == -ETIMEDOUT)
+		dev_err(adev->dev, "Timeout waiting for GFXOFF to disable!\n");
+	else if (r && r != -EOPNOTSUPP && r != -EINVAL)
+		dev_err(adev->dev, "Error waiting for GFXOFF to disable: %d\n", r);
+}
+
 /* amdgpu_gfx_off_ctrl - Handle gfx off feature enable/disable
  *
  * @adev: amdgpu_device pointer
@@ -719,6 +735,8 @@ void amdgpu_gfx_off_ctrl(struct amdgpu_device *adev, bool enable)
 			if (adev->gfx.gfx_off_state &&
 			    !amdgpu_dpm_set_powergating_by_smu(adev, AMD_IP_BLOCK_TYPE_GFX, false)) {
 				adev->gfx.gfx_off_state = false;
+
+				amdgpu_gfx_wait_for_gfxoff_disabled(adev);
 
 				if (adev->gfx.funcs->init_spm_golden) {
 					dev_dbg(adev->dev,

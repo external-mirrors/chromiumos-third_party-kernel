@@ -42,6 +42,11 @@
 #undef pr_info
 #undef pr_debug
 
+#define regSMUIO_GFX_MISC_CNTL				0x00c5
+#define regSMUIO_GFX_MISC_CNTL_BASE_IDX			0
+#define SMUIO_GFX_MISC_CNTL__PWR_GFXOFF_STATUS_MASK	0x00000006L
+#define SMUIO_GFX_MISC_CNTL__PWR_GFXOFF_STATUS__SHIFT	0x1L
+
 #define mmMP1_C2PMSG_2                                                                            (0xbee142 + 0xb00000 / 4)
 #define mmMP1_C2PMSG_2_BASE_IDX                                                                   0
 
@@ -1104,6 +1109,19 @@ static int smu_v13_0_5_set_fine_grain_gfx_freq_parameters(struct smu_context *sm
 	return 0;
 }
 
+static uint32_t smu_v13_0_5_get_gfxoff_status(struct smu_context *smu)
+{
+	uint32_t reg;
+	uint32_t gfxoff_status = 0;
+	struct amdgpu_device *adev = smu->adev;
+
+	reg = RREG32_SOC15(SMUIO, 0, regSMUIO_GFX_MISC_CNTL);
+	gfxoff_status = (reg & SMUIO_GFX_MISC_CNTL__PWR_GFXOFF_STATUS_MASK)
+		>> SMUIO_GFX_MISC_CNTL__PWR_GFXOFF_STATUS__SHIFT;
+
+	return gfxoff_status;
+}
+
 static const struct pptable_funcs smu_v13_0_5_ppt_funcs = {
 	.check_fw_status = smu_v13_0_check_fw_status,
 	.check_fw_version = smu_v13_0_check_fw_version,
@@ -1124,6 +1142,7 @@ static const struct pptable_funcs smu_v13_0_5_ppt_funcs = {
 	.get_pp_feature_mask = smu_cmn_get_pp_feature_mask,
 	.set_driver_table_location = smu_v13_0_set_driver_table_location,
 	.gfx_off_control = smu_v13_0_gfx_off_control,
+	.get_gfx_off_status = smu_v13_0_5_get_gfxoff_status,
 	.mode2_reset = smu_v13_0_5_mode2_reset,
 	.get_dpm_ultimate_freq = smu_v13_0_5_get_dpm_ultimate_freq,
 	.od_edit_dpm_table = smu_v13_0_5_od_edit_dpm_table,
