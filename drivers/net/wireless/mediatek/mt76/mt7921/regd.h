@@ -11,6 +11,5 @@ struct regulatory_request;
 void mt7921_regd_update(struct mt792x_dev *dev);
 void mt7921_regd_notifier(struct wiphy *wiphy,
 			  struct regulatory_request *request);
-bool mt7921_regd_clc_supported(struct mt792x_dev *dev);
 
 #endif
