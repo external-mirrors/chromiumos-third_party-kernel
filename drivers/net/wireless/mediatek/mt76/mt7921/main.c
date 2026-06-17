@@ -7,7 +7,6 @@
 #include <linux/module.h>
 #include <net/ipv6.h>
 #include "mt7921.h"
-#include "regd.h"
 #include "mcu.h"
 
 static int
