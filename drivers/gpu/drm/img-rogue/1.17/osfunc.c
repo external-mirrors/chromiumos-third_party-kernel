@@ -2260,25 +2260,39 @@ PVRSRV_ERROR OSDmaPrepareTransfer(PVRSRV_DEVICE_NODE *psDevNode,
 	PVR_LOG_GOTO_IF_NOMEM(psOSCleanupData->pages[psOSCleanupData->uiCount], eError, e1);
 
 	gup_flags |= bMemToDev ? 0 : FOLL_WRITE;
-
-	num_pinned_pages = get_user_pages_fast(
+	iRet = get_user_pages_fast(
 			(unsigned long)puiAddress,
 			(int)num_pages,
 			gup_flags,
 			psOSCleanupData->pages[psOSCleanupData->uiCount]);
-	if (num_pinned_pages != num_pages)
+
+	if (iRet < 0)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "get_user_pages_fast failed: (%d - %u)", num_pinned_pages, num_pages));
-		eError = PVRSRV_ERROR_OUT_OF_MEMORY;
+		/* Error from pvr_pin_user_pages_for_dma might be due to incompatible buffer passed
+		 * via cpu ptr. For example, device memory allocs might not be suitable for pinning */
+		PVR_DPF((PVR_DBG_ERROR,
+			"%s: Error pinning pages. (error %d)", __func__, iRet));
+		eError = PVRSRV_ERROR_INVALID_PARAMS;
 		goto e2;
 	}
+
+	num_pinned_pages = (unsigned int)iRet;
+
+	if (num_pinned_pages != num_pages)
+	{
+		PVR_DPF((PVR_DBG_ERROR,
+			"get_user_pages_fast for sparse failed, "
+			"not all pages were pinned: (%d - %u)", num_pinned_pages, num_pages));
+		eError = PVRSRV_ERROR_OUT_OF_MEMORY;
+		goto e3; /* Unpin what was pinned and return error */
+	}
+
+	psOSCleanupData->puiNumPages[psOSCleanupData->uiCount] = num_pinned_pages;
 
 #if defined(SUPPORT_VALIDATION) && defined(PVRSRV_DEBUG_DMA)
 	DMADumpPhysicalAddresses(psOSCleanupData->pages[psOSCleanupData->uiCount],
 							 num_pages, psDmaAddr, offset);
 #endif
-
-	psOSCleanupData->puiNumPages[psOSCleanupData->uiCount] = num_pinned_pages;
 
 	if (sg_alloc_table_from_pages(psSg, psOSCleanupData->pages[psOSCleanupData->uiCount], num_pages, offset, uiSize, GFP_KERNEL) != 0)
 	{
@@ -2302,9 +2316,9 @@ PVRSRV_ERROR OSDmaPrepareTransfer(PVRSRV_DEVICE_NODE *psDevNode,
 	dmaengine_slave_config(pvChan, &sConfig);
 
 	iRet = dma_map_sg(psDevConfig->pvOSDevice, psSg->sgl, psSg->nents, sConfig.direction);
-	if (!iRet)
+	if (iRet == 0)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "%s: Error mapping SG list", __func__));
+		PVR_DPF((PVR_DBG_ERROR, "%s: Error mapping SG list (%d)", __func__, iRet));
 		eError = PVRSRV_ERROR_INVALID_PARAMS;
 		goto e4;
 	}
@@ -2346,7 +2360,7 @@ e3:
 	{
 		IMG_UINT32 i;
 		/* Unpin pages */
-		for (i=0; i<psOSCleanupData->puiNumPages[psOSCleanupData->uiCount]; i++)
+		for (i=0; i<num_pinned_pages; i++)
 		{
 			put_page(psOSCleanupData->pages[psOSCleanupData->uiCount][i]);
 		}
@@ -2482,14 +2496,27 @@ PVRSRV_ERROR OSDmaPrepareTransferSparse(PVRSRV_DEVICE_NODE *psDevNode,
 
 		next_pages = psOSCleanupData->pages[psOSCleanupData->uiCount] + (valid_idx * 2);
 
-		num_pinned_pages = get_user_pages_fast(
+		iRet = get_user_pages_fast(
 			(unsigned long)pvNextAddress,
 			(int)num_pages,
 			gup_flags,
 			next_pages);
+		if (iRet < 0)
+		{
+			/* Error from pvr_pin_user_pages_for_dma might be due to incompatible buffer passed
+			 * via cpu ptr. For example, device memory allocs might not be suitable for pinning */
+			PVR_DPF((PVR_DBG_ERROR,
+				"%s: Error pinning pages. (error %d)", __func__, iRet));
+			eError = PVRSRV_ERROR_INVALID_PARAMS;
+			goto e2;
+		}
+
+		num_pinned_pages = (unsigned int)iRet;
 		if (num_pinned_pages != num_pages)
 		{
-			PVR_DPF((PVR_DBG_ERROR, "get_user_pages_fast for sparse failed: (%d - %u)", num_pinned_pages, num_pages));
+			PVR_DPF((PVR_DBG_ERROR,
+				"get_user_pages_fast for sparse failed, "
+				"not all pages were pinned: (%d - %u)", num_pinned_pages, num_pages));
 			eError = PVRSRV_ERROR_OUT_OF_MEMORY;
 			goto e2;
 		}
@@ -2530,7 +2557,7 @@ PVRSRV_ERROR OSDmaPrepareTransferSparse(PVRSRV_DEVICE_NODE *psDevNode,
 		dmaengine_slave_config(pvChan, &sConfig);
 
 		iRet = dma_map_sg(psDevConfig->pvOSDevice, psSg->sgl, psSg->nents, sConfig.direction);
-		if (!iRet)
+		if (iRet == 0)
 		{
 			PVR_DPF((PVR_DBG_ERROR, "%s: Error mapping SG list", __func__));
 			eError = PVRSRV_ERROR_INVALID_PARAMS;
