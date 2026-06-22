@@ -175,7 +175,7 @@ out:
 
 static void mdw_cmd_update_einfos(struct mdw_cmd *c)
 {
-	c->end_ts = sched_clock();
+	c->end_ts = ktime_get_ns();
 	c->einfos->c.total_us = div_u64(c->end_ts - c->start_ts, 1000);
 	c->einfos->c.inference_id = c->inference_id;
 }
@@ -265,7 +265,7 @@ static int mdw_cmd_run(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 
 	mdw_cmd_show(c, mdw_cmd_debug);
 
-	c->start_ts = sched_clock();
+	c->start_ts = ktime_get_ns();
 	atomic_inc(&mdev->cmd_running);
 	ret = mdev->plat_funcs->run_cmd(mpriv, c);
 	if (ret) {
@@ -282,7 +282,7 @@ static int mdw_cmd_run(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 		dma_fence_put(f);
 		/* power off */
 		atomic_dec(&mdev->cmd_running);
-		c->end_ts = sched_clock();
+		c->end_ts = ktime_get_ns();
 	} else {
 		mdw_flw_debug("s(0x%llx) cmd(0x%llx) run\n",
 			(uint64_t)c->mpriv, c->kid);
@@ -632,13 +632,13 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 	uint64_t ts1 = 0, ts2 = 0;
 	int power_dtime = c->power_dtime;
 
-	ts1 = sched_clock();
+	ts1 = ktime_get_ns();
 	mdw_trace_begin("apumdw:cmd_complete|cmd:0x%llx/0x%llx", c->uid, c->kid);
 	mutex_lock(&c->mtx);
-	ts2 = sched_clock();
+	ts2 = ktime_get_ns();
 	c->enter_complt_time = ts2 - ts1;
 
-	ts1 = sched_clock();
+	ts1 = ktime_get_ns();
 	c->pb_put_time = ts1 - ts2;
 
 	/* execinfo out */
@@ -647,7 +647,7 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 	else
 		c->cmd_state = MDW_PERF_CMD_INIT;
 
-	ts2 = sched_clock();
+	ts2 = ktime_get_ns();
 	c->cmdbuf_out_time = ts2 - ts1;
 
 	atomic_dec(&mdev->cmd_running);
@@ -695,7 +695,7 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 		}
 	}
 	dma_fence_put(f);
-	ts1 = sched_clock();
+	ts1 = ktime_get_ns();
 	c->handle_cmd_result_time = ts1 - ts2;
 
 	/* get cmd history table */
@@ -744,7 +744,7 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 	if (mdw_dev->update_power_dtime)
 		mdw_dev->update_power_dtime(power_dtime);
 
-	ts2 = sched_clock();
+	ts2 = ktime_get_ns();
 	c->load_aware_pwroff_time = ts2 - ts1;
 out:
 	mdw_flw_debug("c(0x%llx) complete done\n", c->kid);
@@ -754,11 +754,11 @@ out:
 
 	/* check mpriv to clean cmd */
 	mutex_lock(&mpriv->mtx);
-	ts1 = sched_clock();
+	ts1 = ktime_get_ns();
 	c->enter_mpriv_release_time = ts1 - ts2;
 	atomic_dec(&mpriv->active_cmds);
 	mdev->plat_funcs->release_cmd(mpriv);
-	ts2 = sched_clock();
+	ts2 = ktime_get_ns();
 	c->mpriv_release_time = ts2 - ts1;
 	mutex_unlock(&mpriv->mtx);
 	mdw_cmd_deque_trace(c, MDW_CMD_DEQUE);

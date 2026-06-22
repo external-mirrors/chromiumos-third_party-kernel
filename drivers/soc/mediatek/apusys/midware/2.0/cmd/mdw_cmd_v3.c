@@ -24,7 +24,7 @@ static int mdw_cmd_run(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 
 	mdw_cmd_show(c, mdw_cmd_debug);
 
-	c->start_ts = sched_clock();
+	c->start_ts = ktime_get_ns();
 	ret = mdev->plat_funcs->run_cmd(mpriv, c);
 	if (ret) {
 		mdw_drv_err("s(0x%llx) run cmd(0x%llx) fail(%d)\n",
@@ -54,7 +54,7 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 	mdw_trace_begin("apumdw:cmd_complete|cmd:0x%llx/0x%llx", c->uid, c->kid);
 	mutex_lock(&c->mtx);
 
-	c->end_ts = sched_clock();
+	c->end_ts = ktime_get_ns();
 	c->einfos->c.total_us = div_u64(c->end_ts - c->start_ts, 1000);
 	mdw_flw_debug("s(0x%llx) c(%s/0x%llx/0x%llx/0x%llx) ret(%d) sc_rets(0x%llx) complete, pid(%d/%d)(%d)\n",
 		(uint64_t)mpriv, c->comm, c->uid, c->kid, c->rvid,

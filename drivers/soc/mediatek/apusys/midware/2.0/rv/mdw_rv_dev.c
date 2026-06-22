@@ -292,9 +292,9 @@ static int mdw_rv_callback(struct rpmsg_device *rpdev, void *data,
 
 	mdw_drv_debug("callback msg(%d/0x%llx)\n", msg->id, msg->sync_id);
 
-	ts1 = sched_clock();
+	ts1 = ktime_get_ns();
 	mutex_lock(&mrdev->msg_mtx);
-	ts2 = sched_clock();
+	ts2 = ktime_get_ns();
 	mrdev->enter_rv_cb_time = ts2 - ts1;
 	s_msg = mdw_rv_dev_msg_find(mrdev, msg->sync_id);
 	if (!s_msg) {
@@ -304,7 +304,7 @@ static int mdw_rv_callback(struct rpmsg_device *rpdev, void *data,
 		list_del(&s_msg->ud_item);
 	}
 	mutex_unlock(&mrdev->msg_mtx);
-	ts1 = sched_clock();
+	ts1 = ktime_get_ns();
 	mrdev->rv_cb_time = ts1 - ts2;
 	/* complete callback */
 	if (s_msg)
