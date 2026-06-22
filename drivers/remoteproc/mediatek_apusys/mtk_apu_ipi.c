@@ -180,7 +180,8 @@ int mtk_apu_ipi_send(struct mtk_apu *apu, u32 id, void *data, u32 len, u32 wait_
 	send_hdr.hdr->csum = calculate_csum(data, len);
 	send_hdr.hdr->serial_no = apu->tx_serial_no++;
 
-	ipi_usage_cnt_update(apu, id, 1);
+	apu->ipi_id = id;
+	apu->ipi_id_ack[id] = false;
 
 	ret = mbox_send_message(apu->ch, &send_hdr);
 	if (ret < 0) {
@@ -190,22 +191,20 @@ int mtk_apu_ipi_send(struct mtk_apu *apu, u32 id, void *data, u32 len, u32 wait_
 		ret = 0;
 	}
 
-	apu->ipi_id = id;
-	apu->ipi_id_ack[id] = false;
+	ipi_usage_cnt_update(apu, id, 1);
 
 	/* poll ack from remote processor if wait_ms specified */
 	if (wait_ms) {
-		timeout = jiffies + msecs_to_jiffies(wait_ms);
+		timeout = msecs_to_jiffies(wait_ms);
 		ret = wait_event_timeout(apu->ack_wq, apu->ipi_id_ack[id], timeout);
 
-		apu->ipi_id_ack[id] = false;
-
-		if (WARN(!ret, "apu ipi %d ack timeout!", id)) {
-			ret = -EIO;
-			goto unlock_mutex;
+		if (!apu->ipi_id_ack[id] &&
+		    WARN(!ret, "apu ipi %d ack timeout!", id)) {
+			ret = -ETIMEDOUT;
 		} else {
 			ret = 0;
 		}
+		apu->ipi_id_ack[id] = false;
 	}
 
 unlock_mutex:
