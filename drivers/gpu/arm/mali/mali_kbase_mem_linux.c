@@ -1489,13 +1489,21 @@ static struct kbase_va_region *kbase_mem_from_umm(struct kbase_context *kctx,
 	if (IS_ERR_OR_NULL(reg->gpu_alloc))
 		goto no_alloc;
 
+	/* No pages to map yet */
+	reg->gpu_alloc->nents = 0;
+	reg->gpu_alloc->type = KBASE_MEM_TYPE_IMPORTED_UMM;
+	reg->gpu_alloc->imported.umm.sgt = NULL;
+	reg->gpu_alloc->imported.umm.dma_buf = dma_buf;
+	reg->gpu_alloc->imported.umm.dma_attachment = dma_attachment;
+	reg->gpu_alloc->imported.umm.current_mapping_usage_count = 0;
+	reg->gpu_alloc->imported.umm.need_sync = need_sync;
+	reg->gpu_alloc->imported.umm.kctx = kctx;
+	reg->extension = 0;
+
 	reg->cpu_alloc = kbase_mem_phy_alloc_get(reg->gpu_alloc);
 
 	if (kbase_update_region_flags(kctx, reg, *flags) != 0)
 		goto error_out;
-
-	/* No pages to map yet */
-	reg->gpu_alloc->nents = 0;
 
 	reg->flags &= ~KBASE_REG_FREE;
 	reg->flags |= KBASE_REG_GPU_NX;	/* UMM is always No eXecute */
@@ -1507,19 +1515,8 @@ static struct kbase_va_region *kbase_mem_from_umm(struct kbase_context *kctx,
 	if (padding)
 		reg->flags |= KBASE_REG_IMPORT_PAD;
 
-	reg->gpu_alloc->type = KBASE_MEM_TYPE_IMPORTED_UMM;
-	reg->gpu_alloc->imported.umm.sgt = NULL;
-	reg->gpu_alloc->imported.umm.dma_buf = dma_buf;
-	reg->gpu_alloc->imported.umm.dma_attachment = dma_attachment;
-	reg->gpu_alloc->imported.umm.current_mapping_usage_count = 0;
-	reg->gpu_alloc->imported.umm.need_sync = need_sync;
-	reg->gpu_alloc->imported.umm.kctx = kctx;
-	reg->extension = 0;
-
 	if (!IS_ENABLED(CONFIG_MALI_DMA_BUF_MAP_ON_DEMAND)) {
 		int err;
-
-		reg->gpu_alloc->imported.umm.current_mapping_usage_count = 1;
 
 		err = kbase_mem_umm_map_attachment(kctx, reg);
 		if (err) {
@@ -1529,17 +1526,23 @@ static struct kbase_va_region *kbase_mem_from_umm(struct kbase_context *kctx,
 			goto error_out;
 		}
 
+		reg->gpu_alloc->imported.umm.current_mapping_usage_count = 1;
+
 		*flags |= KBASE_MEM_IMPORT_HAVE_PAGES;
 	}
 
 	return reg;
 
+no_alloc:
+	kfree(reg);
+	dma_buf_detach(dma_buf, dma_attachment);
+	dma_buf_put(dma_buf);
+	return NULL;
+
 error_out:
 	kbase_mem_phy_alloc_put(reg->gpu_alloc);
 	kbase_mem_phy_alloc_put(reg->cpu_alloc);
-no_alloc:
 	kfree(reg);
-
 	return NULL;
 }
 
