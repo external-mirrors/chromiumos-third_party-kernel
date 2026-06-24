@@ -470,10 +470,8 @@ int intel_pxp_key_check(struct intel_pxp *pxp,
 			struct drm_i915_gem_object *obj,
 			bool assign)
 {
-	if (!intel_pxp_is_active(pxp)) {
-		drm_err_ratelimited(&pxp->ctrl_gt->i915->drm, "PXP key_check failed: PXP not active!\n");
+	if (!intel_pxp_is_active(pxp))
 		return -ENODEV;
-	}
 
 	if (!i915_gem_object_is_protected(obj))
 		return -EINVAL;
