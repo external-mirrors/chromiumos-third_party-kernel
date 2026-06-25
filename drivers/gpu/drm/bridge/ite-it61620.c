@@ -29,12 +29,16 @@
 #include <drm/drm_print.h>
 #include <sound/hdmi-codec.h>
 #include <linux/pm_runtime.h>
+#include <linux/string.h>
 
 #include <crypto/hash.h>
 #include <drm/display/drm_hdcp_helper.h>
 
 #define EDID_R_BURST_NUM 16
 #define DDC_FIFO_DEPTH 32
+
+#define IT61620_HDMI_AFE_TABLE_SIZE	4
+#define IT61620_HDMI_AFE_VAL_COUNT	24
 
 #define MIPIRX_I2C_ADDRESS (0x78 >> 1)
 #define TX_I2C_ADDRESS (0xC0 >> 1)
@@ -544,6 +548,8 @@ struct it61620 {
 	struct mipi_dsi_device *dsi;
 
 	struct it61620_mipirx mipirx_config;
+
+	struct it61620_hdmi_afe_setting hdmi_afe[IT61620_HDMI_AFE_TABLE_SIZE];
 
 	struct videomode vm;
 
@@ -1184,7 +1190,7 @@ static int it61620_hdmi_set_ddc_fifo(struct it61620 *it61620, u8 *buf,
 	return 0;
 }
 
-static const struct it61620_hdmi_afe_setting hdmi_afe[4] = {
+static const struct it61620_hdmi_afe_setting hdmi_afe_defaults[IT61620_HDMI_AFE_TABLE_SIZE] = {
 	{375000, 0x01, 0x02,
 		{0x03, 0x53, 0x1A, 0x03, 0x00, 0x04,
 		0x03, 0x53, 0x1A, 0x03, 0x00, 0x04,
@@ -1221,12 +1227,13 @@ static void it61620_hdmi_setup_afe(struct it61620 *it61620, int clock)
 	it61620_hdmi_reg_write(it61620, TX_REG_AFE35, 0x00);
 	it61620_hdmi_reg_write(it61620, TX_REG_AFEE9, 0x10);
 
-	for (i = 0; i < sizeof(hdmi_afe); i++) {
-		if (clock > hdmi_afe[i].clock || hdmi_afe[i].clock == 0)
+	for (i = 0; i < ARRAY_SIZE(it61620->hdmi_afe); i++) {
+		if (clock > it61620->hdmi_afe[i].clock ||
+		    it61620->hdmi_afe[i].clock == 0)
 			break;
 	}
 
-	afe = &hdmi_afe[i];
+	afe = &it61620->hdmi_afe[i];
 
 	it61620_hdmi_reg_write(it61620, TX_REG_AFE0E, 0xF0);
 
@@ -2945,6 +2952,67 @@ static void it61620_detach_dsi(struct it61620 *it61620)
 	mipi_dsi_detach(it61620->dsi);
 }
 
+static void it61620_hdmi_afe_init(struct it61620 *it61620)
+{
+	struct device *dev = it61620->dev;
+	struct device_node *np = dev->of_node;
+	static const char * const dt_props[] = {
+		"ite,hdmi-afe-high-375",
+		"ite,hdmi-afe-high-340",
+		"ite,hdmi-afe-mid",
+		"ite,hdmi-afe-low",
+	};
+	u32 vals[IT61620_HDMI_AFE_VAL_COUNT];
+	int count, i, j, ret;
+
+	memcpy(it61620->hdmi_afe, hdmi_afe_defaults, sizeof(hdmi_afe_defaults));
+
+	/*
+	 * Optional full afe_val[24] overrides:
+	 *   ite,hdmi-afe-high-375 -> hdmi_afe[0], clock > 375 MHz
+	 *   ite,hdmi-afe-high-340 -> hdmi_afe[1], 340 MHz < clock <= 375 MHz
+	 *   ite,hdmi-afe-mid      -> hdmi_afe[2], 150 MHz < clock <= 340 MHz
+	 *   ite,hdmi-afe-low      -> hdmi_afe[3], clock <= 150 MHz
+	 */
+	for (i = 0; i < ARRAY_SIZE(dt_props); i++) {
+		const char *prop = dt_props[i];
+
+		count = of_property_count_elems_of_size(np, prop, sizeof(u32));
+		if (count <= 0)
+			continue;
+
+		if (count != IT61620_HDMI_AFE_VAL_COUNT) {
+			dev_err(dev, "%s: expected %d values, got %d\n",
+				prop, IT61620_HDMI_AFE_VAL_COUNT, count);
+			continue;
+		}
+
+		ret = of_property_read_u32_array(np, prop, vals, count);
+		if (ret) {
+			dev_err(dev, "%s: failed to read property (%d)\n",
+				prop, ret);
+			continue;
+		}
+
+		for (j = 0; j < count; j++) {
+			if (vals[j] > 0xFF) {
+				dev_err(dev, "%s[%d]: invalid value 0x%x\n",
+					prop, j, vals[j]);
+				break;
+			}
+		}
+		if (j < count)
+			continue;
+
+		dev_info(dev,
+			 "%s: HDMI AFE table entry %d override loaded from DT\n",
+			 prop, i);
+
+		for (j = 0; j < count; j++)
+			it61620->hdmi_afe[i].afe_val[j] = vals[j];
+	}
+}
+
 static unsigned int it61620_parse_dt(struct it61620 *it61620)
 {
 	struct device *dev = it61620->dev;
@@ -2963,6 +3031,8 @@ static unsigned int it61620_parse_dt(struct it61620 *it61620)
 			"cannot read dsi-lanes reg property\n");
 
 	dev_dbg(dev, "num_lanes = %x\n", num_lanes);
+
+	it61620_hdmi_afe_init(it61620);
 
 	return 0;
 }
