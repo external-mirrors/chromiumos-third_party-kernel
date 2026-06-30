@@ -291,6 +291,12 @@ static int mtk_mdp_probe(struct platform_device *pdev)
 	}
 
 	mdp->vpu_dev = vpu_get_plat_device(pdev);
+	if (!mdp->vpu_dev) {
+		dev_err(&pdev->dev, "Failed to get vpu device\n");
+		ret = -ENODEV;
+		goto err_vpu_get_dev;
+	}
+
 	ret = vpu_wdt_reg_handler(mdp->vpu_dev, mtk_mdp_reset_handler, mdp,
 				  VPU_RST_MDP);
 	if (ret) {
@@ -322,6 +328,9 @@ err_component_master_add:
 err_set_max_seg_size:
 
 err_wdt_reg:
+	platform_device_put(mdp->vpu_dev);
+
+err_vpu_get_dev:
 	v4l2_device_unregister(&mdp->v4l2_dev);
 
 err_dev_register:
@@ -344,6 +353,7 @@ static void mtk_mdp_remove(struct platform_device *pdev)
 	component_master_del(&pdev->dev, &mtk_mdp_com_ops);
 
 	vb2_dma_contig_clear_max_seg_size(&pdev->dev);
+	platform_device_put(mdp->vpu_dev);
 	v4l2_device_unregister(&mdp->v4l2_dev);
 
 	destroy_workqueue(mdp->wdt_wq);
