@@ -7,13 +7,6 @@
 
 #include "mt8189-pinfunc.h"
 
-&edp_pwr_pins {
-	pins-pwr {
-		pinmux = <PINMUX_GPIO25__FUNC_GPIO25>;
-		output-high;
-	};
-};
-
 &pp3300_edp_x {
 	regulator-boot-on;
 };
