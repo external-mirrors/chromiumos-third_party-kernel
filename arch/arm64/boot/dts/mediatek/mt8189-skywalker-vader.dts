@@ -111,13 +111,17 @@
 	};
 
 	touchscreen_goodix: touchscreen@5d {
-		compatible = "goodix,gt7986u", "goodix,gt7375p";
+		compatible = "hid-over-i2c";
 		reg = <0x5d>;
+		hid-descr-addr = <0x0001>;
 		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins>;
 		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
 		vdd-supply = <&pp3300_tchscr_x>;
+		vddl-supply = <&pp1800_tchscr_report_disable>;
+		post-power-on-delay-ms = <10>;
+		post-reset-deassert-delay-ms = <180>;
 		status = "fail-needs-probe";
 	};
 };
