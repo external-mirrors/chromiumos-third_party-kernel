@@ -1968,8 +1968,11 @@ _AllocOSPages_Fast(PMR_OSPAGEARRAY_DATA *psPageArrayData)
 
 	uiArrayIndex = uiDevPagesFromPool;
 
-	if ((uiOSPagesToAlloc - uiDevPagesFromPool) < PVR_LINUX_HIGHORDER_ALLOCATION_THRESHOLD)
-	{	/* Small allocations: ask for one device page at a time */
+	if ((uiOSPagesToAlloc - uiDevPagesFromPool) < PVR_LINUX_HIGHORDER_ALLOCATION_THRESHOLD ||
+	    BIT_ISSET(psPageArrayData->ui32AllocFlags, FLAG_IS_CMA))
+	{	/* Small allocations: ask for one device page at a time.
+		 * Non4k allocations: ask exactly for requested order
+		 */
 		ui32Order = ui32MinOrder;
 		bIncreaseMaxOrder = IMG_FALSE;
 	}
