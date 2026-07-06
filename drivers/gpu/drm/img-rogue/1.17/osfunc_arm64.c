@@ -266,39 +266,8 @@ void OSCPUCacheInvalidateRangeKM(PVRSRV_DEVICE_NODE *psDevNode,
 								 IMG_CPU_PHYADDR sCPUPhysStart,
 								 IMG_CPU_PHYADDR sCPUPhysEnd)
 {
-	struct device *dev;
-
-	if (pvVirtStart)
-	{
-		FlushRange(pvVirtStart, pvVirtEnd, PVRSRV_CACHE_OP_INVALIDATE);
-		return;
-	}
-
-	dev = psDevNode->psDevConfig->pvOSDevice;
-
-	if (dev)
-	{
-		dma_sync_single_for_cpu(dev, sCPUPhysStart.uiAddr,
-								sCPUPhysEnd.uiAddr - sCPUPhysStart.uiAddr,
-								DMA_FROM_DEVICE);
-	}
-	else
-	{
-		/*
-		 * Allocations done prior to obtaining device pointer may
-		 * affect in cache operations being scheduled.
-		 *
-		 * Ignore operations with null device pointer.
-		 * This prevents crashes on newer kernels that don't return dummy ops
-		 * when null pointer is passed to get_dma_ops.
-		 *
-		 */
-
-		/* Don't spam on nohw */
-#if !defined(NO_HARDWARE)
-		PVR_DPF((PVR_DBG_WARNING, "Cache operation cannot be completed!"));
-#endif
-	}
+	/* We default to flush here to ensure that client side can't issue invalidates on memory written by KMD */
+	OSCPUCacheFlushRangeKM(psDevNode, pvVirtStart, pvVirtEnd, sCPUPhysStart, sCPUPhysEnd);
 }
 
 
