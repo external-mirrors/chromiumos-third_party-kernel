@@ -261,6 +261,26 @@ struct mmc_part {
 #define MMC_BLK_DATA_AREA_RPMB	(1<<3)
 };
 
+#define MMC_SNAP_HISTORY_SIZE 8
+
+/* Defined here so struct mmc_card can embed it */
+struct mmc_bus_snapshot {
+	u64 timestamp;
+	u32 ocr;
+	u32 state;
+	unsigned int clock;
+	u32 raw_cid[4];
+	u32 raw_csd[4];
+	u16 rca;
+	unsigned char vdd;
+	unsigned char signal_voltage;
+	unsigned char power_mode;
+	unsigned char drv_type;
+	unsigned char bus_width;
+	unsigned char timing;
+	bool enhanced_strobe;
+};
+
 /*
  * MMC device
  */
@@ -343,6 +363,10 @@ struct mmc_card {
 	unsigned int    nr_parts;
 
 	struct workqueue_struct *complete_wq;	/* Private workqueue */
+
+	/* Per-card snapshot history ring buffer */
+	struct mmc_bus_snapshot history[MMC_SNAP_HISTORY_SIZE];
+	atomic_t history_idx;
 };
 
 static inline bool mmc_large_sector(struct mmc_card *card)

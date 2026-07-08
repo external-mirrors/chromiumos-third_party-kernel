@@ -40,6 +40,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/idr.h>
 #include <linux/debugfs.h>
+#include <linux/sched/clock.h>
 
 #include <linux/mmc/ioctl.h>
 #include <linux/mmc/card.h>
@@ -182,6 +183,8 @@ static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
 static void mmc_blk_hsq_req_done(struct mmc_request *mrq);
 static int mmc_spi_err_check(struct mmc_card *card);
 static int mmc_blk_busy_cb(void *cb_data, bool *busy);
+static void mmc_capture_snapshot(struct mmc_card *card);
+static void mmc_panic_dump_regs(struct mmc_card *card);
 
 static struct mmc_blk_data *mmc_blk_get(struct gendisk *disk)
 {
@@ -1939,6 +1942,8 @@ static void mmc_blk_mq_rw_recovery(struct mmc_queue *mq, struct request *req)
 	if (!mmc_host_is_spi(mq->card->host) &&
 	    err && mmc_blk_reset(md, card->host, type)) {
 		pr_err("%s: recovery failed!\n", req->q->disk->disk_name);
+		mmc_capture_snapshot(card);
+		mmc_panic_dump_regs(card);
 		mqrq->retries = MMC_NO_RETRIES;
 		return;
 	}
@@ -1971,6 +1976,12 @@ static void mmc_blk_mq_rw_recovery(struct mmc_queue *mq, struct request *req)
 		mmc_blk_read_single(mq, req);
 		return;
 	}
+
+	pr_emerg("MMC_DUMP: Recovery retries exhausted for %s transaction.\n",
+		 rq_data_dir(req) == WRITE ? "WRITE" : "READ");
+	mmc_capture_snapshot(card);
+	mmc_panic_dump_regs(card);
+
 }
 
 static inline bool mmc_blk_rq_error(struct mmc_blk_request *brq)
@@ -2137,6 +2148,89 @@ static void mmc_blk_hsq_req_done(struct mmc_request *mrq)
 		mmc_blk_cqe_complete_rq(mq, req);
 	else if (likely(!blk_should_fake_timeout(req->q)))
 		blk_mq_complete_request(req);
+}
+
+static void mmc_print_snapshot_entry(const struct mmc_bus_snapshot *snap,
+				     const char *tag, int idx)
+{
+	pr_emerg("MMC_SNAP [%d] [%s] Time: %llu ns\n"
+		 "  -> Registers   : OCR: 0x%08x | RCA: 0x%04x | State: 0x%08x\n"
+		 "  -> CID         : %08x%08x%08x%08x\n"
+		 "  -> CSD         : %08x%08x%08x%08x\n"
+		 "  -> Electrical  : Clk: %u Hz | Width: %d-bit | Timing: %d | ES: %s\n"
+		 "  -> Power/Bus   : VDD: 0x%02x | SigVolt: %d (%s) | PwrMode: %d (%s) | DrvType: %d\n",
+		 idx, tag,
+		 (unsigned long long)snap->timestamp,
+		 snap->ocr, snap->rca, snap->state,
+		 snap->raw_cid[0], snap->raw_cid[1], snap->raw_cid[2], snap->raw_cid[3],
+		 snap->raw_csd[0], snap->raw_csd[1], snap->raw_csd[2], snap->raw_csd[3],
+		 snap->clock, (1 << snap->bus_width), snap->timing, snap->enhanced_strobe ? "on" : "off",
+		 snap->vdd,
+		 snap->signal_voltage,
+		 snap->signal_voltage == 1 ? "1.8V" : (snap->signal_voltage == 2 ? "1.2V" : "3.3V"),
+		 snap->power_mode,
+		 snap->power_mode == 2 ? "On" : (snap->power_mode == 1 ? "Up" : "Off"),
+		 snap->drv_type);
+}
+
+static void mmc_capture_snapshot(struct mmc_card *card)
+{
+	unsigned int idx;
+	struct mmc_bus_snapshot *snap;
+
+	if (!card || !card->host)
+		return;
+
+	idx = (unsigned int)atomic_inc_return(&card->history_idx) & (MMC_SNAP_HISTORY_SIZE - 1);
+	snap = &card->history[idx];
+
+	snap->ocr = card->ocr;
+	snap->rca = card->rca;
+	memcpy(snap->raw_cid, card->raw_cid, sizeof(snap->raw_cid));
+	memcpy(snap->raw_csd, card->raw_csd, sizeof(snap->raw_csd));
+	snap->state = card->state;
+
+	snap->clock = card->host->ios.clock;
+	snap->vdd = card->host->ios.vdd;
+	snap->signal_voltage = card->host->ios.signal_voltage;
+	snap->power_mode = card->host->ios.power_mode;
+	snap->drv_type = card->host->ios.drv_type;
+	snap->bus_width = card->host->ios.bus_width;
+	snap->timing = card->host->ios.timing;
+	snap->enhanced_strobe = card->host->ios.enhanced_strobe;
+
+	snap->timestamp = local_clock();
+}
+
+static void mmc_panic_dump_regs(struct mmc_card *card)
+{
+	int i;
+	unsigned int idx, curr_idx;
+	struct mmc_bus_snapshot snap;
+
+	if (!card || !card->host)
+		return;
+
+	pr_emerg("================================================\n");
+	pr_emerg("MMC_DUMP: Critical Hardware Error Event Triggered on %s!\n", mmc_card_name(card));
+	pr_emerg("MMC_DUMP: === HISTORICAL LOGS (LATEST FIRST) ===\n");
+
+	/* Read current index once to anchor the ring buffer traversal */
+	curr_idx = (unsigned int)atomic_read(&card->history_idx);
+
+	for (i = 0; i < MMC_SNAP_HISTORY_SIZE; i++) {
+		/* Reverse-chronological traversal modulo size */
+		idx = (curr_idx - i) & (MMC_SNAP_HISTORY_SIZE - 1);
+
+		/* Copy to local stack to prevent torn reads if preempted */
+		snap = card->history[idx];
+
+		if (snap.timestamp == 0)
+			continue;
+
+		mmc_print_snapshot_entry(&snap, (i == 0) ? "ERROR EVENT / LATEST SNAPSHOT" : "PAST HISTORY", idx);
+	}
+	pr_emerg("================================================\n");
 }
 
 void mmc_blk_mq_complete(struct request *req)
@@ -2408,6 +2502,8 @@ enum mmc_issued mmc_blk_mq_issue_rq(struct mmc_queue *mq, struct request *req)
 	struct mmc_card *card = md->queue.card;
 	struct mmc_host *host = card->host;
 	int ret;
+
+	mmc_capture_snapshot(card);
 
 	ret = mmc_blk_part_switch(card, md->part_type);
 	if (ret)
