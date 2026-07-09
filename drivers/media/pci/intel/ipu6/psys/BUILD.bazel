@@ -1,0 +1,4 @@
+load(
+    "//build/kernel/kleaf:kernel.bzl",
+    "ddk_header",
+)
