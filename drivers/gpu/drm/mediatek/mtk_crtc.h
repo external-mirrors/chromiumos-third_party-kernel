@@ -6,6 +6,7 @@
 #ifndef MTK_CRTC_H
 #define MTK_CRTC_H
 
+#include <linux/completion.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_vblank_work.h>
 #include "mtk_ddp_comp.h"
@@ -81,6 +82,7 @@ struct mtk_crtc {
 	wait_queue_head_t		cb_blocking_queue;
 	struct task_struct		*cmdq_done_task;
 	atomic_t			cmdq_done;
+	struct completion               fast_modeset_done;
 
 	struct cmdq_client		sec_cmdq_client;
 	bool				sec_cmdq_working;

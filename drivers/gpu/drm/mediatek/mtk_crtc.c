@@ -758,6 +758,14 @@ ddp_cmdq_cb_out:
 
 	mtk_crtc->cmdq_vblank_cnt = 0;
 	wake_up_all(&mtk_crtc->cb_blocking_queue);
+
+	if (state->fast_modeset) {
+		/*
+		 * Signal dedicated completion to distinguish fast_modeset
+		 * from normal update_config operations.
+		 */
+		complete(&mtk_crtc->fast_modeset_done);
+	}
 }
 #endif
 
@@ -1589,16 +1597,22 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 			if (cmdq_handle) {
+				unsigned long ret;
+
 				cmdq_pkt_finalize(cmdq_handle);
 				dma_sync_single_for_device(mtk_crtc->cmdq_client.chan->mbox->dev,
 							   cmdq_handle->pa_base,
 							   cmdq_handle->cmd_buf_size,
 							   DMA_TO_DEVICE);
+				reinit_completion(&mtk_crtc->fast_modeset_done);
 				mbox_send_message(mtk_crtc->cmdq_client.chan, cmdq_handle);
 				mbox_client_txdone(mtk_crtc->cmdq_client.chan, 0);
-				wait_event_timeout(mtk_crtc->cb_blocking_queue,
-						   atomic_read(&mtk_crtc->cmdq_done),
-						   msecs_to_jiffies(50));
+				ret = wait_for_completion_timeout(&mtk_crtc->fast_modeset_done,
+								  msecs_to_jiffies(50));
+				if (!ret)
+					dev_warn(crtc->dev->dev,
+						 "crtc%d switch mode timeout\n",
+						 drm_crtc_index(crtc));
 			}
 #endif
 		}
@@ -2012,6 +2026,7 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 	drm_crtc_enable_color_mgmt(&mtk_crtc->base, 0, has_ctm, gamma_lut_size);
 	mutex_init(&mtk_crtc->hw_lock);
 	spin_lock_init(&mtk_crtc->config_lock);
+	init_completion(&mtk_crtc->fast_modeset_done);
 
 	if (mtk_crtc->layer_nr) {
 		for (i = 0; i < mtk_crtc->layer_nr; i++)
