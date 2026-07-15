@@ -2865,28 +2865,11 @@ static int btusb_mtk_disconnect(struct hci_dev *hdev)
 	return 0;
 }
 
-static int btusb_mtk_reset(struct hci_dev *hdev, void *rst_data)
+static int btusb_mtk_subsys_reset(struct hci_dev *hdev, u32 dev_id)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
-	struct btmtk_data *btmtk_data = hci_get_priv(hdev);
 	u32 val;
 	int err;
-
-	/* It's MediaTek specific bluetooth reset mechanism via USB */
-	if (test_and_set_bit(BTMTK_HW_RESET_ACTIVE, &data->flags)) {
-		bt_dev_err(hdev, "last reset failed? Not resetting again");
-		return -EBUSY;
-	}
-
-	err = usb_autopm_get_interface(data->intf);
-	if (err < 0)
-		return err;
-
-	/* Release MediaTek ISO data interface */
-	btusb_mtk_release_iso_intf(hdev);
-
-	btusb_stop_traffic(data);
-	usb_kill_anchored_urbs(&data->tx_anchor);
 
 	/* Toggle the hard reset line. The MediaTek device is going to
 	 * yank itself off the USB and then replug. The cleanup is handled
@@ -2901,7 +2884,7 @@ static int btusb_mtk_reset(struct hci_dev *hdev, void *rst_data)
 		return 0;
 	}
 
-	if (btmtk_data->dev_id == 0x7925) {
+	if (dev_id == 0x7925) {
 		err = btmtk_usb_uhw_reg_read(hdev, MTK_BT_RESET_REG_CONNV3, &val);
 		if (err < 0)
 			return err;
@@ -2985,8 +2968,34 @@ static int btusb_mtk_reset(struct hci_dev *hdev, void *rst_data)
 	if (err < 0 || !val)
 		bt_dev_err(hdev, "Can't get device id, subsys reset fail.");
 
-	usb_queue_reset_device(data->intf);
+	return err;
+}
 
+static int btusb_mtk_reset(struct hci_dev *hdev, void *rst_data)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	struct btmtk_data *btmtk_data = hci_get_priv(hdev);
+	int err;
+
+	/* It's MediaTek specific bluetooth reset mechanism via USB */
+	if (test_and_set_bit(BTMTK_HW_RESET_ACTIVE, &data->flags)) {
+		bt_dev_err(hdev, "last reset failed? Not resetting again");
+		return -EBUSY;
+	}
+
+	err = usb_autopm_get_interface(data->intf);
+	if (err < 0)
+		return err;
+
+	/* Release MediaTek ISO data interface */
+	btusb_mtk_release_iso_intf(hdev);
+
+	btusb_stop_traffic(data);
+	usb_kill_anchored_urbs(&data->tx_anchor);
+
+	err = btusb_mtk_subsys_reset(hdev, btmtk_data->dev_id);
+
+	usb_queue_reset_device(data->intf);
 	clear_bit(BTMTK_HW_RESET_ACTIVE, &data->flags);
 
 	return err;
