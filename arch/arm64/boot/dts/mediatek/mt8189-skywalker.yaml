@@ -132,10 +132,14 @@ jaina:
       fw_config:
         mask: 0x00000060
         value: 0x00000020
-    mt8189-skywalker-jaina-keyboard-uk.dtbo:
+    mt8189-skywalker-jaina-keyboard-us2.dtbo:
       fw_config:
         mask: 0x00000060
         value: 0x00000040
+    mt8189-skywalker-jaina-keyboard-us3.dtbo:
+      fw_config:
+        mask: 0x00000060
+        value: 0x00000060
     mt8189-skywalker-jaina-thermal-11.dtbo:
       fw_config:
         mask: 0x00000080
