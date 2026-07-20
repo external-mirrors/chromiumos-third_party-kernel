@@ -54,6 +54,15 @@ static irqreturn_t mtk_apu_mailbox_irq(int irq, void *data)
 
 	mbox_chan_received_data(link, apu_mbox->msgs.data);
 
+	/*
+	 * The payload has been copied out, so clear the OUTBOX interrupt before
+	 * the bottom half runs. The remote uses it as flow control; holding it
+	 * across the (possibly slow) bottom-half handler stalls the remote and
+	 * can deadlock the mailbox.
+	 */
+	writel(readl(apu_mbox->regs + MTK_APU_MBOX_OUTBOX_IRQ),
+	       apu_mbox->regs + MTK_APU_MBOX_OUTBOX_IRQ);
+
 	return IRQ_WAKE_THREAD;
 }
 
@@ -64,8 +73,6 @@ static irqreturn_t mtk_apu_mailbox_irq_thread(int irq, void *data)
 	struct mbox_chan *link = &apu_mbox->mbox.chans[0];
 
 	mbox_chan_received_data_bh(link, apu_mbox->msgs.data);
-	writel(readl(apu_mbox->regs + MTK_APU_MBOX_OUTBOX_IRQ),
-	       apu_mbox->regs + MTK_APU_MBOX_OUTBOX_IRQ);
 
 	return IRQ_HANDLED;
 }
