@@ -31,6 +31,8 @@
 #define WDT_REQ_MODE			0x30
 #define WDT_STATUS_MCU_THERMAL_RST	(1<<23)
 #define WDT_REQ_MODE_KEY		0x33000000
+#define LVTS_MSR_READ_TIMEOUT_US	400
+#define LVTS_MSR_READ_WAIT_US		(LVTS_MSR_READ_TIMEOUT_US / 2)
 
 /*==================================================
  * LVTS local common code
@@ -62,10 +64,20 @@ static unsigned int lvts_temp_to_raw(struct formula_coeff *co, unsigned int sens
 
 static noinline int __used lvts_read_tc_msr_raw(unsigned int *msr_reg)
 {
+	u32 val;
+	int rc;
+
 	if (msr_reg == 0)
 		return 0;
 
-	return readl(msr_reg) & MRS_RAW_MASK;
+	rc = readl_poll_timeout((void __iomem *)msr_reg, val,
+				val & MRS_RAW_VALID_BIT,
+				LVTS_MSR_READ_WAIT_US,
+				LVTS_MSR_READ_TIMEOUT_US);
+	if (rc)
+		return 0;
+
+	return val & MRS_RAW_MASK;
 }
 
 static int __used lvts_read_all_tc_temperature(struct lvts_data *lvts_data, bool in_isr)
