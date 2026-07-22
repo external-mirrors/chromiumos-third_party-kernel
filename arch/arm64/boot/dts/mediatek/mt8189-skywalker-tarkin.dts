@@ -326,10 +326,6 @@
 	/delete-node/ mt6359codec;
 };
 
-&pp3300_edp_x {
-	/delete-property/ regulator-boot-on;
-};
-
 &rt9123 {
 	status = "disabled";
 };
