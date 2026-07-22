@@ -269,6 +269,17 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	if (cpu_has(c, X86_FEATURE_MSR_IA32_FEAT_CTL))
 		init_ia32_feat_ctl(c);
 
+	/*
+	 * AMD Mendocino/Yellow Carp SMU updates load SRSO-aware microcode.
+	 * Because CONFIG_CPU_SRSO is disabled downstream, the kernel leaves the
+	 * standard retbleed_return_thunk active. The newly loaded microcode
+	 * expects the kernel to utilize SRSO safe-ret paradigms immediately,
+	 * and faults with #GP if returning through an untrained, vanilla CPU RET.
+	 *
+	 * Suspend the branch predictor or execute a localized safe-ret here
+	 * to bridge the gap and prevent the fatal #GP fault upon returning
+	 * from __restore_processor_state.
+	 */
 	microcode_bsp_resume();
 
 	/*
