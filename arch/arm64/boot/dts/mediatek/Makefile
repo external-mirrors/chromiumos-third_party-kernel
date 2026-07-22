@@ -153,6 +153,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-keyboard-us.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-keyboard-jp.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-keyboard-us2.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-keyboard-us3.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-keyboard-uk.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-thermal-11.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-jaina-thermal-14.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan.dtb
