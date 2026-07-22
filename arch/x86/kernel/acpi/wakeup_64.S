@@ -127,7 +127,17 @@ SYM_FUNC_START(do_suspend_lowlevel)
 	xorl	%eax, %eax
 	addq	$8, %rsp
 	FRAME_END
-	jmp	restore_processor_state
+
+	/*
+	 * Execute restore calls using standard call/ret to shield
+	 * against the underlying AMD microcode BTB state mismatch
+	 * after S0i3 resume, rather than jumping into the thunk proxy.
+	 */
+	call	restore_processor_state
+
+	/* Fallback unconditional return */
+	ANNOTATE_RETPOLINE_SAFE
+	ret
 SYM_FUNC_END(do_suspend_lowlevel)
 STACK_FRAME_NON_STANDARD do_suspend_lowlevel
 
