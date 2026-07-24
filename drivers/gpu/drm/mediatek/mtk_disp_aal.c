@@ -21,7 +21,7 @@
 #define DISP_AAL_CFG				0x0020
 #define AAL_RELAY_MODE					BIT(0)
 #define AAL_GAMMA_LUT_EN				BIT(1)
-#define AAL_8BIT_SWTICH					BIT(8)
+#define AAL_8BIT_SWITCH					BIT(8)
 #define DISP_AAL_SIZE				0x0030
 #define DISP_AAL_SIZE_HSIZE				GENMASK(28, 16)
 #define DISP_AAL_SIZE_VSIZE				GENMASK(12, 0)
@@ -142,7 +142,7 @@ void mtk_aal_start(struct device *dev)
 
 	cfg_val = readl(aal->regs + DISP_AAL_CFG);
 	cfg_val |= AAL_RELAY_MODE;
-	cfg_val &= ~AAL_8BIT_SWTICH;
+	cfg_val &= ~AAL_8BIT_SWITCH;
 
 	writel(cfg_val, aal->regs + DISP_AAL_CFG);
 	writel(AAL_EN, aal->regs + DISP_AAL_EN);

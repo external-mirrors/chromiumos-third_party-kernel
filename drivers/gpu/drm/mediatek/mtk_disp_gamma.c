@@ -126,7 +126,9 @@ void mtk_gamma_set(struct device *dev, struct drm_crtc_state *state)
 
 	/* If there's no gamma lut there's need relay gamma. */
 	if (!state->gamma_lut) {
-		writel(GAMMA_RELAY_MODE, gamma->regs + DISP_GAMMA_CFG);
+		cfg_val = readl(gamma->regs + DISP_GAMMA_CFG);
+		cfg_val |= GAMMA_RELAY_MODE;
+		writel(cfg_val, gamma->regs + DISP_GAMMA_CFG);
 		return;
 	}
 
