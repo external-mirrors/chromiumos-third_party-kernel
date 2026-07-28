@@ -895,8 +895,12 @@ out:
 static int mtk_hwv_is_done(struct scp_domain *scpd)
 {
 	u32 val = 0, mask = 0;
+	int ret;
 
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &val);
+	ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &val);
+	if (ret)
+		return 0;
+
 	mask = BIT(scpd->data->hwv_shift);
 	if ((val & mask) == mask)
 		return 1;
@@ -907,16 +911,26 @@ static int mtk_hwv_is_done(struct scp_domain *scpd)
 static int mtk_hwv_is_enable_done(struct scp_domain *scpd)
 {
 	u32 done, en, set_sta, mask, ack;
+	int ret;
 
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &done);
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_en_ofs, &en);
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_set_sta_ofs, &set_sta);
+	ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &done);
+	if (ret)
+		return 0;
+
+	ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_en_ofs, &en);
+	if (ret)
+		return 0;
+
+	ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_set_sta_ofs, &set_sta);
+	if (ret)
+		return 0;
+
 	mask = BIT(scpd->data->hwv_shift);
 
 	if ((done & mask) && (en & mask) && !(set_sta & mask)) {
 		if (scpd->data->hwv_ack_ofs) {
-			regmap_read(scpd->hwv_regmap, scpd->data->hwv_ack_ofs, &ack);
-			if (!(ack & mask))
+			ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_ack_ofs, &ack);
+			if (ret || !(ack & mask))
 				return 0;
 		}
 
@@ -929,9 +943,15 @@ static int mtk_hwv_is_enable_done(struct scp_domain *scpd)
 static int mtk_hwv_is_disable_done(struct scp_domain *scpd)
 {
 	u32 val = 0, val2 = 0;
+	int ret;
 
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &val);
-	regmap_read(scpd->hwv_regmap, scpd->data->hwv_clr_sta_ofs, &val2);
+	ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_done_ofs, &val);
+	if (ret)
+		return 0;
+
+	ret = regmap_read(scpd->hwv_regmap, scpd->data->hwv_clr_sta_ofs, &val2);
+	if (ret)
+		return 0;
 
 	if ((val & BIT(scpd->data->hwv_shift)) &&
 		((val2 & BIT(scpd->data->hwv_shift)) == 0x0))
