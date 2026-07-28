@@ -37,7 +37,7 @@
 #define MTK_RTFF_DELAY_US		10
 #define MTK_STABLE_DELAY_US		100
 
-#define MTK_BUS_PROTECTION_RETY_TIMES	10
+#define MTK_BUS_PROTECTION_RETRY_TIMES	10
 
 #define MTK_SCPD_ACTIVE_WAKEUP		BIT(0)
 #define MTK_SCPD_FWAIT_SRAM		BIT(1)
@@ -436,14 +436,19 @@ static int set_bus_protection(struct regmap *map, struct bus_prot *bp)
 	int retry = 0;
 	int ret = 0;
 
-	while (retry <= MTK_BUS_PROTECTION_RETY_TIMES) {
+	while (retry <= MTK_BUS_PROTECTION_RETRY_TIMES) {
 		if (bp->set_ofs)
-			regmap_write(map,  bp->set_ofs, bp->mask);
+			ret = regmap_write(map, bp->set_ofs, bp->mask);
 		else
-			regmap_update_bits(map, bp->en_ofs, bp->mask, bp->mask);
+			ret = regmap_update_bits(map, bp->en_ofs, bp->mask, bp->mask);
+		if (ret)
+			return ret;
 
 		/* check bus protect enable setting */
-		regmap_read(map, bp->en_ofs, &val);
+		ret = regmap_read(map, bp->en_ofs, &val);
+		if (ret)
+			return ret;
+
 		if ((val & bp->mask) == bp->mask)
 			break;
 
@@ -467,9 +472,11 @@ static int clear_bus_protection(struct regmap *map, struct bus_prot *bp)
 	int ret = 0;
 
 	if (bp->clr_ofs)
-		regmap_write(map, bp->clr_ofs, bp->mask);
+		ret = regmap_write(map, bp->clr_ofs, bp->mask);
 	else
-		regmap_update_bits(map, bp->en_ofs, bp->mask, 0);
+		ret = regmap_update_bits(map, bp->en_ofs, bp->mask, 0);
+	if (ret)
+		return ret;
 
 	if (bp->ignore_clr_ack)
 		return 0;
