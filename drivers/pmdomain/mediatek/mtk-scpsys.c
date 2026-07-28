@@ -31,7 +31,7 @@
 #define MTK_POLL_TIMEOUT		USEC_PER_SEC
 #define MTK_POLL_TIMEOUT_300MS		(300 * USEC_PER_MSEC)
 #define MTK_POLL_IRQ_TIMEOUT		USEC_PER_SEC
-#define MTK_POLL_HWV_PREPARE_CNT	2500
+#define MTK_POLL_HWV_PREPARE_TIMEOUT_US	5000
 #define MTK_POLL_HWV_PREPARE_US		2
 #define MTK_ACK_DELAY_US		50
 #define MTK_RTFF_DELAY_US		10
@@ -967,34 +967,31 @@ static int scpsys_hwv_power_on(struct generic_pm_domain *genpd)
 	u32 val = 0;
 	int ret = 0;
 	int tmp;
-	int i = 0;
 
 	ret = scpsys_regulator_enable(scpd);
-	if (ret < 0)
-		goto out;
+	if (ret)
+		goto err_out;
 
 	ret = scpsys_clk_enable(scpd->clk, MAX_CLKS);
 	if (ret)
-		goto out;
+		goto err_reg;
 
 	ret = readx_poll_timeout_atomic(mtk_hwv_is_done, scpd, tmp, tmp > 0,
 			MTK_POLL_DELAY_US, MTK_POLL_IRQ_TIMEOUT);
-	if (ret < 0)
-		goto out;
+	if (ret)
+		goto err_clk;
 
 	val = BIT(scpd->data->hwv_shift);
-	regmap_write(scpd->hwv_regmap, scpd->data->hwv_set_ofs, val);
-	do {
-		regmap_read(scpd->hwv_regmap, scpd->data->hwv_set_ofs, &val);
-		if ((val & BIT(scpd->data->hwv_shift)) != 0)
-			break;
+	ret = regmap_write(scpd->hwv_regmap, scpd->data->hwv_set_ofs, val);
+	if (ret)
+		goto err_clk;
 
-		if (i > MTK_POLL_HWV_PREPARE_CNT)
-			goto out;
-
-		udelay(MTK_POLL_HWV_PREPARE_US);
-		i++;
-	} while (1);
+	ret = regmap_read_poll_timeout_atomic(scpd->hwv_regmap, scpd->data->hwv_set_ofs,
+					      val, (val & BIT(scpd->data->hwv_shift)),
+					      MTK_POLL_HWV_PREPARE_US,
+					      MTK_POLL_HWV_PREPARE_TIMEOUT_US);
+	if (ret)
+		goto err_hwv;
 
 	/* add debounce time */
 	udelay(1);
@@ -1002,11 +999,21 @@ static int scpsys_hwv_power_on(struct generic_pm_domain *genpd)
 	/* wait until VOTER_ACK = 1 */
 	ret = readx_poll_timeout_atomic(mtk_hwv_is_enable_done, scpd, tmp, tmp > 0,
 			MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT_300MS);
-	if (ret < 0)
-		goto out;
+	if (ret)
+		goto err_hwv;
 
 	return 0;
-out:
+
+err_hwv:
+	/* Best effort to clear HW voter state */
+	val = BIT(scpd->data->hwv_shift);
+	regmap_write(scpd->hwv_regmap, scpd->data->hwv_clr_ofs, val);
+err_clk:
+	/* Continue unwinding software resources regardless of HW errors */
+	scpsys_clk_disable(scpd->clk, MAX_CLKS);
+err_reg:
+	scpsys_regulator_disable(scpd);
+err_out:
 	dev_err(scp->dev, "Failed to power on domain %s(%d)\n", genpd->name, ret);
 	return ret;
 }
@@ -1016,28 +1023,25 @@ static int scpsys_hwv_power_off(struct generic_pm_domain *genpd)
 	struct scp_domain *scpd = container_of(genpd, struct scp_domain, genpd);
 	struct scp *scp = scpd->scp;
 	u32 val = 0;
-	int ret = 0;
+	int ret, ret_reg;
 	int tmp;
-	int i = 0;
 
 	ret = readx_poll_timeout_atomic(mtk_hwv_is_done, scpd, tmp, tmp > 0,
 			MTK_POLL_DELAY_US, MTK_POLL_IRQ_TIMEOUT);
-	if (ret < 0)
-		goto out;
+	if (ret)
+		goto err_clk;
 
 	val = BIT(scpd->data->hwv_shift);
-	regmap_write(scpd->hwv_regmap, scpd->data->hwv_clr_ofs, val);
-	do {
-		regmap_read(scpd->hwv_regmap, scpd->data->hwv_clr_ofs, &val);
-		if ((val & BIT(scpd->data->hwv_shift)) == 0)
-			break;
+	ret = regmap_write(scpd->hwv_regmap, scpd->data->hwv_clr_ofs, val);
+	if (ret)
+		goto err_clk;
 
-		if (i > MTK_POLL_HWV_PREPARE_CNT)
-			goto out;
-
-		i++;
-		udelay(MTK_POLL_HWV_PREPARE_US);
-	} while (1);
+	ret = regmap_read_poll_timeout_atomic(scpd->hwv_regmap, scpd->data->hwv_clr_ofs,
+					      val, !(val & BIT(scpd->data->hwv_shift)),
+					      MTK_POLL_HWV_PREPARE_US,
+					      MTK_POLL_HWV_PREPARE_TIMEOUT_US);
+	if (ret)
+		goto err_clk;
 
 	/* delay 100us for stable status */
 	udelay(MTK_STABLE_DELAY_US);
@@ -1045,18 +1049,24 @@ static int scpsys_hwv_power_off(struct generic_pm_domain *genpd)
 	/* wait until VOTER_ACK = 0 */
 	ret = readx_poll_timeout_atomic(mtk_hwv_is_disable_done,
 			scpd, tmp, tmp > 0, MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT_300MS);
-	if (ret < 0)
-		goto out;
 
+err_clk:
+	if (ret)
+		dev_err(scp->dev, "Failed to clear/disable HWV: %d\n", ret);
+
+	/*
+	 * Always disable clocks and regulators to prevent resource leaks, even
+	 * if HWV is left in a bad state when disabling fails.
+	 */
 	scpsys_clk_disable(scpd->clk, MAX_CLKS);
 
-	ret = scpsys_regulator_disable(scpd);
-	if (ret < 0)
-		goto out;
+	ret_reg = scpsys_regulator_disable(scpd);
+	if (ret_reg && !ret)
+		ret = ret_reg;
 
-	return 0;
-out:
-	dev_err(scp->dev, "Failed to power off domain %s(%d)\n", genpd->name, ret);
+	if (ret)
+		dev_err(scp->dev, "Failed to power off domain %s(%d)\n", genpd->name, ret);
+
 	return ret;
 }
 
