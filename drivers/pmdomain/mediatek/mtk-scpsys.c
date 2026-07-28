@@ -263,6 +263,7 @@ struct scp_subdomain {
 	int subdomain;
 };
 
+typedef int (*scp_soc_pre_probe_fn)(struct platform_device *pdev);
 typedef int (*scp_soc_post_probe_fn)(struct platform_device *pdev,
 		struct scp *scp);
 
@@ -275,6 +276,7 @@ struct scp_soc_data {
 	bool bus_prot_reg_update;
 	const char **bp_list;
 	int num_bp;
+	scp_soc_pre_probe_fn pre_probe;
 	scp_soc_post_probe_fn post_probe;
 };
 
@@ -2351,6 +2353,14 @@ static const struct scp_subdomain scp_subdomain_mt8196_mmpc[] = {
 	{MT8196_POWER_DOMAIN_MM_INFRA_AO, MT8196_POWER_DOMAIN_MM_INFRA0},
 };
 
+static int mt8196_mmpc_pre_probe(struct platform_device *pdev)
+{
+	if (!mt8196_mm_proc_domain)
+		return -EPROBE_DEFER;
+
+	return 0;
+}
+
 static int mt8196_mmpc_post_probe(struct platform_device *pdev,
 		struct scp *scp)
 {
@@ -2466,6 +2476,7 @@ static const struct scp_soc_data mt8196_mmpc_hwv_data = {
 	},
 	.bp_list = mt8196_mmpc_bp_list,
 	.num_bp = MT8196_MMPC_BP_NR,
+	.pre_probe = mt8196_mmpc_pre_probe,
 	.post_probe = mt8196_mmpc_post_probe,
 };
 
@@ -2822,6 +2833,12 @@ static int scpsys_probe(struct platform_device *pdev)
 	int i, ret;
 
 	soc = of_device_get_match_data(&pdev->dev);
+
+	if (soc->pre_probe) {
+		ret = soc->pre_probe(pdev);
+		if (ret)
+			return ret;
+	}
 
 	scp = init_scp(pdev, soc);
 	if (IS_ERR(scp))
