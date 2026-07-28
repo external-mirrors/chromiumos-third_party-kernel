@@ -109,7 +109,7 @@ module_param(enable_apicv, bool, S_IRUGO);
  * VMX and be a hypervisor for its own guests. If nested=0, guests may not
  * use VMX instructions.
  */
-static bool __read_mostly nested = 1;
+static bool __read_mostly nested = 0;
 module_param(nested, bool, S_IRUGO);
 
 bool __read_mostly enable_pml = 1;
