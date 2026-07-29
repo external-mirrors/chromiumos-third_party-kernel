@@ -222,6 +222,10 @@ int btmtk_usb_suspend(struct hci_dev *hdev);
 int btmtk_usb_setup(struct hci_dev *hdev);
 
 int btmtk_usb_shutdown(struct hci_dev *hdev);
+
+void btmtk_fw_get_filename(char *buf, size_t size, u32 dev_id, u32 fw_ver,
+			   u32 fw_flavor);
+
 #else
 
 static inline int btmtk_set_bdaddr(struct hci_dev *hdev,
@@ -311,5 +315,10 @@ static inline int btmtk_usb_setup(struct hci_dev *hdev)
 static inline int btmtk_usb_shutdown(struct hci_dev *hdev)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline void btmtk_fw_get_filename(char *buf, size_t size, u32 dev_id,
+				  u32 fw_ver, u32 fw_flavor)
+{
 }
 #endif
