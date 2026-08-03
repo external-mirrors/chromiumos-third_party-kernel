@@ -44,16 +44,25 @@ static void kvm_sched_set_util(struct kvm_vcpu *vcpu, u64 *val)
 
 static void kvm_sched_get_cpufreq_table(struct kvm_vcpu *vcpu, u64 *val)
 {
+	struct cpufreq_frequency_table *pos;
 	struct cpufreq_policy *policy;
 	u32 idx = smccc_get_arg1(vcpu);
+	u32 i;
 
 	policy = cpufreq_cpu_get(task_cpu(current));
 
 	if (!policy)
 		return;
 
-	val[0] = SMCCC_RET_SUCCESS;
-	val[1] = policy->freq_table[idx].frequency;
+	val[0] = SMCCC_RET_INVALID_PARAMETER;
+
+	cpufreq_for_each_valid_entry_idx(pos, policy->freq_table, i) {
+		if (i == idx) {
+			val[0] = SMCCC_RET_SUCCESS;
+			val[1] = policy->freq_table[idx].frequency;
+			break;
+		}
+	}
 
 	cpufreq_cpu_put(policy);
 }
