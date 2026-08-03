@@ -77,6 +77,10 @@ static void remote_populate_freqtbl(void *data)
 	cpufreq_for_each_entry_idx(pos, table, idx) {
 		arm_smccc_1_1_invoke(ARM_SMCCC_VENDOR_HYP_KVM_GET_CPUFREQ_TBL_FUNC_ID,
 				idx, &hvc_res);
+		if (hvc_res.a0 == SMCCC_RET_INVALID_PARAMETER) {
+			pos->frequency = CPUFREQ_ENTRY_INVALID;
+			continue;
+		}
 		if (hvc_res.a0) {
 			freq_data->ret = -ENODEV;
 			return;
