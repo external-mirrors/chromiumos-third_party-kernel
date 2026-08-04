@@ -50,7 +50,7 @@
 
 &i2c_tunnel {
 	battery: sbs-battery@b {
-		sbs,i2c-retry-count = <2>;
+		sbs,i2c-retry-count = <10>;
 		sbs,poll-retry-count = <10>;
 	};
 };
