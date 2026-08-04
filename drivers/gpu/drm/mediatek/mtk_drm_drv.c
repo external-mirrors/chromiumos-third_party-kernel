@@ -276,7 +276,8 @@ static const unsigned int mt8196_mtk_ddp_disp0_ext[] = {
 
 static const unsigned int mt8196_mtk_ddp_disp1_ext[] = {
 	DDP_COMPONENT_DLI_ASYNC22,
-	DDP_COMPONENT_DSC0,
+	DDP_COMPONENT_SPLITTER0,
+	DDP_COMPONENT_MERGE0,
 	DDP_COMPONENT_DP_INTF0,
 };
 
@@ -292,7 +293,7 @@ static const unsigned int mt8196_mtk_ddp_disp0_third[] = {
 
 static const unsigned int mt8196_mtk_ddp_disp1_third[] = {
 	DDP_COMPONENT_DLI_ASYNC23,
-	DDP_COMPONENT_DSC1,
+	DDP_COMPONENT_DSC2,
 };
 
 static enum mtk_ddp_comp_id mt8189_mtk_ddp_main[] = {
