@@ -24,9 +24,10 @@
 #define SWAP_MODE				0
 #define FLD_SWAP_MODE				GENMASK(4, 0)
 #define DISP_REG_MERGE_CFG_12		0x040
-#define CFG_10_10_1PI_2PO_BUF_MODE		6
-#define CFG_10_10_2PI_2PO_BUF_MODE		8
-#define CFG_11_10_1PI_2PO_MERGE			18
+#define CFG_1PI_0PI_2PO_0PO_BUF			6
+#define CFG_2PI_0PI_2PO_0PO_BUF			8
+#define CFG_1PI_1PI_2PO_0PO_MERGE		18
+#define CFG_2PI_2PI_2PO_0PO_MERGE		24
 #define FLD_CFG_MERGE_MODE			GENMASK(4, 0)
 #define DISP_REG_MERGE_CFG_24		0x070
 #define DISP_REG_MERGE_CFG_25		0x074
@@ -57,6 +58,8 @@
 #define PREULTRA_TH_HIGH			(9 * 594)
 #define FLD_PREULTRA_TH_LOW			GENMASK(15, 0)
 #define FLD_PREULTRA_TH_HIGH			GENMASK(31, 16)
+#define DISP_REG_MERGE_SUBPIXEL		0x300
+#define SUBPIXEL_EN				BIT(0)
 
 #define DISP_REG_MERGE_MUTE_0		0xf00
 
@@ -68,6 +71,7 @@ struct mtk_disp_merge {
 	bool				fifo_en;
 	bool				mute_support;
 	struct reset_control		*reset_ctl;
+	struct dsc_info			dsc_info;
 };
 
 void mtk_merge_start(struct device *dev)
@@ -107,8 +111,51 @@ void mtk_merge_stop_cmdq(struct device *dev, struct cmdq_pkt *cmdq_pkt)
 		reset_control_reset(priv->reset_ctl);
 }
 
-static void mtk_merge_fifo_setting(struct mtk_disp_merge *priv,
-				   struct cmdq_pkt *cmdq_pkt)
+static void mtk_merge_dsc_setting(struct mtk_disp_merge *priv,
+				  unsigned int h, unsigned int *l_w, unsigned int *r_w,
+				  struct cmdq_pkt *cmdq_pkt)
+{
+	const struct drm_dsc_config *dsc_cfg = &priv->dsc_info.dsc_config;
+	u32 num_eng = *r_w ? 2 : 1;
+	u32 slices_per_eng = dsc_cfg->slice_count / num_eng;
+	u32 bytes_per_eng = dsc_cfg->slice_chunk_size * slices_per_eng;
+	u32 pad = roundup(bytes_per_eng, 3) - bytes_per_eng;
+	u32 subpixel = 0;
+
+	/*
+	 * DSC outputs a byte stream; the merge/DP_INTF operates in
+	 * 3-byte (one pixel) granularity. Convert each engine's
+	 * compressed byte count to pixel count: ceil(bytes / 3).
+	 */
+	*l_w = DIV_ROUND_UP(bytes_per_eng, 3);
+	if (*r_w)
+		*r_w = DIV_ROUND_UP(bytes_per_eng, 3);
+
+	/*
+	 * When bytes_per_eng is not a multiple of 3, the DSC pads
+	 * extra bytes at the line end. The merge subpixel mode tells
+	 * hardware which sub-byte position the valid data ends at.
+	 *
+	 * Stage represents the merge's position in the tree:
+	 *   - 2 DSC → 1 merge: stage = 1
+	 *   - 4 DSC → 2 leaf merges (stage=1) → 1 final merge (stage=2)
+	 *
+	 * Formula of pixel_type fill in bit 1:
+	 *   - pixel_type = (pad == 1) ? 1 - (stage % 2) : stage % 2
+	 *
+	 * Currently only the 2-DSC topology is used, so stage is always 1.
+	 */
+	if (pad) {
+		u32 pixel_type = (pad == 2) ? 1 : 0;
+
+		subpixel = SUBPIXEL_EN | (pixel_type << 1);
+	}
+
+	mtk_ddp_write(cmdq_pkt, subpixel, &priv->cmdq_reg, priv->regs,
+		      DISP_REG_MERGE_SUBPIXEL);
+}
+
+static void mtk_merge_fifo_setting(struct mtk_disp_merge *priv, struct cmdq_pkt *cmdq_pkt)
 {
 	mtk_ddp_write(cmdq_pkt, ULTRA_EN | PREULTRA_EN,
 		      &priv->cmdq_reg, priv->regs, DISP_REG_MERGE_CFG_36);
@@ -130,7 +177,12 @@ void mtk_merge_config(struct device *dev, unsigned int w,
 		      unsigned int h, unsigned int vrefresh,
 		      unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
 {
-	mtk_merge_advance_config(dev, w, 0, h, vrefresh, bpc, cmdq_pkt);
+	struct mtk_disp_merge *priv = dev_get_drvdata(dev);
+
+	if (priv->dsc_info.splitted)
+		mtk_merge_advance_config(dev, w / 2, w / 2, h, vrefresh, bpc, cmdq_pkt);
+	else
+		mtk_merge_advance_config(dev, w, 0, h, vrefresh, bpc, cmdq_pkt);
 }
 
 void mtk_merge_advance_config(struct device *dev, unsigned int l_w, unsigned int r_w,
@@ -138,20 +190,29 @@ void mtk_merge_advance_config(struct device *dev, unsigned int l_w, unsigned int
 			      struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_disp_merge *priv = dev_get_drvdata(dev);
-	unsigned int mode = CFG_10_10_1PI_2PO_BUF_MODE;
+	unsigned int mode = CFG_1PI_0PI_2PO_0PO_BUF;
+	unsigned int sram_size = 0;
 
 	if (!h || !l_w) {
 		dev_err(dev, "%s: input width(%d) or height(%d) is invalid\n", __func__, l_w, h);
 		return;
 	}
 
+	/* l_w, r_w will be modified by mtk_merge_dsc_setting() */
+	if (priv->dsc_info.compression_enable)
+		mtk_merge_dsc_setting(priv, h, &l_w, &r_w, cmdq_pkt);
+
 	if (priv->fifo_en) {
 		mtk_merge_fifo_setting(priv, cmdq_pkt);
-		mode = CFG_10_10_2PI_2PO_BUF_MODE;
+		mode = CFG_2PI_0PI_2PO_0PO_BUF;
 	}
 
-	if (r_w)
-		mode = CFG_11_10_1PI_2PO_MERGE;
+	if (r_w) {
+		if (priv->dsc_info.splitted)
+			mode = CFG_2PI_2PI_2PO_0PO_MERGE;
+		else
+			mode = CFG_1PI_1PI_2PO_0PO_MERGE;
+	}
 
 	mtk_ddp_write(cmdq_pkt, h << 16 | l_w, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_MERGE_CFG_0);
@@ -159,6 +220,7 @@ void mtk_merge_advance_config(struct device *dev, unsigned int l_w, unsigned int
 		      DISP_REG_MERGE_CFG_1);
 	mtk_ddp_write(cmdq_pkt, h << 16 | (l_w + r_w), &priv->cmdq_reg, priv->regs,
 		      DISP_REG_MERGE_CFG_4);
+
 	/*
 	 * DISP_REG_MERGE_CFG_24 is merge SRAM0 w/h
 	 * DISP_REG_MERGE_CFG_25 is merge SRAM1 w/h.
@@ -167,14 +229,10 @@ void mtk_merge_advance_config(struct device *dev, unsigned int l_w, unsigned int
 	 * If r_w = 0, the merge is in buffer mode, the input goes through SRAM0 and
 	 * then to SRAM1. Both SRAM0 and SRAM1 are set to the same size.
 	 */
-	mtk_ddp_write(cmdq_pkt, h << 16 | l_w, &priv->cmdq_reg, priv->regs,
-		      DISP_REG_MERGE_CFG_24);
-	if (r_w)
-		mtk_ddp_write(cmdq_pkt, h << 16 | r_w, &priv->cmdq_reg, priv->regs,
-			      DISP_REG_MERGE_CFG_25);
-	else
-		mtk_ddp_write(cmdq_pkt, h << 16 | l_w, &priv->cmdq_reg, priv->regs,
-			      DISP_REG_MERGE_CFG_25);
+	sram_size = h << 16 | l_w;
+	mtk_ddp_write(cmdq_pkt, sram_size, &priv->cmdq_reg, priv->regs, DISP_REG_MERGE_CFG_24);
+	sram_size = (h << 16) | (r_w ? r_w : l_w);
+	mtk_ddp_write(cmdq_pkt, sram_size, &priv->cmdq_reg, priv->regs, DISP_REG_MERGE_CFG_25);
 
 	/*
 	 * DISP_REG_MERGE_CFG_26 and DISP_REG_MERGE_CFG_27 is only used in LR merge.
@@ -189,6 +247,20 @@ void mtk_merge_advance_config(struct device *dev, unsigned int l_w, unsigned int
 			   DISP_REG_MERGE_CFG_10, FLD_SWAP_MODE);
 	mtk_ddp_write_mask(cmdq_pkt, mode, &priv->cmdq_reg, priv->regs,
 			   DISP_REG_MERGE_CFG_12, FLD_CFG_MERGE_MODE);
+
+	dev_dbg(dev, "%s: mode=%u l_w=%u r_w=%u h=%u\n", __func__, mode, l_w, r_w, h);
+}
+
+void mtk_merge_set_dsc_info(struct device *dev, const struct dsc_info *dsc_info)
+{
+	struct mtk_disp_merge *priv = dev_get_drvdata(dev);
+
+	if (!dsc_info) {
+		dev_err(dev, "dsc_info is NULL\n");
+		return;
+	}
+
+	priv->dsc_info = *dsc_info;
 }
 
 int mtk_merge_clk_enable(struct device *dev)

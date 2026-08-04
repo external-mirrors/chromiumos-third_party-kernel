@@ -360,6 +360,7 @@ static const struct mtk_ddp_comp_funcs ddp_merge = {
 	.start = mtk_merge_start,
 	.stop = mtk_merge_stop,
 	.config = mtk_merge_config,
+	.set_dsc_info = mtk_merge_set_dsc_info,
 };
 
 static const struct mtk_ddp_comp_funcs ddp_od = {
