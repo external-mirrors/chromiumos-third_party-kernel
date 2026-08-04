@@ -132,6 +132,7 @@ extern struct platform_driver mtk_disp_ovl_driver;
 extern struct platform_driver mtk_disp_ovlsys_adaptor_driver;
 extern struct platform_driver mtk_disp_pmqos_driver;
 extern struct platform_driver mtk_disp_rdma_driver;
+extern struct platform_driver mtk_disp_splitter_driver;
 extern struct platform_driver mtk_dpi_driver;
 extern struct platform_driver mtk_dpi_driver_v2;
 extern struct platform_driver mtk_dsc_driver;

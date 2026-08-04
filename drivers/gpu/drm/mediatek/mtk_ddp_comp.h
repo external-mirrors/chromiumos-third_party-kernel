@@ -43,6 +43,7 @@ enum mtk_ddp_comp_type {
 	MTK_DISP_POSTMASK,
 	MTK_DISP_PWM,
 	MTK_DISP_RDMA,
+	MTK_DISP_SPLITTER,
 	MTK_DISP_TDSHP,
 	MTK_DISP_UFOE,
 	MTK_DISP_VIRTUAL,
@@ -61,6 +62,7 @@ enum mtk_ddp_comp_type {
 
 struct dsc_info {
 	bool compression_enable;
+	bool splitted;
 	struct drm_dsc_config dsc_config;
 };
 

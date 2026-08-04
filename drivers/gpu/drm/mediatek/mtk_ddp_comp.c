@@ -453,6 +453,19 @@ static const struct mtk_ddp_comp_funcs ddp_rdma = {
 	.get_num_formats = mtk_rdma_get_num_formats,
 };
 
+static const struct mtk_ddp_comp_funcs ddp_splitter = {
+	.clk_enable = mtk_splitter_clk_enable,
+	.clk_disable = mtk_splitter_clk_disable,
+	.config = mtk_splitter_config,
+	.start = mtk_splitter_start,
+	.stop = mtk_splitter_stop,
+	.connect = mtk_splitter_connect,
+	.disconnect = mtk_splitter_disconnect,
+	.add = mtk_splitter_add,
+	.remove = mtk_splitter_remove,
+	.set_dsc_info = mtk_splitter_set_dsc_info,
+};
+
 static const struct mtk_ddp_comp_funcs ddp_ufoe = {
 	.clk_enable = mtk_ddp_clk_enable,
 	.clk_disable = mtk_ddp_clk_disable,
@@ -503,6 +516,7 @@ static const char * const mtk_ddp_comp_stem[MTK_DDP_COMP_TYPE_MAX] = {
 	[MTK_DISP_POSTMASK] = "postmask",
 	[MTK_DISP_PWM] = "pwm",
 	[MTK_DISP_RDMA] = "rdma",
+	[MTK_DISP_SPLITTER] = "splitter",
 	[MTK_DISP_TDSHP] = "tdshp",
 	[MTK_DISP_UFOE] = "ufoe",
 	[MTK_DISP_VIRTUAL] = "virtual",
@@ -586,6 +600,7 @@ static const struct mtk_ddp_comp_match mtk_ddp_matches[DDP_COMPONENT_DRM_ID_MAX]
 	[DDP_COMPONENT_RDMA1]		= { MTK_DISP_RDMA,		1, &ddp_rdma },
 	[DDP_COMPONENT_RDMA2]		= { MTK_DISP_RDMA,		2, &ddp_rdma },
 	[DDP_COMPONENT_RDMA4]		= { MTK_DISP_RDMA,		4, &ddp_rdma },
+	[DDP_COMPONENT_SPLITTER0]	= { MTK_DISP_SPLITTER,		0, &ddp_splitter },
 	[DDP_COMPONENT_TDSHP0]		= { MTK_DISP_TDSHP,		0, &ddp_tdshp },
 	[DDP_COMPONENT_UFOE]		= { MTK_DISP_UFOE,		0, &ddp_ufoe },
 	[DDP_COMPONENT_WDMA0]		= { MTK_DISP_WDMA,		0, NULL },
@@ -745,6 +760,7 @@ int mtk_ddp_comp_init(struct device *dev, struct device_node *node, struct mtk_d
 	    type == MTK_DISP_OVL_2L ||
 	    type == MTK_DISP_PWM ||
 	    type == MTK_DISP_RDMA ||
+	    type == MTK_DISP_SPLITTER ||
 	    type == MTK_DPI ||
 	    type == MTK_DP_INTF ||
 	    type == MTK_DSI ||

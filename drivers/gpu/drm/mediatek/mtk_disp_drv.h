@@ -295,4 +295,21 @@ int mtk_padding_clk_enable(struct device *dev);
 void mtk_padding_clk_disable(struct device *dev);
 void mtk_padding_start(struct device *dev);
 void mtk_padding_stop(struct device *dev);
+
+int mtk_splitter_clk_enable(struct device *dev);
+void mtk_splitter_clk_disable(struct device *dev);
+void mtk_splitter_start(struct device *dev);
+void mtk_splitter_stop(struct device *dev);
+void mtk_splitter_config(struct device *dev, unsigned int w, unsigned int h,
+			 unsigned int vrefresh, unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
+void mtk_splitter_connect(struct device *dev, struct device *mmsys_dev,
+			  unsigned int next);
+void mtk_splitter_disconnect(struct device *dev, struct device *mmsys_dev,
+			     unsigned int next);
+void mtk_splitter_add(struct device *dev, struct mtk_mutex *mutex);
+void mtk_splitter_remove(struct device *dev, struct mtk_mutex *mutex);
+void mtk_splitter_set_dsc_info(struct device *dev,
+			       const struct dsc_info *dsc_info);
+void mtk_splitter_get_dsc_comps(struct device *dev, struct device **dsc_dev,
+				u32 max, u32 *count);
 #endif

@@ -348,7 +348,7 @@ static struct drm_crtc_state *mtk_crtc_duplicate_state(struct drm_crtc *crtc)
 	struct mtk_crtc_state *state;
 	int i;
 
-	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
@@ -1460,23 +1460,19 @@ static void mtk_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	/* Get dsc_info from output comp */
 	comp = mtk_crtc->ddp_comp[mtk_crtc->ddp_comp_nr - 1];
-	i = mtk_crtc->conn_routes_sys;
-	priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[i];
-	dev_dbg(priv->dev, "Updated DSC info path index %d\n",
-		mtk_crtc->ddp_comp_nr - 1);
+	dev_dbg(comp->dev, "Get dsc_info from path[%d] comp_id:%d\n",
+		mtk_crtc->ddp_comp_nr - 1, comp->id);
 	mtk_ddp_comp_get_dsc_info(comp, &mtk_crtc_state->dsc);
 
 	/* Set dsc_info in current crtc */
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 		comp = mtk_crtc->ddp_comp[i];
-		j = mtk_crtc->conn_routes_sys;
-		priv = ((struct mtk_drm_private *)crtc->dev->dev_private)->all_drm_private[j];
 
-		if (mtk_ddp_comp_get_type(comp->id) == MTK_DISP_DSC) {
-			dev_dbg(priv->dev, "Updated DSC info path index %d\n",
-				mtk_crtc->ddp_comp_nr - 1);
-			mtk_ddp_comp_set_dsc_info(comp, &mtk_crtc_state->dsc);
-		}
+		/* splitted is only consumed by components after the splitter */
+		if (mtk_ddp_comp_get_type(comp->id) == MTK_DISP_SPLITTER)
+			mtk_crtc_state->dsc.splitted = true;
+
+		mtk_ddp_comp_set_dsc_info(comp, &mtk_crtc_state->dsc);
 	}
 
 	ret = mtk_crtc_ddp_hw_init(mtk_crtc);

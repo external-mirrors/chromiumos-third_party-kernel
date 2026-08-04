@@ -1190,6 +1190,8 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	  .data = (void *)MTK_DISP_RDMA },
 	{ .compatible = "mediatek,mt8195-disp-rdma",
 	  .data = (void *)MTK_DISP_RDMA },
+	{ .compatible = "mediatek,mt8196-disp-splitter",
+	  .data = (void *)MTK_DISP_SPLITTER },
 	{ .compatible = "mediatek,mt8196-disp-tdshp",
 	  .data = (void *)MTK_DISP_TDSHP },
 	{ .compatible = "mediatek,mt8173-disp-ufoe",
@@ -1667,6 +1669,7 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		    comp_type == MTK_DISP_OVL_2L ||
 		    comp_type == MTK_DISP_OVL_ADAPTOR ||
 		    comp_type == MTK_DISP_RDMA ||
+		    comp_type == MTK_DISP_SPLITTER ||
 		    comp_type == MTK_DP_INTF ||
 		    comp_type == MTK_DPI ||
 		    comp_type == MTK_DSI ||
@@ -1785,6 +1788,7 @@ static struct platform_driver * const mtk_drm_drivers[] = {
 	&mtk_disp_ovlsys_adaptor_driver,
 	&mtk_disp_pmqos_driver,
 	&mtk_disp_rdma_driver,
+	&mtk_disp_splitter_driver,
 	&mtk_dpi_driver,
 	&mtk_dpi_driver_v2,
 	&mtk_drm_platform_driver,
