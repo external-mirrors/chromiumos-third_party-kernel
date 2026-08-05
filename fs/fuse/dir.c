@@ -1146,6 +1146,7 @@ static int fuse_chromeos_tmpfile(struct user_namespace *mnt_userns, struct inode
 	struct fuse_chromeos_tmpfile_in inarg;
 	struct fuse_mount *fm = get_fuse_mount(dir);
 	FUSE_ARGS(args);
+	int err;
 
 	if (!fm->fc->dont_mask)
 		mode &= ~current_umask();
@@ -1158,7 +1159,8 @@ static int fuse_chromeos_tmpfile(struct user_namespace *mnt_userns, struct inode
 	args.in_args[0].size = sizeof(inarg);
 	args.in_args[0].value = &inarg;
 
-	return create_new_entry(fm, &args, dir, file->f_path.dentry, S_IFREG);
+	err = create_new_entry(fm, &args, dir, file->f_path.dentry, S_IFREG);
+	return finish_open_simple(file, err);
 }
 
 static int fuse_symlink(struct user_namespace *mnt_userns, struct inode *dir,
