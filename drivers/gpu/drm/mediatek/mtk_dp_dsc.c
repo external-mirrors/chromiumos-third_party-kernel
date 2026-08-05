@@ -184,6 +184,7 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	unsigned int pad_num;
 	unsigned int bp_enable;
 	unsigned int slice_mode;
+	unsigned int pic_width, slice_width, slice_count;
 	unsigned int rgb_swap = 0;
 	unsigned int con = 0;
 	int i;
@@ -211,17 +212,38 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 		return;
 	}
 
+	dev_dbg(dsc->dev, "%s: PPS: pic_width=%u slice_width=%u slice_count=%u slice_height=%u\n",
+		__func__, cfg->pic_width, cfg->slice_width, cfg->slice_count, cfg->slice_height);
+	dev_dbg(dsc->dev, "%s: PPS: chunk_size=%u bits_per_pixel=%u initial_xmit_delay=%u\n",
+		 __func__, cfg->slice_chunk_size, cfg->bits_per_pixel, cfg->initial_xmit_delay);
+	dev_dbg(dsc->dev, "%s: PPS: bits_per_component=%u dsc_version_minor=%u\n",
+		 __func__, cfg->bits_per_component, cfg->dsc_version_minor);
+
+	if (dsc_info->splitted) {
+		pic_width = w;
+		slice_count = cfg->slice_count ? cfg->slice_count : 2;
+		slice_width = DIV_ROUND_UP(w, slice_count);
+	} else {
+		pic_width = cfg->pic_width;
+		slice_count = cfg->slice_count;
+		slice_width = cfg->slice_width;
+	}
 	bp_enable = cfg->block_pred_enable ? 1 : 0;
-	slice_mode = cfg->pic_width / cfg->slice_width - 1;
-	pic_group_width = (cfg->pic_width + 2) / 3;
+	slice_mode = pic_width / slice_width - 1;
+	pic_group_width = (pic_width + 2) / 3;
 	pic_height_ext_num = (h + cfg->slice_height - 1) / cfg->slice_height;
-	slice_group_width = (cfg->slice_width + 2) / 3;
+	slice_group_width = (slice_width + 2) / 3;
 	pad_num = (cfg->slice_chunk_size * (slice_mode + 1) + 2) / 3 * 3
 		- cfg->slice_chunk_size * (slice_mode + 1);
 	init_delay_limit = ((128 + (cfg->initial_xmit_delay + 2) / 3) * 3
-		+ cfg->slice_width - 1) / cfg->slice_width;
+		+ slice_width - 1) / slice_width;
 	init_delay_height_min = (init_delay_limit > 15) ? 15 : init_delay_limit;
 	init_delay_height = init_delay_height_min;
+
+	dev_dbg(dsc->dev, "%s: REG: pic_width=%u slice_width=%u slice_count=%u slice_mode=%u\n",
+		__func__, pic_width, slice_width, slice_count, slice_mode);
+	dev_dbg(dsc->dev, "%s: REG: pic_group_w=%u slice_group_w=%u pad=%u init_delay_h=%u\n",
+		__func__, pic_group_width, slice_group_width, pad_num, init_delay_height);
 
 	if (dsc->data->pt_mem_en) {
 		con |= DSC_PT_MEM_EN | DSC_EMPTY_FLAG_ALWAYS_LOW |
@@ -241,12 +263,12 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 		      (h - 1) | ((pic_height_ext_num * cfg->slice_height - 1) << 16));
 
 	mtk_dsc_write(dsc, DISP_REG_DSC_SLICE_W,
-		      cfg->slice_width | ((slice_group_width - 1) << 16));
+		      slice_width | ((slice_group_width - 1) << 16));
 
 	mtk_dsc_write(dsc, DISP_REG_DSC_SLICE_H,
 		      (cfg->slice_height - 1) |
 		      ((pic_height_ext_num - 1) << 16) |
-		      ((cfg->slice_width % 3) << 30));
+		      ((slice_width % 3) << 30));
 
 	mtk_dsc_write(dsc, DISP_REG_DSC_CHUNK_SIZE,
 		      cfg->slice_chunk_size |
@@ -265,7 +287,7 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PAD, pad_num, GENMASK(2, 0));
 
 	mtk_dsc_write(dsc, DISP_REG_DSC_ENC_WIDTH,
-		      cfg->slice_width | (cfg->pic_width << 16));
+		      slice_width | (pic_width << 16));
 
 	mtk_dsc_write(dsc, DISP_REG_DSC_PIC_PRE_PAD_SIZE, h | (w << 16));
 
