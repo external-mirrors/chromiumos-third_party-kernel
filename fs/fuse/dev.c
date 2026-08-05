@@ -161,6 +161,7 @@ sleep:
 	watchdog = fuse_watchdog_detach(fc);
 	if (watchdog)
 		put_task_struct(watchdog);
+	fuse_conn_put(fc);
 	return 0;
 
 fpq_abort:
@@ -173,6 +174,7 @@ abort_conn:
 
 	pr_err("%s: connection timeout\n", current->comm);
 	fuse_abort_conn(fc);
+	fuse_conn_put(fc);
 	return 0;
 }
 
@@ -181,12 +183,14 @@ void init_fuse_watchdog(struct fuse_conn *fc)
 	/* PIDs can have multiple connections, distinguish them */
 	static atomic_t num;
 
-	fc->watchdog = kthread_create(fuse_watchdog_fn, fc,
+	fc->watchdog = kthread_create(fuse_watchdog_fn, fuse_conn_get(fc),
 				      "fusedog%d/%d",
 				      atomic_inc_return(&num),
 				      task_pid_nr(current));
 	if (!IS_ERR_OR_NULL(fc->watchdog))
 		wake_up_process(fc->watchdog);
+	else
+		fuse_conn_put(fc);
 }
 
 void terminate_fuse_watchdog(struct fuse_conn *fc)
