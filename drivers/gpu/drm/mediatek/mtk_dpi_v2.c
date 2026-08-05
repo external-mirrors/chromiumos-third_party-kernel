@@ -1054,7 +1054,8 @@ static const u32 mt8196_output_fmts[] = {
 
 static const struct mtk_dpi_conf mt8196_dpintf_conf = {
 	.cal_factor = mt8196_dpintf_calculate_factor_v2,
-	.max_clock_khz = 600000,
+	/* coarse pixel-clock cap; real DP BW check in mtk_dp_check_mode_v2 */
+	.max_clock_khz = 1188000,
 	.output_fmts = mt8196_output_fmts,
 	.num_output_fmts = ARRAY_SIZE(mt8196_output_fmts),
 	.pixels_per_iter = 4,

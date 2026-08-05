@@ -103,6 +103,8 @@
 #define AUDIO_SRAM_RESET_TIMEOUT_MS		1000
 #define DP_CHECK_PHY_POLLING_DELAY_TIME		0
 #define DP_CHECK_PHY_POLLING_TIMEOUT		10
+#define DP_DSC_DEFAULT_SLICE_COUNT		2
+#define DP_DSC_HIGH_BW_THRESHOLD		680000000
 
 #define GET_DP_ENCODER_ID(dev, dp_dev) \
 	((dev) == (dp_dev) ? DP_ENCODER_ID_0 : DP_ENCODER_ID_1)
@@ -2731,7 +2733,7 @@ static int mtk_dsc_compute_params_v2(struct mtk_dp *mtk_dp,
 
 	vdsc_cfg->pic_width = width;
 	vdsc_cfg->pic_height = hight;
-
+	vdsc_cfg->slice_count = slice_count;
 	vdsc_cfg->slice_width = DIV_ROUND_UP(vdsc_cfg->pic_width, slice_count);
 
 	if (vdsc_cfg->pic_height % 8 == 0)
@@ -2793,13 +2795,19 @@ void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id
 {
 	struct drm_dsc_picture_parameter_set pps;
 	struct drm_dsc_config mtk_dsc_cfg;
+	struct drm_display_mode *mode = &mtk_dp->mode[encoder_id];
+	u64 pixel_clk_hz = (u64)mode->clock * 1000;
+	u8 slice_count = DP_DSC_DEFAULT_SLICE_COUNT;
+
+	if (pixel_clk_hz >= DP_DSC_HIGH_BW_THRESHOLD)
+		slice_count = DP_DSC_DEFAULT_SLICE_COUNT * 2;
 
 	memset(&pps, 0x0, sizeof(pps));
 	memset(&mtk_dsc_cfg, 0x0, sizeof(mtk_dsc_cfg));
 
 	mtk_dsc_compute_params_v2(mtk_dp, encoder_id, &mtk_dsc_cfg,
-				  mtk_dp->mode[encoder_id].hdisplay,
-				  mtk_dp->mode[encoder_id].vdisplay, 2, 8, 8);
+				  mode->hdisplay, mode->vdisplay,
+				  slice_count, 8, 8);
 	drm_dsc_pps_payload_pack(&pps, &mtk_dsc_cfg);
 	mtk_dp_dsc_parse_pps_param_v2(mtk_dp, encoder_id, (u8 *)&pps);
 
@@ -6582,7 +6590,7 @@ static const struct mtk_dp_data mt8196_dp_data = {
 	.audio_m_div2_bit = 0,
 	.dsc_support = true,
 	.mst_support = true,
-	.max_hdisplay = 3840,
+	.max_hdisplay = 5120,
 	.max_vdisplay = 2160,
 	.min_hblanking = 80,
 	.min_hdisplay = 800,
