@@ -5,6 +5,7 @@
 
 #include <drm/display/drm_dsc_helper.h>
 
+#include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/of_device.h>
@@ -85,6 +86,9 @@
 #define DISP_REG_DSC_PPS17		0x00c4
 #define DISP_REG_DSC_PPS18		0x00c8
 #define DISP_REG_DSC_PPS19		0x00cc
+#define DSC_RC_RANGE_MIN_QP_MASK		GENMASK(4, 0)
+#define DSC_RC_RANGE_MAX_QP_MASK		GENMASK(9, 5)
+#define DSC_RC_RANGE_BPG_OFF_MASK		GENMASK(15, 10)
 
 #define DISP_REG_DSC_SHADOW		0x0200
 #define DISP_DSC_VERSION_MINOR			(0x000001e0)
@@ -126,6 +130,14 @@ static u32 mtk_dsc_read(struct mtk_dsc *dsc, u32 offset)
 	u32 val = readl(dsc->regs + offset);
 
 	return val;
+}
+
+static u32 mtk_dsc_pack_rc_range(const struct drm_dsc_rc_range_parameters *rc)
+{
+	return FIELD_PREP(DSC_RC_RANGE_MIN_QP_MASK, rc->range_min_qp) |
+	       FIELD_PREP(DSC_RC_RANGE_MAX_QP_MASK, rc->range_max_qp) |
+	       FIELD_PREP(DSC_RC_RANGE_BPG_OFF_MASK,
+			  rc->range_bpg_offset & DSC_RANGE_BPG_OFFSET_MASK);
 }
 
 void mtk_dsc_start(struct device *dev)
@@ -174,6 +186,7 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	unsigned int slice_mode;
 	unsigned int rgb_swap = 0;
 	unsigned int con = 0;
+	int i;
 
 	if (!dsc->data) {
 		dev_err(dev, "%s: driver data is not set\n", __func__);
@@ -320,59 +333,13 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	mtk_dsc_write(dsc, DISP_REG_DSC_PPS11,
 		      cfg->rc_buf_thresh[12] |
 		      (cfg->rc_buf_thresh[13] << 8));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS12,
-		      cfg->rc_range_params[0].range_min_qp |
-		      (cfg->rc_range_params[0].range_max_qp << 5) |
-		      (cfg->rc_range_params[0].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[1].range_min_qp << 16) |
-		      (cfg->rc_range_params[1].range_max_qp << 21) |
-		      (cfg->rc_range_params[1].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS13,
-		      cfg->rc_range_params[2].range_min_qp |
-		      (cfg->rc_range_params[2].range_max_qp << 5) |
-		      (cfg->rc_range_params[2].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[3].range_min_qp << 16) |
-		      (cfg->rc_range_params[3].range_max_qp << 21) |
-		      (cfg->rc_range_params[3].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS14,
-		      cfg->rc_range_params[4].range_min_qp |
-		      (cfg->rc_range_params[4].range_max_qp << 5) |
-		      (cfg->rc_range_params[4].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[5].range_min_qp << 16) |
-		      (cfg->rc_range_params[5].range_max_qp << 21) |
-		      (cfg->rc_range_params[5].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS15,
-		      cfg->rc_range_params[6].range_min_qp |
-		      (cfg->rc_range_params[6].range_max_qp << 5) |
-		      (cfg->rc_range_params[6].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[7].range_min_qp << 16) |
-		      (cfg->rc_range_params[7].range_max_qp << 21) |
-		      (cfg->rc_range_params[7].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS16,
-		      cfg->rc_range_params[8].range_min_qp |
-		      (cfg->rc_range_params[8].range_max_qp << 5) |
-		      (cfg->rc_range_params[8].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[9].range_min_qp << 16) |
-		      (cfg->rc_range_params[9].range_max_qp << 21) |
-		      (cfg->rc_range_params[9].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS17,
-		      cfg->rc_range_params[10].range_min_qp |
-		      (cfg->rc_range_params[10].range_max_qp << 5) |
-		      (cfg->rc_range_params[10].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[11].range_min_qp << 16) |
-		      (cfg->rc_range_params[11].range_max_qp << 21) |
-		      (cfg->rc_range_params[11].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS18,
-		      cfg->rc_range_params[12].range_min_qp |
-		      (cfg->rc_range_params[12].range_max_qp << 5) |
-		      (cfg->rc_range_params[12].range_bpg_offset << 10) |
-		      (cfg->rc_range_params[13].range_min_qp << 16) |
-		      (cfg->rc_range_params[13].range_max_qp << 21) |
-		      (cfg->rc_range_params[13].range_bpg_offset << 26));
-	mtk_dsc_write(dsc, DISP_REG_DSC_PPS19,
-		      cfg->rc_range_params[14].range_min_qp |
-		      (cfg->rc_range_params[14].range_max_qp << 5) |
-		      (cfg->rc_range_params[14].range_bpg_offset << 10));
+
+	for (i = 0; i < 7; i++)
+		mtk_dsc_write(dsc, DISP_REG_DSC_PPS12 + i * 4,
+			      mtk_dsc_pack_rc_range(&cfg->rc_range_params[2 * i]) |
+			      (mtk_dsc_pack_rc_range(&cfg->rc_range_params[2 * i + 1]) << 16));
+
+	mtk_dsc_write(dsc, DISP_REG_DSC_PPS19, mtk_dsc_pack_rc_range(&cfg->rc_range_params[14]));
 
 	if (cfg->dsc_version_minor == 1)
 		mtk_dsc_write(dsc, DISP_REG_DSC_SHADOW, 0x20);
