@@ -248,10 +248,7 @@ static int mdw_dmabuf_vmap(struct dma_buf *dbuf, struct iosys_map *dbuf_map)
 	struct mdw_mem_dma *mdbuf = m->priv;
 
 	mdw_mem_debug("dmabuf vmap: 0x%llx\n", (uint64_t) mdbuf->vaddr);
-	if (dbuf_map->is_iomem)
-		dbuf_map->vaddr_iomem = mdbuf->vaddr;
-	else
-		dbuf_map->vaddr = mdbuf->vaddr;
+	iosys_map_set_vaddr(dbuf_map, mdbuf->vaddr);
 	return 0;
 }
 
