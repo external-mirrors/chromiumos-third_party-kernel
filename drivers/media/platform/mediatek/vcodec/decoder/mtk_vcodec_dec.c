@@ -957,6 +957,16 @@ void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	}
 
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
+		if (ctx->last_vb2_v4l2_src) {
+			struct media_request *req =
+				ctx->last_vb2_v4l2_src->vb2_buf.req_obj.req;
+
+			if (req)
+				v4l2_ctrl_request_complete(req, &ctx->ctrl_hdl);
+			v4l2_m2m_buf_done(ctx->last_vb2_v4l2_src, VB2_BUF_STATE_ERROR);
+			ctx->last_vb2_v4l2_src = NULL;
+		}
+
 		while ((src_buf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx))) {
 			if (src_buf != &ctx->empty_flush_buf.vb) {
 				struct media_request *req =
