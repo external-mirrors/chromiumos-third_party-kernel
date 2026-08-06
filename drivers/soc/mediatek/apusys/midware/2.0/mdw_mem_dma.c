@@ -244,7 +244,8 @@ static void mdw_dmabuf_unmap_dma(struct dma_buf_attachment *attach,
 
 static int mdw_dmabuf_vmap(struct dma_buf *dbuf, struct iosys_map *dbuf_map)
 {
-	struct mdw_mem_dma *mdbuf = dbuf->priv;
+	struct mdw_mem *m = dbuf->priv;
+	struct mdw_mem_dma *mdbuf = m->priv;
 
 	mdw_mem_debug("dmabuf vmap: 0x%llx\n", (uint64_t) mdbuf->vaddr);
 	if (dbuf_map->is_iomem)
