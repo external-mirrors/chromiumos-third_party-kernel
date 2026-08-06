@@ -318,7 +318,7 @@ static void mtk_vdec_worker(struct work_struct *work)
 	struct mtk_vcodec_dec_ctx *ctx =
 		container_of(work, struct mtk_vcodec_dec_ctx, decode_work);
 	struct mtk_vcodec_dec_dev *dev = ctx->dev;
-	struct vb2_v4l2_buffer *vb2_v4l2_src = ctx->last_vb2_v4l2_src;
+	struct vb2_v4l2_buffer *vb2_v4l2_src;
 	struct vb2_v4l2_buffer *vb2_v4l2_dst;
 	struct vb2_buffer *vb2_src;
 	struct mtk_vcodec_mem *bs_src;
@@ -328,7 +328,10 @@ static void mtk_vdec_worker(struct work_struct *work)
 	bool res_chg = false;
 	int ret;
 
-	vb2_v4l2_src = vb2_v4l2_src ? vb2_v4l2_src : v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+	vb2_v4l2_src = ctx->last_vb2_v4l2_src;
+	ctx->last_vb2_v4l2_src = NULL;
+	if (!vb2_v4l2_src)
+		vb2_v4l2_src = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 	if (!vb2_v4l2_src) {
 		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 		mtk_v4l2_vdec_dbg(1, ctx, "[%d] no available source buffer", ctx->id);
@@ -399,10 +402,13 @@ static void mtk_vdec_worker(struct work_struct *work)
 	 * If each codec decode error, must to set buffer done with error status for
 	 * this buffer have been removed from ready list.
 	 */
-	ctx->last_vb2_v4l2_src = (ret != -EAGAIN) ? NULL : vb2_v4l2_src;
-	if (ret && ret != -EAGAIN) {
-		v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
-		v4l2_m2m_buf_done(vb2_v4l2_src, state);
+	if (ret) {
+		if (ret == -EAGAIN) {
+			ctx->last_vb2_v4l2_src = vb2_v4l2_src;
+		} else {
+			v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
+			v4l2_m2m_buf_done(vb2_v4l2_src, state);
+		}
 	}
 
 	v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
