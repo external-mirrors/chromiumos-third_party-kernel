@@ -8,6 +8,7 @@
 #include <linux/sync_file.h>
 #include <linux/sched/clock.h>
 #include <linux/min_heap.h>
+#include <linux/rcupdate.h>
 
 #include "mdw_trace.h"
 #include "mdw_cmn.h"
@@ -519,7 +520,7 @@ void mdw_fence_release(struct dma_fence *fence)
 	mdw_flw_debug("fence release, fence(%s/%llu-%llu)\n",
 		mf->name, mf->base_fence.context, mf->base_fence.seqno);
 	mdw_fence_ctx_free(mf->mdev, mf->base_fence.context);
-	kfree(mf);
+	kfree_rcu(mf, base_fence.rcu);
 }
 
 const struct dma_fence_ops mdw_fence_ops = {
