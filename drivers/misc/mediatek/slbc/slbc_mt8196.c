@@ -1428,12 +1428,21 @@ void slbc_get_gid_for_dma(struct dma_buf *dmabuf_2)
 	struct dma_buf *dmabuf_1;
 	int ret;
 
+	if (IS_ERR_OR_NULL(dmabuf_2))
+		return;
+
+	if (dmabuf_2->size < sizeof(struct slbc_gid_data)) {
+		pr_err("#@# %s(%d) [LVL_ERR] dmabuf size too small: %zu\n",
+			__func__, __LINE__, dmabuf_2->size);
+		return;
+	}
+
 	memset(&map, 0, sizeof(map));
 	ret = dma_buf_vmap_unlocked(dmabuf_2, &map);
 	if (ret) {
 		pr_err("#@# %s(%d) [LVL_ERR] dma_buf_vmap_unlocked failed\n",
 			__func__, __LINE__);
-		goto err1;
+		return;
 	}
 
 	gid_data = (struct slbc_gid_data *)map.vaddr;
