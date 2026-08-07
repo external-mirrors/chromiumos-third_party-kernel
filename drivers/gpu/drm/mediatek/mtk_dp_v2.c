@@ -2833,7 +2833,55 @@ u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode)
 	return pixel_clock;
 }
 
-static int set_dsc_decompression_flag_v2(struct drm_dp_aux *aux, u8 flag, bool set)
+static int mtk_dp_dsc_aux_ref_count_v2(struct mtk_dp *mtk_dp, enum dp_encoder_id cur_id,
+				       struct drm_dp_aux *aux)
+{
+	int cur_con_id = encoder_id_to_con_id(mtk_dp, cur_id, DRM_DP_MST);
+	int ref = 0;
+	u8 i;
+
+	if (!aux)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
+		struct mtk_dp_con *mtk_con = mtk_dp->mtk_con[i];
+
+		if (!mtk_con || i == cur_con_id ||
+		    mtk_con->dp_mode != DRM_DP_MST || !mtk_con->dsc_decompression_enabled)
+			continue;
+
+		if (mtk_con->dsc_aux == aux)
+			ref++;
+	}
+
+	return ref;
+}
+
+static int mtk_dp_passthrough_aux_ref_count_v2(struct mtk_dp *mtk_dp, enum dp_encoder_id cur_id,
+					       struct drm_dp_aux *aux)
+{
+	int cur_con_id = encoder_id_to_con_id(mtk_dp, cur_id, DRM_DP_MST);
+	int ref = 0;
+	u8 i;
+
+	if (!aux)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
+		struct mtk_dp_con *mtk_con = mtk_dp->mtk_con[i];
+
+		if (!mtk_con || i == cur_con_id || mtk_con->dp_mode != DRM_DP_MST ||
+		    !mtk_con->dsc_decompression_enabled)
+			continue;
+
+		if (mtk_con->port && mtk_con->port->passthrough_aux == aux)
+			ref++;
+	}
+
+	return ref;
+}
+
+int mtk_dp_set_dsc_decompression_flag_v2(struct drm_dp_aux *aux, u8 flag, bool set)
 {
 	int err;
 	u8 val;
@@ -3690,6 +3738,106 @@ static void mtk_dp_verify_clock_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] [%d] audio M:0x%llx, fs:%llu\n", encoder_id, m, fs);
 }
 
+/**
+ * mtk_dp_sink_dsc_enable_v2 - Enable DSC decompression flag on sink/branch DPCD
+ * @mtk_dp: DP driver context
+ * @encoder_id: Encoder ID to enable DSC for
+ *
+ * This function writes to DPCD registers (not hardware registers).
+ * It's different from mtk_dp_dsc_enable_v2() which controls DSC hardware.
+ *
+ * Handles both SST and MST with proper mode detection (passthrough/branch/sink-only)
+ */
+static void mtk_dp_sink_dsc_enable_v2(struct mtk_dp *mtk_dp, enum dp_encoder_id encoder_id)
+{
+	int con_id;
+	struct mtk_dp_con *mtk_con;
+	struct drm_dp_mst_port *port;
+	struct drm_dp_aux *dsc_aux;
+
+	/* SST: only sink decompression */
+	if (!mtk_dp->mst_enable) {
+		if (drm_dp_sink_supports_dsc(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd))
+			mtk_dp_set_dsc_decompression_flag_v2(&mtk_dp->aux,
+							     DP_DECOMPRESSION_EN,
+							     mtk_dp->dsc_enable[encoder_id]);
+		return;
+	}
+
+	/* MST */
+	con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
+	if (con_id < 0 || !mtk_dp->dsc_enable[encoder_id])
+		return;
+
+	mtk_con = mtk_dp->mtk_con[con_id];
+	port = mtk_con->port;
+	dsc_aux = mtk_con->dsc_aux;
+
+	if (mtk_con->dsc_decompression_enabled)
+		return;
+
+	mtk_con->dsc_decompression_enabled = 1;	/* take ref */
+
+	if (!dsc_aux || mtk_dp_dsc_aux_ref_count_v2(mtk_dp, encoder_id, dsc_aux) != 0)
+		return;
+
+	mtk_dp_set_dsc_decompression_flag_v2(dsc_aux, DP_DECOMPRESSION_EN, true);
+
+	if (port && port->passthrough_aux)
+		mtk_dp_set_dsc_decompression_flag_v2(port->passthrough_aux,
+						     DP_DSC_PASSTHROUGH_EN, true);
+}
+
+/**
+ * mtk_dp_sink_dsc_disable_v2 - Disable DSC decompression flag on sink/branch DPCD
+ * @mtk_dp: DP driver context
+ * @encoder_id: Encoder ID to disable DSC for
+ *
+ * This function writes to DPCD registers (not hardware registers).
+ * It's different from mtk_dp_dsc_disable_v2() which controls DSC hardware.
+ *
+ * Handles both SST and MST with proper mode detection (passthrough/branch/sink-only)
+ */
+static void mtk_dp_sink_dsc_disable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
+{
+	int con_id;
+	struct mtk_dp_con *mtk_con;
+	struct drm_dp_mst_port *port;
+	struct drm_dp_aux *dsc_aux;
+
+	/* SST: only sink decompression */
+	if (!mtk_dp->mst_enable) {
+		if (drm_dp_sink_supports_dsc(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd))
+			mtk_dp_set_dsc_decompression_flag_v2(&mtk_dp->aux,
+							     DP_DECOMPRESSION_EN, false);
+		return;
+	}
+
+	/* MST */
+	con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
+	if (con_id < 0)
+		return;
+
+	mtk_con = mtk_dp->mtk_con[con_id];
+	port = mtk_con->port;
+	dsc_aux = mtk_con->dsc_aux;
+
+	if (!mtk_con->dsc_decompression_enabled)
+		return;   /* we don't hold a ref, nothing to clear */
+
+	mtk_con->dsc_decompression_enabled = 0;   /* release our ref first */
+
+	if (!dsc_aux || mtk_dp_dsc_aux_ref_count_v2(mtk_dp, encoder_id, dsc_aux) != 0)
+		return;
+
+	mtk_dp_set_dsc_decompression_flag_v2(dsc_aux, DP_DECOMPRESSION_EN, false);
+
+	if (port && port->passthrough_aux &&
+	    mtk_dp_passthrough_aux_ref_count_v2(mtk_dp, encoder_id, port->passthrough_aux) == 0)
+		mtk_dp_set_dsc_decompression_flag_v2(port->passthrough_aux,
+						     DP_DSC_PASSTHROUGH_EN, false);
+}
+
 void mtk_dp_video_enable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
 {
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Output Video[%d] enable\n", encoder_id);
@@ -3706,14 +3854,17 @@ void mtk_dp_video_disable_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id enc
 	mtk_dp_stop_sent_sdp_v2(mtk_dp, encoder_id);
 	mtk_dp_sdp_path_reset_v2(mtk_dp, encoder_id);
 
+	/* Disable DSC hardware */
 	mtk_dp_dsc_disable_v2(mtk_dp, encoder_id);
+
+	/* Disable DSC DPCD flags (passthrough and decompression) */
+	mtk_dp_sink_dsc_disable_v2(mtk_dp, encoder_id);
 }
 
 static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
 {
 	struct dp_timing_parameter *dp_timing = &mtk_dp->info[encoder_id].dp_output_timing;
 	struct videomode vm = {0};
-	int con_id;
 
 	if (!mtk_dp->dp_ready) {
 		dev_err(mtk_dp->dev, "[DPTX] %s, DP is not ready\n", __func__);
@@ -3788,21 +3939,7 @@ static void mtk_dp_video_config_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_
 		mtk_dp_dsc_enable_v2(mtk_dp, encoder_id);
 	}
 
-	if (mtk_dp->mst_enable) {
-		con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
-		if (con_id < 0)
-			return;
-
-		if (drm_dp_sink_supports_dsc(mtk_dp->mtk_con[con_id]->dsc_dpcd))
-			set_dsc_decompression_flag_v2(mtk_dp->mtk_con[con_id]->dsc_aux,
-						      DP_DECOMPRESSION_EN,
-						      mtk_dp->dsc_enable[encoder_id]);
-	} else {
-		if (drm_dp_sink_supports_dsc(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd))
-			set_dsc_decompression_flag_v2(&mtk_dp->aux,
-						      DP_DECOMPRESSION_EN,
-						      mtk_dp->dsc_enable[encoder_id]);
-	}
+	mtk_dp_sink_dsc_enable_v2(mtk_dp, encoder_id);
 }
 
 static void mtk_dp_stop_sent_sdp_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id)
@@ -4986,8 +5123,41 @@ static u32 *mtk_dp_bridge_atomic_get_input_bus_fmts_v2(struct drm_bridge *bridge
 	u32 rate = drm_dp_bw_code_to_link_rate(mtk_dp->training_info.link_rate) * lane_count_min;
 	int fmt = MEDIA_BUS_FMT_RGB888_1X24; /* default format: RGB888 */
 
-	if (mtk_dp->mst_enable)
+	if (mtk_dp->mst_enable) {
+		enum dp_encoder_id id = mtk_bridge->encoder_id;
+		int con_id = encoder_id_to_con_id(mtk_dp, id, DRM_DP_MST);
+
+		bpp = 24;
+		mtk_dp_check_mode_v2(mtk_dp, mode, bpp, &dsc);
+
+		/*
+		 * mtk_dp_check_mode_v2 only checks main link capacity.
+		 * Also check downstream port capacity: if uncompressed
+		 * PBN exceeds port->full_pbn, DSC is required.
+		 */
+		if (!dsc && con_id >= 0 && mtk_dp->mtk_con[con_id] &&
+		    mtk_dp->mtk_con[con_id]->port) {
+			int uncomp_pbn = drm_dp_calc_pbn_mode(mode->clock, bpp << 4);
+
+			if (uncomp_pbn > (int)mtk_dp->mtk_con[con_id]->port->full_pbn)
+				dsc = true;
+		}
+
+		drm_mode_copy(&mtk_dp->mode[id], mode);
+		mtk_dp->dsc_enable[id] = dsc;
+		if (dsc) {
+			mtk_dp->info[id].format = DP_PIXELFORMAT_RGB;
+			mtk_dp->info[id].depth = DP_COLOR_DEPTH_8BIT;
+			mtk_dp_dsc_check_prepare_v2(mtk_dp, id);
+		}
+		if (mtk_dp->prop_dsc_enable[id])
+			mtk_dp->prop_dsc_enable[id]->values[0] = dsc ? 1 : 0;
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] get_input_bus_fmts MST: encoder_id:%d, dsc:%d, mode:%dx%d@%d\n",
+			    id, dsc, mode->hdisplay, mode->vdisplay,
+			    drm_mode_vrefresh(mode));
 		goto set_fmts;
+	}
 
 	support_422 = conn_state->connector->display_info.color_formats &
 		DRM_COLOR_FORMAT_YCBCR422 ? true : false;

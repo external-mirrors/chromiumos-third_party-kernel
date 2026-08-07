@@ -34,6 +34,7 @@ void mtk_dp_hdcp_disable(struct mtk_dp *mtk_dp);
 bool mtk_dp_hdcp_need_hdcp(struct mtk_dp *mtk_dp);
 u32 mtk_dp_dsc_cal_clock_v2(struct drm_display_mode *mode);
 void mtk_dp_dsc_check_prepare_v2(struct mtk_dp *mtk_dp, const enum dp_encoder_id encoder_id);
+int mtk_dp_set_dsc_decompression_flag_v2(struct drm_dp_aux *aux, u8 flag, bool set);
 void mtk_dp_fec_enable_v2(struct mtk_dp *mtk_dp);
 
 static inline struct mtk_dp_con *encoder_to_mtk_con(struct drm_encoder *encoder,

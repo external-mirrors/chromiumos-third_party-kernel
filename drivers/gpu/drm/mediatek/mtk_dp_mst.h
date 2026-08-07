@@ -15,7 +15,8 @@ void mtk_dp_mst_drv_unprepare(struct mtk_dp *mtk_dp);
 int mtk_dp_mst_drv_calculate_pbn(struct mtk_dp *mtk_dp,
 				 struct drm_display_mode *mode, u8 bpp, bool dsc);
 int mtk_dp_mst_drv_find_vcpi_slots(struct mtk_dp *mtk_dp,
-				   int pbn_div, const int pbn_allocating);
+				   int pbn_div, const int pbn_allocating,
+				   int total_avail_slots);
 void mtk_dp_mst_drv_set_hdcp_setting(struct mtk_dp *mtk_dp);
 void mtk_dp_mst_atomic_disable(struct mtk_dp *mtk_dp,
 			       enum dp_encoder_id id, struct drm_atomic_state *state);

@@ -22,7 +22,6 @@
 #include "mtk_dp_reg_v2.h"
 
 #define DPTX_DPCD_TRANS_BYTES_MAX	16
-#define TOTAL_AVAVIL_SLOT		63
 
 static void mtk_dp_mst_hal_enc_enable(struct mtk_dp *mtk_dp, const enum dp_encoder_id id,
 				const u8 enable)
@@ -562,19 +561,38 @@ static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_c
 
 	drm_dp_send_power_updown_phy(&mtk_dp->mgr, mtk_con->port, true);
 
+	/*
+	 * Set DSC passthrough/decompression before payload allocation.
+	 * Some hubs require these flags before they'll accept the payload.
+	 * mtk_dp_sink_dsc_enable_v2() in video_config handles ref-counting
+	 * and won't re-write if already set.
+	 */
+	if (mtk_dp->dsc_enable[mtk_con->encoder_id] &&
+	    drm_dp_sink_supports_dsc(mtk_con->dsc_dpcd)) {
+		if (mtk_con->port->passthrough_aux)
+			mtk_dp_set_dsc_decompression_flag_v2(mtk_con->port->passthrough_aux,
+							     DP_DSC_PASSTHROUGH_EN, true);
+		if (mtk_con->dsc_aux)
+			mtk_dp_set_dsc_decompression_flag_v2(mtk_con->dsc_aux,
+							     DP_DECOMPRESSION_EN, true);
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] %s: DSC flags set before payload (passthrough:%d)\n",
+			    __func__, !!mtk_con->port->passthrough_aux);
+	}
+
 	if (first_stream)
 		drm_dp_mst_topology_queue_probe(&mtk_dp->mgr);
 
 	ret = drm_dp_add_payload_part1(&mtk_dp->mgr, mst_state, payload);
 	if (ret < 0) {
-		dev_err(mtk_dp->dev, "[DPTX] fail to add payload part1!");
+		dev_err(mtk_dp->dev, "[DPTX] fail to add payload part1! ret:%d\n", ret);
 		return;
 	}
 
 	mtk_dp_mst_hal_trigger_act(mtk_dp);
 	ret = drm_dp_check_act_status(&mtk_dp->mgr);
 	if (ret != 0)
-		dev_err(mtk_dp->dev, "[DPTX] fail to check act status!");
+		dev_err(mtk_dp->dev, "[DPTX] fail to check act status! ret:%d\n", ret);
 
 	if (first_stream)
 		mtk_dp_mst_drv_wait_fec_detected(mtk_dp, true);
@@ -582,7 +600,7 @@ static void mtk_dp_mst_drv_update_payload(struct mtk_dp *mtk_dp, struct mtk_dp_c
 	ret = drm_dp_add_payload_part2(&mtk_dp->mgr,
 			drm_atomic_get_mst_payload_state(mst_state, mtk_con->port));
 	if (ret < 0) {
-		dev_err(mtk_dp->dev, "[DPTX] fail to add payload part2!");
+		dev_err(mtk_dp->dev, "[DPTX] fail to add payload part2! ret:%d\n", ret);
 		return;
 	}
 }
@@ -596,19 +614,29 @@ static int mtk_dp_mst_drv_slots(int pbn_div, int pbn)
 	return num_slots;
 }
 
-int mtk_dp_mst_drv_find_vcpi_slots(struct mtk_dp *mtk_dp, int pbn_div, const int pbn_allocating)
+int mtk_dp_mst_drv_find_vcpi_slots(struct mtk_dp *mtk_dp, int pbn_div,
+				   const int pbn_allocating, int total_avail_slots)
 {
 	int slots = 0;
 
+	if (pbn_div <= 0)
+		return 0;
+
 	slots = mtk_dp_mst_drv_slots(pbn_div, pbn_allocating);
-	if (slots > TOTAL_AVAVIL_SLOT) {
-		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Un-expected slots %d\n", slots);
+	if (slots > total_avail_slots) {
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Un-expected slots %d > %d\n",
+			    slots, total_avail_slots);
 		return 0;
 	}
 
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] Slots before fine-tune %d, %d\n",
 		    slots, pbn_allocating);
 
+	/*
+	 * Hardware Limitations:
+	 * 1. Alignment: 1-lane -> multiples of 4, 2-lane -> multiples of 2
+	 * 2. Reservation: Extra slots for HW overhead
+	 */
 	switch (mtk_dp->training_info.link_lane_count) {
 	case DP_1LANE:
 		slots += (4 - (slots % 4));
@@ -621,8 +649,9 @@ int mtk_dp_mst_drv_find_vcpi_slots(struct mtk_dp *mtk_dp, int pbn_div, const int
 		break;
 	}
 
-	if (slots > TOTAL_AVAVIL_SLOT) {
-		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] abnormal slots:%d\n", slots);
+	if (slots > total_avail_slots) {
+		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] abnormal slots %d > %d\n",
+			    slots, total_avail_slots);
 		return 0;
 	}
 
@@ -825,6 +854,7 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 	int slots = 0;
 	int need_pbn = 0;
 	int valid_pbn = 0;
+	int pbn_allocated;
 	enum drm_mode_status ret = MODE_CLOCK_HIGH;
 	u8 sink_count;
 
@@ -855,40 +885,67 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 		return ret;
 	}
 
-	valid_pbn = dfixed_trunc(mst_state->pbn_div) * TOTAL_AVAVIL_SLOT;
+	/*
+	 * Use the full link bandwidth for mode validation instead of
+	 * dividing evenly by sink_count. The actual slot allocation is
+	 * validated at atomic_check time by drm_dp_atomic_find_time_slots().
+	 */
+	valid_pbn = dfixed_trunc(mst_state->pbn_div) * mst_state->total_avail_slots;
 
 	need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, bpp, false);
-	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, dfixed_trunc(mst_state->pbn_div), need_pbn);
-	if (slots && (slots * dfixed_trunc(mst_state->pbn_div)) < valid_pbn &&
-		slots * dfixed_trunc(mst_state->pbn_div) < mtk_con->port->full_pbn) {
+	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, dfixed_trunc(mst_state->pbn_div),
+					       need_pbn, mst_state->total_avail_slots);
+	pbn_allocated = slots * dfixed_trunc(mst_state->pbn_div);
+	if (slots && pbn_allocated <= valid_pbn && pbn_allocated <= mtk_con->port->full_pbn) {
 		*dsc = false;
 		ret = MODE_OK;
 		goto end;
 	}
 
 	if (mtk_dp->data->dsc_support &&
-		drm_dp_sink_supports_fec(mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap) &&
-		drm_dp_sink_supports_fec(mtk_con->fec_cap) &&
-		drm_dp_sink_supports_dsc(mtk_con->dsc_dpcd)
-		) {
+	    mtk_con->dsc_aux &&
+	    drm_dp_sink_supports_fec(mtk_con->fec_cap) &&
+	    drm_dp_sink_supports_dsc(mtk_con->dsc_dpcd)) {
 		/* DSC only support RGB 8bit now */
 		need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode,
 			mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT), true);
-		slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
-					dfixed_trunc(mst_state->pbn_div), need_pbn);
-		if (slots && (slots * dfixed_trunc(mst_state->pbn_div)) < valid_pbn &&
-			slots * dfixed_trunc(mst_state->pbn_div) < mtk_con->port->full_pbn) {
+		slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, dfixed_trunc(mst_state->pbn_div),
+						       need_pbn, mst_state->total_avail_slots);
+
+		/* compressed stream must fit both first hop and port bandwidth */
+		pbn_allocated = slots * dfixed_trunc(mst_state->pbn_div);
+		if (!slots || pbn_allocated > valid_pbn || pbn_allocated > mtk_con->port->full_pbn)
+			goto end;
+
+		if (mtk_con->dsc_aux == &mtk_con->port->aux) {
+			/* sink decompresses -> branch->sink is compressed, no 2nd-hop check */
 			*dsc = true;
 			ret = MODE_OK;
+		} else {
+			/*
+			 * upstream decompresses -> branch->sink is uncompressed,
+			 * must fit port->full_pbn
+			 */
+			int need_pbn_uncomp = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode,
+									   bpp, false);
+
+			if (need_pbn_uncomp <= (int)mtk_con->port->full_pbn) {
+				*dsc = true;
+				ret = MODE_OK;
+			}
 		}
 	}
 
 end:
 	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] pbn_div:%d, slots:%d, valid_pbn:%d, need_pbn:%d, dsc:%d, "
-		    "port_full:%d, ret:%d\n",
-		    dfixed_trunc(mst_state->pbn_div), slots, valid_pbn, need_pbn, *dsc,
-		    mtk_con->port->full_pbn, ret);
+		    "[DPTX] %s: con[%d] %dx%d@%d pbn_div:%d slots:%d dsc:%d ret:%d "
+		    "port_full:%d dsc_aux=%s\n",
+		    __func__, mtk_dp_con_id(mtk_dp, mtk_con), mode->hdisplay, mode->vdisplay,
+		    drm_mode_vrefresh(mode), dfixed_trunc(mst_state->pbn_div), slots, *dsc, ret,
+		    mtk_con->port->full_pbn,
+		    mtk_con->dsc_aux ?
+		    (mtk_con->dsc_aux == &mtk_con->port->aux ?
+		    "endpoint" : "upstream") : "NULL");
 
 	return ret;
 }
@@ -1007,6 +1064,32 @@ void mtk_dp_mst_drv_set_hdcp_setting(struct mtk_dp *mtk_dp)
 	mtk_dp_mst_hal_hdcp_trigger_act(mtk_dp);
 }
 
+static void mtk_dp_mst_dump_stream_info(struct mtk_dp *mtk_dp, enum dp_encoder_id id, int con_id,
+					const char *func, int line)
+{
+	struct drm_dp_mst_topology_state *mst_state;
+	int pbn_div;
+	int pbn, slots;
+	u8 bpp;
+
+	if (!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
+	bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
+	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
+	pbn_div = dfixed_trunc(mst_state->pbn_div);
+	pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, &mtk_dp->mode[id], bpp,
+					   mtk_dp->dsc_enable[id]);
+	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, pbn_div, pbn,
+					       mst_state->total_avail_slots);
+
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX][%s][%d] id:%d con_id:%d mode:%dx%d@%d dsc:%d clk:%d pbn:%d slots:%d\n",
+		    func, line, id, con_id, mtk_dp->mode[id].hdisplay, mtk_dp->mode[id].vdisplay,
+		    drm_mode_vrefresh(&mtk_dp->mode[id]), mtk_dp->dsc_enable[id],
+		    mtk_dp->mode[id].clock, pbn, slots);
+}
+
 void mtk_dp_mst_atomic_disable(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 			       struct drm_atomic_state *state)
 {
@@ -1022,6 +1105,7 @@ void mtk_dp_mst_atomic_disable(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 		return;
 
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bridge[%d] MST disable", id);
+	mtk_dp_mst_dump_stream_info(mtk_dp, id, con_id, __func__, __LINE__);
 
 	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
 		if (mst_con_with_encoder(mtk_dp->mtk_con[i]) && mtk_dp->mtk_con[i]->video_enable) {
@@ -1062,7 +1146,8 @@ void mtk_dp_mst_atomic_enable(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 	if (con_id < 0)
 		return;
 
-	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bridge[%d] MST enable", id);
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] bridge[%d] MST enable, con_id:%d\n", id, con_id);
+	mtk_dp_mst_dump_stream_info(mtk_dp, id, con_id, __func__, __LINE__);
 
 	if (!mtk_dp->training_info.cable_plug_in || !mtk_dp->dp_ready) {
 		dev_err(mtk_dp->dev, "[DPTX] bridge[%d] MST cable_plug_in:%d, dp_ready:%d",
@@ -1092,10 +1177,10 @@ int mtk_dp_mst_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 	struct drm_atomic_state *state = crtc_state->state;
 	struct drm_dp_mst_topology_state *mst_state;
 	int con_id;
-	int pbn_need;
-	int pbn_allocated;
-	int slot_need;
-	int slot_allocated;
+	int pbn_need = 0;
+	int pbn_allocated = 0;
+	int slot_need = 0;
+	int slot_allocated = 0;
 	bool dsc = false;
 	u8 bpp;
 	int ret;
@@ -1120,18 +1205,25 @@ int mtk_dp_mst_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 	}
 
 	bpp = mtk_dp_color_get_bpp_v2(mtk_dp->info[id].format, mtk_dp->info[id].depth);
-	mtk_dp_mst_drv_check_mode(mtk_dp, mtk_dp->mtk_con[con_id], &crtc_state->adjusted_mode, bpp, &dsc);
+	ret = mtk_dp_mst_drv_check_mode(mtk_dp, mtk_dp->mtk_con[con_id],
+					&crtc_state->adjusted_mode, bpp, &dsc);
+	if (ret != MODE_OK) {
+		dev_err(mtk_dp->dev,
+			"[DPTX] bridge[%d] mode check failed, status:%d\n", id, ret);
+		ret = -EINVAL;
+		goto fail;
+	}
 
 	if (dsc)
 		bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
 
 	pbn_need = mtk_dp_mst_drv_calculate_pbn(mtk_dp, &crtc_state->adjusted_mode, bpp, dsc);
-	slot_need = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp,
-						   dfixed_trunc(mst_state->pbn_div), pbn_need);
+	slot_need = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, dfixed_trunc(mst_state->pbn_div),
+						   pbn_need, mst_state->total_avail_slots);
 	pbn_allocated = slot_need * dfixed_trunc(mst_state->pbn_div);
-	slot_allocated = drm_dp_atomic_find_time_slots(state,
-						       &mtk_dp->mgr, mtk_dp->mtk_con[con_id]->port, pbn_allocated);
-
+	slot_allocated = drm_dp_atomic_find_time_slots(state, &mtk_dp->mgr,
+						       mtk_dp->mtk_con[con_id]->port,
+						       pbn_allocated);
 	if (slot_allocated < 0) {
 		dev_err(mtk_dp->dev, "[DPTX] fail to find time slots:%d", slot_allocated);
 		ret = slot_allocated;
@@ -1435,6 +1527,56 @@ static const struct drm_connector_helper_funcs mtk_dp_mst_connector_helper_funcs
 	.detect_ctx = mtk_dp_mst_connector_detect,
 };
 
+/*
+ * Detect DSC passthrough capability and fix up passthrough_aux when the
+ * framework's drm_dp_mst_dsc_aux_for_port() missed it (endpoint DPCD
+ * not ready at the time of the call).
+ */
+static void mtk_dp_mst_detect_dsc_passthrough(struct mtk_dp *mtk_dp,
+					       struct mtk_dp_con *mtk_con)
+{
+	struct drm_dp_mst_port *port = mtk_con->port;
+	struct drm_dp_mst_port *upstream_port;
+	u8 upstream_dsc = 0, endpoint_dsc = 0, endpoint_fec = 0;
+
+	drm_dp_dpcd_read(&port->aux, DP_DSC_SUPPORT, &endpoint_dsc, 1);
+	drm_dp_dpcd_read(&port->aux, DP_FEC_CAPABILITY, &endpoint_fec, 1);
+
+	upstream_port = port->parent ? port->parent->port_parent : NULL;
+	if (upstream_port)
+		drm_dp_dpcd_read(&upstream_port->aux,
+				 DP_DSC_SUPPORT, &upstream_dsc, 1);
+	else
+		drm_dp_dpcd_read(&mtk_dp->aux, DP_DSC_SUPPORT, &upstream_dsc, 1);
+
+	drm_dbg_kms(mtk_dp->drm_dev,
+		    "[DPTX] caps: ep=0x%02x, fec=0x%02x, up=0x%02x, dsc_aux=%s, passthrough=%s\n",
+		    endpoint_dsc, endpoint_fec, upstream_dsc,
+		    mtk_con->dsc_aux ? (mtk_con->dsc_aux == &port->aux ? "ep" : "up") : "NULL",
+		    port->passthrough_aux ? "yes" : "no");
+
+	/*
+	 * If hub supports passthrough but drm_dp_mst_dsc_aux_for_port()
+	 * didn't set passthrough_aux (endpoint DPCD not ready yet),
+	 * manually set it so DSC pass-through can work.
+	 */
+	if ((upstream_dsc & DP_DSC_PASSTHROUGH_IS_SUPPORTED) &&
+	    (endpoint_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED) &&
+	    (endpoint_fec & DP_FEC_CAPABLE) &&
+	    !port->passthrough_aux) {
+		upstream_port = port->parent ? port->parent->port_parent : NULL;
+		if (upstream_port) {
+			port->passthrough_aux = &upstream_port->aux;
+			mtk_con->dsc_aux = &port->aux;
+		} else {
+			port->passthrough_aux = &mtk_dp->aux;
+			mtk_con->dsc_aux = &port->aux;
+		}
+		drm_dbg_kms(mtk_dp->drm_dev,
+			    "[DPTX] Manually set passthrough_aux for port\n");
+	}
+}
+
 static struct drm_connector *mtk_dp_add_connector(struct drm_dp_mst_topology_mgr *mgr,
 								struct drm_dp_mst_port *port,
 								const char *pathprop)
@@ -1472,6 +1614,7 @@ static struct drm_connector *mtk_dp_add_connector(struct drm_dp_mst_topology_mgr
 	drm_dp_mst_get_port_malloc(port);
 
 	mtk_con->dsc_aux = drm_dp_mst_dsc_aux_for_port(port);
+	mtk_dp_mst_detect_dsc_passthrough(mtk_dp, mtk_con);
 	mtk_dp_mst_drv_read_port_dsc_caps(mtk_dp, mtk_con);
 	mtk_con->dsc_hblank_expansion_quirk =
 		mtk_dp_mst_drv_detect_dsc_hblank_expansion_quirk(mtk_con);
