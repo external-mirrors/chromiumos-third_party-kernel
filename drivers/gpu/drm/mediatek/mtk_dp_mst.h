@@ -25,5 +25,8 @@ int mtk_dp_mst_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 			    struct drm_bridge_state *bridge_state,
 			    struct drm_crtc_state *crtc_state,
 			    struct drm_connector_state *conn_state);
+enum drm_mode_status mtk_dp_mst_encoder_mode_valid_mt8196(u8 encoder_id,
+							  const struct drm_display_mode *mode);
+int mtk_dp_mst_best_encoder_mt8196(struct mtk_dp *mtk_dp, struct drm_connector *connector);
 #endif
 

@@ -855,7 +855,7 @@ static enum drm_mode_status mtk_dp_mst_drv_check_mode(struct mtk_dp *mtk_dp,
 		return ret;
 	}
 
-	valid_pbn = dfixed_trunc(mst_state->pbn_div) * TOTAL_AVAVIL_SLOT / sink_count;
+	valid_pbn = dfixed_trunc(mst_state->pbn_div) * TOTAL_AVAVIL_SLOT;
 
 	need_pbn = mtk_dp_mst_drv_calculate_pbn(mtk_dp, mode, bpp, false);
 	slots = mtk_dp_mst_drv_find_vcpi_slots(mtk_dp, dfixed_trunc(mst_state->pbn_div), need_pbn);
@@ -1106,6 +1106,13 @@ int mtk_dp_mst_atomic_check(struct mtk_dp *mtk_dp, enum dp_encoder_id id,
 	if (con_id < 0)
 		return con_id;
 
+	if (mtk_dp->data->mst_encoder_mode_valid) {
+		const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
+
+		if (mtk_dp->data->mst_encoder_mode_valid(id, mode) != MODE_OK)
+			return -EINVAL;
+	}
+
 	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
 	if (IS_ERR(mst_state)) {
 		dev_err(mtk_dp->dev, "[DPTX] fail to get mst topology state!\n");
@@ -1250,7 +1257,7 @@ static int mtk_dp_mst_connector_get_modes(struct drm_connector *connector)
 }
 
 static enum drm_mode_status mtk_dp_mst_connector_mode_valid(struct drm_connector *connector,
-								struct drm_display_mode *mode)
+							    struct drm_display_mode *mode)
 {
 	struct mtk_dp_con *mtk_con;
 	struct mtk_dp *mtk_dp;
@@ -1260,6 +1267,12 @@ static enum drm_mode_status mtk_dp_mst_connector_mode_valid(struct drm_connector
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
+
+	if (mtk_dp->data->mst_encoder_mode_valid && mtk_con->encoder) {
+		mode_status = mtk_dp->data->mst_encoder_mode_valid(mtk_con->encoder_id, mode);
+		if (mode_status != MODE_OK)
+			return mode_status;
+	}
 
 	/* MST only support RGB 8bit now */
 	bpp = mtk_dp_color_get_bpp_v2(DP_PIXELFORMAT_RGB, DP_COLOR_DEPTH_8BIT);
@@ -1275,13 +1288,71 @@ static enum drm_mode_status mtk_dp_mst_connector_mode_valid(struct drm_connector
 	return mode_status;
 }
 
+static bool mtk_dp_mst_encoder_available(struct mtk_dp *mtk_dp, u8 encoder_idx)
+{
+	u8 i;
+
+	for (i = 0; i < ARRAY_SIZE(mtk_dp->mtk_con); i++) {
+		if (mtk_dp->mtk_con[i] &&
+		    mtk_dp->mtk_con[i]->dp_mode == DRM_DP_MST &&
+		    mtk_dp->mtk_con[i]->encoder_id == encoder_idx &&
+		    mtk_dp->mtk_con[i]->encoder)
+			return false;
+	}
+
+	return true;
+}
+
+static struct drm_encoder *mtk_dp_mst_get_bridge_encoder(struct mtk_dp *mtk_dp, u8 idx)
+{
+	struct drm_bridge *bridge;
+
+	bridge = devm_drm_of_get_bridge(mtk_dp->dev, mtk_dp->dev->of_node,
+					idx, DP_ENCODER_ENDPOINT);
+	if (IS_ERR(bridge) || !bridge->encoder)
+		return NULL;
+
+	return bridge->encoder;
+}
+
+enum drm_mode_status mtk_dp_mst_encoder_mode_valid_mt8196(u8 encoder_id,
+							  const struct drm_display_mode *mode)
+{
+	/* Only encoder 0 has dual-DSC and can drive resolutions above 4K */
+	if (encoder_id != DP_ENCODER_ID_0 && mode->hdisplay > 3840)
+		return MODE_BAD_HVALUE;
+
+	return MODE_OK;
+}
+
+/*
+ * MT8196 encoder assignment:
+ * Encoder 0 (DP_INTF0) has dual-DSC → supports up to 5K
+ * Encoder 1 (DP_INTF1) has single-DSC → supports up to 4K
+ *
+ * Strategy: 5K connectors must use encoder 0; 4K connectors prefer
+ * encoder 1 to keep encoder 0 free for a later 5K connector.
+ */
+int mtk_dp_mst_best_encoder_mt8196(struct mtk_dp *mtk_dp, struct drm_connector *connector)
+{
+	struct drm_display_mode *mode;
+
+	/* If any mode exceeds 4K, this connector needs dual-DSC (encoder 0) */
+	list_for_each_entry(mode, &connector->modes, head) {
+		if (mode->hdisplay > 3840)
+			return DP_ENCODER_ID_0;
+	}
+
+	return DP_ENCODER_ID_1;
+}
+
 static struct drm_encoder *mtk_dp_mst_connector_atomic_best_encoder(struct drm_connector *connector,
-							struct drm_atomic_state *state)
+								    struct drm_atomic_state *state)
 {
 	struct mtk_dp_con *mtk_con;
 	struct mtk_dp *mtk_dp;
-	struct drm_bridge *bridge;
-	u8 i, j;
+	struct drm_encoder *enc;
+	u8 i;
 
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
@@ -1289,40 +1360,39 @@ static struct drm_encoder *mtk_dp_mst_connector_atomic_best_encoder(struct drm_c
 	if (mtk_con->encoder)
 		return mtk_con->encoder;
 
+	/* Platform-specific encoder preference, fall through if unavailable */
+	if (mtk_dp->data->mst_best_encoder) {
+		int preferred = mtk_dp->data->mst_best_encoder(mtk_dp, connector);
+
+		if (preferred >= 0 && preferred < DP_ENCODER_NUM) {
+			enc = mtk_dp_mst_get_bridge_encoder(mtk_dp, preferred);
+			if (enc && mtk_dp_mst_encoder_available(mtk_dp, preferred)) {
+				mtk_con->encoder = enc;
+				mtk_con->encoder_id = preferred;
+				drm_dbg_kms(mtk_dp->drm_dev,
+					    "[DPTX] connector[%d] hook assigned encoder %d\n",
+					    mtk_dp_con_id(mtk_dp, mtk_con), preferred);
+				return enc;
+			}
+		}
+	}
+
+	/* Fallback: use any available encoder */
 	for (i = 0; i < DP_ENCODER_NUM; i++) {
-		bridge = devm_drm_of_get_bridge(mtk_dp->dev,
-					mtk_dp->dev->of_node, i, DP_ENCODER_ENDPOINT);
-		if (IS_ERR(bridge)) {
-			drm_dbg_kms(mtk_dp->drm_dev,
-				    "[DPTX] best encoder, can not find bridge[%d, %d]", i, 0);
+		enc = mtk_dp_mst_get_bridge_encoder(mtk_dp, i);
+		if (!enc)
 			continue;
-		}
-		if (!bridge->encoder) {
-			drm_dbg_kms(mtk_dp->drm_dev,
-				    "[DPTX] best encoder, bridge have no encoder[%d, %d]", i, 0);
+
+		if (!mtk_dp_mst_encoder_available(mtk_dp, i))
 			continue;
-		}
+
 		drm_dbg_kms(mtk_dp->drm_dev,
-			    "[DPTX] best encoder, found dp_intf[%d] bridge node:%pOF\n",
-			i, bridge->of_node);
+			    "[DPTX] connector[%d] MST best encoder, assigned dp_intf[%d]\n",
+			    mtk_dp_con_id(mtk_dp, mtk_con), i);
 
-		for (j = 0; j < ARRAY_SIZE(mtk_dp->mtk_con); j++) {
-			if (mtk_dp->mtk_con[j] &&
-			    mtk_dp->mtk_con[j]->dp_mode == DRM_DP_MST &&
-			    mtk_dp->mtk_con[j]->encoder == bridge->encoder)
-				break;
-		}
-
-		if (j == ARRAY_SIZE(mtk_dp->mtk_con)) {
-			drm_dbg_kms(mtk_dp->drm_dev,
-				    "[DPTX] connector[%d] MST best encoder, found encoder with dp_intf[%d] node:%pOF\n",
-				    mtk_dp_con_id(mtk_dp, mtk_con), i, bridge->of_node);
-
-			mtk_con->encoder = bridge->encoder;
-			mtk_con->encoder_id = i;
-
-			return bridge->encoder;
-		}
+		mtk_con->encoder = enc;
+		mtk_con->encoder_id = i;
+		return enc;
 	}
 
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] best encoder, fail to find encoder!");

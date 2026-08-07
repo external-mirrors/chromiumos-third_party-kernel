@@ -281,6 +281,9 @@ struct mtk_dp_data {
 	u8 max_link_rate;
 	u8 max_lane_count;
 	u8 encoder_num;
+	int (*mst_best_encoder)(struct mtk_dp *mtk_dp, struct drm_connector *connector);
+	enum drm_mode_status (*mst_encoder_mode_valid)(u8 encoder_id,
+						       const struct drm_display_mode *mode);
 	bool need_phy_lane_enable_set;
 	bool need_phy_flip_set;
 	u32 phy_4lane_ctrl_bit;
