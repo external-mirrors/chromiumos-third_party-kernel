@@ -96,7 +96,7 @@
 struct mtk_dsc_data {
 	bool dsc_bypass_enable;
 	bool pt_mem_en;
-	u32 dsc_cfg;
+	bool supports_10bit;
 	u32 obuf;
 };
 
@@ -168,6 +168,7 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	unsigned int init_delay_limit, init_delay_height_min, init_delay_height;
 	unsigned int pic_group_width, pic_height_ext_num;
 	unsigned int slice_group_width;
+	unsigned int dsc_cfg = DSC_CONFIG_8BIT_SETTING;
 	unsigned int pad_num;
 	unsigned int bp_enable;
 	unsigned int slice_mode;
@@ -244,7 +245,9 @@ void mtk_dsc_config(struct device *dev, unsigned int w, unsigned int h,
 	mtk_dsc_write(dsc, DISP_REG_DSC_MODE,
 		      (slice_mode & BIT(0)) | (rgb_swap << 2) | (init_delay_height << 8));
 
-	mtk_dsc_write(dsc, DISP_REG_DSC_CFG, dsc->data->dsc_cfg);
+	if (cfg->bits_per_component == 10 && dsc->data->supports_10bit)
+		dsc_cfg = DSC_CONFIG_10BIT_SETTING;
+	mtk_dsc_write(dsc, DISP_REG_DSC_CFG, dsc_cfg);
 
 	mtk_dsc_write_mask(dsc, DISP_REG_DSC_PAD, pad_num, GENMASK(2, 0));
 
@@ -470,19 +473,16 @@ static int mtk_dsc_remove(struct platform_device *pdev)
 }
 
 static const struct mtk_dsc_data mt8189_dsc_driver_conf = {
-	.dsc_cfg = DSC_CONFIG_8BIT_SETTING,
 	.obuf = 0x7c1,
 };
 
 static const struct mtk_dsc_data mt8195_dsc_driver_conf = {
 	.dsc_bypass_enable = true,
-	.dsc_cfg = 0xb687d82b,
-	.obuf = 0x410,
 };
 
 static const struct mtk_dsc_data mt8196_dsc_driver_conf = {
 	.pt_mem_en = true,
-	.dsc_cfg = 0xb687d82b,
+	.supports_10bit = true,
 	.obuf = 0x410,
 };
 
