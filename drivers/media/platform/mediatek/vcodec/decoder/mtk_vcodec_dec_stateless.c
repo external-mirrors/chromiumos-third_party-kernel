@@ -349,9 +349,10 @@ static void mtk_vdec_worker(struct work_struct *work)
 	if (!ctx->is_secure_playback) {
 		bs_src->va = vb2_plane_vaddr(vb2_src, 0);
 		if (!bs_src->va) {
-			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 			mtk_v4l2_vdec_err(ctx, "[%d] id=%d source buffer is NULL", ctx->id,
 					  vb2_src->index);
+			v4l2_m2m_buf_done(vb2_v4l2_src, VB2_BUF_STATE_ERROR);
+			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 			return;
 		}
 	}
