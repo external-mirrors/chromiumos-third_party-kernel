@@ -499,10 +499,12 @@ EXPORT_SYMBOL_GPL(mtk_dmaheap_unregister_slc_callback);
 
 int dma_buf_set_gid(struct dma_buf *dmabuf, int gid)
 {
-	struct system_heap_buffer *buffer = dmabuf->priv;
+	struct system_heap_buffer *buffer;
 
-	if (IS_ERR_OR_NULL(buffer))
+	if (IS_ERR_OR_NULL(dmabuf) || dmabuf->ops != &system_heap_buf_ops)
 		return -EINVAL;
+
+	buffer = dmabuf->priv;
 	buffer->slc_gid = gid;
 	return 0;
 }
@@ -510,10 +512,12 @@ EXPORT_SYMBOL_GPL(dma_buf_set_gid);
 
 int dma_buf_get_gid(struct dma_buf *dmabuf)
 {
-	struct system_heap_buffer *buffer = dmabuf->priv;
+	struct system_heap_buffer *buffer;
 
-	if (IS_ERR_OR_NULL(buffer))
+	if (IS_ERR_OR_NULL(dmabuf) || dmabuf->ops != &system_heap_buf_ops)
 		return -EINVAL;
+
+	buffer = dmabuf->priv;
 	return buffer->slc_gid;
 }
 EXPORT_SYMBOL_GPL(dma_buf_get_gid);
