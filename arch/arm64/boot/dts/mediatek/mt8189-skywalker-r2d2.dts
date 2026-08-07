@@ -121,14 +121,9 @@
 		interrupts-extended = <&pio 15 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_pins>;
-		// Add delay
-		post-power-on-delay-ms = <30>;
 		reset-gpios = <&pio 126 GPIO_ACTIVE_LOW>;
 		vdd-supply = <&pp3300_tchscr_x>;
 		status = "okay";
-
-		// test flag
-		test-property = "r2d2_test_20260507_1200";
 	};
 };
 
@@ -144,35 +139,6 @@
 		wakeup-source;
 		vcc-supply = <&pp1800_trackpad>;
 		status = "okay";
-	};
-
-	trackpad_goodix: trackpad@2c {
-		compatible = "hid-over-i2c";
-		reg = <0x2c>;
-		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&trackpad_pins>;
-		wakeup-source;
-		post-power-on-delay-ms = <10>;
-		hid-descr-addr = <0x0020>;
-		vdd-supply = <&pp3300_s3>;
-
-		vddl-supply = <&pp1800_trackpad>;
-		status = "fail-needs-probe";
-	};
-
-	trackpad_focal: trackpad@38 {
-		compatible = "hid-over-i2c";
-		reg = <0x38>;
-		interrupts-extended = <&pio 125 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&trackpad_pins>;
-		wakeup-source;
-		post-power-on-delay-ms = <40>;
-		hid-descr-addr = <0x0020>;
-		vdd-supply = <&pp3300_s3>;
-		vddl-supply = <&pp1800_trackpad>;
-		status = "fail-needs-probe";
 	};
 };
 
@@ -196,6 +162,10 @@
 	};
 };
 
+&ap_i2c_sar {
+	status = "disabled";
+};
+
 &ap_sar_sensor {
 	status = "disabled";
 };
@@ -207,18 +177,8 @@
 	mediatek,phy-timing-clk-hs-zero = <0>;
 };
 
-&mt6359_vpa_buck_reg {
-	regulator-min-microvolt = <1000000>;
-	regulator-max-microvolt = <1000000>;
-};
-
-/* Use PMIC VFE28 for WFC 2.8V AF power supply */
-&mt6359_vfe28_ldo_reg {
-	regulator-always-on;
-};
-
 &pen_insert {
-	wakeup-event-action = <EV_ACT_ANY>;
+	wakeup-event-action = <EV_ACT_DEASSERTED>;
 };
 
 &pio{
@@ -226,14 +186,14 @@
 	gpio-line-names =
 		"IMU_INT_SCP_L",		/* 0 */
 		"LID_ACCEL_INT_SCP_L",
-		"ESIM_ERASE",
-		"PP1800_TCHPAD_EN",
+		"AP_SCP_GPIO02",
+		"AP_SCP_GPIO03",
 		"HP_INT_ODL",
 		"EN_SPKR",
 		"RST_SPKR_L",
 		"USB3_HUB_RST_L",
 		"SPKR_INT_ODL",
-		"SAR_INT_ODL",
+		"WWAN_INT_ODL",
 		"WWAN_RESET_L",			/* 10 */
 		"PEN_EJECT_OD",
 		"TP",
@@ -254,7 +214,7 @@
 		"EC_AP_DP_HPD_L",
 		"EDP_HPD_1V8",
 		"BL_PWM_1V8",
-		"CODEC_PWR_SOC_EN",		/* 30 */
+		"TP",		/* 30 */
 		"UART_AP_TX_GSC_DBG_RX",
 		"UART_GSC_DBG_TX_AP_RX",
 		"AP_UART1_TXD",
@@ -291,8 +251,8 @@
 		"AP_I2C_HDMI_SDA_1V8",
 		"AP_I2C_TCHPAD_SCL_1V8",
 		"AP_I2C_TCHPAD_SDA_1V8",
-		"TP",
-		"TP",
+		"AP_I2C_WWAN_SCL_1V8",
+		"AP_I2C_WWAN_SDA_1V8",
 		"SPI_AP_CS_EC_L",
 		"SPI_AP_CLK_EC",		/* 70 */
 		"SPI_AP_DO_EC_DI",
@@ -301,10 +261,10 @@
 		"TP",
 		"TP",
 		"TP",
-		"",
-		"",
-		"",
-		"",		/* 80 */
+		"SPI_AP_CS_TCHSCR_L",
+		"SPI_AP_CLK_TCHSCR",
+		"SPI_AP_DO_TCHSCR_DI",
+		"SPI_AP_DI_TCHSCR_DO",		/* 80 */
 		"",
 		"",
 		"",
@@ -348,7 +308,7 @@
 		"EN_PP3300_WWAN_X",
 		"DMIC1_CLK",
 		"DMIC1_DATA",
-		"WWAN_SAR_DETECT_L",
+		"TP",
 		"TCHPAD_INT_ODL",
 		"TCHSCR_RST_1V8_L",
 		"AP_HDMI_RST_ODL",
@@ -360,7 +320,7 @@
 		"TP",
 		"TP",
 		"EN_HDMI_PWR",
-		"",
+		"TP",
 		"AP_EC_WARM_RST_REQ",
 		"GSC_AP_INT_ODL",
 		"HDMI_HPD_1V8_ODL",
@@ -368,7 +328,7 @@
 		"EC_AP_RSVD0_ODL",
 		"EC_AP_RSVD1_ODL",
 		"MT6319B_INT",
-		"MT6319C_INT",
+		"TP",
 		"BT_KILL_1V8_L",
 		"WIFI_KILL_1V8_L",
 		"WWAN_PWR_OFF_L",
@@ -392,12 +352,12 @@
 		"",
 		"",
 		"",
-		"",
-		"",
-		"",			/* 170 */
-		"",
-		"",
-		"",
+		"TP",
+		"TP",
+		"TP",			/* 170 */
+		"TP",
+		"TP",
+		"TP",
 		"",
 		"",
 		"",
@@ -471,6 +431,10 @@
 	status = "disabled";
 };
 
+&spi2 {
+	status = "disabled";
+};
+
 &thermal_zones {
 	tboard0-thermal {
 		polling-delay = <0>; /* milliseconds */
@@ -501,12 +465,24 @@
 	};
 };
 
+&threshold {
+    temperature = <60000>;
+};
+
+&target {
+    temperature = <70000>;
+};
+
 &u3phy0 {
 	status = "okay";
 };
 
 &ufshci {
 	status = "okay";
+};
+
+&usb_a1 {
+	status = "disabled";
 };
 
 &usb_c1 {

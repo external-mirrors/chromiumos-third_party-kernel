@@ -215,15 +215,6 @@ padme:
 r2d2:
   dtb:
     mt8189-skywalker-r2d2.dtb: {}
-  dtbo:
-    mt8189-skywalker-r2d2-touchscreen.dtbo:
-      fw_config:
-        mask: 0x1
-        value: 0x1
-    mt8189-skywalker-r2d2-usb-c1.dtbo:
-      fw_config:
-        mask: 0x300
-        value: 0x000
 
 sheev:
   dtb:
