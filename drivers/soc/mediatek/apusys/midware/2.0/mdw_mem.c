@@ -247,7 +247,12 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 		if (ret) {
 			mdw_drv_err("generate mem handle fail\n");
 			dma_buf_put(m->dbuf);
-			goto delete_mem;
+			m = NULL;
+			/*
+			 * memory freed and mpriv reference put
+			 * when DMABUF is released.
+			 */
+			goto out;
 		}
 	}
 	/* insert to list */
