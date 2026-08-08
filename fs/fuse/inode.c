@@ -1264,6 +1264,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 		fc->conn_init = 0;
 		fc->conn_error = 1;
 	} else {
+		fuse_print_conn_mounts(fc, "connection initialized");
 		init_fuse_watchdog(fc);
 	}
 
