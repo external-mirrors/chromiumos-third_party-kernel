@@ -3,6 +3,7 @@
  * Copyright (c) 2021 MediaTek Inc.
  */
 
+#include <linux/cleanup.h>
 #include <linux/math64.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
@@ -791,15 +792,21 @@ static void mdw_cmd_trigger_func(struct work_struct *wk)
 	struct mdw_cmd *c =
 		container_of(wk, struct mdw_cmd, t_wk);
 	int ret = 0;
+	struct dma_fence *fence = NULL;
 
-	if (c->wait_fence) {
-		dma_fence_wait(c->wait_fence, false);
-		dma_fence_put(c->wait_fence);
+	scoped_guard(mutex, &c->mtx) {
+		fence = c->wait_fence;
+		c->wait_fence = NULL;
 	}
 
+	if (fence) {
+		dma_fence_wait(fence, false);
+		dma_fence_put(fence);
+	}
+
+	mutex_lock(&c->mtx);
 	mdw_flw_debug("s(0x%llx) c(0x%llx) wait fence done, start run\n",
 		(uint64_t)c->mpriv, c->kid);
-	mutex_lock(&c->mtx);
 	ret = mdw_cmd_run(c->mpriv, c);
 	mutex_unlock(&c->mtx);
 
