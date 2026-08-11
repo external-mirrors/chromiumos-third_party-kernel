@@ -1015,6 +1015,11 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 				mdw_cmd_put(c);
 				goto out;
 			}
+			if (atomic_read(&c->is_running)) {
+				ret = -EBUSY;
+				mdw_cmd_put(c);
+				goto out;
+			}
 		}
 		/* run stale cmd */
 		mdw_cmd_debug("s(0x%llx) run stale(0x%llx)\n",
