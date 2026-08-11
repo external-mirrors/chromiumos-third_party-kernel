@@ -8658,36 +8658,15 @@ static int get_adv_size_info(struct sock *sk, struct hci_dev *hdev,
 	return err;
 }
 
-static struct hci_dev *floss_get_hdev(u16 hci_id)
-{
-	struct hci_dev *hdev = NULL;
-	struct hci_dev *d;
-
-	read_lock(&hci_dev_list_lock);
-
-	// find the corresponding hci device.
-	list_for_each_entry(d, &hci_dev_list, list) {
-		if (d->id == hci_id) {
-			hdev = d;
-			break;
-		}
-	}
-	read_unlock(&hci_dev_list_lock);
-
-	return hdev;
-}
-
 static int floss_get_sco_codec_capabilities(struct sock *sk,
 					    struct hci_dev *hdev,
 					    void *data, u16 data_len)
 {
 	struct mgmt_cp_get_codec_capabilities *cp = data;
 	struct mgmt_rp_get_codec_capabilities rp;
-	struct hci_dev *found_hdev;
+	int err;
 
-	found_hdev = floss_get_hdev(cp->hci_id);
-	if (found_hdev)
-		hdev = found_hdev;
+	hdev = hci_dev_get(cp->hci_id);
 
 	// Make sure we have a valid hdev.
 	if (!hdev)
@@ -8701,9 +8680,11 @@ static int floss_get_sco_codec_capabilities(struct sock *sk,
 		hdev->get_data_path_id(hdev, &rp.hci_data_path_id);
 	rp.wbs_pkt_len = hdev->wbs_pkt_len;
 
-	return mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
-				 MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
-				 MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
+	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
+				MGMT_OP_GET_SCO_CODEC_CAPABILITIES,
+				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
+	hci_dev_put(hdev);
+	return err;
 }
 
 static int floss_notify_sco_connection_change(struct sock *sk,
@@ -8714,28 +8695,31 @@ static int floss_notify_sco_connection_change(struct sock *sk,
 
 	struct hci_conn *conn;
 	int notify;
-	struct hci_dev *found_hdev;
 
-	found_hdev = floss_get_hdev(cp->hci_id);
-	if (found_hdev)
-		hdev = found_hdev;
+	hdev = hci_dev_get(cp->hci_id);
 
 	// Make sure we have a valid hdev.
 	if (!hdev)
 		return -EINVAL;
 
 	/* We only need to notify the driver if it listens for it. */
-	if (!hdev->notify)
+	if (!hdev->notify) {
+		hci_dev_put(hdev);
 		return 0;
+	}
 
+	hci_dev_lock(hdev);
 	/* We only notify for the first connected or disconnected change for a
 	 * given device.
 	 */
 	conn = hci_conn_hash_lookup_ba(hdev, SCO_LINK, &cp->addr.bdaddr);
 	if (cp->connected && !conn) {
 		conn = hci_conn_add(hdev, SCO_LINK, &cp->addr.bdaddr, 0);
-		if (!conn)
+		if (!conn) {
+			hci_dev_unlock(hdev);
+			hci_dev_put(hdev);
 			return -ENOMEM;
+		}
 
 		notify = (cp->codec == MGMT_SCO_CODEC_MSBC_TRANSPARENT) ?
 					HCI_NOTIFY_ENABLE_SCO_TRANSP :
@@ -8745,6 +8729,8 @@ static int floss_notify_sco_connection_change(struct sock *sk,
 		hci_conn_del(conn);
 		hdev->notify(hdev, HCI_NOTIFY_DISABLE_SCO);
 	}
+	hci_dev_unlock(hdev);
+	hci_dev_put(hdev);
 
 	return 0;
 }
@@ -8762,14 +8748,11 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 	u16 hci_id;
 	u16 vendor_specification;
 	int err;
-	struct hci_dev *found_hdev;
 
 	hci_id = __le16_to_cpu(cp->hci_id);
 	vendor_specification = __le16_to_cpu(cp->vendor_specification);
 
-	found_hdev = floss_get_hdev(cp->hci_id);
-	if (found_hdev)
-		hdev = found_hdev;
+	hdev = hci_dev_get(hci_id);
 
 	// Make sure we have a valid hdev.
 	if (!hdev) {
@@ -8792,19 +8775,18 @@ static int floss_get_vs_opcode(struct sock *sk, struct hci_dev *hdev,
 	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE,
 				MGMT_OP_GET_VS_OPCODE,
 				MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
+	hci_dev_put(hdev);
 	return err;
 }
 
 static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 {
 	struct mgmt_cp_notify_suspend_state *cp = data;
-	struct hci_dev *found_hdev;
+	int err;
 
 	bt_dev_dbg(hdev, "sock %p", sk);
 
-	found_hdev = floss_get_hdev(cp->hci_id);
-	if (found_hdev)
-		hdev = found_hdev;
+	hdev = hci_dev_get(cp->hci_id);
 
 	// Make sure we have a valid hdev.
 	if (!hdev) {
@@ -8813,15 +8795,20 @@ static int floss_notify_suspend_state(struct sock *sk, struct hci_dev *hdev, voi
 				       MGMT_STATUS_INVALID_INDEX);
 	}
 
-	if (cp->suspended != 0x00 && cp->suspended != 0x01)
-		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_NOTIFY_SUSPEND_STATE,
-				       MGMT_STATUS_INVALID_PARAMS);
+	if (cp->suspended != 0x00 && cp->suspended != 0x01) {
+		err = mgmt_cmd_status(sk, hdev->id,
+				      MGMT_OP_NOTIFY_SUSPEND_STATE,
+				      MGMT_STATUS_INVALID_PARAMS);
+		hci_dev_put(hdev);
+		return err;
+	}
 
 	hci_dev_lock(hdev);
 
 	hdev->suspended = cp->suspended;
 
 	hci_dev_unlock(hdev);
+	hci_dev_put(hdev);
 
 	return 0;
 }
@@ -9008,19 +8995,15 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	[MGMT_OP_GET_SCO_CODEC_CAPABILITIES] = {
 	floss_get_sco_codec_capabilities,
 				   MGMT_GET_SCO_CODEC_CAPABILITIES_SIZE,
-						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED },
+						HCI_MGMT_NO_HDEV },
 	{ floss_notify_sco_connection_change,
 				   MGMT_NOTIFY_SCO_CONNECTION_CHANGE_SIZE,
-						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED },
+						HCI_MGMT_NO_HDEV },
 	{ floss_get_vs_opcode,     MGMT_GET_VS_OPCODE_SIZE,
-						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED },
+						HCI_MGMT_NO_HDEV },
 	{ floss_notify_suspend_state,
 				   MGMT_NOTIFY_SUSPEND_STATE_SIZE,
-						HCI_MGMT_NO_HDEV |
-						HCI_MGMT_UNTRUSTED },
+						HCI_MGMT_NO_HDEV },
 	[MGMT_OP_SCO_FORCE_RETRANS_EFFORT] = {
 	sco_force_retrans_effort,
 				   MGMT_SCO_FORCE_RETRANS_EFFORT_SIZE },
