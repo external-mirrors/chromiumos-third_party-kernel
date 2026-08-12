@@ -237,6 +237,7 @@ unlock:
 static void term_queue_group(struct kbase_queue_group *group);
 static void get_queue(struct kbase_queue *queue);
 static bool release_queue(struct kbase_queue *queue);
+static bool kbase_csf_queue_phys_allocated(struct kbase_queue *queue);
 
 /**
  * kbase_csf_free_command_stream_user_pages() - Free the resources allocated
@@ -723,6 +724,9 @@ int kbase_csf_queue_bind(struct kbase_context *kctx, union kbase_ioctl_cs_queue_
 		goto out;
 
 	if (queue->group || group->bound_queues[bind->in.csi_index])
+		goto out;
+
+	if (kbase_csf_queue_phys_allocated(queue))
 		goto out;
 
 	ret = get_user_pages_mmap_handle(kctx, queue);
