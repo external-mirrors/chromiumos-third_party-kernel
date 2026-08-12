@@ -117,14 +117,22 @@ i915_gem_busy_ioctl(struct drm_device *dev, void *data,
 	struct drm_i915_gem_object *obj;
 	struct dma_resv_iter cursor;
 	struct dma_fence *fence;
-	int err;
 
-	err = -ENOENT;
 	rcu_read_lock();
 	obj = i915_gem_object_lookup_rcu(file, args->handle);
-	if (!obj)
-		goto out;
 
+	/*
+	 * Pin the object so a foreign-import obj->base.resv
+	 * (which equals dma_buf->resv and is freed non-RCU on the last dma_buf_put)
+	 * cannot be freed while we walk its fences.
+	 */
+	if (obj && !kref_get_unless_zero(&obj->base.refcount))
+		obj = NULL;
+
+	rcu_read_unlock();
+
+	if (!obj)
+		return -ENOENT;
 	/*
 	 * A discrepancy here is that we do not report the status of
 	 * non-i915 fences, i.e. even though we may report the object as idle,
@@ -157,8 +165,6 @@ i915_gem_busy_ioctl(struct drm_device *dev, void *data,
 	}
 	dma_resv_iter_end(&cursor);
 
-	err = 0;
-out:
-	rcu_read_unlock();
-	return err;
+	i915_gem_object_put(obj);
+	return 0;
 }
