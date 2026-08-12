@@ -232,8 +232,13 @@ int mdw_cmd_get_apummutable(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 		return ret;
 	}
 
-	c->size_cmdbufs += tbl_size;
+	if (check_add_overflow(c->size_cmdbufs, tbl_size, &c->size_cmdbufs)) {
+		mdw_drv_err("cmdbuf + apummutable size overflow(%u/%u)\n",
+			    c->size_cmdbufs, tbl_size);
+		return -EINVAL;
+	}
 	c->size_apummutable = tbl_size;
+
 	mdw_cmd_debug("c->kid(0x%llx) tbl_size(%u) apummutable size(%u)\n",
 		c->kid, tbl_size, c->size_apummutable);
 
