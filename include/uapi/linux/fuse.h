@@ -591,9 +591,6 @@ enum fuse_opcode {
 	 * after the atomic open kernel patch is merged to upstream.
 	 */
 	FUSE_OPEN_ATOMIC	= 0xfffffffe, /* u32::MAX - 1 */
-
-	/* Chrome OS extensions */
-	FUSE_CHROMEOS_TMPFILE	= 0xffffffff,	/* u32::MAX */
 };
 
 enum fuse_notify_code {
@@ -708,11 +705,6 @@ struct fuse_create_in {
 	uint32_t	mode;
 	uint32_t	umask;
 	uint32_t	open_flags;	/* FUSE_OPEN_... */
-};
-
-struct fuse_chromeos_tmpfile_in {
-	uint32_t mode;
-	uint32_t umask;
 };
 
 struct fuse_open_out {
