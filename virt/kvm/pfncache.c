@@ -159,13 +159,6 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	kvm_pfn_t new_pfn = KVM_PFN_ERR_FAULT;
 	void *new_khva = NULL;
 	unsigned long mmu_seq;
-	struct kvm_follow_pfn kfp = {
-		.slot = gpc->memslot,
-		.gfn = gpa_to_gfn(gpc->gpa),
-		.flags = FOLL_GET | FOLL_WRITE,
-		.hva = gpc->uhva,
-		.allow_non_refcounted_struct_page = false,
-	};
 
 	lockdep_assert_held(&gpc->refresh_lock);
 
@@ -179,6 +172,14 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	gpc->valid = false;
 
 	do {
+		struct kvm_follow_pfn kfp = {
+			.slot = gpc->memslot,
+			.gfn = gpa_to_gfn(gpc->gpa),
+			.flags = FOLL_GET | FOLL_WRITE,
+			.hva = gpc->uhva,
+			.allow_non_refcounted_struct_page = false,
+		};
+
 		mmu_seq = gpc->kvm->mmu_invalidate_seq;
 		smp_rmb();
 
