@@ -1838,41 +1838,10 @@ ap_i2c_tchpad: &i2c7 {
 &xhci3 {
 	status = "okay";
 
-	/* 2.x hub on port 1 */
-	usb_hub_2_x: hub@1 {
-		compatible = "usbbda,5411";
-		reg = <1>;
-		vdd-supply = <&pp3300_s3>;
-		peer-hub = <&usb_hub_3_x>;
-
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-			port@1 {
-				reg = <1>;
-				usb_hub_dsp1_hs: endpoint { };
-			};
-			port@2 {
-				reg = <2>;
-				usb_hub_dsp2_hs: endpoint { };
-			};
-			port@3 {
-				reg = <3>;
-				usb_hub_dsp3_hs: endpoint { };
-			};
-			port@4 {
-				reg = <4>;
-
-				/* On-board WWAN card */
-				usb_hub_dsp4_hs: endpoint { };
-			};
-		};
-	};
-
-	/* 3.x hub on port 2 */
-	usb_hub_3_x: hub@2 {
+	/* 3.x hub on port 1 */
+	usb_hub_3_x: hub@1 {
 		compatible = "usbbda,411";
-		reg = <2>;
+		reg = <1>;
 		vdd-supply = <&pp3300_s3>;
 		peer-hub = <&usb_hub_2_x>;
 
@@ -1896,6 +1865,37 @@ ap_i2c_tchpad: &i2c7 {
 
 				/* On-board WWAN card */
 				usb_hub_dsp4_ss: endpoint { };
+			};
+		};
+	};
+
+	/* 2.x hub on port 1 */
+	usb_hub_2_x: hub@2 {
+		compatible = "usbbda,5411";
+		reg = <2>;
+		vdd-supply = <&pp3300_s3>;
+		peer-hub = <&usb_hub_3_x>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@1 {
+				reg = <1>;
+				usb_hub_dsp1_hs: endpoint { };
+			};
+			port@2 {
+				reg = <2>;
+				usb_hub_dsp2_hs: endpoint { };
+			};
+			port@3 {
+				reg = <3>;
+				usb_hub_dsp3_hs: endpoint { };
+			};
+			port@4 {
+				reg = <4>;
+
+				/* On-board WWAN card */
+				usb_hub_dsp4_hs: endpoint { };
 			};
 		};
 	};
