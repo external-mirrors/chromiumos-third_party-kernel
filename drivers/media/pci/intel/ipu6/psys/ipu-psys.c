@@ -1602,7 +1602,29 @@ static struct auxiliary_driver ipu6_psys_aux_driver = {
 		.pm = &psys_pm_ops,
 	},
 };
-module_auxiliary_driver(ipu6_psys_aux_driver);
+
+static int __init ipu6_psys_init(void)
+{
+	int ret;
+
+	ret = bus_register(&ipu6_psys_bus);
+	if (ret)
+		return ret;
+
+	ret = auxiliary_driver_register(&ipu6_psys_aux_driver);
+	if (ret)
+		bus_unregister(&ipu6_psys_bus);
+
+	return ret;
+}
+module_init(ipu6_psys_init);
+
+static void __exit ipu6_psys_exit(void)
+{
+	auxiliary_driver_unregister(&ipu6_psys_aux_driver);
+	bus_unregister(&ipu6_psys_bus);
+}
+module_exit(ipu6_psys_exit);
 
 MODULE_AUTHOR("Bingbu Cao <bingbu.cao@intel.com>");
 MODULE_LICENSE("GPL");
