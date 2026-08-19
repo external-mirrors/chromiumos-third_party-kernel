@@ -114,7 +114,8 @@ void mtk_cam_dev_dequeue_frame(struct mtk_cam_dev *cam,
 	unsigned long flags;
 	unsigned int fbc_cnt;
 
-	if (!cam->vdev_nodes[node_id].enabled || !cam->streaming)
+	if (!cam->vdev_nodes[node_id].enabled || !cam->streaming ||
+	    cam->vdev_nodes[node_id].vbq.uses_requests)
 		return;
 
 	/*
