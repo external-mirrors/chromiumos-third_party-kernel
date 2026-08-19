@@ -53,8 +53,16 @@ static void isp_tx_frame_worker(struct work_struct *work)
 		container_of(req->req.mdev, struct mtk_cam_dev, media_dev);
 	struct mtk_isp_p1_device *p1_dev = dev_get_drvdata(cam->dev);
 
+	/*
+	 * scp_ipi_send() is synchronous: it copies frame_params into the SCP
+	 * shared memory and, as a non-zero timeout is passed, waits for the
+	 * SCP acknowledge. The frame parameters are not referenced anymore
+	 * once it returns, so the request reference taken by
+	 * mtk_isp_req_enqueue() can be released here.
+	 */
 	scp_ipi_send(p1_dev->scp, SCP_IPI_ISP_FRAME, &req->frame_params,
 		     sizeof(req->frame_params), MTK_ISP_IPI_SEND_TIMEOUT);
+	media_request_put(&req->req);
 }
 
 static void isp_composer_handler(void *data, unsigned int len, void *priv)
@@ -281,6 +289,8 @@ void mtk_isp_req_enqueue(struct mtk_cam_dev *cam,
 	req->frame_params.frame_seq_no = ++p1_dev->enqueued_frame_seq_no;
 
 	INIT_WORK(&req->frame_work, isp_tx_frame_worker);
+	/* The reference is handed over to isp_tx_frame_worker() */
+	media_request_get(&req->req);
 	queue_work(p1_dev->composer_wq, &req->frame_work);
 	dev_dbg(cam->dev, "enqueue fd:%s frame_seq_no:%d job cnt:%d\n",
 		req->req.debug_str, req->frame_params.frame_seq_no,

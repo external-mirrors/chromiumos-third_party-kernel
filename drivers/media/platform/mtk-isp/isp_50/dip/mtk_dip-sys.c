@@ -206,21 +206,26 @@ static void mdp_cb_timeout_worker(struct work_struct *work)
 	scp_ipi_send(req->dip_pipe->dip_dev->scp, SCP_IPI_DIP,
 		     &ipi_param, sizeof(ipi_param), 0);
 	mtk_dip_notify(req);
+	media_request_put(&req->req);
 }
 
-/* Maybe in IRQ context of cmdq */
+/*
+ * Maybe in IRQ context of cmdq
+ *
+ * It takes the ownership of the request reference that dip_runner_func()
+ * handed over to mdp_cmdq_sendtask().
+ */
 static void dip_mdp_cb_func(struct cmdq_cb_data data)
 {
 	struct mtk_dip_request *req;
 	struct mtk_dip_dev *dip_dev;
 
 	if (!data.data) {
+		/*
+		 * The request is only reachable through data.data, there is
+		 * no way to release its reference here.
+		 */
 		pr_err("%s: data->data is NULL\n",
-		       __func__);
-		return;
-	}
-	if (data.sta < 0) {
-		pr_err("%s: callback data return error\n",
 		       __func__);
 		return;
 	}
@@ -228,6 +233,7 @@ static void dip_mdp_cb_func(struct cmdq_cb_data data)
 	req = data.data;
 	if (!req->dip_pipe) {
 		pr_err("%s: req->dip_pipe is NULL\n", __func__);
+		media_request_put(&req->req);
 		return;
 	}
 	pr_info("req(0x%px), req->dip_pipe(0x%px)\n", req, req->dip_pipe);
@@ -245,29 +251,46 @@ static void dip_mdp_cb_func(struct cmdq_cb_data data)
 			__func__, req->img_fparam.frameparam.frame_no);
 		req->img_fparam.frameparam.state = FRAME_STATE_HW_TIMEOUT;
 		INIT_WORK(&req->mdpcb_work, mdp_cb_timeout_worker);
+		/* The reference is handed over to mdp_cb_timeout_worker() */
 		queue_work(req->dip_pipe->dip_dev->mdpcb_wq,
 			   &req->mdpcb_work);
-	} else {
-		mtk_dip_notify(req);
+		return;
 	}
+
+	mtk_dip_notify(req);
+	media_request_put(&req->req);
 }
 
+/*
+ * It takes the ownership of the request reference that dip_scp_handler()
+ * handed over to the mdp work item.
+ */
 static void dip_runner_func(struct work_struct *work)
 {
 	struct mtk_dip_request *req = mtk_dip_hw_mdp_work_to_req(work);
 	struct mtk_dip_dev *dip_dev = req->dip_pipe->dip_dev;
 	struct img_config *config_data =
 		(struct img_config *)req->working_buf->config_data.vaddr;
+	int ret;
 
 	dev_info(dip_dev->dev, "req(0x%px), req->dip_pipe(0x%px)\n", req, req->dip_pipe);
 	/*
 	 * Call MDP/GCE API to do HW excecution
 	 * Pass the framejob to MDP driver
+	 *
+	 * On success the reference is handed over to dip_mdp_cb_func(),
+	 * which is called exactly once when the HW job completes.
 	 */
 	pm_runtime_get_sync(dip_dev->dev);
-	mdp_cmdq_sendtask(dip_dev->mdp_pdev, config_data,
+	ret = mdp_cmdq_sendtask(dip_dev->mdp_pdev, config_data,
 			  &req->img_fparam.frameparam, NULL,
 			  dip_mdp_cb_func, req);
+	if (ret < 0) {
+		dev_err(dip_dev->dev, "mdp_cmdq_sendtask failed: %d\n", ret);
+		req->img_fparam.frameparam.state = FRAME_STATE_HW_TIMEOUT;
+		mtk_dip_notify(req);
+		media_request_put(&req->req);
+	}
 }
 
 static void dip_scp_handler(void *data, unsigned int len, void *priv)
@@ -324,6 +347,8 @@ static void dip_scp_handler(void *data, unsigned int len, void *priv)
 		__func__, frameparam->frame_no, frameparam->index, num);
 
 	INIT_WORK(&req->mdp_work, dip_runner_func);
+	/* The reference is handed over to dip_runner_func() */
+	media_request_get(&req->req);
 	queue_work(dip_dev->mdp_wq, &req->mdp_work);
 }
 
@@ -396,11 +421,12 @@ static void dip_composer_workfunc(struct work_struct *work)
 		__func__, req->img_fparam.frameparam.frame_no,
 		req->img_fparam.frameparam.index,
 		atomic_read(&dip_dev->num_composing));
+	media_request_put(&req->req);
 }
 
 static int mtk_dip_hw_flush_pipe_jobs(struct mtk_dip_pipe *pipe)
 {
-	struct mtk_dip_request *req;
+	struct mtk_dip_request *req, *next;
 	struct list_head job_list = LIST_HEAD_INIT(job_list);
 	int num;
 	int ret;
@@ -419,11 +445,22 @@ static int mtk_dip_hw_flush_pipe_jobs(struct mtk_dip_pipe *pipe)
 		dev_err(pipe->dip_dev->dev,
 			"%s: flushing is aborted, num(%d)\n",
 			__func__, num);
+		/*
+		 * The HW is still using these requests, we cannot return
+		 * their buffers. Keep their references and only unlink them
+		 * from the local list.
+		 */
+		list_for_each_entry_safe(req, next, &job_list, list)
+			list_del_init(&req->list);
 		return -EINVAL;
 	}
+	flush_workqueue(pipe->dip_dev->composer_wq);
+	flush_workqueue(pipe->dip_dev->mdp_wq);
 
-	list_for_each_entry(req, &job_list, list)
+	list_for_each_entry_safe(req, next, &job_list, list) {
+		list_del_init(&req->list);
 		mtk_dip_pipe_job_finish(req, VB2_BUF_STATE_ERROR);
+	}
 
 	return 0;
 }
@@ -532,5 +569,7 @@ void mtk_dip_hw_enqueue(struct mtk_dip_dev *dip_dev,
 		__func__, frameparams->index, frameparams->frame_no);
 
 	INIT_WORK(&req->fw_work, dip_composer_workfunc);
+	/* The reference is handed over to dip_composer_workfunc() */
+	media_request_get(&req->req);
 	queue_work(dip_dev->composer_wq, &req->fw_work);
 }
