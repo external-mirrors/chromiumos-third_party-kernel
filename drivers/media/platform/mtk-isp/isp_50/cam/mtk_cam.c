@@ -816,7 +816,6 @@ static int mtk_cam_cio_stream_off(struct mtk_cam_dev *cam)
 
 	cam->streaming = false;
 	mtk_isp_stream(cam, 0);
-	mtk_isp_hw_release(cam);
 
 	dev_dbg(dev, "streamed off Pass 1\n");
 
@@ -1115,6 +1114,8 @@ static int mtk_cam_vb2_start_streaming(struct vb2_queue *vq,
 
 fail_no_stream:
 	cam->stream_count--;
+	if (cam->stream_count == 0)
+		mtk_isp_hw_release(cam);
 fail_stop_pipeline:
 	if (cam->stream_count == 0)
 		media_pipeline_stop(&node->vdev.entity);
@@ -1150,6 +1151,7 @@ static void mtk_cam_vb2_stop_streaming(struct vb2_queue *vq)
 	mutex_unlock(&cam->op_lock);
 
 	mtk_cam_dev_req_cleanup(cam);
+	mtk_isp_hw_release(cam);
 	media_pipeline_stop(&node->vdev.entity);
 }
 
