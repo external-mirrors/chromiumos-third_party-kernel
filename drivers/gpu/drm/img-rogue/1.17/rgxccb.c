@@ -2696,7 +2696,9 @@ void DumpStalledContextInfo(PVRSRV_RGXDEV_INFO *psDevInfo)
 			RGXFWIF_UFO *psUFOPtr = IMG_OFFSET_ADDR(pvPtr, sizeof(*psCommandHeader));
 			IMG_UINT32 jj;
 			IMG_UINT32 ui32NumUnsignalledUFOs = 0;
-			IMG_UINT32 ui32UnsignalledUFOVaddrs[PVRSRV_MAX_SYNCS];
+			IMG_UINT32 aui32UnsignalledUFOVaddrs[RGXFWIF_CCB_CMD_MAX_UFOS];
+
+			PVR_ASSERT(psCommandHeader->ui32CmdSize/sizeof(RGXFWIF_UFO) <= RGXFWIF_CCB_CMD_MAX_UFOS);
 
 #if defined(PVRSRV_STALLED_CCB_ACTION)
 			if (!psDevInfo->psRGXFWIfFwOsData->sSLRLogFirst.aszCCBName[0])
@@ -2742,7 +2744,7 @@ void DumpStalledContextInfo(PVRSRV_RGXDEV_INFO *psDevInfo)
 					if (ui32ReadValue != psUFOPtr[jj].ui32Value)
 					{
 						/* Add to our list to pass to pvr_sync */
-						ui32UnsignalledUFOVaddrs[ui32NumUnsignalledUFOs] = psUFOPtr[jj].puiAddrUFO.ui32Addr;
+						aui32UnsignalledUFOVaddrs[ui32NumUnsignalledUFOs] = psUFOPtr[jj].puiAddrUFO.ui32Addr;
 						ui32NumUnsignalledUFOs++;
 					}
 				}
@@ -2758,7 +2760,7 @@ void DumpStalledContextInfo(PVRSRV_RGXDEV_INFO *psDevInfo)
 			if (ui32NumUnsignalledUFOs > 0)
 			{
 				IMG_UINT32 ui32NumSyncsOwned;
-				PVRSRV_ERROR eErr = SyncCheckpointDumpInfoOnStalledUFOs(ui32NumUnsignalledUFOs, &ui32UnsignalledUFOVaddrs[0], &ui32NumSyncsOwned);
+				PVRSRV_ERROR eErr = SyncCheckpointDumpInfoOnStalledUFOs(ui32NumUnsignalledUFOs, &aui32UnsignalledUFOVaddrs[0], &ui32NumSyncsOwned);
 
 				PVR_LOG_IF_ERROR(eErr, "SyncCheckpointDumpInfoOnStalledUFOs() call failed.");
 			}
