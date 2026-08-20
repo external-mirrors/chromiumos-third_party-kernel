@@ -5332,7 +5332,7 @@ PVRSRV_ERROR PVRSRVRGXKickTA3DKM(RGX_SERVER_RENDER_CONTEXT	*psRenderContext,
 		eError = AttachKickResourcesCleanupCtls((PRGXFWIF_CLEANUP_CTL *) &s3DCmdKickData.apsCleanupCtl,
 				&s3DCmdKickData.ui32NumCleanupCtl,
 				RGXFWIF_DM_3D,
-				bKick3D,
+				bKick3D || bAbort,
 				psKMHWRTDataSet,
 				psZSBuffer,
 				psMSAAScratchBuffer);
