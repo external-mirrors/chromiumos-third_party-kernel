@@ -917,20 +917,14 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
 ({									\
 	const size_t __count = (COUNT);					\
 	const size_t __obj_size = struct_size_t(TYPE, FAM, __count);	\
-	TYPE *__obj_ptr;						\
-	if (WARN_ON_ONCE(overflows_flex_counter_type(TYPE, FAM,	__count))) \
-		__obj_ptr = NULL;					\
-	else								\
-		__obj_ptr = KMALLOC(__obj_size, GFP);			\
-	if (__obj_ptr)							\
-		__set_flex_counter(__obj_ptr->FAM, __count);		\
+	TYPE *__obj_ptr = KMALLOC(__obj_size, GFP);			\
 	__obj_ptr;							\
 })
 
 /**
  * kmalloc_obj - Allocate a single instance of the given type
  * @VAR_OR_TYPE: Variable or type to allocate.
- * @GFP: GFP flags for the allocation.
+ * @...: optional GFP flags for the allocation (GFP_KERNEL when not specified).
  *
  * Returns: newly allocated pointer to a @VAR_OR_TYPE on success, or NULL
  * on failure.
@@ -942,7 +936,7 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
  * kmalloc_objs - Allocate an array of the given type
  * @VAR_OR_TYPE: Variable or type to allocate an array of.
  * @COUNT: How many elements in the array.
- * @GFP: GFP flags for the allocation.
+ * @...: optional GFP flags for the allocation (GFP_KERNEL when not specified).
  *
  * Returns: newly allocated pointer to array of @VAR_OR_TYPE on success,
  * or NULL on failure.
@@ -955,7 +949,7 @@ static __always_inline __alloc_size(1) void *kmalloc_noprof(size_t size, gfp_t f
  * @VAR_OR_TYPE: Variable or type to allocate (with its flex array).
  * @FAM: The name of the flexible array member of the structure.
  * @COUNT: How many flexible array member elements are desired.
- * @GFP: GFP flags for the allocation.
+ * @...: optional GFP flags for the allocation (GFP_KERNEL when not specified).
  *
  * Returns: newly allocated pointer to @VAR_OR_TYPE on success, NULL on
  * failure. If @FAM has been annotated with __counted_by(), the allocation

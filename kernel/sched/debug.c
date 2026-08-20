@@ -347,6 +347,9 @@ static int sched_fair_server_write(long cpu, u64 period, u64 runtime)
 		if (period == rq->fair_server.dl_period && runtime == rq->fair_server.dl_runtime)
 			return 0;
 
+		if (!cpu_online(cpu_of(rq)))
+			return -EBUSY;
+
 		update_rq_clock(rq);
 		dl_server_stop(&rq->fair_server);
 
