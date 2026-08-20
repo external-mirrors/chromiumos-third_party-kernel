@@ -37,9 +37,10 @@ void mdw_mem_put(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 
 struct mdw_mem *mdw_mem_get(struct mdw_fpriv *mpriv, int handle)
 {
-	struct dma_buf *dbuf = NULL;
-	struct mdw_device *mdev = mpriv->mdev;
-	struct mdw_mem *m = NULL, *tmp = NULL;
+	struct dma_buf *dbuf;
+	struct mdw_mem *m;
+
+	lockdep_assert_held(&mpriv->mtx);
 
 	dbuf = dma_buf_get(handle);
 	if (IS_ERR_OR_NULL(dbuf)) {
@@ -47,14 +48,9 @@ struct mdw_mem *mdw_mem_get(struct mdw_fpriv *mpriv, int handle)
 		return NULL;
 	}
 
-	mutex_lock(&mdev->m_mtx);
-	list_for_each_entry_safe(m, tmp, &mdev->m_list, d_node) {
-		if (m->dbuf == dbuf) {
-			mutex_unlock(&mdev->m_mtx);
+	list_for_each_entry(m, &mpriv->mems, u_item)
+		if (m->dbuf == dbuf)
 			return m;
-		}
-	}
-	mutex_unlock(&mdev->m_mtx);
 
 	dma_buf_put(dbuf);
 	mdw_mem_debug("handle(%d) not belong to apu\n", handle);
@@ -64,18 +60,16 @@ struct mdw_mem *mdw_mem_get(struct mdw_fpriv *mpriv, int handle)
 
 static struct mdw_mem *mdw_mem_get_by_dbuf(struct mdw_fpriv *mpriv, struct dma_buf *dbuf)
 {
-	struct mdw_device *mdev = mpriv->mdev;
-	struct mdw_mem *m = NULL, *tmp = NULL;
+	struct mdw_mem *m;
 
-	mutex_lock(&mdev->m_mtx);
-	list_for_each_entry_safe(m, tmp, &mdev->m_list, d_node) {
+	lockdep_assert_held(&mpriv->mtx);
+
+	list_for_each_entry(m, &mpriv->mems, u_item) {
 		if (m->dbuf == dbuf) {
 			get_dma_buf(dbuf);
-			mutex_unlock(&mdev->m_mtx);
 			return m;
 		}
 	}
-	mutex_unlock(&mdev->m_mtx);
 
 	mdw_mem_debug("dmabuf not belong to apu\n");
 
