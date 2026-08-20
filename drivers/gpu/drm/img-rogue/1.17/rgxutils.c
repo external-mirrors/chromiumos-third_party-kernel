@@ -383,8 +383,8 @@ return_error:
 
 /* Check if all global freelists have the same size and if all local freelists have the same size.*/
 PVRSRV_ERROR ValidateFreeListSizes(RGX_FREELIST* apsFreeLists[RGXMKIF_NUM_RTDATA_FREELISTS],
-                                   IMG_UINT32*   pui32LocalFLMaxPages,
-                                   IMG_UINT32*   pui32GlobalFLMaxPages)
+                                   IMG_DEVMEM_SIZE_T*   pui64LocalFLMaxPages,
+                                   IMG_DEVMEM_SIZE_T*   pui64GlobalFLMaxPages)
 {
 	IMG_UINT32 i,j;
 	PVRSRV_ERROR eError = PVRSRV_OK;
@@ -410,8 +410,8 @@ PVRSRV_ERROR ValidateFreeListSizes(RGX_FREELIST* apsFreeLists[RGXMKIF_NUM_RTDATA
 		}
 	}
 
-	*pui32LocalFLMaxPages = ui32LocalFLMaxPages;
-	*pui32GlobalFLMaxPages = ui32GlobalFLMaxPages;
+	*pui64LocalFLMaxPages = ui32LocalFLMaxPages;
+	*pui64GlobalFLMaxPages = ui32GlobalFLMaxPages;
 
 	return eError;
 }

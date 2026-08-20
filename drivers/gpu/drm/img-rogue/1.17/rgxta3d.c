@@ -1642,7 +1642,7 @@ PVRSRV_ERROR RGXCreateHWRTDataSet2(
 {
 	PVRSRV_ERROR eError;
 	IMG_UINT32 ui32RTDataID;
-	IMG_UINT32 ui32GlobalFLMaxPages, ui32LocalFLMaxPages;
+	IMG_DEVMEM_SIZE_T ui64GlobalFLMaxPages, ui64LocalFLMaxPages;
 	IMG_DEVMEM_SIZE_T ui64MListSize;
 	PVRSRV_RGXDEV_INFO *psDevInfo = psDeviceNode->pvDevice;
 
@@ -1656,13 +1656,13 @@ PVRSRV_ERROR RGXCreateHWRTDataSet2(
 
 	/* Check if freelists have correct sizes */
 	eError = ValidateFreeListSizes(apsFreeLists,
-	                               &ui32LocalFLMaxPages,
-	                               &ui32GlobalFLMaxPages);
+	                               &ui64LocalFLMaxPages,
+	                               &ui64GlobalFLMaxPages);
 	PVR_LOG_RETURN_IF_ERROR(eError, "Invalid freelist sizes");
 
 	ui64MListSize = RGXCalcMListSize(psDeviceNode,
-	    ui32LocalFLMaxPages * RGX_BIF_PM_PHYSICAL_PAGE_SIZE,
-	    ui32GlobalFLMaxPages * RGX_BIF_PM_PHYSICAL_PAGE_SIZE);
+	    ui64LocalFLMaxPages * RGX_BIF_PM_PHYSICAL_PAGE_SIZE,
+	    ui64GlobalFLMaxPages * RGX_BIF_PM_PHYSICAL_PAGE_SIZE);
 
 	eError = AcquireValidateRefCriticalBuffer(psDeviceNode,
 	                                          psPMMListsReservation,

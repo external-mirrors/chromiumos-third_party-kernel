@@ -204,15 +204,15 @@ IMG_UINT32 RGXCalcMListSize(PVRSRV_DEVICE_NODE *psDeviceNode,
                 if all global freelists have the same size and if all local
                 freelists have the same size. Return the sizes in output params.
 
-@Output         pui32LocalFLMaxPages Max number of pages for local freelist
-@Output         pui32GlobalFLMaxPages Max number of pages for global freelist
+@Output         pui64LocalFLMaxPages Max number of pages for local freelist
+@Output         pui64GlobalFLMaxPages Max number of pages for global freelist
 
 @Return         PVRSRV_ERROR PVRSRV_OK if validation successful.
                 Appropriate error otherwise.
 */ /**************************************************************************/
 PVRSRV_ERROR ValidateFreeListSizes(RGX_FREELIST* apsFreeLists[RGXMKIF_NUM_RTDATA_FREELISTS],
-                                   IMG_UINT32*   pui32LocalFLMaxPages,
-                                   IMG_UINT32*   pui32GlobalFLMaxPages);
+                                   IMG_DEVMEM_SIZE_T*   pui64LocalFLMaxPages,
+                                   IMG_DEVMEM_SIZE_T*   pui64GlobalFLMaxPages);
 
 /*************************************************************************/ /*!
 @Function       AcquireValidateRefCriticalBuffer
