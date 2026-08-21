@@ -182,6 +182,10 @@ obiwan:
       fw_config:
         mask: 0xFC00000
         value: 0x2400000
+    mt8189-skywalker-obiwan-es8326-rt1019p.dtbo:
+      fw_config:
+        mask: 0xFC00000
+        value: 0x3000000
 
 padme:
   dtb:

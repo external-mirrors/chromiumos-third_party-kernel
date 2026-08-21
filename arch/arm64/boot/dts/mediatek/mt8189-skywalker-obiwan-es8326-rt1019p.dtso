@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/*
+ * Copyright (C) 2025 Google Inc.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&i2c2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	es8326: audio-codec@19 {
+		compatible = "everest,es8326";
+		reg = <0x19>;
+		interrupts-extended = <&pio 4 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_codec_pins>;
+		#sound-dai-cells = <0>;
+		everest,jack-pol = [0e];
+		everest,interrupt-clk = [00];
+		status = "okay";
+	};
+};
+
+&rt1019p {
+	status = "okay";
+};
+
+&sound {
+	compatible = "mediatek,mt8189-es8326-sound";
+	model = "mt8189_1019_es8326";
+	status = "okay";
+
+	audio-routing = "I2SOUT1", "ETDMOUT_SPK_PIN",
+			"I2SOUT0", "ETDMIN_HP_PIN",
+			"I2SOUT0", "ETDMOUT_HP_PIN",
+			"I2SIN0", "ETDMIN_HP_PIN",
+			"I2SIN0", "ETDMOUT_HP_PIN",
+			"MIC1", "Headset Mic",
+			"PCM 0 Playback", "ETDMOUT_HDMI_PIN",
+			"AP DMIC Capture", "AP_DMIC0_PIN",
+			"AP DMIC CH34 Capture", "AP_DMIC1_PIN";
+
+	dai-link-0 {
+		link-name = "I2SOUT1_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&rt1019p>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "I2SOUT0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&es8326>;
+		};
+	};
+
+	dai-link-2 {
+		link-name = "I2SIN0_BE";
+		mediatek,clk-provider = "cpu";
+
+		codec {
+			sound-dai = <&es8326>;
+		};
+	};
+};

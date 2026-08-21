@@ -162,6 +162,7 @@ dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-kb.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-panel-follower.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-rt5682i-rt1019p.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-rt5682s-rt1019p.dtbo
+dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-es8326-rt1019p.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-obiwan-touchscreen.dtbo
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme.dtb
 dtb-$(CONFIG_ARCH_MEDIATEK) += mt8189-skywalker-padme-kb-ca-fr.dtbo
