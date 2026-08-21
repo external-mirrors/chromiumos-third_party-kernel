@@ -4807,6 +4807,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	int young = 0;
 	pte_t *pte = pvmw->pte;
 	unsigned long addr = pvmw->address;
+	struct vm_area_struct *vma = pvmw->vma;
 	struct folio *folio = pfn_folio(pvmw->pfn);
 	struct mem_cgroup *memcg = folio_memcg(folio);
 	struct pglist_data *pgdat = folio_pgdat(folio);
@@ -4825,11 +4826,15 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	if (spin_is_contended(pvmw->ptl))
 		return young;
 
+	/* exclude special VMAs containing anon pages from COW */
+	if (vma->vm_flags & VM_SPECIAL)
+		return young;
+
 	/* avoid taking the LRU lock under the PTL when possible */
 	walk = current->reclaim_state ? current->reclaim_state->mm_walk : NULL;
 
-	start = max(addr & PMD_MASK, pvmw->vma->vm_start);
-	end = min(addr | ~PMD_MASK, pvmw->vma->vm_end - 1) + 1;
+	start = max(addr & PMD_MASK, vma->vm_start);
+	end = min(addr | ~PMD_MASK, vma->vm_end - 1) + 1;
 
 	if (end - start == PAGE_SIZE)
 		return young;
@@ -4858,9 +4863,9 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 		unsigned long pfn;
 		bool activate;
 
-		pfn = get_pte_pfn(pte[i], pvmw->vma, addr);
+		pfn = get_pte_pfn(pte[i], vma, addr);
 		if (pfn == -1) {
-			skip_spte_young(pvmw->vma->vm_mm, addr, bitmap, &last);
+			skip_spte_young(vma->vm_mm, addr, bitmap, &last);
 			continue;
 		}
 
@@ -4876,9 +4881,9 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 			continue;
 		}
 
-		clear_spte_young(pvmw->vma->vm_mm, addr, bitmap, &last);
+		clear_spte_young(vma->vm_mm, addr, bitmap, &last);
 		if (pte_young(pte[i]))
-			ptep_test_and_clear_young(pvmw->vma, addr, pte + i);
+			ptep_test_and_clear_young(vma, addr, pte + i);
 
 		young++;
 
