@@ -923,26 +923,28 @@ static int __mem_open_access_permitted(struct file *file, struct task_struct *ta
 struct mm_struct *proc_mem_open(struct file  *file, unsigned int mode)
 {
 	struct task_struct *task = get_proc_task(file_inode(file));
-	struct mm_struct *mm = ERR_PTR(-ESRCH);
+	struct mm_struct *mm;
 	int ret;
 
-	if (task) {
-		ret = __mem_open_access_permitted(file, task);
-		if (ret) {
-			put_task_struct(task);
-			return ERR_PTR(ret);
-		}
+	if (!task)
+		return ERR_PTR(-ESRCH);
 
-		mm = mm_access(task, mode | PTRACE_MODE_FSCREDS);
+	ret = __mem_open_access_permitted(file, task);
+	if (ret) {
 		put_task_struct(task);
-
-		if (!IS_ERR_OR_NULL(mm)) {
-			/* ensure this mm_struct can't be freed */
-			mmgrab(mm);
-			/* but do not pin its memory */
-			mmput(mm);
-		}
+		return ERR_PTR(ret);
 	}
+
+	mm = mm_access(task, mode | PTRACE_MODE_FSCREDS);
+	put_task_struct(task);
+
+	if (IS_ERR(mm))
+		return mm == ERR_PTR(-ESRCH) ? NULL : mm;
+
+	/* ensure this mm_struct can't be freed */
+	mmgrab(mm);
+	/* but do not pin its memory */
+	mmput(mm);
 
 	return mm;
 }
@@ -2370,7 +2372,7 @@ static int map_files_d_revalidate(struct dentry *dentry, unsigned int flags)
 		goto out_notask;
 
 	mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
-	if (IS_ERR_OR_NULL(mm))
+	if (IS_ERR(mm))
 		goto out;
 
 	if (!dname_to_vma_addr(dentry, &vm_start, &vm_end)) {
