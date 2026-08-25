@@ -15,11 +15,6 @@
 #include <linux/kdev_t.h>
 #include <linux/usb/ch9.h>
 
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-extern int acc_ctrlrequest_composite(struct usb_composite_dev *cdev,
-				const struct usb_ctrlrequest *ctrl);
-void acc_disconnect(void);
-#endif
 static struct class *android_class;
 static struct device *android_device;
 static int index;
@@ -1563,11 +1558,6 @@ static int android_setup(struct usb_gadget *gadget,
 		}
 	}
 
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-	if (value < 0)
-		value = acc_ctrlrequest_composite(cdev, c);
-#endif
-
 	if (value < 0)
 		value = composite_setup(gadget, c);
 
@@ -1603,9 +1593,6 @@ static void android_disconnect(struct usb_gadget *gadget)
 		so we need to inform it when we are disconnected.
 	*/
 
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-	acc_disconnect();
-#endif
 	gi->connected = 0;
 	schedule_work(&gi->work);
 	composite_disconnect(gadget);
