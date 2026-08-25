@@ -939,6 +939,17 @@ delete_cmd:
 	return ERR_PTR(ret);
 }
 
+/* inverse of _mdw_cmd_ioctl_create() above; used in error paths */
+static void _mdw_cmd_ioctl_del(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
+{
+	lockdep_assert_held(&mpriv->mtx);
+
+	if (c != idr_remove(&mpriv->cmds, c->id))
+		mdw_drv_warn("remove cmd idr conflict(0x%llx/%d)\n", c->kid, c->id);
+
+	mdw_cmd_delete(c);
+}
+
 static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *args)
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
@@ -1017,7 +1028,7 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 	if (fd < 0) {
 		mdw_drv_err("get unused fd fail\n");
 		ret = -EINVAL;
-		goto delete_idr;
+		goto delete_cmd;
 	}
 	if (mdw_fence_init(c, fd)) {
 		mdw_drv_err("cmd init fence fail\n");
@@ -1087,11 +1098,9 @@ put_file:
 	fput(sync_file->file);
 put_fd:
 	put_unused_fd(fd);
-delete_idr:
-	if (c != idr_remove(&mpriv->cmds, c->id))
-		mdw_drv_warn("remove cmd idr conflict(0x%llx/%d)\n", c->kid, c->id);
+delete_cmd:
 	mutex_unlock(&c->mtx);
-	mdw_cmd_delete(c);
+	_mdw_cmd_ioctl_del(mpriv, c);
 out:
 	mutex_unlock(&mpriv->mtx);
 	if (priv_c)
