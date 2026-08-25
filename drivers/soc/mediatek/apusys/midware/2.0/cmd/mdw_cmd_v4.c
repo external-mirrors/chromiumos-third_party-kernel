@@ -950,12 +950,105 @@ static void _mdw_cmd_ioctl_del(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 	mdw_cmd_delete(c);
 }
 
+static int _mdw_cmd_ioctl_exec(struct mdw_fpriv *mpriv, struct mdw_cmd *c, union mdw_cmd_args *args)
+{
+	struct mdw_cmd_in *in = &args->in;
+	struct sync_file *sync_file;
+	int ret, fd, wait_fd;
+
+	lockdep_assert_held(&mpriv->mtx);
+
+	/* get wait fd */
+	wait_fd = in->exec.fence;
+
+	mutex_lock(&c->mtx);
+
+	/* get sync_file fd */
+	fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0) {
+		mdw_drv_err("get unused fd fail\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = mdw_fence_init(c, fd);
+	if (ret) {
+		mdw_drv_err("cmd init fence fail\n");
+		goto put_fd;
+	}
+
+	sync_file = sync_file_create(&c->fence->base_fence);
+	if (!sync_file) {
+		mdw_drv_err("create sync file fail\n");
+		dma_fence_put(&c->fence->base_fence);
+		ret = -ENOMEM;
+		goto put_fd;
+	}
+
+	/* reinit completion */
+	reinit_completion(&c->cmplt);
+
+	/* get cmd execution ref */
+	atomic_inc(&c->is_running);
+	mdw_cmd_get(c);
+
+	/* generate cmd inference id */
+	c->inference_id = MDW_CMD_GEN_INFID((uint64_t) mpriv, mpriv->counter++);
+
+	/* mdw cmd tag : enqueue */
+	mdw_cmd_trace(c, MDW_CMD_ENQUE);
+
+	/* check wait fence from other module */
+	mdw_flw_debug("s(0x%llx)c(0x%llx) wait fence(%d)...\n",
+			(uint64_t)c->mpriv, c->kid, wait_fd);
+	c->wait_fence = sync_file_get_fence(wait_fd);
+	if (!c->wait_fence) {
+		mdw_flw_debug("s(0x%llx)c(0x%llx) no wait fence, trigger directly\n",
+			(uint64_t)c->mpriv, c->kid);
+		ret = mdw_cmd_run(mpriv, c);
+		if (ret) {
+			/* put cmd execution ref */
+			atomic_dec(&c->is_running);
+			mdw_cmd_put(c);
+			goto put_file;
+		}
+	} else {
+		/* wait fence from wq */
+		schedule_work(&c->t_wk);
+	}
+
+	/* assign fd */
+	fd_install(fd, sync_file->file);
+
+	/* get ref for cmd exec */
+	atomic_inc(&mpriv->active_cmds);
+
+	/* return fd */
+	memset(args, 0, sizeof(*args));
+	args->out.exec.fence = fd;
+	args->out.exec.id = c->id;
+	args->out.exec.cmd_done_usr = c->cmd_state;
+	args->out.exec.ext_id = c->ext_id;
+	mdw_flw_debug("async fd(%d) id(%d) extid(0x%llx) inference_id(0x%llx)\n",
+			 fd, c->id, c->ext_id, c->inference_id);
+	mutex_unlock(&c->mtx);
+
+	return 0;
+
+put_file:
+	fput(sync_file->file);
+put_fd:
+	put_unused_fd(fd);
+out:
+	mutex_unlock(&c->mtx);
+	return ret;
+}
+
 static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *args)
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
 	struct mdw_cmd *c = NULL, *priv_c = NULL;
-	struct sync_file *sync_file = NULL;
-	int ret = 0, fd = 0, wait_fd = 0, is_running = 0;
+	int ret = 0, wait_fd = 0, is_running = 0;
 
 	mdw_trace_begin("apumdw:user_run");
 
@@ -1019,87 +1112,14 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		goto out;
 	}
 
-	memset(args, 0, sizeof(*args));
-
-	mutex_lock(&c->mtx);
-
-	/* get sync_file fd */
-	fd = get_unused_fd_flags(O_CLOEXEC);
-	if (fd < 0) {
-		mdw_drv_err("get unused fd fail\n");
-		ret = -EINVAL;
-		goto delete_cmd;
-	}
-	if (mdw_fence_init(c, fd)) {
-		mdw_drv_err("cmd init fence fail\n");
-		goto put_fd;
-	}
-	sync_file = sync_file_create(&c->fence->base_fence);
-	if (!sync_file) {
-		mdw_drv_err("create sync file fail\n");
-		dma_fence_put(&c->fence->base_fence);
-		ret = -ENOMEM;
-		goto put_fd;
-	}
-	/* reinit completion */
-	reinit_completion(&c->cmplt);
-
-	/* get cmd execution ref */
-	atomic_inc(&c->is_running);
-	mdw_cmd_get(c);
+	ret = _mdw_cmd_ioctl_exec(mpriv, c, args);
+	if (ret)
+		_mdw_cmd_ioctl_del(mpriv, c);
 
 	/* put cmd execution ref when stale cmd wait */
 	if (is_running)
 		mdw_cmd_put(c);
 
-	/* generate cmd inference id */
-	c->inference_id = MDW_CMD_GEN_INFID((uint64_t) mpriv, mpriv->counter++);
-
-	/* mdw cmd tag : enqueue */
-	mdw_cmd_trace(c, MDW_CMD_ENQUE);
-
-	/* check wait fence from other module */
-	mdw_flw_debug("s(0x%llx)c(0x%llx) wait fence(%d)...\n",
-			(uint64_t)c->mpriv, c->kid, wait_fd);
-	c->wait_fence = sync_file_get_fence(wait_fd);
-	if (!c->wait_fence) {
-		mdw_flw_debug("s(0x%llx)c(0x%llx) no wait fence, trigger directly\n",
-			(uint64_t)c->mpriv, c->kid);
-		ret = mdw_cmd_run(mpriv, c);
-		if (ret) {
-			/* put cmd execution ref */
-			atomic_dec(&c->is_running);
-			mdw_cmd_put(c);
-			goto put_file;
-		}
-	} else {
-		/* wait fence from wq */
-		schedule_work(&c->t_wk);
-	}
-
-	/* assign fd */
-	fd_install(fd, sync_file->file);
-
-	/* get ref for cmd exec */
-	atomic_inc(&mpriv->active_cmds);
-
-	/* return fd */
-	args->out.exec.fence = fd;
-	args->out.exec.id = c->id;
-	args->out.exec.cmd_done_usr = c->cmd_state;
-	args->out.exec.ext_id = c->ext_id;
-	mdw_flw_debug("async fd(%d) id(%d) extid(0x%llx) inference_id(0x%llx)\n",
-			 fd, c->id, c->ext_id, c->inference_id);
-	mutex_unlock(&c->mtx);
-	goto out;
-
-put_file:
-	fput(sync_file->file);
-put_fd:
-	put_unused_fd(fd);
-delete_cmd:
-	mutex_unlock(&c->mtx);
-	_mdw_cmd_ioctl_del(mpriv, c);
 out:
 	mutex_unlock(&mpriv->mtx);
 	if (priv_c)
