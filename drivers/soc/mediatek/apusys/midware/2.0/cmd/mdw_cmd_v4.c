@@ -1066,16 +1066,15 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		mdw_flw_debug("s(0x%llx)c(0x%llx) no wait fence, trigger directly\n",
 			(uint64_t)c->mpriv, c->kid);
 		ret = mdw_cmd_run(mpriv, c);
+		if (ret) {
+			/* put cmd execution ref */
+			atomic_dec(&c->is_running);
+			mdw_cmd_put(c);
+			goto put_file;
+		}
 	} else {
 		/* wait fence from wq */
 		schedule_work(&c->t_wk);
-	}
-
-	if (ret) {
-		/* put cmd execution ref */
-		atomic_dec(&c->is_running);
-		mdw_cmd_put(c);
-		goto put_file;
 	}
 
 	/* assign fd */
