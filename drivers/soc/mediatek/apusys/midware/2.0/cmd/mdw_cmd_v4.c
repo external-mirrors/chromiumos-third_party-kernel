@@ -907,6 +907,38 @@ out:
 	return c;
 }
 
+static struct mdw_cmd * _mdw_cmd_ioctl_create(struct mdw_fpriv *mpriv,
+					      union mdw_cmd_args *args)
+{
+	struct mdw_cmd *c;
+	int ret;
+
+	lockdep_assert_held(&mpriv->mtx);
+
+	/* create cmd */
+	c = mdw_cmd_create(mpriv, args);
+	if (!c) {
+		mdw_drv_err("create cmd fail\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	/* alloc idr */
+	ret = idr_alloc(&mpriv->cmds, c, MDW_CMD_IDR_MIN, MDW_CMD_IDR_MAX, GFP_KERNEL);
+	if (ret < 0) {
+		mdw_drv_err("alloc idr fail(%d)\n", ret);
+		goto delete_cmd;
+	}
+
+	c->id = ret;
+
+	return c;
+
+delete_cmd:
+	mdw_cmd_delete(c);
+
+	return ERR_PTR(ret);
+}
+
 static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *args)
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
@@ -947,7 +979,6 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		/* run stale cmd */
 		mdw_cmd_debug("s(0x%llx) run stale(0x%llx)\n",
 			(uint64_t)mpriv, (uint64_t)c);
-		goto exec;
 	} else {
 		/* release stale cmd and create new */
 		mdw_cmd_debug("s(0x%llx) delete stale(0x%llx) and create new\n",
@@ -961,18 +992,12 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 	}
 
 	/* create cmd */
-	c = mdw_cmd_create(mpriv, args);
 	if (!c) {
-		mdw_drv_err("create cmd fail\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	/* alloc idr */
-	c->id = idr_alloc(&mpriv->cmds, c, MDW_CMD_IDR_MIN, MDW_CMD_IDR_MAX, GFP_KERNEL);
-	if (c->id < MDW_CMD_IDR_MIN) {
-		mdw_drv_err("alloc idr fail(%d)\n", c->id);
-		goto delete_cmd;
+		c = _mdw_cmd_ioctl_create(mpriv, args);
+		if (IS_ERR(c)) {
+			ret = PTR_ERR(c);
+			goto out;
+		}
 	}
 
 	if (in->op == MDW_CMD_IOCTL_ENQ) {
@@ -985,7 +1010,6 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 
 	memset(args, 0, sizeof(*args));
 
-exec:
 	mutex_lock(&c->mtx);
 
 	/* get sync_file fd */
@@ -1067,7 +1091,6 @@ delete_idr:
 	if (c != idr_remove(&mpriv->cmds, c->id))
 		mdw_drv_warn("remove cmd idr conflict(0x%llx/%d)\n", c->kid, c->id);
 	mutex_unlock(&c->mtx);
-delete_cmd:
 	mdw_cmd_delete(c);
 out:
 	mutex_unlock(&mpriv->mtx);
