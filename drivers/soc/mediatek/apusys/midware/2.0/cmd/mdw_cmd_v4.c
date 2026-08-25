@@ -1048,12 +1048,9 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
 	struct mdw_cmd *c = NULL, *priv_c = NULL;
-	int ret = 0, wait_fd = 0, is_running = 0;
+	int ret = 0, is_running = 0;
 
 	mdw_trace_begin("apumdw:user_run");
-
-	/* get wait fd */
-	wait_fd = in->exec.fence;
 
 	mutex_lock(&mpriv->mtx);
 	/* get stale cmd */
@@ -1105,9 +1102,9 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 	}
 
 	if (in->op == MDW_CMD_IOCTL_ENQ) {
-		/* return input fence fd (enq no use fence) */
+		/* enq doesn't use fence */
 		memset(args, 0, sizeof(*args));
-		args->out.exec.fence = wait_fd;
+		args->out.exec.fence = -1;
 		args->out.exec.id = c->id;
 		goto out;
 	}
