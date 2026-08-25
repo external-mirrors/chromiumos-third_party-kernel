@@ -15,11 +15,6 @@
 #include <linux/kdev_t.h>
 #include <linux/usb/ch9.h>
 
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-extern int acc_ctrlrequest_composite(struct usb_composite_dev *cdev,
-				const struct usb_ctrlrequest *ctrl);
-void acc_disconnect(void);
-#endif
 static struct class *android_class;
 static struct device *android_device;
 static int index;
@@ -34,10 +29,6 @@ struct device *create_function_device(char *name)
 		return ERR_PTR(-EINVAL);
 }
 EXPORT_SYMBOL_GPL(create_function_device);
-#else
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-static inline void acc_disconnect(void) {}
-#endif
 #endif
 
 int check_user_usb_string(const char *name,
@@ -1572,11 +1563,6 @@ static int android_setup(struct usb_gadget *gadget,
 		}
 	}
 
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-	if (value < 0)
-		value = acc_ctrlrequest_composite(cdev, c);
-#endif
-
 	if (value < 0)
 		value = composite_setup(gadget, c);
 
@@ -1629,14 +1615,6 @@ static void configfs_composite_disconnect(struct usb_gadget *gadget)
 	if (!cdev)
 		return;
 
-#ifdef CONFIG_USB_CONFIGFS_F_ACC
-	/*
-	 * accessory HID support can be active while the
-	 * accessory function is not actually enabled,
-	 * so we need to inform it when we are disconnected.
-	 */
-	acc_disconnect();
-#endif
 	gi = container_of(cdev, struct gadget_info, cdev);
 	spin_lock_irqsave(&gi->spinlock, flags);
 	cdev = get_gadget_data(gadget);
