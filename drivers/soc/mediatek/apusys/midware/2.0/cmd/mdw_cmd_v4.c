@@ -1106,6 +1106,7 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		memset(args, 0, sizeof(*args));
 		args->out.exec.fence = -1;
 		args->out.exec.id = c->id;
+		ret = 0;
 		goto out;
 	}
 
