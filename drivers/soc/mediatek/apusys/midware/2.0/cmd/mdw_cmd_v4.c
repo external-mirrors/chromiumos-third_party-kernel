@@ -1044,6 +1044,40 @@ out:
 	return ret;
 }
 
+/* returns > 0 if successfully waited, leaving extra refcount for caller to put */
+static int _mdw_cmd_run_stale_wait(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
+{
+	int is_running, ret;
+
+	lockdep_assert_held(&mpriv->mtx);
+
+	is_running = atomic_read(&c->is_running);
+	if (!is_running)
+		return 0;
+
+	mdw_cmd_debug("s(0x%llx) c(0x%llx) is running(%d), wait cmd done\n",
+		      (uint64_t)mpriv, (uint64_t)c, is_running);
+	mdw_cmd_get(c);
+	mutex_unlock(&mpriv->mtx);
+	ret = mdw_cmd_wait_cmd_done(c);
+	mutex_lock(&mpriv->mtx);
+	if (ret)
+		goto out_put;
+
+	if (atomic_read(&c->is_running)) {
+		ret = -EBUSY;
+		goto out_put;
+	}
+
+	/* extra reference left to caller to put */
+	return 1;
+
+out_put:
+	mdw_cmd_put(c);
+
+	return ret;
+}
+
 static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *args)
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
@@ -1059,24 +1093,11 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		/* no stale cmd, create cmd */
 		mdw_cmd_debug("s(0x%llx) create new\n", (uint64_t)mpriv);
 	} else if (in->op == MDW_CMD_IOCTL_RUN_STALE) {
-		is_running = atomic_read(&c->is_running);
-		if (is_running) {
-			mdw_cmd_debug("s(0x%llx) c(0x%llx) is running(%d), wait cmd done\n",
-				(uint64_t)mpriv, (uint64_t)c, is_running);
-			mdw_cmd_get(c);
-			mutex_unlock(&mpriv->mtx);
-			ret = mdw_cmd_wait_cmd_done(c);
-			mutex_lock(&mpriv->mtx);
-			if (ret) {
-				mdw_cmd_put(c);
-				goto out;
-			}
-			if (atomic_read(&c->is_running)) {
-				ret = -EBUSY;
-				mdw_cmd_put(c);
-				goto out;
-			}
-		}
+		ret = _mdw_cmd_run_stale_wait(mpriv, c);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			is_running = 1;
 		/* run stale cmd */
 		mdw_cmd_debug("s(0x%llx) run stale(0x%llx)\n",
 			(uint64_t)mpriv, (uint64_t)c);
