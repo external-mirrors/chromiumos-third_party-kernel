@@ -196,42 +196,6 @@ static void mdw_cmd_execinfo_out(struct mdw_cmd *c)
 	mdw_cmd_update_einfos(c);
 }
 
-static int mdw_cmd_history_tbl_create(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
-{
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
-	int ret = 0;
-
-	/* alloc cmd history */
-	ch_tbl = kzalloc(sizeof(*ch_tbl), GFP_KERNEL);
-	if (!ch_tbl) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	/* alloc subcmd history */
-	ch_tbl->h_sc_einfo =
-			 kcalloc(c->num_subcmds, sizeof(*ch_tbl->h_sc_einfo), GFP_KERNEL);
-
-	/* assign basic info */
-	ch_tbl->uid = c->uid;
-	ch_tbl->num_subcmds = c->num_subcmds;
-
-	/* add history tbl node to list */
-	mutex_lock(&mpriv->ch_mtx);
-	list_add_tail(&ch_tbl->ch_tbl_node , &mpriv->ch_list);
-	mutex_unlock(&mpriv->ch_mtx);
-
-	if (!ch_tbl->h_sc_einfo) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	mdw_flw_debug("create cmd history done\n");
-
-out:
-	return ret;
-}
-
 static bool mdw_cmd_exec_time_check(uint64_t h_exec_time, uint64_t exec_time)
 {
 	uint64_t exec_time_th = 0;
@@ -260,7 +224,7 @@ static int mdw_cmd_run(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 {
 	struct mdw_device *mdev = mpriv->mdev;
 	struct dma_fence *f = &c->fence->base_fence;
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
+	struct mdw_cmd_history_tbl *ch_tbl = &c->ch_tbl;
 	int ret = 0;
 	uint64_t poll_timeout = MDW_POLL_TIMEOUT;
 
@@ -288,10 +252,6 @@ static int mdw_cmd_run(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 		mdw_flw_debug("s(0x%llx) cmd(0x%llx) run\n",
 			(uint64_t)c->mpriv, c->kid);
 		if (c->power_plcy == MDW_POWERPOLICY_PERFORMANCE) {
-			ch_tbl = mdw_cmd_ch_tbl_find(c);
-			if (!ch_tbl)
-				goto out;
-
 			if (g_mdw_poll_timeout)
 				poll_timeout = g_mdw_poll_timeout;
 
@@ -306,25 +266,6 @@ static int mdw_cmd_run(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 	}
 out:
 	return ret;
-}
-
-struct mdw_cmd_history_tbl *mdw_cmd_ch_tbl_find(struct mdw_cmd *c)
-{
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
-	struct mdw_fpriv *mpriv = c->mpriv;
-
-	mutex_lock(&mpriv->ch_mtx);
-	list_for_each_entry(ch_tbl, &mpriv->ch_list, ch_tbl_node) {
-		if(ch_tbl->uid == c->uid) {
-			mdw_flw_debug("find ch_tbl uid(0x%llx)\n", c->uid);
-			goto out;
-		}
-	}
-	ch_tbl = NULL;
-
-out:
-	mutex_unlock(&mpriv->ch_mtx);
-	return ch_tbl;
 }
 
 void mdw_cmd_history_init(struct mdw_device *mdev)
@@ -461,7 +402,7 @@ static void mdw_cmd_min_heap_sanity_check(struct mdw_cmd *c)
 
 static int mdw_cmd_record(struct mdw_cmd *c)
 {
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
+	struct mdw_cmd_history_tbl *ch_tbl = &c->ch_tbl;
 	struct mdw_device *mdev = c->mpriv->mdev;
 	struct mdw_subcmd_exec_info *sc_einfo = NULL;
 	int i = 0, ret = -EINVAL;
@@ -473,9 +414,7 @@ static int mdw_cmd_record(struct mdw_cmd *c)
 
 	memset(vid_array, -1, sizeof(vid_array));
 
-	/* check history table */
-	ch_tbl = mdw_cmd_ch_tbl_find(c);
-	if (!ch_tbl)
+	if (!ch_tbl->h_sc_einfo)
 		goto out;
 
 	/* Setup subcmd history */
@@ -628,7 +567,7 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 	struct dma_fence *f = &c->fence->base_fence;
 	struct mdw_fpriv *mpriv = c->mpriv;
 	struct mdw_device *mdev = c->mpriv->mdev;
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
+	struct mdw_cmd_history_tbl *ch_tbl = &c->ch_tbl;
 	bool need_dtime_check = false;
 	uint64_t ts1 = 0, ts2 = 0;
 	int power_dtime = c->power_dtime;
@@ -698,11 +637,6 @@ static int mdw_cmd_complete(struct mdw_cmd *c, int ret)
 	dma_fence_put(f);
 	ts1 = ktime_get_ns();
 	c->handle_cmd_result_time = ts1 - ts2;
-
-	/* get cmd history table */
-	ch_tbl = mdw_cmd_ch_tbl_find(c);
-	if (!ch_tbl)
-		goto out;
 
 	/* initial or update h_exec_time */
 	if (!ch_tbl->h_exec_time ||
@@ -931,6 +865,14 @@ static struct mdw_cmd *mdw_cmd_create(struct mdw_fpriv *mpriv,
 		goto free_link;
 	}
 
+	/* subcmd history */
+	c->ch_tbl.h_sc_einfo =
+		kcalloc(c->num_subcmds, sizeof(*c->ch_tbl.h_sc_einfo), GFP_KERNEL);
+	if (!c->ch_tbl.h_sc_einfo) {
+		mdw_drv_err("alloc subcmd history fail\n");
+		goto delete_infos;
+	}
+
 	c->mpriv->get(c->mpriv);
 	c->complete = mdw_cmd_complete;
 
@@ -945,6 +887,8 @@ static struct mdw_cmd *mdw_cmd_create(struct mdw_fpriv *mpriv,
 
 	goto out;
 
+delete_infos:
+	mdw_cmd_delete_infos(mpriv, c);
 free_link:
 	kfree(c->links);
 free_adj:
@@ -969,26 +913,11 @@ static void mdw_cmd_ch_tbl_sanity_check(struct mdw_fpriv *mpriv)
 		mdw_flw_debug("session has %d cmd\n", mpriv->cmd_cnt);
 }
 
-static void mdw_cmd_ch_tbl_sc_check(struct mdw_cmd_history_tbl *ch_tbl,
-	struct mdw_cmd *c)
-{
-	/* compare num_subcmds */
-	if (ch_tbl->num_subcmds < c->num_subcmds) {
-		mdw_flw_debug("s(0x%llx) uid(0x%llx) del old ch_tbl and create new\n",
-				(uint64_t)c->mpriv, c->uid);
-		list_del(&ch_tbl->ch_tbl_node);
-		kfree(ch_tbl->h_sc_einfo);
-		kfree(ch_tbl);
-		mdw_cmd_history_tbl_create(c->mpriv, c);
-	}
-}
-
 static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *args)
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
 	struct mdw_cmd *c = NULL, *priv_c = NULL;
 	struct sync_file *sync_file = NULL;
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
 	int ret = 0, fd = 0, wait_fd = 0, is_running = 0;
 
 	mdw_trace_begin("apumdw:user_run");
@@ -1052,6 +981,7 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		goto delete_cmd;
 	}
 
+	mpriv->cmd_cnt++;
 	if (in->op == MDW_CMD_IOCTL_ENQ) {
 		/* return input fence fd (enq no use fence) */
 		memset(args, 0, sizeof(*args));
@@ -1064,19 +994,6 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 
 exec:
 	mutex_lock(&c->mtx);
-
-	/* handle cmd history */
-	ch_tbl = mdw_cmd_ch_tbl_find(c);
-	if (ch_tbl) {
-		mdw_flw_debug("s(0x%llx) uid(0x%llx) check num subcmd\n",
-				(uint64_t)mpriv, c->uid);
-		mdw_cmd_ch_tbl_sc_check(ch_tbl, c);
-	} else {
-		mdw_flw_debug("s(0x%llx) uid(0x%llx) create ch_tbl\n",
-				(uint64_t)mpriv, c->uid);
-		mdw_cmd_history_tbl_create(mpriv, c);
-		mpriv->cmd_cnt++;
-	}
 
 	/* ch_tbl sanity check */
 	mdw_cmd_ch_tbl_sanity_check(mpriv);

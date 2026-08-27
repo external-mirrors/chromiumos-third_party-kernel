@@ -309,9 +309,7 @@ struct mdw_fpriv {
 	void (*put)(struct mdw_fpriv *mpriv);
 
 	/* cmd history */
-	struct list_head ch_list;
 	uint32_t cmd_cnt;
-	struct mutex ch_mtx;
 
 	/* cmd execute id counter */
 	uint32_t counter;
@@ -345,17 +343,12 @@ struct mdw_cmd_map_invoke {
 };
 
 struct mdw_cmd_history_tbl {
-	/* history basic struct */
-	uint64_t uid;
-	struct list_head ch_tbl_node; //to mpriv
-	uint64_t period_cnt;
-	uint32_t num_subcmds;
-
 	/* history cmd time info */
 	uint64_t h_end_ts;
 	uint64_t h_start_ts;
 	uint64_t h_period;
 	uint64_t h_exec_time;
+	uint64_t period_cnt;
 
 	/* history subcmd einfo */
 	struct mdw_subcmd_exec_info *h_sc_einfo;
@@ -390,6 +383,7 @@ struct mdw_cmd {
 	struct mdw_exec_info *einfos;
 	uint8_t *adj_matrix;
 	struct mdw_subcmd_link_v1 *links;
+	struct mdw_cmd_history_tbl ch_tbl;
 
 	struct mutex mtx;
 	struct list_head u_item;

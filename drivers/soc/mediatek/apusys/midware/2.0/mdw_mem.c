@@ -657,8 +657,8 @@ int mdw_mem_unmap(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 	mdw_mem_show(m);
 	m_invoke = mdw_mem_invoke_find(mpriv, m);
 	if (m_invoke == NULL) {
-		mdw_drv_warn("s(0x%llx) no invoke m(0x%llx)\n",
-			(uint64_t)mpriv, (uint64_t)m);
+		mdw_drv_err("s(0x%llx) no invoke m(0x%llx)\n",
+			    (uint64_t)mpriv, (uint64_t)m);
 		ret = -EINVAL;
 		goto out;
 	}

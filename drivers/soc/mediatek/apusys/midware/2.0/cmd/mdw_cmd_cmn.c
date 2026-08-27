@@ -419,23 +419,6 @@ void mdw_cmd_history_reset(struct mdw_fpriv *mpriv)
 	mutex_unlock(&mdev->h_mtx);
 }
 
-static void mdw_cmd_history_tbl_delete(struct mdw_fpriv *mpriv)
-{
-	struct mdw_cmd_history_tbl *ch_tbl = NULL, *tmp = NULL;
-
-	mutex_lock(&mpriv->ch_mtx);
-	list_for_each_entry_safe(ch_tbl, tmp, &mpriv->ch_list, ch_tbl_node) {
-		list_del(&ch_tbl->ch_tbl_node);
-		mdw_cmd_debug("s(0x%llx) uid(0x%llx) delete ch_tbl\n",
-			(uint64_t)mpriv, ch_tbl->uid);
-		kfree(ch_tbl->h_sc_einfo);
-		kfree(ch_tbl);
-	}
-	mutex_unlock(&mpriv->ch_mtx);
-
-	mdw_cmd_history_reset(mpriv);
-}
-
 void mdw_cmd_mpriv_release(struct mdw_fpriv *mpriv)
 {
 	struct mdw_cmd *c = NULL;
@@ -455,8 +438,8 @@ void mdw_cmd_mpriv_release(struct mdw_fpriv *mpriv)
 		mdw_trace_begin("apummu:table_free|s:0x%llx", (uint64_t)mpriv);
 		apu_mem_table_free((uint64_t)mpriv);
 		mdw_trace_end();
-		mdw_flw_debug("s(0x%llx) release history tbl\n", (uint64_t)mpriv);
-		mdw_cmd_history_tbl_delete(mpriv);
+		mdw_flw_debug("s(0x%llx) reset history\n", (uint64_t)mpriv);
+		mdw_cmd_history_reset(mpriv);
 	}
 }
 
@@ -620,6 +603,7 @@ static void mdw_cmd_release(struct kref *ref)
 	mdw_cmd_delete_infos(c->mpriv, c);
 	mdw_mem_put(c->mpriv, c->exec_infos);
 	mutex_unlock(&mpriv->mdev->mctl_mtx);
+	kfree(c->ch_tbl.h_sc_einfo);
 	kfree(c->adj_matrix);
 	kfree(c->ksubcmds);
 	kfree(c->subcmds);

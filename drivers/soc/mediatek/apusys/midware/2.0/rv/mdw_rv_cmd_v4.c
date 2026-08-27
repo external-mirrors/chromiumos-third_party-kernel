@@ -176,7 +176,7 @@ static struct mdw_rv_cmd *mdw_rv_cmd_create(struct mdw_fpriv *mpriv,
 	struct mdw_rv_msg_cb *rmcb = NULL;
 	struct mdw_rv_msg_ammu *rmammu = NULL;
 	struct mdw_rv_sc_link *rl = NULL;
-	struct mdw_cmd_history_tbl *ch_tbl = NULL;
+	struct mdw_cmd_history_tbl *ch_tbl = &c->ch_tbl;
 
 	mdw_trace_begin("apumdw:rv_cmd_create");
 	/* reuse internal cmd if exist */
@@ -351,9 +351,8 @@ reuse:
 
 	/* update history ip time */
 	rmsc = (void *)rmc + rmc->subcmds_offset;
-	ch_tbl = mdw_cmd_ch_tbl_find(c);
 	for (i = 0; i < c->num_subcmds; i++) {
-		if (ch_tbl)
+		if (ch_tbl->h_sc_einfo)
 			rmsc[i].history_ip_time = ch_tbl->h_sc_einfo[i].ip_time;
 		mdw_rv_sc_print(&rmsc[i], rmc->cmd_id, i);
 	}

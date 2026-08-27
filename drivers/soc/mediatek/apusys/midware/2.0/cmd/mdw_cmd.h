@@ -44,7 +44,6 @@ void mdw_cmd_mpriv_release_without_stale(struct mdw_fpriv *mpriv);
 /* cmd history */
 void mdw_cmd_history_init(struct mdw_device *mdev);
 void mdw_cmd_history_deinit(struct mdw_device *mdev);
-struct mdw_cmd_history_tbl *mdw_cmd_ch_tbl_find(struct mdw_cmd *c);
 void mdw_cmd_history_reset(struct mdw_fpriv *mpriv);
 
 /* cmdbuf */
