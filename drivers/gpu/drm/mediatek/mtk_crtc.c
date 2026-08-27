@@ -1328,13 +1328,23 @@ static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *comp = mtk_crtc->crc_provider;
 
-	if (!src)
-		return -EINVAL;
-
-	if (strcmp(src, "auto") != 0) {
+	/* The core passes NULL when userspace closes crc/data. */
+	if (src && strcmp(src, "auto") != 0) {
 		DRM_ERROR("%s(crtc-%d): undnown source '%s'\n",
 			  __func__, drm_crtc_index(crtc), src);
 		return -EINVAL;
+	}
+
+	if (!src) {
+		drm_vblank_work_cancel_sync(&mtk_crtc->crc_work);
+		/*
+		 * Undo the bypass that opening crc/data set. Guarded because
+		 * userspace can close crc/data after the CRTC went down, when
+		 * the registers are unreachable.
+		 */
+		if (mtk_crtc->enabled && comp && comp->funcs && comp->funcs->bypass)
+			comp->funcs->bypass(comp->dev, false, NULL);
+		return 0;
 	}
 
 	if (comp->funcs->bypass)
