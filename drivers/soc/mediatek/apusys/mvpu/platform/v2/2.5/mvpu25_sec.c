@@ -1267,8 +1267,14 @@ void mvpu25_CopyArgToPrimem(char *dst_ptr, char *src_ptr, int src_size)
 
 	for (i = 0; i < src_size; i += 2) {
 		src_data = src_ptr + i;
-		for (j = 0; j < MVPU_PE_NUM * 2; j += 2)
-			memcpy(dup_buf + j, src_data, 2);
+		for (j = 0; j < MVPU_PE_NUM * 2; j += 2) {
+			if (i + 1 < src_size) {
+				memcpy(dup_buf + j, src_data, 2);
+			} else {
+				dup_buf[j] = *src_data;
+				dup_buf[j + 1] = 0;
+			}
+		}
 
 		memcpy(dst_ptr, dup_buf, MVPU_DUP_BUF_SIZE);
 		dst_ptr = dst_ptr + MVPU_DUP_BUF_SIZE;
