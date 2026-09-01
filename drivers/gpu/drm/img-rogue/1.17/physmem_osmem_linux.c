@@ -3392,7 +3392,7 @@ e0:
 static INLINE IMG_BOOL IsOffsetValid(const PMR_OSPAGEARRAY_DATA *psOSPageArrayData,
                                      IMG_DEVMEM_OFFSET_T uiOffset)
 {
-	return uiOffset < (psOSPageArrayData->uiTotalNumOSPages << PAGE_SHIFT);
+	return uiOffset < ((IMG_UINT64)psOSPageArrayData->uiTotalNumOSPages << PAGE_SHIFT);
 }
 
 /* Determine PA for specified offset into page array. */
