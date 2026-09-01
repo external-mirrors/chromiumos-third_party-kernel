@@ -373,6 +373,10 @@ int mvpu25_validation(void *hnd)
 
 		if (ret != 0)
 			goto END_WITH_MUTEX;
+	} else if (kerarg_num > 0) {
+		ret = -EINVAL;
+		pr_info("[MVPU][Sec] online batch combined with kernel args FAIL\n");
+		goto END_WITH_MUTEX;
 	}
 
 	if (algo_in_pool == false) {
@@ -528,8 +532,12 @@ int mvpu25_validation(void *hnd)
 		kerarg_buf_id_kva =
 			apusys_mem_query_kva_by_sess(session, mvpu_req->kerarg_buf_id);
 
-		if (kerarg_buf_id_kva != NULL)
+		if (kerarg_buf_id_kva != NULL) {
 			memcpy(kerarg_buf_id, kerarg_buf_id_kva, kerarg_num*sizeof(uint32_t));
+		} else {
+			ret = -ENOMEM;
+			goto END_WITH_MUTEX;
+		}
 
 		kerarg_offset = kcalloc(kerarg_num, sizeof(uint32_t), GFP_KERNEL);
 		if (kerarg_offset == NULL) {
@@ -540,8 +548,12 @@ int mvpu25_validation(void *hnd)
 		kerarg_offset_kva =
 			apusys_mem_query_kva_by_sess(session, mvpu_req->kerarg_offset);
 
-		if (kerarg_offset_kva != NULL)
+		if (kerarg_offset_kva != NULL) {
 			memcpy(kerarg_offset, kerarg_offset_kva, kerarg_num*sizeof(uint32_t));
+		} else {
+			ret = -ENOMEM;
+			goto END_WITH_MUTEX;
+		}
 
 		kerarg_size = kcalloc(kerarg_num, sizeof(uint32_t), GFP_KERNEL);
 		if (kerarg_size == NULL) {
@@ -552,8 +564,28 @@ int mvpu25_validation(void *hnd)
 		kerarg_size_kva =
 			apusys_mem_query_kva_by_sess(session, mvpu_req->kerarg_size);
 
-		if (kerarg_size_kva != NULL)
+		if (kerarg_size_kva != NULL) {
 			memcpy(kerarg_size, kerarg_size_kva, kerarg_num*sizeof(uint32_t));
+		} else {
+			ret = -ENOMEM;
+			goto END_WITH_MUTEX;
+		}
+
+		for (i = 0; i < kerarg_num; i++) {
+			if (kerarg_buf_id[i] >= buf_num) {
+				pr_info("[MVPU][Sec] kerarg_buf_id[%u] %u >= buf_num %u\n",
+					i, kerarg_buf_id[i], buf_num);
+				ret = -EINVAL;
+				goto END_WITH_MUTEX;
+			}
+			if ((u64)kerarg_offset[i] + kerarg_size[i] > sec_buf_size[kerarg_buf_id[i]]) {
+				pr_info("[MVPU][Sec] kerarg[%u] out of bounds: ofst 0x%x, size 0x%x, buf_size 0x%x\n",
+					i, kerarg_offset[i], kerarg_size[i],
+					sec_buf_size[kerarg_buf_id[i]]);
+				ret = -EINVAL;
+				goto END_WITH_MUTEX;
+			}
+		}
 
 		// get primem only when ker arg num != 0 & not get into check flow
 		primem_num = mvpu_req->primem_num;
@@ -567,9 +599,13 @@ int mvpu25_validation(void *hnd)
 			primem_src_buf_id_kva =
 				apusys_mem_query_kva_by_sess(session, mvpu_req->primem_src_buf_id);
 
-			if (primem_src_buf_id_kva != NULL)
+			if (primem_src_buf_id_kva != NULL) {
 				memcpy(primem_src_buf_id, primem_src_buf_id_kva,
 					primem_num*sizeof(uint32_t));
+			} else {
+				ret = -ENOMEM;
+				goto END_WITH_MUTEX;
+			}
 
 			primem_dst_buf_id = kcalloc(primem_num, sizeof(uint32_t), GFP_KERNEL);
 			if (primem_dst_buf_id == NULL) {
@@ -580,9 +616,13 @@ int mvpu25_validation(void *hnd)
 			primem_dst_buf_id_kva =
 				apusys_mem_query_kva_by_sess(session, mvpu_req->primem_dst_buf_id);
 
-			if (primem_dst_buf_id_kva != NULL)
+			if (primem_dst_buf_id_kva != NULL) {
 				memcpy(primem_dst_buf_id, primem_dst_buf_id_kva,
 					primem_num*sizeof(uint32_t));
+			} else {
+				ret = -ENOMEM;
+				goto END_WITH_MUTEX;
+			}
 
 			primem_src_offset = kcalloc(primem_num, sizeof(uint32_t), GFP_KERNEL);
 			if (primem_src_offset == NULL) {
@@ -593,9 +633,13 @@ int mvpu25_validation(void *hnd)
 			primem_src_offset_kva =
 				apusys_mem_query_kva_by_sess(session, mvpu_req->primem_src_offset);
 
-			if (primem_src_offset_kva != NULL)
+			if (primem_src_offset_kva != NULL) {
 				memcpy(primem_src_offset, primem_src_offset_kva,
 					primem_num*sizeof(uint32_t));
+			} else {
+				ret = -ENOMEM;
+				goto END_WITH_MUTEX;
+			}
 
 			primem_dst_offset = kcalloc(primem_num, sizeof(uint32_t), GFP_KERNEL);
 			if (primem_dst_offset == NULL) {
@@ -606,9 +650,13 @@ int mvpu25_validation(void *hnd)
 			primem_dst_offset_kva =
 				apusys_mem_query_kva_by_sess(session, mvpu_req->primem_dst_offset);
 
-			if (primem_dst_offset_kva != NULL)
+			if (primem_dst_offset_kva != NULL) {
 				memcpy(primem_dst_offset, primem_dst_offset_kva,
 					primem_num*sizeof(uint32_t));
+			} else {
+				ret = -ENOMEM;
+				goto END_WITH_MUTEX;
+			}
 
 			primem_size = kcalloc(primem_num, sizeof(uint32_t), GFP_KERNEL);
 			if (primem_size == NULL) {
@@ -619,8 +667,36 @@ int mvpu25_validation(void *hnd)
 			primem_size_kva =
 				apusys_mem_query_kva_by_sess(session, mvpu_req->primem_size);
 
-			if (primem_size_kva != NULL)
+			if (primem_size_kva != NULL) {
 				memcpy(primem_size, primem_size_kva, primem_num*sizeof(uint32_t));
+			} else {
+				ret = -ENOMEM;
+				goto END_WITH_MUTEX;
+			}
+
+			for (i = 0; i < primem_num; i++) {
+				if (primem_src_buf_id[i] >= buf_num || primem_dst_buf_id[i] >= buf_num) {
+					pr_info("[MVPU][Sec] primem[%u] invalid buf id: src %u, dst %u >= buf_num %u\n",
+						i, primem_src_buf_id[i], primem_dst_buf_id[i], buf_num);
+					ret = -EINVAL;
+					goto END_WITH_MUTEX;
+				}
+				if ((u64)primem_src_offset[i] + primem_size[i] > sec_buf_size[primem_src_buf_id[i]]) {
+					pr_info("[MVPU][Sec] primem[%u] src out of bounds: ofst 0x%x, size 0x%x, buf_size 0x%x\n",
+						i, primem_src_offset[i], primem_size[i],
+						sec_buf_size[primem_src_buf_id[i]]);
+					ret = -EINVAL;
+					goto END_WITH_MUTEX;
+				}
+
+				if ((u64)primem_dst_offset[i] + (u64)primem_size[i] * MVPU_PE_NUM > sec_buf_size[primem_dst_buf_id[i]]) {
+					pr_info("[MVPU][Sec] primem[%u] dst out of bounds: ofst 0x%x, size 0x%x, buf_size 0x%x\n",
+						i, primem_dst_offset[i], primem_size[i],
+						sec_buf_size[primem_dst_buf_id[i]]);
+					ret = -EINVAL;
+					goto END_WITH_MUTEX;
+				}
+			}
 		}
 	}
 
