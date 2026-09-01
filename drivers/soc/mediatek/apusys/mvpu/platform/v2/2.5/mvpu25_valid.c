@@ -913,6 +913,7 @@ TRIGGER_SETTING:
 					session_id, hash_id,
 					kerarg_num,
 					sec_chk_addr,
+					sec_buf_size,
 					kerarg_buf_id,
 					kerarg_offset,
 					kerarg_size,
@@ -922,6 +923,10 @@ TRIGGER_SETTING:
 					primem_src_offset,
 					primem_dst_offset,
 					primem_size);
+		if (ret) {
+			pr_info("[MVPU][Sec] replace kerarg failed: %d\n", ret);
+			goto END_WITH_MUTEX;
+		}
 	}
 
 END_WITH_MUTEX:

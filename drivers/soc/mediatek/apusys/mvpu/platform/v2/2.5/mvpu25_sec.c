@@ -1299,6 +1299,7 @@ int mvpu25_replace_kerarg(void *session,
 					uint32_t hash_id,
 					uint32_t kerarg_num,
 					uint32_t *sec_chk_addr,
+					uint32_t *sec_buf_size,
 					uint32_t *kerarg_buf_id,
 					uint32_t *kerarg_offset,
 					uint32_t *kerarg_size,
@@ -1323,12 +1324,25 @@ int mvpu25_replace_kerarg(void *session,
 	uint32_t target_pool_ofst = 0;
 	uint32_t target_src_ofst = 0;
 	uint32_t target_dst_ofst = 0;
+	uint32_t pool_size;
+	uint32_t pool_buf_num;
 	int i;
 	int ret_dma_buf_vmap = 0;
 	struct iosys_map sys_map = {0};
 
 	if (mvpu_loglvl_sec >= APUSYS_MVPU_LOG_DBG)
 		pr_info("[MVPU][Sec] %s\n", __func__);
+
+	if (session_id >= MAX_SAVE_SESSION || hash_id >= MAX_SAVE_HASH ||
+	    !hash_pool[session_id])
+		return -EINVAL;
+
+	if (!hash_pool[session_id]->hash_dma_buf[hash_id] ||
+	    !hash_pool[session_id]->hash_offset[hash_id])
+		return -EINVAL;
+
+	pool_size = hash_pool[session_id]->hash_pool_size[hash_id];
+	pool_buf_num = hash_pool[session_id]->buf_num[hash_id];
 
 	ret_dma_buf_vmap = dma_buf_vmap(hash_pool[session_id]->hash_dma_buf[hash_id], &sys_map);
 	pool_ptr_base = sys_map.vaddr;
@@ -1342,12 +1356,41 @@ int mvpu25_replace_kerarg(void *session,
 	dma_buf_begin_cpu_access(hash_pool[session_id]->hash_dma_buf[hash_id], DMA_TO_DEVICE);
 
 	for (cnt = 0; cnt < kerarg_num; cnt++) {
+		if (kerarg_buf_id[cnt] >= pool_buf_num) {
+			pr_err("[MVPU][Sec] invalid kerarg_buf_id[%d]: %u (max %u)\n",
+			       cnt, kerarg_buf_id[cnt], pool_buf_num);
+			ret = -EINVAL;
+			goto out_unmap;
+		}
+
+		if ((u64)kerarg_offset[cnt] + kerarg_size[cnt] > sec_buf_size[kerarg_buf_id[cnt]]) {
+			pr_err("[MVPU][Sec] kerarg[%d] out of source bounds: offset 0x%x, size 0x%x, buf_size 0x%x\n",
+			       cnt, kerarg_offset[cnt], kerarg_size[cnt],
+			       sec_buf_size[kerarg_buf_id[cnt]]);
+			ret = -EINVAL;
+			goto out_unmap;
+		}
+
 		sec_chk_addr_kva =
 			apusys_mem_query_kva_by_sess(session, sec_chk_addr[kerarg_buf_id[cnt]]);
+		if (!sec_chk_addr_kva) {
+			pr_err("[MVPU][Sec] apusys_mem_query_kva_by_sess failed for buf %u\n",
+			       kerarg_buf_id[cnt]);
+			ret = -EINVAL;
+			goto out_unmap;
+		}
+
 		buf_ptr = (void *)((uintptr_t)sec_chk_addr_kva
 								+ kerarg_offset[cnt]);
 
 		target_pool_ofst = hash_pool[session_id]->hash_offset[hash_id][kerarg_buf_id[cnt]];
+		if ((u64)target_pool_ofst + kerarg_offset[cnt] + kerarg_size[cnt] > pool_size) {
+			pr_err("[MVPU][Sec] kerarg[%d] out of pool bounds: pool_ofst 0x%x, kerarg_ofst 0x%x, size 0x%x, pool_size 0x%x\n",
+			       cnt, target_pool_ofst, kerarg_offset[cnt], kerarg_size[cnt], pool_size);
+			ret = -EINVAL;
+			goto out_unmap;
+		}
+
 		kerarg_ptr = (void *)((uintptr_t)pool_ptr_base
 								+ target_pool_ofst
 								+ kerarg_offset[cnt]);
@@ -1383,14 +1426,33 @@ int mvpu25_replace_kerarg(void *session,
 		for (i = 0; i < primem_num; i++) {
 			if ((kerarg_buf_id[cnt] == primem_src_buf_id[i]) &&
 				(kerarg_offset[cnt] >= primem_src_offset[i]) &&
-				(kerarg_offset[cnt] < primem_src_offset[i] + primem_size[i])) {
+				((u64)kerarg_offset[cnt] < (u64)primem_src_offset[i] + primem_size[i])) {
+				u64 primem_copy_size;
+				u64 dst_ofst;
+
+				if (primem_dst_buf_id[i] >= pool_buf_num) {
+					pr_err("[MVPU][Sec] invalid primem_dst_buf_id[%d]: %u (max %u)\n",
+					       i, primem_dst_buf_id[i], pool_buf_num);
+					ret = -EINVAL;
+					goto out_unmap;
+				}
+
 				target_pool_ofst =
 					hash_pool[session_id]->hash_offset
 						[hash_id][primem_dst_buf_id[i]];
 				target_src_ofst = kerarg_offset[cnt] - primem_src_offset[i];
-				target_dst_ofst =
-					primem_dst_offset[i] + target_src_ofst * MVPU_PE_NUM;
+				dst_ofst = (u64)primem_dst_offset[i] + (u64)target_src_ofst * MVPU_PE_NUM;
+				primem_copy_size = (u64)DIV_ROUND_UP(kerarg_size[cnt], 2) * MVPU_DUP_BUF_SIZE;
 
+				if ((u64)target_pool_ofst + dst_ofst + primem_copy_size > pool_size ||
+				    dst_ofst + primem_copy_size > sec_buf_size[primem_dst_buf_id[i]]) {
+					pr_err("[MVPU][Sec] primem[%d] out of bounds: pool_ofst 0x%x, dst_ofst 0x%llx, copy_size 0x%llx, pool_size 0x%x\n",
+					       i, target_pool_ofst, dst_ofst, primem_copy_size, pool_size);
+					ret = -EINVAL;
+					goto out_unmap;
+				}
+
+				target_dst_ofst = (uint32_t)dst_ofst;
 				primem_ptr = (void *)((uintptr_t)pool_ptr_base
 								+ target_pool_ofst
 								+ target_dst_ofst);
@@ -1415,6 +1477,7 @@ int mvpu25_replace_kerarg(void *session,
 		}
 	}
 
+out_unmap:
 	//cache sync
 	dma_buf_end_cpu_access(hash_pool[session_id]->hash_dma_buf[hash_id], DMA_TO_DEVICE);
 
