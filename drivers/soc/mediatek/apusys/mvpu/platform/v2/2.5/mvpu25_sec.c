@@ -555,6 +555,7 @@ int mvpu25_update_hash_pool(void *session,
 	void *buf_kva;
 	bool copy_to_pool = true;
 	int ret_dma_buf_vmap = 0;
+	int ret = 0;
 	struct iosys_map sys_map = {0};
 
 	if (mvpu_loglvl_sec >= APUSYS_MVPU_LOG_DBG)
@@ -678,7 +679,8 @@ int mvpu25_update_hash_pool(void *session,
 					if (buf_kva == NULL) {
 						pr_info("[MVPU][Sec] apusys_mem_query_kva_by_sess fail (session: 0x%llx, sec_chk_addr[%3d]: 0x%08x)\n",
 								(unsigned long long)session, cnt, sec_chk_addr[cnt]);
-						return -ENOMEM;
+						ret = -ENOMEM;
+						goto out_unmap;
 					}
 
 					if (mvpu_loglvl_sec >= APUSYS_MVPU_LOG_DBG)
@@ -708,7 +710,8 @@ int mvpu25_update_hash_pool(void *session,
 					if (buf_kva == NULL) {
 						pr_info("[MVPU][Sec] apusys_mem_query_kva_by_sess fail (session: 0x%llx, sec_chk_addr[%3d]: 0x%08x)\n",
 								(unsigned long long)session, cnt, sec_chk_addr[cnt]);
-						return -ENOMEM;
+						ret = -ENOMEM;
+						goto out_unmap;
 					}
 
 					if (mvpu_loglvl_sec >= APUSYS_MVPU_LOG_DBG)
@@ -743,7 +746,8 @@ int mvpu25_update_hash_pool(void *session,
 					memcpy(cp_buff, buf_kva, buf_size);
 				} else {
 					pr_info("[MVPU][Sec] buf_size error\n");
-					return -1;
+					ret = -EINVAL;
+					goto out_unmap;
 				}
 
 				//alignment
@@ -771,16 +775,17 @@ int mvpu25_update_hash_pool(void *session,
 		}
 	} else {
 		pr_info("[MVPU][Sec] hash_offset alloc fail\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
 	}
 
 	//cache sync
+out_unmap:
 	dma_buf_end_cpu_access(hash_pool[session_id]->hash_dma_buf[hash_id], DMA_TO_DEVICE);
 
 	if (p_buf)
 		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], &sys_map);
 
-	return 0;
+	return ret;
 }
 
 #ifdef FULL_RP_INFO
