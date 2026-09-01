@@ -778,7 +778,7 @@ int mvpu25_update_hash_pool(void *session,
 	dma_buf_end_cpu_access(hash_pool[session_id]->hash_dma_buf[hash_id], DMA_TO_DEVICE);
 
 	if (p_buf)
-		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], p_buf);
+		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], &sys_map);
 
 	return 0;
 }
@@ -1254,7 +1254,7 @@ int mvpu25_replace_mem(uint32_t session_id,
 	dma_buf_end_cpu_access(hash_pool[session_id]->hash_dma_buf[hash_id], DMA_TO_DEVICE);
 
 	if (buf_ptr_base)
-		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], buf_ptr_base);
+		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], &sys_map);
 
 	return ret;
 }
@@ -1413,7 +1413,7 @@ int mvpu25_replace_kerarg(void *session,
 	dma_buf_end_cpu_access(hash_pool[session_id]->hash_dma_buf[hash_id], DMA_TO_DEVICE);
 
 	if (pool_ptr_base)
-		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], pool_ptr_base);
+		dma_buf_vunmap(hash_pool[session_id]->hash_dma_buf[hash_id], &sys_map);
 
 	return ret;
 }
