@@ -2224,7 +2224,7 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 		.hwv_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
 		.hwv_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
 		.hwv_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
-		.hwv_shift = MT8196_MM_VOTE_MML0_SHIFT,
+		.hwv_shift = MT8196_MM_VOTE_MML1_SHIFT,
 		.caps = MTK_SCPD_HWV_OPS,
 	},
 	[MT8196_POWER_DOMAIN_MM_INFRA0] = {
