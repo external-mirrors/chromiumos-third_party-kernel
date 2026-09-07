@@ -28,7 +28,6 @@
 #define MDW_NAME "apusys"
 #define MDW_DEV_MAX (APUSYS_DEVICE_MAX)
 #define MDW_DEV_TAB_DEV_MAX (16)
-#define MDW_CMD_MAX (32)
 #define MDW_SUBCMD_MAX (64)
 #define MDW_PRIORITY_MAX (32)
 #define MDW_DEFAULT_TIMEOUT_MS (30*1000)
@@ -307,9 +306,6 @@ struct mdw_fpriv {
 	struct kref ref;
 	void (*get)(struct mdw_fpriv *mpriv);
 	void (*put)(struct mdw_fpriv *mpriv);
-
-	/* cmd history */
-	uint32_t cmd_cnt;
 
 	/* cmd execute id counter */
 	uint32_t counter;

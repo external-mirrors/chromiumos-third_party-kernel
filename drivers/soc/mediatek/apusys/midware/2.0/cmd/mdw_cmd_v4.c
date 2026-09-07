@@ -907,12 +907,6 @@ out:
 	return c;
 }
 
-static void mdw_cmd_ch_tbl_sanity_check(struct mdw_fpriv *mpriv)
-{
-	if (mpriv->cmd_cnt > MDW_CMD_MAX)
-		mdw_flw_debug("session has %d cmd\n", mpriv->cmd_cnt);
-}
-
 static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *args)
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
@@ -981,7 +975,6 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 		goto delete_cmd;
 	}
 
-	mpriv->cmd_cnt++;
 	if (in->op == MDW_CMD_IOCTL_ENQ) {
 		/* return input fence fd (enq no use fence) */
 		memset(args, 0, sizeof(*args));
@@ -994,9 +987,6 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 
 exec:
 	mutex_lock(&c->mtx);
-
-	/* ch_tbl sanity check */
-	mdw_cmd_ch_tbl_sanity_check(mpriv);
 
 	/* get sync_file fd */
 	fd = get_unused_fd_flags(O_CLOEXEC);
