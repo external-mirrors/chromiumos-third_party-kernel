@@ -118,7 +118,7 @@ struct mtk_crtc {
 	struct mtk_crtc_qos_ctx		*qos_ctx;
 };
 
-void mtk_crtc_check_fast_modeset(struct drm_crtc_state *old_crtc_state,
+bool mtk_crtc_check_fast_modeset(struct drm_crtc_state *old_crtc_state,
 				 struct drm_crtc_state *new_crtc_state);
 int mtk_crtc_create(struct drm_device *drm_dev,
 		    enum mtk_crtc_path path_sel);

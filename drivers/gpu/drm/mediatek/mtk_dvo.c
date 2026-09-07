@@ -20,6 +20,7 @@
 
 #include <video/videomode.h>
 
+#include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_bridge_connector.h>
@@ -33,6 +34,7 @@
 #include "mtk_drm_drv.h"
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
+#include "mtk_disp_drv.h"
 
 /* DVO INPUT default value is 1T2P */
 #define MTK_DVO_INPUT_MODE				2
@@ -144,11 +146,6 @@ struct mtk_dvo {
 static inline struct mtk_dvo *bridge_to_dvo(struct drm_bridge *b)
 {
 	return container_of(b, struct mtk_dvo, bridge);
-}
-
-static inline struct mtk_dvo *encoder_to_dvo(struct drm_encoder *e)
-{
-	return container_of(e, struct mtk_dvo, mtk_encoder.encoder);
 }
 
 enum mtk_dvo_polarity {
@@ -707,6 +704,148 @@ static u32 *mtk_dvo_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 	return input_fmts;
 }
 
+/*
+ * A seamless switch reprograms DVO_TGEN_V0's VFP field only, so the whole vtotal
+ * delta is folded onto the front porch the hardware currently has. VSYNC2ACT,
+ * vsync and vactive are left alone, which keeps
+ *
+ *	hw vtotal = old vtotal - old vfp + folded vfp = new vtotal
+ *
+ * as long as the two modes share vactive and vsync_len.
+ */
+static int mtk_dvo_folded_vfp(const struct drm_display_mode *old_mode,
+			      const struct drm_display_mode *new_mode)
+{
+	int hw_vfp = old_mode->vsync_start - old_mode->vdisplay;
+
+	return hw_vfp + new_mode->vtotal - old_mode->vtotal;
+}
+
+static bool mtk_dvo_is_seamless_switch(struct mtk_dvo *dvo,
+				       struct drm_connector *connector,
+				       const struct drm_display_mode *old_mode,
+				       struct drm_crtc_state *crtc_state)
+{
+	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
+	const struct drm_display_info *info = &connector->display_info;
+	int vfp;
+
+	/*
+	 * Only allow a vfp/vbp change. The pixel clock and the mode flags have to
+	 * match too: a seamless switch rewrites DVO_TGEN_V0 alone and never reaches
+	 * clk_set_rate() or mtk_dvo_config_interface(), so a change to either would
+	 * be silently dropped by the hardware.
+	 */
+	if (old_mode->hdisplay    == new_mode->hdisplay &&
+	    old_mode->vdisplay    == new_mode->vdisplay &&
+	    old_mode->htotal      == new_mode->htotal &&
+	    old_mode->hskew       == new_mode->hskew &&
+	    old_mode->hsync_start == new_mode->hsync_start &&
+	    old_mode->hsync_end   == new_mode->hsync_end &&
+	    old_mode->vscan       == new_mode->vscan &&
+	    old_mode->clock       == new_mode->clock &&
+	    old_mode->flags       == new_mode->flags &&
+	    info->monitor_range.min_vfreq != 0 &&
+	    info->monitor_range.max_vfreq != 0 &&
+	    (old_mode->vsync_end - old_mode->vsync_start) ==
+	    (new_mode->vsync_end - new_mode->vsync_start) &&
+	    old_mode->vtotal      != new_mode->vtotal) {
+		/*
+		 * Fall back to a full modeset if the folded front porch does not
+		 * fit DVO_TGEN_V0's field, rather than truncate against the mask.
+		 */
+		vfp = mtk_dvo_folded_vfp(old_mode, new_mode);
+
+		return vfp >= 0 && vfp <= dvo->conf->dimension_mask;
+	}
+
+	return false;
+}
+
+static int mtk_dvo_check_config(struct mtk_dvo *dvo,
+				const struct drm_display_mode *old_mode,
+				struct drm_crtc_state *crtc_state)
+{
+	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
+	struct videomode new_vm = { 0 };
+	struct videomode old_vm = { 0 };
+
+	drm_display_mode_to_videomode(new_mode, &new_vm);
+	drm_display_mode_to_videomode(old_mode, &old_vm);
+
+	/*
+	 * Log the porches the hardware ends up with, not the requested ones: the
+	 * whole vtotal delta is folded onto the front porch, and the back porch
+	 * is left alone because DVO_TGEN_V1 is never rewritten.
+	 */
+	dev_dbg(dvo->dev,
+		"vfp %u -> %d (requested %u), vbp %u kept (requested %u)\n",
+		old_vm.vfront_porch, mtk_dvo_folded_vfp(old_mode, new_mode),
+		new_vm.vfront_porch, old_vm.vback_porch, new_vm.vback_porch);
+
+	return 0;
+}
+
+/*
+ * A refresh rate only change needs no full modeset. Clear mode_changed so the
+ * display pipe keeps running, and let the CRTC take its fast_modeset path,
+ * which reprograms the timing generator through mtk_dvo_update_config().
+ *
+ * The timing the hardware runs is the previously committed adjusted_mode, not
+ * the target mode of the commit that programmed it: a seamless switch folds the
+ * whole vtotal delta onto the front porch. Record that fold in this commit's
+ * adjusted_mode, so the next switch measures its delta against a front porch
+ * the hardware really has and .atomic_begin is left with nothing to do but
+ * write the register.
+ */
+static int mtk_dvo_check_seamless_switch(struct mtk_dvo *dvo,
+					 struct drm_crtc_state *crtc_state,
+					 struct drm_connector_state *conn_state)
+{
+	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
+	struct drm_connector *connector = conn_state->connector;
+	struct drm_crtc_state *old_crtc_state;
+	const struct drm_display_mode *old_mode;
+	int vsync_len, vfp, ret;
+
+	if (!crtc_state->crtc || !connector ||
+	    connector->connector_type != DRM_MODE_CONNECTOR_eDP)
+		return 0;
+
+	if (!drm_atomic_crtc_needs_modeset(crtc_state))
+		return 0;
+
+	old_crtc_state = drm_atomic_get_old_crtc_state(crtc_state->state,
+						       crtc_state->crtc);
+	if (!old_crtc_state)
+		return 0;
+
+	old_mode = &old_crtc_state->adjusted_mode;
+
+	if (!mtk_dvo_is_seamless_switch(dvo, connector, old_mode, crtc_state))
+		return 0;
+
+	ret = mtk_dvo_check_config(dvo, old_mode, crtc_state);
+	if (ret)
+		return ret;
+
+	/*
+	 * Only fold once the CRTC has actually accepted the fast path. If the
+	 * modeset was needed for another reason - a DPMS cycle sets
+	 * active_changed - mode_changed goes back up and the full modeset
+	 * programs adjusted_mode verbatim, which must stay the target mode.
+	 */
+	if (!mtk_crtc_check_fast_modeset(old_crtc_state, crtc_state))
+		return 0;
+
+	vfp = mtk_dvo_folded_vfp(old_mode, new_mode);
+	vsync_len = new_mode->vsync_end - new_mode->vsync_start;
+	new_mode->vsync_start = new_mode->vdisplay + vfp;
+	new_mode->vsync_end = new_mode->vsync_start + vsync_len;
+
+	return 0;
+}
+
 static int mtk_dvo_bridge_atomic_check(struct drm_bridge *bridge,
 				       struct drm_bridge_state *bridge_state,
 				       struct drm_crtc_state *crtc_state,
@@ -734,7 +873,7 @@ static int mtk_dvo_bridge_atomic_check(struct drm_bridge *bridge,
 	else
 		dvo->color_format = MTK_DVO_COLOR_FORMAT_RGB;
 
-	return 0;
+	return mtk_dvo_check_seamless_switch(dvo, crtc_state, conn_state);
 }
 
 static int mtk_dvo_bridge_attach(struct drm_bridge *bridge,
@@ -770,11 +909,23 @@ static void mtk_dvo_bridge_disable(struct drm_bridge *bridge)
 static void mtk_dvo_bridge_enable(struct drm_bridge *bridge)
 {
 	struct mtk_dvo *dvo = bridge_to_dvo(bridge);
+	struct drm_crtc *crtc = bridge->encoder ? bridge->encoder->crtc : NULL;
+	struct drm_display_mode *mode = &dvo->mode;
+
+	/*
+	 * A seamless switch leaves mode_changed clear, so .mode_set - the only
+	 * writer of dvo->mode - does not run and dvo->mode no longer describes
+	 * the running timing. crtc_set_mode() skips .mode_set for a DPMS cycle
+	 * too, because that only sets active_changed, so reprogramming from
+	 * dvo->mode here would resurrect the pre-switch refresh rate. The
+	 * committed adjusted_mode is the timing that was really programmed.
+	 */
+	if (crtc && crtc->state)
+		mode = &crtc->state->adjusted_mode;
 
 	mtk_dvo_power_on(dvo);
-	mtk_dvo_set_display_mode(dvo, &dvo->mode);
+	mtk_dvo_set_display_mode(dvo, mode);
 	mtk_dvo_enable(dvo);
-
 }
 
 static enum drm_mode_status
@@ -835,87 +986,25 @@ unsigned int mtk_dvo_encoder_index(struct device *dev)
 	return encoder_index;
 }
 
-static bool mtk_dvo_is_seamless_switch(struct drm_encoder *encoder,
-				       struct drm_connector *connector,
-				       struct drm_crtc_state *crtc_state)
+/*
+ * Called from the CRTC's .atomic_begin on the fast_modeset path. Everything has
+ * been decided in mtk_dvo_check_seamless_switch(), which folded the vtotal delta
+ * onto the front porch and stored the result in adjusted_mode, so this only
+ * touches hardware. A vbp change is absorbed into VFP too, so DVO_TGEN_V1 stays
+ * untouched.
+ */
+void mtk_dvo_update_config(struct device *dev,
+			   struct drm_crtc_state *crtc_state,
+			   struct cmdq_pkt *cmdq_pkt)
 {
-	struct mtk_dvo *dvo = encoder_to_dvo(encoder);
-	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
-	struct drm_display_mode *old_mode = &dvo->mode;
-	const struct drm_display_info *info = &connector->display_info;
-
-	/* Only allow vfp/vbp change */
-	if (old_mode->hdisplay    == new_mode->hdisplay &&
-	    old_mode->vdisplay    == new_mode->vdisplay &&
-	    old_mode->htotal      == new_mode->htotal &&
-	    old_mode->hskew       == new_mode->hskew &&
-	    old_mode->hsync_start == new_mode->hsync_start &&
-	    old_mode->hsync_end   == new_mode->hsync_end &&
-	    old_mode->vscan       == new_mode->vscan &&
-	    info->monitor_range.min_vfreq != 0 &&
-	    info->monitor_range.max_vfreq != 0 &&
-	    (old_mode->vsync_end - old_mode->vsync_start) ==
-	    (new_mode->vsync_end - new_mode->vsync_start) &&
-	    ((old_mode->vtotal      != new_mode->vtotal) ||
-	     (old_mode->clock      != new_mode->clock)))
-		return true;
-
-	return false;
-}
-
-static int mtk_dvo_check_config(struct drm_encoder *encoder,
-				struct drm_crtc_state *crtc_state,
-				struct drm_connector_state *conn_state)
-{
-	struct mtk_dvo *dvo = encoder_to_dvo(encoder);
-	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
-	struct videomode new_vm = { 0 };
-	struct videomode old_vm = { 0 };
-
-	drm_display_mode_to_videomode(new_mode, &new_vm);
-	drm_display_mode_to_videomode(&dvo->mode, &old_vm);
-
-	if (new_vm.vfront_porch != old_vm.vfront_porch)
-		dev_dbg(dvo->dev, "Change vfp from %u to %u\n",
-			old_vm.vfront_porch, new_vm.vfront_porch);
-
-	if (new_vm.vback_porch != old_vm.vback_porch)
-		dev_dbg(dvo->dev, "Change vbp from %u to %u\n",
-			old_vm.vback_porch, new_vm.vback_porch);
-
-	return 0;
-}
-
-static int mtk_dvo_update_config(struct drm_encoder *encoder,
-				 struct drm_crtc_state *crtc_state,
-				 void *cmdq_pkt)
-{
-	struct mtk_dvo *dvo = encoder_to_dvo(encoder);
-	struct drm_display_mode *new_mode = &crtc_state->adjusted_mode;
-	struct videomode new_vm = { 0 };
-	struct videomode old_vm = { 0 };
-	int vtotal_diff;
-	int tmp;
-
-	drm_display_mode_to_videomode(new_mode, &new_vm);
-	drm_display_mode_to_videomode(&dvo->mode, &old_vm);
-
-	vtotal_diff = new_mode->vtotal - dvo->mode.vtotal;
-	tmp = (vtotal_diff > 0) ? new_vm.vfront_porch + vtotal_diff : new_vm.vfront_porch;
-
-	if (new_mode->clock != dvo->mode.clock || new_mode->vtotal != dvo->mode.vtotal) {
-		/* A vbp change is absorbed into VFP too, so DVO_TGEN_V1 stays untouched */
-		if (new_vm.vfront_porch != old_vm.vfront_porch ||
-		    new_vm.vback_porch != old_vm.vback_porch) {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-			mtk_ddp_write_mask(cmdq_pkt, tmp << VFP, &dvo->cmdq_reg, dvo->regs,
-					   DVO_TGEN_V0, dvo->conf->dimension_mask << VFP);
-#endif
-		}
-		drm_mode_copy(&dvo->mode, new_mode);
-	}
+	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
+	struct mtk_dvo *dvo = dev_get_drvdata(dev);
+	int vfp = mode->vsync_start - mode->vdisplay;
 
-	return 0;
+	mtk_ddp_write_mask(cmdq_pkt, vfp << VFP, &dvo->cmdq_reg, dvo->regs,
+			   DVO_TGEN_V0, dvo->conf->dimension_mask << VFP);
+#endif
 }
 
 static int mtk_dvo_bind(struct device *dev, struct device *master, void *data)
@@ -926,9 +1015,6 @@ static int mtk_dvo_bind(struct device *dev, struct device *master, void *data)
 	int ret;
 
 	dvo->mmsys_dev = priv->mmsys_dev;
-	dvo->mtk_encoder.compute_config = mtk_dvo_check_config;
-	dvo->mtk_encoder.update_config = mtk_dvo_update_config;
-	dvo->mtk_encoder.is_seamless_switch = mtk_dvo_is_seamless_switch;
 	ret = drm_simple_encoder_init(drm_dev, &dvo->mtk_encoder.encoder,
 				      DRM_MODE_ENCODER_TMDS);
 	if (ret) {

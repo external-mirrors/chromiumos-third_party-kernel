@@ -45,15 +45,6 @@ struct regmap;
 
 struct mtk_encoder {
 	struct drm_encoder encoder;
-	bool (*is_seamless_switch)(struct drm_encoder *encoder,
-				   struct drm_connector *connector,
-				   struct drm_crtc_state *crtc_state);
-	int (*compute_config)(struct drm_encoder *encoder,
-			      struct drm_crtc_state *crtc_state,
-			      struct drm_connector_state *conn_state);
-	int (*update_config)(struct drm_encoder *encoder,
-			     struct drm_crtc_state *crtc_state,
-			     void *cmdq_pkt);
 };
 
 struct mtk_drm_route {

@@ -76,6 +76,9 @@ struct mtk_ddp_comp_funcs {
 	void (*config)(struct device *dev, unsigned int w,
 		       unsigned int h, unsigned int vrefresh,
 		       unsigned int bpc, struct cmdq_pkt *cmdq_pkt);
+	void (*update_config)(struct device *dev,
+			      struct drm_crtc_state *crtc_state,
+			      struct cmdq_pkt *cmdq_pkt);
 	void (*start)(struct device *dev);
 	void (*stop)(struct device *dev);
 	void (*bypass)(struct device *dev, bool bypass, struct cmdq_pkt *cmdq_pkt);

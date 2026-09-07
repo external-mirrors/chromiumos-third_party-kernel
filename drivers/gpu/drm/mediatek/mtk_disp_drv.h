@@ -126,6 +126,9 @@ void mtk_dsi_get_hrt_bw_by_datarate(struct device *dev, unsigned int *bw_base);
 
 void mtk_dvo_start(struct device *dev);
 void mtk_dvo_stop(struct device *dev);
+void mtk_dvo_update_config(struct device *dev,
+			   struct drm_crtc_state *crtc_state,
+			   struct cmdq_pkt *cmdq_pkt);
 void mtk_dvo_get_hrt_bw_by_datarate(struct device *dev, unsigned int *bw_base);
 unsigned int mtk_dvo_encoder_index(struct device *dev);
 

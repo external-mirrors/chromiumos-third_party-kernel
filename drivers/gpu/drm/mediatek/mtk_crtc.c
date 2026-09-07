@@ -1585,14 +1585,12 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 	struct cmdq_pkt *cmdq_handle = NULL;
 
 	if (mtk_crtc_state->fast_modeset) {
-		struct drm_encoder *encoder;
-
 		dev_dbg(crtc->dev->dev, "crtc%d go fast_modeset flow to vrefresh:%d",
 			drm_crtc_index(crtc), drm_mode_vrefresh(&crtc_state->adjusted_mode));
-		drm_for_each_encoder_mask(encoder, crtc->dev, crtc_state->encoder_mask) {
-			struct mtk_encoder *mtk_encoder = to_mtk_encoder(encoder);
+		for (int i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+			struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[i];
 
-			if (!mtk_encoder->update_config)
+			if (!comp->funcs || !comp->funcs->update_config)
 				continue;
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 			if (mtk_crtc->cmdq_client.chan) {
@@ -1603,7 +1601,7 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 				cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
 			}
 #endif
-			mtk_encoder->update_config(encoder, crtc_state, cmdq_handle);
+			comp->funcs->update_config(comp->dev, crtc_state, cmdq_handle);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 			if (cmdq_handle) {
@@ -1804,21 +1802,25 @@ struct device *mtk_crtc_dma_dev_get(struct drm_crtc *crtc)
 	return mtk_crtc->dma_dev;
 }
 
-void mtk_crtc_check_fast_modeset(struct drm_crtc_state *old_crtc_state,
+bool mtk_crtc_check_fast_modeset(struct drm_crtc_state *old_crtc_state,
 				 struct drm_crtc_state *new_crtc_state)
 {
 	struct mtk_crtc_state *new_mtk_state;
 
 	if (!old_crtc_state || !new_crtc_state)
-		return;
+		return false;
 
 	new_mtk_state = to_mtk_crtc_state(new_crtc_state);
 	new_crtc_state->mode_changed = false;
 
-	if (!drm_atomic_crtc_needs_modeset(new_crtc_state))
+	if (!drm_atomic_crtc_needs_modeset(new_crtc_state)) {
 		new_mtk_state->fast_modeset = true;
-	else
-		new_crtc_state->mode_changed = true;
+		return true;
+	}
+
+	new_crtc_state->mode_changed = true;
+
+	return false;
 }
 
 int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)

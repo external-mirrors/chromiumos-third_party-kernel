@@ -338,6 +338,7 @@ static const struct mtk_ddp_comp_funcs ddp_dsi = {
 };
 
 static const struct mtk_ddp_comp_funcs ddp_dvo = {
+	.update_config = mtk_dvo_update_config,
 	.start = mtk_dvo_start,
 	.stop = mtk_dvo_stop,
 	.get_hrt_bw_by_datarate = mtk_dvo_get_hrt_bw_by_datarate,
