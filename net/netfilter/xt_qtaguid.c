@@ -733,6 +733,25 @@ done:
 	return iface_entry;
 }
 
+/* Find the entry for tracking the specified net_device.
+ * Caller must hold iface_stat_list_lock
+ */
+static struct iface_stat *get_iface_entry_by_dev(const struct net_device *dev)
+{
+	struct qtaguid_net *qtaguid_net;
+	struct iface_stat *iface_entry;
+
+	if (!dev)
+		return NULL;
+
+	qtaguid_net = qtaguid_pernet(dev_net(dev));
+	list_for_each_entry(iface_entry, &qtaguid_net->iface_stat_list, list) {
+		if (iface_entry->net_dev == dev)
+			return iface_entry;
+	}
+	return NULL;
+}
+
 /* This is for fmt2 only */
 static void pp_iface_stat_header(struct seq_file *m)
 {
@@ -869,16 +888,28 @@ static const struct proc_ops read_bool_fops = {
 	.proc_lseek	= default_llseek,
 };
 
+static DEFINE_MUTEX(iface_proc_lock);
+
 static void iface_create_proc_worker(struct work_struct *work)
 {
 	struct proc_dir_entry *proc_entry;
-	struct iface_stat_work *isw = container_of(work, struct iface_stat_work,
-						   iface_work);
-	struct qtaguid_net *qtaguid_net = qtaguid_pernet(dev_net(isw->net_dev));
-	struct iface_stat *new_iface  = isw->iface_entry;
+	struct iface_stat *new_iface =
+		container_of(work, struct iface_stat, iface_work);
+	struct qtaguid_net *qtaguid_net = qtaguid_pernet(new_iface->net);
+	char ifname[IFNAMSIZ];
+
+	mutex_lock(&iface_proc_lock);
+	spin_lock_bh(&qtaguid_net->iface_stat_list_lock);
+	strscpy(ifname, new_iface->ifname, sizeof(ifname));
+	spin_unlock_bh(&qtaguid_net->iface_stat_list_lock);
+
+	if (new_iface->proc_ptr) {
+		proc_remove(new_iface->proc_ptr);
+		new_iface->proc_ptr = NULL;
+	}
 
 	/* iface_entries are not deleted, so safe to manipulate. */
-	proc_entry = proc_mkdir(new_iface->ifname,
+	proc_entry = proc_mkdir(ifname,
 				qtaguid_net->iface_stat_procdir);
 	if (IS_ERR_OR_NULL(proc_entry)) {
 		pr_err("qtaguid: iface_stat: create_proc(): alloc failed.\n");
@@ -902,27 +933,20 @@ static void iface_create_proc_worker(struct work_struct *work)
 	proc_create_data("active", proc_iface_perms, proc_entry,
 			 &read_bool_fops, &new_iface->active);
 
-	IF_DEBUG("qtaguid: iface_stat: create_proc(): done "
-		 "entry=%p dev=%s\n", new_iface, new_iface->ifname);
+	IF_DEBUG("qtaguid: iface_stat: create_proc(): done entry=%p dev=%s\n",
+		 new_iface, ifname);
 abort:
-	dev_put(isw->net_dev);
-	kfree(isw);
+	mutex_unlock(&iface_proc_lock);
 }
 
-static void iface_delete_proc(struct qtaguid_net *qtaguid_net,
-			      struct iface_stat *iface_entry)
+static void iface_delete_proc(struct iface_stat *iface_entry)
 {
-	struct proc_dir_entry *proc_entry = iface_entry->proc_ptr;
-
-	if (!proc_entry)
-		return;
-
-	remove_proc_entry("active", proc_entry);
-	remove_proc_entry("rx_packets", proc_entry);
-	remove_proc_entry("tx_packets", proc_entry);
-	remove_proc_entry("rx_bytes", proc_entry);
-	remove_proc_entry("tx_bytes", proc_entry);
-	remove_proc_entry(iface_entry->ifname, qtaguid_net->iface_stat_procdir);
+	mutex_lock(&iface_proc_lock);
+	if (iface_entry->proc_ptr) {
+		proc_remove(iface_entry->proc_ptr);
+		iface_entry->proc_ptr = NULL;
+	}
+	mutex_unlock(&iface_proc_lock);
 }
 
 /*
@@ -965,7 +989,6 @@ static struct iface_stat *iface_alloc(struct net_device *net_dev)
 {
 	struct qtaguid_net *qtaguid_net = qtaguid_pernet(dev_net(net_dev));
 	struct iface_stat *new_iface;
-	struct iface_stat_work *isw;
 
 	new_iface = kzalloc(sizeof(*new_iface), GFP_ATOMIC);
 	if (new_iface == NULL) {
@@ -988,20 +1011,9 @@ static struct iface_stat *iface_alloc(struct net_device *net_dev)
 	 * ipv6 notifier chains are atomic :(
 	 * No create_proc_read_entry() for you!
 	 */
-	isw = kmalloc(sizeof(*isw), GFP_ATOMIC);
-	if (!isw) {
-		pr_err("qtaguid: iface_stat: create(%s): "
-		       "work alloc failed\n", new_iface->ifname);
-		_iface_stat_set_active(new_iface, net_dev, false);
-		kfree(new_iface->ifname);
-		kfree(new_iface);
-		return NULL;
-	}
-	isw->iface_entry = new_iface;
-	dev_hold(net_dev);
-	isw->net_dev = net_dev;
-	INIT_WORK(&isw->iface_work, iface_create_proc_worker);
-	schedule_work(&isw->iface_work);
+	new_iface->net = dev_net(net_dev);
+	INIT_WORK(&new_iface->iface_work, iface_create_proc_worker);
+	schedule_work(&new_iface->iface_work);
 	list_add(&new_iface->list, &qtaguid_net->iface_stat_list);
 	return new_iface;
 }
@@ -1282,6 +1294,47 @@ static void iface_stat_update(struct net_device *net_dev, bool stash_only)
 	spin_unlock_bh(&qtaguid_net->iface_stat_list_lock);
 }
 
+static void iface_stat_rename(struct net_device *net_dev)
+{
+	struct qtaguid_net *qtaguid_net = qtaguid_pernet(dev_net(net_dev));
+	struct iface_stat *entry, *existing;
+	char *new_name;
+
+	spin_lock_bh(&qtaguid_net->iface_stat_list_lock);
+	entry = get_iface_entry_by_dev(net_dev);
+	if (!entry)
+		goto unlock;
+
+	existing = get_iface_entry(qtaguid_net, net_dev->name);
+	if (existing) {
+		if (existing != entry) {
+			/* _iface_stat_set_active(..., false) clears
+			 * entry->net_dev and leaves entry inactive
+			 * with its historical stats for the old name.
+			 */
+			entry->last_known_valid = false;
+			_iface_stat_set_active(entry, net_dev, false);
+			iface_check_stats_reset_and_adjust(net_dev, existing);
+			_iface_stat_set_active(existing, net_dev, true);
+		}
+		goto unlock;
+	}
+
+	new_name = kstrdup(net_dev->name, GFP_ATOMIC);
+	if (new_name) {
+		kfree(entry->ifname);
+		entry->ifname = new_name;
+		schedule_work(&entry->iface_work);
+	} else {
+		pr_warn("qtaguid: iface_stat: rename(%s): alloc failed\n",
+			net_dev->name);
+		entry->last_known_valid = false;
+		_iface_stat_set_active(entry, net_dev, false);
+	}
+unlock:
+	spin_unlock_bh(&qtaguid_net->iface_stat_list_lock);
+}
+
 /* Guarantied to return a net_device that has a name */
 static void get_dev_and_dir(const struct sk_buff *skb,
 			    struct xt_action_param *par,
@@ -1510,6 +1563,10 @@ static int iface_netdev_event_handler(struct notifier_block *nb,
 		 event, netdev_evt_str(event), dev, dev ? dev->name : "");
 
 	switch (event) {
+	case NETDEV_CHANGENAME:
+		iface_stat_rename(dev);
+		atomic64_inc(&qtaguid_net->qtu_events.iface_events);
+		break;
 	case NETDEV_UP:
 		iface_stat_create(dev, NULL);
 		atomic64_inc(&qtaguid_net->qtu_events.iface_events);
@@ -3229,7 +3286,8 @@ static void __net_exit qtaguid_net_exit(struct net *net)
 
 	list_for_each_entry_safe(iface_entry, tmp,
 				 &qtaguid_net->iface_stat_list, list) {
-		iface_delete_proc(qtaguid_net, iface_entry);
+		cancel_work_sync(&iface_entry->iface_work);
+		iface_delete_proc(iface_entry);
 		tag_stat_tree_erase(&iface_entry->tag_stat_tree);
 		kfree(iface_entry->ifname);
 		kfree(iface_entry);

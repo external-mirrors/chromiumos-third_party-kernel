@@ -237,16 +237,11 @@ struct iface_stat {
 	bool last_known_valid;
 
 	struct proc_dir_entry *proc_ptr;
+	struct work_struct iface_work;
+	struct net *net;
 
 	struct rb_root tag_stat_tree;
 	spinlock_t tag_stat_list_lock;
-};
-
-/* This is needed to create proc_dir_entries from atomic context. */
-struct iface_stat_work {
-	struct work_struct iface_work;
-	struct iface_stat *iface_entry;
-	struct net_device *net_dev;
 };
 
 /*
