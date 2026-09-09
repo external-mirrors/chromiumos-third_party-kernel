@@ -1069,6 +1069,12 @@ static int _mdw_cmd_run_stale_wait(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 		goto out_put;
 	}
 
+	if (c != idr_find(&mpriv->cmds, c->id)) {
+		/* cmd object deleted or replaced when we dropped the lock */
+		ret = -ENOENT;
+		goto out_put;
+	}
+
 	/* extra reference left to caller to put */
 	return 1;
 
