@@ -1088,6 +1088,7 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 {
 	struct mdw_cmd_in *in = (struct mdw_cmd_in *)args;
 	struct mdw_cmd *c = NULL, *priv_c = NULL;
+	bool cmd_created = false;
 	int ret = 0, is_running = 0;
 
 	mdw_trace_begin("apumdw:user_run");
@@ -1126,6 +1127,8 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 			ret = PTR_ERR(c);
 			goto out;
 		}
+
+		cmd_created = true;
 	}
 
 	if (in->op == MDW_CMD_IOCTL_ENQ) {
@@ -1138,7 +1141,7 @@ static int mdw_cmd_ioctl_run_v4(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 	}
 
 	ret = _mdw_cmd_ioctl_exec(mpriv, c, args);
-	if (ret)
+	if (ret && cmd_created)
 		_mdw_cmd_ioctl_del(mpriv, c);
 
 	/* put cmd execution ref when stale cmd wait */
