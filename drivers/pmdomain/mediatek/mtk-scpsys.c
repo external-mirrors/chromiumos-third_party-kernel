@@ -266,6 +266,7 @@ struct scp_subdomain {
 typedef int (*scp_soc_pre_probe_fn)(struct platform_device *pdev);
 typedef int (*scp_soc_post_probe_fn)(struct platform_device *pdev,
 		struct scp *scp);
+typedef void (*scp_soc_override_domains_fn)(struct scp *scp);
 
 struct scp_soc_data {
 	const struct scp_domain_data *domains;
@@ -277,6 +278,11 @@ struct scp_soc_data {
 	const char **bp_list;
 	int num_bp;
 	scp_soc_pre_probe_fn pre_probe;
+	/*
+	 * Optional callback to let the SoC override default domain data
+	 * (scp->domains[i].data) after allocation but before genpd setup.
+	 */
+	scp_soc_override_domains_fn override_domains;
 	scp_soc_post_probe_fn post_probe;
 };
 
@@ -1178,6 +1184,17 @@ struct scp *init_scp(struct platform_device *pdev, const struct scp_soc_data *so
 	if (!scp->domains)
 		return ERR_PTR(-ENOMEM);
 
+	for (i = 0; i < soc->num_domains; i++) {
+		struct scp_domain *scpd = &scp->domains[i];
+		const struct scp_domain_data *data = &soc->domains[i];
+
+		scpd->scp = scp;
+		scpd->data = data;
+	}
+
+	if (soc->override_domains)
+		soc->override_domains(scp);
+
 	pd_data = &scp->pd_data;
 
 	pd_data->domains = devm_kcalloc(&pdev->dev,
@@ -1210,7 +1227,7 @@ struct scp *init_scp(struct platform_device *pdev, const struct scp_soc_data *so
 
 	for (i = 0; i < soc->num_domains; i++) {
 		struct scp_domain *scpd = &scp->domains[i];
-		const struct scp_domain_data *data = &soc->domains[i];
+		const struct scp_domain_data *data = scpd->data;
 
 		scpd->supply = devm_regulator_get_optional(&pdev->dev, data->name);
 		if (IS_ERR(scpd->supply)) {
@@ -1228,12 +1245,9 @@ struct scp *init_scp(struct platform_device *pdev, const struct scp_soc_data *so
 	for (i = 0; i < soc->num_domains; i++) {
 		struct scp_domain *scpd = &scp->domains[i];
 		struct generic_pm_domain *genpd = &scpd->genpd;
-		const struct scp_domain_data *data = &soc->domains[i];
+		const struct scp_domain_data *data = scpd->data;
 
 		pd_data->domains[i] = genpd;
-		scpd->scp = scp;
-
-		scpd->data = data;
 
 		for (j = 0; j < MAX_CLKS && data->clk_id[j]; j++) {
 			struct clk *c = clk[data->clk_id[j]];
@@ -2333,6 +2347,46 @@ static const struct scp_domain_data scp_domain_mt8196_mmpc_hwv_data[] = {
 	},
 };
 
+/*
+ * DSI PHY1 and DSI PHY2 can either be voted on through the HW CCF, as
+ * described by scp_domain_mt8196_mmpc_hwv_data[], or be driven directly
+ * through their MMPC PWR_CON register. Firmware clears the per-PHY
+ * MTCMOS_SEL_GP0 bit of every DSI PHY it keeps under software control.
+ *
+ * Indexed by DSI PHY number.
+ */
+static const struct scp_domain_data mt8196_dsi_phy_sw_data[] = {
+	/* DSI PHY0 is always voted on, it has no software description. */
+	[0] = {
+		.name = "dsi-phy0",
+	},
+	[1] = {
+		.name = "dsi-phy1",
+		.ctl_offs = MT8196_MM_DSI_PHY1_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[2] = {
+		.name = "dsi-phy2",
+		.ctl_offs = MT8196_MM_DSI_PHY2_PWR_CON,
+		.caps = MTK_SCPD_IS_PWR_CON_ON,
+	},
+};
+
+static void mt8196_mmpc_override_domains(struct scp *scp)
+{
+	u32 sel = readl(scp->base + MT8196_MM_MTCMOS_SEL_GP0);
+
+	if (!(sel & MT8196_MM_MTCMOS_SEL_DSI_PHY1)) {
+		scp->domains[MT8196_POWER_DOMAIN_DSI_PHY1].data = &mt8196_dsi_phy_sw_data[1];
+		dev_info(scp->dev, "dsi-phy1: software MTCMOS control\n");
+	}
+
+	if (!(sel & MT8196_MM_MTCMOS_SEL_DSI_PHY2)) {
+		scp->domains[MT8196_POWER_DOMAIN_DSI_PHY2].data = &mt8196_dsi_phy_sw_data[2];
+		dev_info(scp->dev, "dsi-phy2: software MTCMOS control\n");
+	}
+}
+
 static const struct scp_subdomain scp_subdomain_mt8196_mmpc[] = {
 	{MT8196_POWER_DOMAIN_VDE_VCORE0, MT8196_POWER_DOMAIN_VDE0},
 	{MT8196_POWER_DOMAIN_VDE_VCORE0, MT8196_POWER_DOMAIN_VDE1},
@@ -2477,6 +2531,7 @@ static const struct scp_soc_data mt8196_mmpc_hwv_data = {
 	.bp_list = mt8196_mmpc_bp_list,
 	.num_bp = MT8196_MMPC_BP_NR,
 	.pre_probe = mt8196_mmpc_pre_probe,
+	.override_domains = mt8196_mmpc_override_domains,
 	.post_probe = mt8196_mmpc_post_probe,
 };
 
