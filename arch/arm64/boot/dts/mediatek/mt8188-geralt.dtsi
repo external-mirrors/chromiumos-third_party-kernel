@@ -205,7 +205,7 @@
 
 		scp_mem_reserved: scp-mem-region {
 			compatible = "shared-dma-pool";
-			reg = <0 0x50000000 0 0x800000>;
+			reg = <0 0x50000000 0 0x900000>;
 			no-map;
 		};
 
