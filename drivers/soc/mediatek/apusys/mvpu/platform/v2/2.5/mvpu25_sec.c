@@ -550,6 +550,8 @@ int mvpu25_update_hash_pool(void *session,
 	uint32_t cnt = 0;
 	uint32_t buf_size = 0;
 	uint32_t buf_ofst = 0;
+	uint64_t pool_size_acc = 0;
+	uint32_t pool_end_iova = 0;
 	void *p_buf;
 	void *cp_buff;
 	void *buf_kva;
@@ -577,26 +579,31 @@ int mvpu25_update_hash_pool(void *session,
 		return -1;
 	}
 
-	// count buf size
+	// count buf size, accumulate in u64 so sec_buf_size[] cannot wrap the total
 	for (cnt = 0; cnt < hash_pool[session_id]->buf_num[hash_id]; cnt++) {
 		if (sec_buf_attr[cnt] != BUF_IO) {
-			buf_size = sec_buf_size[cnt];
-
 			// alignment
-			buf_size =
-				(((buf_size) + MVPU_ADDR_ALIGN - 1)
+			pool_size_acc +=
+				(((u64)sec_buf_size[cnt] + MVPU_ADDR_ALIGN - 1)
 					/MVPU_ADDR_ALIGN)
 					*MVPU_ADDR_ALIGN;
-			hash_pool[session_id]->hash_pool_size[hash_id] += buf_size;
 		}
 	}
 
 	// set MPU region size
-	hash_pool[session_id]->hash_pool_size[hash_id] =
-		(((hash_pool[session_id]->hash_pool_size[hash_id])
-			+ MVPU_MPU_SIZE - 1)
+	pool_size_acc =
+		((pool_size_acc + MVPU_MPU_SIZE - 1)
 			/MVPU_MPU_SIZE)
 			*MVPU_MPU_SIZE;
+
+	// hash_pool_size[] is u32, reject before truncation
+	if (pool_size_acc == 0 || pool_size_acc > U32_MAX) {
+		pr_err("[MVPU][Sec] hash pool size out of range: 0x%llx\n",
+			(unsigned long long)pool_size_acc);
+		return -EINVAL;
+	}
+
+	hash_pool[session_id]->hash_pool_size[hash_id] = (uint32_t)pool_size_acc;
 
 	hash_pool[session_id]->hash_dma_buf[hash_id] =
 		dma_heap_buffer_alloc(hash_pool[session_id]->dma_heap[hash_id],
@@ -637,6 +644,16 @@ int mvpu25_update_hash_pool(void *session,
 	// get iova
 	hash_pool[session_id]->hash_base_iova[hash_id] =
 		(uint32_t)sg_dma_address(hash_pool[session_id]->sgt[hash_id]->sgl);
+
+	// mvpu25_update_mpu() computes base + size in the u32 mpu_seg[]
+	if (check_add_overflow(hash_pool[session_id]->hash_base_iova[hash_id],
+			       hash_pool[session_id]->hash_pool_size[hash_id],
+			       &pool_end_iova)) {
+		pr_err("[MVPU][Sec] pool end overflows 32-bit iova: base 0x%08x, size 0x%08x\n",
+			hash_pool[session_id]->hash_base_iova[hash_id],
+			hash_pool[session_id]->hash_pool_size[hash_id]);
+		return -EINVAL;
+	}
 
 	if (mvpu_loglvl_sec >= APUSYS_MVPU_LOG_DBG) {
 		pr_info("[MVPU][Sec] hash_base_iova 0x%08x\n",
@@ -742,13 +759,16 @@ int mvpu25_update_hash_pool(void *session,
 			}
 
 			if (copy_to_pool) {
-				if (buf_size < UINT_MAX) {
-					memcpy(cp_buff, buf_kva, buf_size);
-				} else {
-					pr_info("[MVPU][Sec] buf_size error\n");
+				if ((u64)buf_ofst + buf_size >
+					hash_pool[session_id]->hash_pool_size[hash_id]) {
+					pr_err("[MVPU][Sec] buf[%d] out of pool bounds: ofst 0x%x, size 0x%x, pool_size 0x%x\n",
+						cnt, buf_ofst, buf_size,
+						hash_pool[session_id]->hash_pool_size[hash_id]);
 					ret = -EINVAL;
 					goto out_unmap;
 				}
+
+				memcpy(cp_buff, buf_kva, buf_size);
 
 				//alignment
 				buf_size = (((buf_size) + MVPU_ADDR_ALIGN - 1)

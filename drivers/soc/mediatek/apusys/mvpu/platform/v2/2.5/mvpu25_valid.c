@@ -332,6 +332,16 @@ int mvpu25_validation(void *hnd)
 						buf_cmd_kreg = i;
 						buf_cmd_next = i + 1;
 					}
+					// skips the integrity check below, but
+					// mvpu25_update_hash_pool() still copies
+					// sec_buf_size[i] bytes out of this cmdbuf
+					if (sec_buf_size[i] >
+						cmdbuf[MVPU_CMD_KREG_BASE_IDX].size) {
+						pr_info("[MVPU][Sec] buf[%3d]: size 0x%08x exceeds kreg cmdbuf 0x%08x\n",
+							i, sec_buf_size[i],
+							cmdbuf[MVPU_CMD_KREG_BASE_IDX].size);
+						buf_int_check_pass = 0;
+					}
 				}
 				continue;
 			}
