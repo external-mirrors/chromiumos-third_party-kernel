@@ -62,9 +62,9 @@ static int restricted_heap_attach(struct dma_buf *dmabuf, struct dma_buf_attachm
 		return -ENOMEM;
 
 	table = sg_dup_table(&restricted_buf->sg_table);
-	if (!table) {
+	if (IS_ERR(table)) {
 		kfree(a);
-		return -ENOMEM;
+		return PTR_ERR(table);
 	}
 
 	a->table = table;
