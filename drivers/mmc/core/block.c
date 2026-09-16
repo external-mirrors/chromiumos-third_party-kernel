@@ -1464,6 +1464,11 @@ static void mmc_blk_cqe_complete_rq(struct mmc_queue *mq, struct request *req)
 				mqrq->flags |= MQRQ_XFER_SINGLE_BLOCK;
 			blk_mq_requeue_request(req, true);
 		} else {
+			pr_emerg("MMC_DUMP: CQE recovery retries exhausted for %s transaction.\n",
+				 rq_data_dir(req) == WRITE ? "WRITE" : "READ");
+			mmc_capture_snapshot(mq->card);
+			mmc_panic_dump_regs(mq->card);
+
 			blk_mq_end_request(req, BLK_STS_IOERR);
 		}
 	} else if (mrq->data) {
@@ -1744,6 +1749,9 @@ static void mmc_blk_read_single(struct mmc_queue *mq, struct request *req)
 	return;
 
 error_exit:
+	mmc_capture_snapshot(card);
+	mmc_panic_dump_regs(card);
+
 	mrq->data->bytes_xfered = 0;
 	blk_update_request(req, BLK_STS_IOERR, bytes_per_read);
 	/* Let it try the remaining request again */
