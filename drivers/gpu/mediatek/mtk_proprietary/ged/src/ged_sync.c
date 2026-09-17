@@ -431,6 +431,11 @@ int ged_bridge_create_timeline(
 	struct sync_timeline *obj;
 	int timeline_fd = -1;
 
+	if (!string_is_terminated(in->name, sizeof(in->name))) {
+		GED_LOGE("Name not NUL-terminated\n");
+		return -1;
+	}
+
 	obj = sync_timeline_create(in->name);
 
 	if (!obj) {
