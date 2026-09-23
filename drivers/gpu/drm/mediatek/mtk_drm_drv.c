@@ -44,47 +44,25 @@
  * mtk_atomic_commit_tail - Custom atomic commit tail for MediaTek DRM
  * @state: atomic state
  *
- * This function extends the standard atomic commit tail to wait for CMDQ
- * (GCE) completion. The standard drm_atomic_helper_wait_for_vblanks() only
- * waits for one vblank interrupt, but CMDQ may take more than 1 vblank to
- * complete hardware updates. We must wait for CMDQ callback before marking
- * hardware as done to prevent EBUSY errors on subsequent pageflips.
+ * Like drm_atomic_helper_commit_tail_rpm(), but waits for flip_done instead of
+ * vblanks. With CMDQ, flip_done is signaled from ddp_cmdq_cb() after GCE
+ * execution completes. Waiting on it ensures:
+ * 1. Old framebuffers are retained until GCE finishes applying the new config.
+ * 2. Blocking commits do not return early, preventing subsequent nonblocking
+ *    commits from hitting -EBUSY in stall_checks().
  */
 static void mtk_atomic_commit_tail(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
-	struct drm_crtc *crtc;
-	struct drm_crtc_state *new_crtc_state;
-	int i;
 
-	/* Standard atomic commit sequence */
 	drm_atomic_helper_commit_modeset_disables(dev, state);
 	drm_atomic_helper_commit_modeset_enables(dev, state);
 	drm_atomic_helper_commit_planes(dev, state,
 					DRM_PLANE_COMMIT_ACTIVE_ONLY);
 
-	/* Wait for one vblank (standard behavior) */
-	drm_atomic_helper_wait_for_vblanks(dev, state);
-
-#if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	/*
-	 * MTK-specific: Wait for CMDQ completion
-	 * CMDQ executes asynchronously on GCE hardware and may take multiple
-	 * vblanks to complete. We must wait for the callback before declaring
-	 * hardware done.
-	 */
-	for_each_new_crtc_in_state(state, crtc, new_crtc_state, i)
-		mtk_crtc_atomic_commit_complete(crtc);
-#endif
-
-	/*
-	 * Mark hardware as done only after CMDQ completion.
-	 * This ensures subsequent operations won't see stale busy state.
-	 * Must be called before cleanup_planes as it's unsafe to touch
-	 * new_crtc_state after hw_done.
-	 */
+	drm_atomic_helper_fake_vblank(state);
 	drm_atomic_helper_commit_hw_done(state);
-
+	drm_atomic_helper_wait_for_flip_done(dev, state);
 	drm_atomic_helper_cleanup_planes(dev, state);
 }
 
