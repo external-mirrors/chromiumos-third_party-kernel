@@ -337,23 +337,6 @@ put:
 	}
 }
 
-static void __cam_isp_ctx_dequeue_request(struct cam_context *ctx,
-	struct cam_ctx_request *req)
-{
-	struct cam_ctx_request           *req_current;
-	struct cam_ctx_request           *req_prev;
-
-	spin_lock_bh(&ctx->lock);
-	list_for_each_entry_safe_reverse(req_current, req_prev,
-		&ctx->pending_req_list, list) {
-		if (req->request_id == req_current->request_id) {
-			list_del_init(&req_current->list);
-			break;
-		}
-	}
-	spin_unlock_bh(&ctx->lock);
-}
-
 static int __cam_isp_ctx_enqueue_request_in_order(
 	struct cam_context *ctx, struct cam_ctx_request *req)
 {
@@ -3496,13 +3479,22 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 			add_req.dev_hdl  = ctx->dev_hdl;
 			add_req.req_id   = req->request_id;
 			add_req.skip_before_applying = 0;
-			__cam_isp_ctx_enqueue_request_in_order(ctx, req);
+			/*
+			 * Hand the request to the CRM before publishing
+			 * it to pending_req_list: ctx->lock is not held
+			 * across add_req(), and the hw error tasklet
+			 * drains pending_req_list holding ctx->lock
+			 * only, so a request visible there can be freed
+			 * behind our back. The request cannot be applied
+			 * too early either, as the CRM apply path takes
+			 * ctx->ctx_mutex, held by our caller.
+			 */
 			rc = ctx->ctx_crm_intf->add_req(&add_req);
-			if (rc) {
+			if (rc)
 				CAM_ERR(CAM_ISP, "Add req failed: req id=%llu",
 					req->request_id);
-				__cam_isp_ctx_dequeue_request(ctx, req);
-			}
+			else
+				__cam_isp_ctx_enqueue_request_in_order(ctx, req);
 		} else {
 			rc = -EINVAL;
 			CAM_ERR(CAM_ISP, "Received Update in wrong state");
@@ -3530,6 +3522,7 @@ free_cpu_buf:
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 free_req:
 	cam_common_mem_free(packet_local);
+	req->pf_data.packet = NULL;
 	spin_lock_bh(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
 	spin_unlock_bh(&ctx->lock);
