@@ -217,6 +217,13 @@ int cam_mem_get_cpu_buf(int32_t buf_handle, uintptr_t *vaddr_ptr, size_t *len)
 		goto end;
 	}
 
+	if (tbl->bufq[idx].smmu_mapping_client != CAM_SMMU_MAPPING_USER) {
+		CAM_ERR(CAM_MEM, "idx: %d Invalid client %d",
+			idx, tbl->bufq[idx].smmu_mapping_client);
+		rc = -EINVAL;
+		goto end;
+	}
+
 	/* Sync from the device to main memory */
 	rc = dma_buf_begin_cpu_access(tbl->bufq[idx].dma_buf, DMA_FROM_DEVICE);
 	if (rc)
@@ -774,6 +781,13 @@ void cam_mem_put_cpu_buf(int32_t buf_handle)
 	if (buf_handle != tbl->bufq[idx].buf_handle) {
 		CAM_ERR(CAM_MEM, "idx: %d Invalid buf handle %d",
 				idx, buf_handle);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	if (tbl->bufq[idx].smmu_mapping_client != CAM_SMMU_MAPPING_USER) {
+		CAM_ERR(CAM_MEM, "idx: %d Invalid client %d",
+			idx, tbl->bufq[idx].smmu_mapping_client);
 		rc = -EINVAL;
 		goto end;
 	}
