@@ -433,8 +433,18 @@ static int mtk_dip_hw_flush_pipe_jobs(struct mtk_dip_pipe *pipe)
 	unsigned long flags;
 
 	spin_lock_irqsave(&pipe->job_lock, flags);
+	/*
+	 * The jobs that are still pending have not been handed to the HW, so
+	 * the driver does not hold a reference on them: they are kept alive
+	 * by the V4L2 core until the request is re-queued or freed. Unlinking
+	 * them from the list is enough here, their buffers are returned by
+	 * mtk_dip_return_all_buffers() during stop_streaming().
+	 */
+	list_for_each_entry_safe(req, next, &pipe->pipe_job_pending_list, list)
+		list_del_init(&req->list);
 	list_splice_init(&pipe->pipe_job_running_list, &job_list);
 	pipe->num_jobs = 0;
+	pipe->num_pending_jobs = 0;
 	spin_unlock_irqrestore(&pipe->job_lock, flags);
 
 	ret = wait_event_freezable_timeout

@@ -110,7 +110,7 @@ void mtk_dip_pipe_remove_job(struct mtk_dip_request *req)
 	unsigned long flags;
 
 	spin_lock_irqsave(&req->dip_pipe->job_lock, flags);
-	list_del(&req->list);
+	list_del_init(&req->list);
 	req->dip_pipe->num_jobs = req->dip_pipe->num_jobs - 1;
 	spin_unlock_irqrestore(&req->dip_pipe->job_lock, flags);
 }
@@ -143,6 +143,7 @@ void mtk_dip_pipe_job_finish(struct mtk_dip_request *req,
 		list_del(&dev_buf->list);
 		spin_unlock_irqrestore(&node->buf_list_lock, flags);
 	}
+	media_request_put(&req->req);
 }
 
 static u32 dip_pass1_fmt_get_stride(struct v4l2_pix_format_mplane *mfmt,
@@ -652,7 +653,17 @@ void mtk_dip_pipe_try_enqueue(struct mtk_dip_pipe *pipe)
 	spin_lock_irqsave(&pipe->job_lock, flags);
 	list_for_each_entry_safe(req, tmp_req,
 				 &pipe->pipe_job_pending_list, list) {
-		list_del(&req->list);
+		/*
+		 * The request is being freed: mtk_dip_request_free() is
+		 * already waiting for job_lock to unlink it. Drop it from the
+		 * pending list here so that it is not considered again.
+		 */
+		if (!kref_get_unless_zero(&req->req.kref)) {
+			list_del_init(&req->list);
+			pipe->num_pending_jobs--;
+			continue;
+		}
+		list_del_init(&req->list);
 		pipe->num_pending_jobs--;
 		list_add_tail(&req->list,
 			      &pipe->pipe_job_running_list);

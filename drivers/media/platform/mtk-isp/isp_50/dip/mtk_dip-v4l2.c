@@ -718,6 +718,10 @@ static struct media_request *mtk_dip_request_alloc(struct media_device *mdev)
 	struct mtk_dip_request *dip_req;
 
 	dip_req = kzalloc(sizeof(*dip_req), GFP_KERNEL);
+	if (!dip_req)
+		return NULL;
+
+	INIT_LIST_HEAD(&dip_req->list);
 
 	return &dip_req->req;
 }
@@ -725,6 +729,23 @@ static struct media_request *mtk_dip_request_alloc(struct media_device *mdev)
 static void mtk_dip_request_free(struct media_request *req)
 {
 	struct mtk_dip_request *dip_req = mtk_dip_media_req_to_dip_req(req);
+	struct mtk_dip_pipe *pipe = dip_req->dip_pipe;
+	unsigned long flags;
+
+	if (pipe) {
+		spin_lock_irqsave(&pipe->job_lock, flags);
+		/*
+		 * The requests in pipe_job_running_list hold a driver
+		 * reference, so a request that is being freed can only be
+		 * queued in pipe_job_pending_list, e.g. when the file handle
+		 * is closed before STREAMON.
+		 */
+		if (!list_empty(&dip_req->list)) {
+			list_del_init(&dip_req->list);
+			pipe->num_pending_jobs--;
+		}
+		spin_unlock_irqrestore(&pipe->job_lock, flags);
+	}
 
 	kfree(dip_req);
 }

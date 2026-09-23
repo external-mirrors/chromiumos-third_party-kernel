@@ -178,6 +178,7 @@ void mtk_cam_dev_dequeue_req_frame(struct mtk_cam_dev *cam,
 {
 	struct mtk_cam_dev_request *req, *req_prev;
 	unsigned long flags;
+	LIST_HEAD(to_put_list);
 
 	spin_lock_irqsave(&cam->running_job_lock, flags);
 	list_for_each_entry_safe(req, req_prev, &cam->running_job_list, list) {
@@ -189,7 +190,7 @@ void mtk_cam_dev_dequeue_req_frame(struct mtk_cam_dev *cam,
 			cam->running_job_count--;
 			/* Pass to user space */
 			mtk_cam_dev_job_done(cam, req, VB2_BUF_STATE_DONE);
-			list_del(&req->list);
+			list_move_tail(&req->list, &to_put_list);
 			break;
 		} else if (req->frame_params.frame_seq_no < frame_seq_no) {
 			cam->running_job_count--;
@@ -197,30 +198,45 @@ void mtk_cam_dev_dequeue_req_frame(struct mtk_cam_dev *cam,
 			mtk_cam_dev_job_done(cam, req, VB2_BUF_STATE_ERROR);
 			dev_warn(cam->dev, "frame_seq:%d drop\n",
 				 req->frame_params.frame_seq_no);
-			list_del(&req->list);
+			list_move_tail(&req->list, &to_put_list);
 		} else {
 			break;
 		}
 	}
 	spin_unlock_irqrestore(&cam->running_job_lock, flags);
+
+	list_for_each_entry_safe(req, req_prev, &to_put_list, list) {
+		list_del_init(&req->list);
+		media_request_put(&req->req);
+	}
 }
 
 static void mtk_cam_dev_req_cleanup(struct mtk_cam_dev *cam)
 {
 	struct mtk_cam_dev_request *req, *req_prev;
+	struct mtk_isp_p1_device *p1_dev = dev_get_drvdata(cam->dev);
 	unsigned long flags;
+	LIST_HEAD(temp_list);
 
 	dev_dbg(cam->dev, "%s\n", __func__);
 
+	if (p1_dev->composer_wq)
+		flush_workqueue(p1_dev->composer_wq);
+
 	spin_lock_irqsave(&cam->pending_job_lock, flags);
 	list_for_each_entry_safe(req, req_prev, &cam->pending_job_list, list)
-		list_del(&req->list);
+		list_del_init(&req->list);
 	spin_unlock_irqrestore(&cam->pending_job_lock, flags);
 
 	spin_lock_irqsave(&cam->running_job_lock, flags);
-	list_for_each_entry_safe(req, req_prev, &cam->running_job_list, list)
-		list_del(&req->list);
+	list_splice_tail_init(&cam->running_job_list, &temp_list);
+	cam->running_job_count = 0;
 	spin_unlock_irqrestore(&cam->running_job_lock, flags);
+
+	list_for_each_entry_safe(req, req_prev, &temp_list, list) {
+		list_del_init(&req->list);
+		media_request_put(&req->req);
+	}
 }
 
 void mtk_cam_dev_req_try_queue(struct mtk_cam_dev *cam)
@@ -234,18 +250,26 @@ void mtk_cam_dev_req_try_queue(struct mtk_cam_dev *cam)
 	}
 
 	spin_lock_irqsave(&cam->pending_job_lock, flags);
-	spin_lock_irqsave(&cam->running_job_lock, flags);
+	spin_lock(&cam->running_job_lock);
 	list_for_each_entry_safe(req, req_prev, &cam->pending_job_list, list) {
 		if (cam->running_job_count >= MTK_ISP_MAX_RUNNING_JOBS) {
 			dev_dbg(cam->dev, "jobs are full\n");
 			break;
 		}
+		/*
+		 * The request is being freed: mtk_cam_req_free() is already
+		 * waiting for the list locks to unlink it. Drop it from the
+		 * pending list here so that it is not considered again.
+		 */
+		if (!kref_get_unless_zero(&req->req.kref)) {
+			list_del_init(&req->list);
+			continue;
+		}
 		cam->running_job_count++;
-		list_del(&req->list);
-		list_add_tail(&req->list, &cam->running_job_list);
+		list_move_tail(&req->list, &cam->running_job_list);
 		mtk_isp_req_enqueue(cam, req);
 	}
-	spin_unlock_irqrestore(&cam->running_job_lock, flags);
+	spin_unlock(&cam->running_job_lock);
 	spin_unlock_irqrestore(&cam->pending_job_lock, flags);
 }
 
@@ -254,6 +278,10 @@ static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 	struct mtk_cam_dev_request *cam_dev_req;
 
 	cam_dev_req = kzalloc(sizeof(*cam_dev_req), GFP_KERNEL);
+	if (!cam_dev_req)
+		return NULL;
+
+	INIT_LIST_HEAD(&cam_dev_req->list);
 
 	return &cam_dev_req->req;
 }
@@ -261,6 +289,23 @@ static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 static void mtk_cam_req_free(struct media_request *req)
 {
 	struct mtk_cam_dev_request *cam_dev_req = mtk_cam_req_to_dev_req(req);
+	struct mtk_cam_dev *cam;
+	unsigned long flags;
+
+	if (req->mdev) {
+		cam = container_of(req->mdev, struct mtk_cam_dev, media_dev);
+		spin_lock_irqsave(&cam->pending_job_lock, flags);
+		spin_lock(&cam->running_job_lock);
+		/*
+		 * The requests in running_job_list hold a driver reference,
+		 * so a request that is being freed can only be queued in
+		 * pending_job_list, e.g. when the file handle is closed
+		 * before STREAMON.
+		 */
+		list_del_init(&cam_dev_req->list);
+		spin_unlock(&cam->running_job_lock);
+		spin_unlock_irqrestore(&cam->pending_job_lock, flags);
+	}
 
 	kfree(cam_dev_req);
 }

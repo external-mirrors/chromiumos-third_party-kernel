@@ -126,6 +126,7 @@ unreg_ipi_cmd:
 static void isp_composer_uninit(struct mtk_isp_p1_device *p1_dev)
 {
 	destroy_workqueue(p1_dev->composer_wq);
+	p1_dev->composer_wq = NULL;
 	scp_ipi_unregister(p1_dev->scp, SCP_IPI_ISP_CMD);
 	scp_ipi_unregister(p1_dev->scp, SCP_IPI_ISP_FRAME);
 }
