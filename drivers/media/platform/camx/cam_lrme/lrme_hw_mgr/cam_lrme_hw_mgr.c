@@ -945,7 +945,7 @@ static int cam_lrme_mgr_hw_prepare_update(void *hw_mgr_priv,
 		0);
 	if (rc) {
 		CAM_ERR(CAM_LRME, "Patch packet failed, rc=%d", rc);
-		return rc;
+		goto rel_kmd_buf;
 	}
 
 	memset(&config_args, 0, sizeof(config_args));
@@ -957,28 +957,28 @@ static int cam_lrme_mgr_hw_prepare_update(void *hw_mgr_priv,
 		CAM_LRME_MAX_IO_BUFFER);
 	if (rc) {
 		CAM_ERR(CAM_LRME, "Error in prepare IO Buf %d", rc);
-		goto error;
+		goto rel_kmd_buf;
 	}
 	/* Check port number */
 	if (args->num_in_map_entries == 0 || args->num_out_map_entries == 0) {
 		CAM_ERR(CAM_LRME, "Error in port number in %d, out %d",
 			args->num_in_map_entries, args->num_out_map_entries);
 		rc = -EINVAL;
-		goto error;
+		goto rel_kmd_buf;
 	}
 
 	rc = cam_lrme_mgr_util_prepare_hw_update_entries(hw_mgr, args,
 		&config_args, &kmd_buf);
 	if (rc) {
 		CAM_ERR(CAM_LRME, "Error in hw update entries %d", rc);
-		goto error;
+		goto rel_kmd_buf;
 	}
 
 	rc = cam_lrme_mgr_util_get_frame_req(&hw_mgr->frame_free_list,
 		&frame_req, &hw_mgr->free_req_lock);
 	if (rc || !frame_req) {
 		CAM_ERR(CAM_LRME, "Can not get free frame request");
-		goto error;
+		goto rel_kmd_buf;
 	}
 
 	frame_req->ctxt_to_hw_map = args->ctxt_to_hw_map;
@@ -992,8 +992,8 @@ static int cam_lrme_mgr_hw_prepare_update(void *hw_mgr_priv,
 
 	CAM_DBG(CAM_LRME, "FramePrepare : Frame[%lld]", frame_req->req_id);
 
-	return 0;
-
+rel_kmd_buf:
+	cam_mem_put_cpu_buf(kmd_buf.handle);
 error:
 	return rc;
 }

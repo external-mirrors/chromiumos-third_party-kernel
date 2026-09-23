@@ -88,6 +88,12 @@ int cam_packet_util_validate_cmd_desc(struct cam_cmd_buf_desc *cmd_desc);
  *
  * @brief                  Get the kmd buffer from the packet command descriptor
  *
+ *                         On success a reference to the underlying buffer
+ *                         is held on behalf of the caller, so that
+ *                         kmd_buf->cpu_addr stays valid. The caller must
+ *                         release it with cam_mem_put_cpu_buf(kmd_buf->handle)
+ *                         once it is done accessing the buffer.
+ *
  * @packet:                Packet data
  * @kmd_buf:               Extracted the KMD buffer information
  *

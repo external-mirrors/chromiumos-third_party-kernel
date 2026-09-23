@@ -823,6 +823,7 @@ static int cam_jpeg_mgr_prepare_hw_update(void *hw_mgr_priv,
 	CAM_DBG(CAM_JPEG, "will wait on input sync sync_id %d",
 		prepare_args->in_map_entries[0].sync_id);
 
+	cam_mem_put_cpu_buf(kmd_buf.handle);
 	return rc;
 }
 

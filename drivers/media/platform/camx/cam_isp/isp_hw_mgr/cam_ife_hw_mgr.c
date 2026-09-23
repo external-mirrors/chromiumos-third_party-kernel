@@ -4312,7 +4312,7 @@ static int cam_ife_mgr_prepare_hw_update(void *hw_mgr_priv,
 		0);
 	if (rc) {
 		CAM_ERR(CAM_ISP, "Patch ISP packet failed.");
-		return rc;
+		goto end;
 	}
 
 	prepare->num_hw_update_entries = 0;
@@ -4414,6 +4414,7 @@ static int cam_ife_mgr_prepare_hw_update(void *hw_mgr_priv,
 	ctx->res_bitmap = 0;
 
 end:
+	cam_mem_put_cpu_buf(kmd_buf.handle);
 	return rc;
 }
 
