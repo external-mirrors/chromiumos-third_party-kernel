@@ -947,8 +947,10 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 	struct cam_req_mgr_trigger_notify  notify;
 	struct cam_context *ctx = ctx_isp->base;
 	struct cam_ctx_request  *req = NULL;
+	struct cam_ctx_request  *done_req = NULL;
 	uint64_t  request_id  = 0;
 	struct cam_isp_ctx_req  *req_isp = NULL;
+	struct cam_isp_ctx_req  *done_req_isp = NULL;
 
 	/*
 	 * notify reqmgr with sof signal. Note, due to scheduling delay
@@ -1013,7 +1015,8 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 			if (req->request_id >
 				ctx_isp->req_info.reported_req_id) {
 				request_id = req->request_id;
-				req_isp =
+				done_req = req;
+				done_req_isp =
 					(struct cam_isp_ctx_req *)req->req_priv;
 				ctx_isp->req_info.reported_req_id = request_id;
 				ctx_isp->req_info.last_reported_id_time_stamp =
@@ -1047,14 +1050,15 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 		rc = -EFAULT;
 	}
 
-	if ((req_isp) && (req_isp->num_acked == req_isp->num_fence_map_out)) {
+	if (done_req && done_req_isp &&
+	    done_req_isp->num_acked == done_req_isp->num_fence_map_out) {
 		CAM_INFO_RATE_LIMIT(CAM_REQ,
 			"Move active req %lld to free [all fences done] ctx %u",
-			req->request_id, ctx->ctx_id);
-		cam_common_mem_free(req->pf_data.packet);
-		req->pf_data.packet = NULL;
-		list_del_init(&req->list);
-		list_add_tail(&req->list, &ctx->free_req_list);
+			done_req->request_id, ctx->ctx_id);
+		cam_common_mem_free(done_req->pf_data.packet);
+		done_req->pf_data.packet = NULL;
+		list_del_init(&done_req->list);
+		list_add_tail(&done_req->list, &ctx->free_req_list);
 	}
 
 	return 0;
