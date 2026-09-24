@@ -284,6 +284,7 @@ int cam_icp_context_init(struct cam_icp_context *ctx,
 		goto err;
 	}
 
+	static_assert(CAM_ICP_CTX_REQ_MAX <= CAM_CTX_FLUSH_REQ_MAX);
 	rc = cam_context_init(ctx->base, cam_icp_dev_name(), CAM_ICP, ctx_id,
 		NULL, hw_intf, ctx->req_base, CAM_ICP_CTX_REQ_MAX);
 	if (rc) {

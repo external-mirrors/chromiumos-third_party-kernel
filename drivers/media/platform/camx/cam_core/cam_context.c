@@ -574,6 +574,12 @@ int cam_context_init(struct cam_context *ctx,
 		return -EINVAL;
 	}
 
+	/* Every request of the context must fit in a single flush */
+	if (req_size > CAM_CTX_FLUSH_REQ_MAX) {
+		CAM_ERR(CAM_CORE, "Invalid request pool size %u", req_size);
+		return -EINVAL;
+	}
+
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->dev_hdl = -1;
 	ctx->link_hdl = -1;

@@ -29,6 +29,12 @@
 /* maximum buf done irqs */
 #define CAM_NUM_OUT_PER_COMP_IRQ_MAX        12
 
+/*
+ * maximum requests carried by a flush, must be at least as large as the
+ * biggest request pool of any context (CAM_ICP_CTX_REQ_MAX)
+ */
+#define CAM_CTX_FLUSH_REQ_MAX               40
+
 /* hardware event callback function type */
 typedef int (*cam_hw_event_cb_func)(void *context, uint32_t evt_id,
 	void *evt_data);
@@ -243,9 +249,9 @@ struct cam_hw_config_args {
 struct cam_hw_flush_args {
 	void                           *ctxt_to_hw_map;
 	uint32_t                        num_req_pending;
-	void                           *flush_req_pending[20];
+	void                           *flush_req_pending[CAM_CTX_FLUSH_REQ_MAX];
 	uint32_t                        num_req_active;
-	void                           *flush_req_active[20];
+	void                           *flush_req_active[CAM_CTX_FLUSH_REQ_MAX];
 	enum flush_type_t               flush_type;
 	uint32_t                        last_flush_req;
 };
