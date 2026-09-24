@@ -61,6 +61,10 @@ struct jpeg_encoder {
 	struct media_device mdev;
 #endif
 	struct mutex dev_mutex;
+	/* Serializes starting a job with completing or resetting it */
+	struct mutex job_mutex;
+	/* Context whose DQT tables are loaded in the HW, under job_mutex */
+	void *dqt_owner;
 	struct v4l2_m2m_dev *m2m_dev;
 	atomic_t ref_count;
 	struct device *smmu;

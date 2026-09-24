@@ -162,6 +162,11 @@ static void op_jenc_vb2_stop_streaming(struct vb2_queue *q)
 	if (!jctx)
 		return;
 
+	/*
+	 * v4l2_m2m_cancel_job() has already waited for the job of this
+	 * context, if any. Do not touch the HW: it might be running a job of
+	 * another context.
+	 */
 	jenc_hal_process_done(jctx, true);
 }
 
@@ -192,11 +197,18 @@ static const struct vb2_ops jenc_v4l2_vb2_ops = {
 static void op_jenc_m2m_job_run(void *priv)
 {
 	struct jenc_context *jctx = priv;
+	struct jpeg_encoder *jenc;
 	struct vb2_v4l2_buffer *src_vb, *dst_vb;
 	struct jenc_bufq *sdsc, *ddsc;
+	int rc;
 
 	if (!jctx)
 		return;
+
+	jenc = jctx->jenc;
+
+	/* Make sure no watchdog of a previous job can hit this one */
+	jenc_hal_watchdog_sync(jctx);
 
 	src_vb = v4l2_m2m_next_src_buf(jctx->fh.m2m_ctx);
 	dst_vb = v4l2_m2m_next_dst_buf(jctx->fh.m2m_ctx);
@@ -213,9 +225,17 @@ static void op_jenc_m2m_job_run(void *priv)
 	dst_vb->sequence = ddsc->sequence++;
 	v4l2_m2m_buf_copy_metadata(src_vb, dst_vb, true);
 
-	if (jenc_hal_process_exec(jctx, src_vb, dst_vb)) {
+	/*
+	 * The job can complete as soon as it is started, and the context can
+	 * then be released: only use jctx if exec failed.
+	 */
+	mutex_lock(&jenc->job_mutex);
+	rc = jenc_hal_process_exec(jctx, src_vb, dst_vb);
+	mutex_unlock(&jenc->job_mutex);
+
+	if (rc) {
 		jenc_hal_process_done(jctx, true);
-		v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
+		v4l2_m2m_job_finish(jenc->m2m_dev, jctx->fh.m2m_ctx);
 	}
 }
 
@@ -518,6 +538,7 @@ static int op_jenc_file_open(struct file *file)
 	mutex_init(&jctx->vb_mutex);
 	mutex_init(&jctx->quality_mutex);
 	spin_lock_init(&jctx->irqlock);
+	jenc_hal_watchdog_init(jctx);
 
 	if (atomic_inc_return(&jenc->ref_count) == 1)
 		hw_reset = true;
@@ -585,6 +606,15 @@ static int op_jenc_file_release(struct file *file)
 	mutex_lock(&jenc->dev_mutex);
 	v4l2_m2m_ctx_release(jctx->fh.m2m_ctx);
 	mutex_unlock(&jenc->dev_mutex);
+
+	/* The watchdog may still be pending after the last job completed */
+	jenc_hal_watchdog_sync(jctx);
+
+	/* A new context could be allocated at the same address */
+	mutex_lock(&jenc->job_mutex);
+	if (jenc->dqt_owner == jctx)
+		jenc->dqt_owner = NULL;
+	mutex_unlock(&jenc->job_mutex);
 
 	/* Only power down once no job can be running on this context */
 	if (!atomic_dec_if_positive(&jenc->ref_count))

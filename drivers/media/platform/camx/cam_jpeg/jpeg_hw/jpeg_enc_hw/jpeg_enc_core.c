@@ -530,6 +530,7 @@ int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,
 {
 	struct cam_hw_info *jpeg_enc_dev = device_priv;
 	struct cam_jpeg_enc_device_core_info *core_info = NULL;
+	unsigned long flags;
 	int rc;
 
 	if (!device_priv) {
@@ -554,6 +555,12 @@ int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,
 			CAM_ERR(CAM_JPEG, "cmd args NULL");
 			return -EINVAL;
 		}
+		/*
+		 * The IRQ handler calls the callback with hw_lock held: once
+		 * this returns, the old callback is not running anymore.
+		 * Must not be called from the callback itself.
+		 */
+		spin_lock_irqsave(&jpeg_enc_dev->hw_lock, flags);
 		if (irq_cb->b_set_cb) {
 			core_info->irq_cb.jpeg_hw_mgr_cb =
 				irq_cb->jpeg_hw_mgr_cb;
@@ -562,6 +569,7 @@ int cam_jpeg_enc_process_cmd(void *device_priv, uint32_t cmd_type,
 			core_info->irq_cb.jpeg_hw_mgr_cb = NULL;
 			core_info->irq_cb.data = NULL;
 		}
+		spin_unlock_irqrestore(&jpeg_enc_dev->hw_lock, flags);
 		rc = 0;
 		break;
 	}

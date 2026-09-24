@@ -102,6 +102,7 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
 		CAM_ERR(CAM_JPEG, " unreg failed to reg cpas %d", rc);
 
 	mutex_destroy(&jpeg_enc_dev_intf->dev_mutex);
+	mutex_destroy(&jpeg_enc_dev_intf->job_mutex);
 	mutex_destroy(&core_info->core_mutex);
 	kfree(core_info);
 
@@ -147,6 +148,7 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	mutex_init(&jpeg_enc_dev_intf->dev_mutex);
+	mutex_init(&jpeg_enc_dev_intf->job_mutex);
 
 	of_property_read_u32(pdev->dev.of_node,
 		"cell-index", &jpeg_enc_dev_intf->hw_idx);

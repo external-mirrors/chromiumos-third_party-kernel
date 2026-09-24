@@ -36,6 +36,7 @@
 #define JENC_REG_SCALE_DEFAULT_STEP 0x200000
 
 #define JENC_IRQ_TYPE_SESSION_DONE 0x1
+#define JENC_JOB_TIMEOUT_MS 2000
 
 #define JENC_DQT_TABLE_COL  8
 #define JENC_DQT_QFP_SHIFT 20
@@ -1256,7 +1257,6 @@ struct jenc_bufq *jenc_hal_get_bufq(struct jenc_context *jctx,
 
 void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
 {
-	struct cam_jpeg_set_irq_cb irq_cd = {0};
 	struct vb2_v4l2_buffer *src_vb, *dst_vb;
 	enum vb2_buffer_state bstate = (cleanup) ? VB2_BUF_STATE_ERROR :
 						   VB2_BUF_STATE_DONE;
@@ -1277,22 +1277,94 @@ void jenc_hal_process_done(struct jenc_context *jctx, bool cleanup)
 		vb2_set_plane_payload(&dst_vb->vb2_buf, 0, jctx->result_size + sizeof(jfif));
 		v4l2_m2m_buf_done(dst_vb, bstate);
 	} while (cleanup);
-
-	cam_jpeg_enc_process_cmd(jctx->jenc->hw_priv, CAM_JPEG_CMD_SET_IRQ_CB,
-				 &irq_cd, sizeof(irq_cd));
 }
 
 static int32_t jenc_hal_process_irq(u32 irq_status, s32 result_size, void *data)
 {
 	struct jenc_context *jctx = data;
 
-	if (irq_status & JENC_IRQ_TYPE_SESSION_DONE) {
+	/*
+	 * Called with the HW lock held. The same status can report both
+	 * FRAME_DONE and an error: an error always wins, as it leaves the HW
+	 * not ready until it is reset.
+	 */
+	if (jctx->job_status == JENC_JOB_ERROR)
+		return 0;
+
+	if (result_size < 0) {
+		/* Error or unexpected stop, the job is over */
+		dev_err(jctx->dev, "Encoding failed, irq_status:0x%x\n",
+			irq_status);
+		jctx->job_status = JENC_JOB_ERROR;
+	} else if (jctx->job_status == JENC_JOB_PENDING &&
+		   (irq_status & JENC_IRQ_TYPE_SESSION_DONE)) {
 		jctx->result_size = result_size;
-		jenc_hal_process_done(jctx, false);
-		v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
+		jctx->job_status = JENC_JOB_DONE;
+	} else {
+		return 0;
 	}
 
+	/* Complete the job from process context */
+	mod_delayed_work(system_wq, &jctx->timeout_work, 0);
+
 	return 0;
+}
+
+static void jenc_hal_job_work(struct work_struct *work)
+{
+	struct jenc_context *jctx = container_of(to_delayed_work(work),
+						 struct jenc_context,
+						 timeout_work);
+	struct jpeg_encoder *jenc = jctx->jenc;
+	struct cam_jpeg_set_irq_cb irq_cd = {0};
+	enum jenc_job_status status;
+
+	/* Wait until the job has been started, or failed to start */
+	mutex_lock(&jenc->job_mutex);
+
+	/* The job might have been completed already */
+	if (!atomic_xchg(&jctx->job_running, 0)) {
+		mutex_unlock(&jenc->job_mutex);
+		return;
+	}
+
+	/*
+	 * Stop delivering IRQs to this context. This takes the HW lock,
+	 * which the IRQ handler holds while running the callback, so no
+	 * callback for this job can be running once it returns.
+	 */
+	cam_jpeg_enc_process_cmd(jenc->hw_priv, CAM_JPEG_CMD_SET_IRQ_CB,
+				 &irq_cd, sizeof(irq_cd));
+
+	status = jctx->job_status;
+	if (status != JENC_JOB_DONE) {
+		if (status == JENC_JOB_PENDING)
+			dev_err(jctx->dev, "Encoding timeout\n");
+
+		/* The HW is not ready after an error or a timeout */
+		cam_jpeg_enc_stop_hw(jenc->hw_priv, NULL, 0);
+		cam_jpeg_enc_reset_hw(jenc->hw_priv, NULL, 0);
+
+		/* The reset lost the quantization tables, reprogram them */
+		jenc->dqt_owner = NULL;
+	}
+
+	mutex_unlock(&jenc->job_mutex);
+
+	jenc_hal_process_done(jctx, status != JENC_JOB_DONE);
+	v4l2_m2m_job_finish(jenc->m2m_dev, jctx->fh.m2m_ctx);
+}
+
+void jenc_hal_watchdog_init(struct jenc_context *jctx)
+{
+	atomic_set(&jctx->job_running, 0);
+	INIT_DELAYED_WORK(&jctx->timeout_work, jenc_hal_job_work);
+}
+
+/* Wait for any pending or running completion of a previous job */
+void jenc_hal_watchdog_sync(struct jenc_context *jctx)
+{
+	cancel_delayed_work_sync(&jctx->timeout_work);
 }
 
 int jenc_hal_process_exec(struct jenc_context *jctx,
@@ -1321,8 +1393,11 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 		return rc;
 
 	mutex_lock(&jctx->quality_mutex);
-	if (jctx->quality_programmed != jctx->quality_requested)
+	if (jctx->jenc->dqt_owner != jctx ||
+	    jctx->quality_programmed != jctx->quality_requested) {
 		jenc_hal_dmi_tables_calculate(jctx);
+		jctx->jenc->dqt_owner = jctx;
+	}
 	mutex_unlock(&jctx->quality_mutex);
 
 	/* Copy the DQT tables in output buffer */
@@ -1338,13 +1413,31 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 	irq_cd.jpeg_hw_mgr_cb = jenc_hal_process_irq;
 	irq_cd.data	      = jctx;
 	irq_cd.b_set_cb	      = 1;
+	jctx->job_status = JENC_JOB_PENDING;
+	atomic_set(&jctx->job_running, 1);
 	rc = cam_jpeg_enc_process_cmd(jctx->jenc->hw_priv,
 				      CAM_JPEG_CMD_SET_IRQ_CB, &irq_cd,
 				      sizeof(irq_cd));
-	if (rc)
+	if (!rc)
+		rc = cam_jpeg_enc_start_hw(jctx->jenc->hw_priv, NULL, 0);
+	if (rc) {
+		/*
+		 * The caller holds job_mutex, so the completion work cannot
+		 * run until the caller has finished the job itself.
+		 */
+		atomic_set(&jctx->job_running, 0);
+		irq_cd.b_set_cb = 0;
+		cam_jpeg_enc_process_cmd(jctx->jenc->hw_priv,
+					 CAM_JPEG_CMD_SET_IRQ_CB, &irq_cd,
+					 sizeof(irq_cd));
 		return rc;
+	}
 
-	return cam_jpeg_enc_start_hw(jctx->jenc->hw_priv, NULL, 0);
+	/* If the job is already done, this does not delay its completion */
+	schedule_delayed_work(&jctx->timeout_work,
+			      msecs_to_jiffies(JENC_JOB_TIMEOUT_MS));
+
+	return 0;
 }
 
 int jenc_hal_prepare(struct jenc_context *jctx, bool hw_reset)

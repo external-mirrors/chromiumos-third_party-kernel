@@ -17,6 +17,7 @@
 #define CAM_JENC_V4L2_HAL_H_
 
 #include <linux/types.h>
+#include <linux/workqueue.h>
 #include <linux/videodev2.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/v4l2-fh.h>
@@ -36,6 +37,12 @@
 
 #define JENC_PAYLOAD_DIV 3 // Chrome: Maximum payload of jpeg buffer
 #define JENC_MAX_DMI_INDEX 64
+
+enum jenc_job_status {
+	JENC_JOB_PENDING,	/* No IRQ yet, the job timed out if it ends now */
+	JENC_JOB_DONE,
+	JENC_JOB_ERROR,
+};
 
 struct jenc_bufq {
 	struct v4l2_format vf;
@@ -65,6 +72,12 @@ struct jenc_context {
 	size_t result_size;
 	u8 dqt_table1[JENC_MAX_DMI_INDEX];
 	u8 dqt_table2[JENC_MAX_DMI_INDEX];
+	/* Set while a job is on the hardware; cleared by whoever completes it */
+	atomic_t job_running;
+	/* How the running job ended, written by the IRQ handler */
+	enum jenc_job_status job_status;
+	/* Completes the job, on IRQ or on timeout */
+	struct delayed_work timeout_work;
 };
 
 void jenc_hal_setup_fe_engine(struct jenc_context *jctx, struct jenc_bufq *bq);
@@ -83,6 +96,10 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 			  struct vb2_v4l2_buffer *dst_vb);
 
 void jenc_hal_process_done(struct jenc_context *jctx, bool status);
+
+void jenc_hal_watchdog_init(struct jenc_context *jctx);
+
+void jenc_hal_watchdog_sync(struct jenc_context *jctx);
 
 int jenc_hal_prepare(struct jenc_context *jctx, bool hw_reset);
 
