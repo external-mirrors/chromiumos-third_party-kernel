@@ -176,10 +176,11 @@ static int cam_jpeg_mgr_process_irq(void *priv, void *data)
 	CAM_DBG(CAM_JPEG, "Encoded Size %d", task_data->result_size);
 
 	buf_data.num_handles =
-		p_cfg_req->hw_cfg_args.num_out_map_entries;
+		min_t(uint32_t, p_cfg_req->hw_cfg_args.num_out_map_entries,
+		      CAM_NUM_OUT_PER_COMP_IRQ_MAX);
 	for (i = 0; i < buf_data.num_handles; i++) {
 		buf_data.resource_handle[i] =
-		p_cfg_req->hw_cfg_args.out_map_entries[i].resource_handle;
+			p_cfg_req->hw_cfg_args.out_map_entries[i].resource_handle;
 	}
 	buf_data.request_id =
 		PTR_TO_U64(p_cfg_req->hw_cfg_args.priv);
@@ -509,10 +510,11 @@ end_callcb:
 	if (p_cfg_req) {
 		hw_cfg_args = &p_cfg_req->hw_cfg_args;
 		buf_data.num_handles =
-			hw_cfg_args->num_out_map_entries;
+			min_t(uint32_t, hw_cfg_args->num_out_map_entries,
+			      CAM_NUM_OUT_PER_COMP_IRQ_MAX);
 		for (i = 0; i < buf_data.num_handles; i++) {
 			buf_data.resource_handle[i] =
-			hw_cfg_args->out_map_entries[i].resource_handle;
+				hw_cfg_args->out_map_entries[i].resource_handle;
 		}
 		buf_data.request_id =
 			(uintptr_t)p_cfg_req->hw_cfg_args.priv;
@@ -781,7 +783,8 @@ static int cam_jpeg_mgr_prepare_hw_update(void *hw_mgr_priv,
 				io_cfg_ptr[i].fence;
 			prepare_args->num_in_map_entries++;
 		} else {
-			if (k >= prepare_args->max_out_map_entries)
+			if (k >= prepare_args->max_out_map_entries ||
+			    k >= CAM_NUM_OUT_PER_COMP_IRQ_MAX)
 				continue;
 			prepare_args->out_map_entries[k].resource_handle =
 				io_cfg_ptr[i].resource_type;
