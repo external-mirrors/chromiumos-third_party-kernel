@@ -64,6 +64,7 @@ struct cam_mem_buf_queue {
 	uintptr_t kmdvaddr;
 	bool active;
 	bool is_imported;
+	bool is_released;
 	struct kref krefcount;
 	enum cam_smmu_mapping_client smmu_mapping_client;
 };

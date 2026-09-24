@@ -190,8 +190,8 @@ int cam_mem_get_cpu_buf(int32_t buf_handle, uintptr_t *vaddr_ptr, size_t *len)
 		return -EINVAL;
 
 	mutex_lock(&tbl->m_lock);
-	if (!tbl->bufq[idx].active) {
-		CAM_ERR(CAM_MEM, "idx: %d not active", idx);
+	if (!tbl->bufq[idx].active || tbl->bufq[idx].is_released) {
+		CAM_ERR(CAM_MEM, "idx: %d not active or released", idx);
 		rc = -EPERM;
 		goto end;
 	}
@@ -485,6 +485,7 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 	memcpy(tbl->bufq[idx].hdls, cmd->mmu_hdls,
 		sizeof(int32_t) * cmd->num_hdl);
 	tbl->bufq[idx].is_imported = false;
+	tbl->bufq[idx].is_released = false;
 	kref_init(&tbl->bufq[idx].krefcount);
 	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_USER;
 	mutex_unlock(&tbl->bufq[idx].q_lock);
@@ -589,6 +590,7 @@ int cam_mem_mgr_map(struct cam_mem_mgr_map_cmd *cmd)
 	memcpy(tbl->bufq[idx].hdls, cmd->mmu_hdls,
 		sizeof(int32_t) * cmd->num_hdl);
 	tbl->bufq[idx].is_imported = true;
+	tbl->bufq[idx].is_released = false;
 	kref_init(&tbl->bufq[idx].krefcount);
 	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_USER;
 	mutex_unlock(&tbl->bufq[idx].q_lock);
@@ -751,6 +753,7 @@ static void cam_mem_util_unmap(struct kref *kref)
 	tbl->bufq[idx].len = 0;
 	tbl->bufq[idx].num_hdl = 0;
 	tbl->bufq[idx].active = false;
+	tbl->bufq[idx].is_released = false;
 	tbl->bufq[idx].kmdvaddr = 0;
 	clear_bit(idx, tbl->bitmap);
 }
@@ -836,6 +839,11 @@ static int __cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
 		return -EINVAL;
 	}
 
+	if (tbl->bufq[idx].is_released) {
+		CAM_ERR(CAM_MEM, "Released buffer is already released");
+		return -EINVAL;
+	}
+
 	if (tbl->bufq[idx].buf_handle != cmd->buf_handle) {
 		CAM_ERR(CAM_MEM,
 			"Released buf handle %d not matching within table %d, idx=%d",
@@ -848,6 +856,8 @@ static int __cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
 			idx, tbl->bufq[idx].smmu_mapping_client);
 		return -EINVAL;
 	}
+
+	tbl->bufq[idx].is_released = true;
 
 	CAM_DBG(CAM_MEM, "Releasing hdl = %x, idx = %d", cmd->buf_handle, idx);
 	if (kref_put(&tbl->bufq[idx].krefcount, cam_mem_util_unmap)) {
@@ -973,6 +983,7 @@ int cam_mem_mgr_request_mem(struct cam_mem_mgr_request_desc *inp,
 	memcpy(tbl->bufq[idx].hdls, &smmu_hdl,
 		sizeof(int32_t));
 	tbl->bufq[idx].is_imported = false;
+	tbl->bufq[idx].is_released = false;
 	kref_init(&tbl->bufq[idx].krefcount);
 	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_KERNEL;
 	mutex_unlock(&tbl->bufq[idx].q_lock);
@@ -1028,6 +1039,12 @@ int cam_mem_mgr_release_mem(struct cam_mem_mgr_memory_desc *inp)
 		goto err_mutex_unlock;
 	}
 
+	if (tbl->bufq[idx].is_released) {
+		CAM_ERR(CAM_MEM, "buffer is released already");
+		rc = -EINVAL;
+		goto err_mutex_unlock;
+	}
+
 	if (tbl->bufq[idx].buf_handle != inp->mem_handle) {
 		CAM_ERR(CAM_MEM,
 			"Released buf handle not matching within table");
@@ -1041,6 +1058,8 @@ int cam_mem_mgr_release_mem(struct cam_mem_mgr_memory_desc *inp)
 		rc = -EINVAL;
 		goto err_mutex_unlock;
 	}
+
+	tbl->bufq[idx].is_released = true;
 
 	CAM_DBG(CAM_MEM, "Releasing hdl = %X", inp->mem_handle);
 	if (kref_put(&tbl->bufq[idx].krefcount, cam_mem_util_unmap)) {
@@ -1106,7 +1125,7 @@ void cam_mem_mgr_close(void)
 
 	for_each_set_bit_from(i, tbl->bitmap, tbl->bits) {
 		mutex_lock(&tbl->m_lock);
-		if (tbl->bufq[i].active &&
+		if (tbl->bufq[i].active && !tbl->bufq[i].is_released &&
 		    tbl->bufq[i].smmu_mapping_client == CAM_SMMU_MAPPING_USER) {
                         CAM_DBG(CAM_MEM, "Active buffer idx=%d", i);
 			cmd.buf_handle = tbl->bufq[i].buf_handle;
