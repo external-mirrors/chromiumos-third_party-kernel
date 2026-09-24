@@ -660,6 +660,8 @@ static void op_jenc_vdev_release(struct video_device *vdev)
 #ifdef CONFIG_MEDIA_CONTROLLER
 	media_device_cleanup(&jenc->mdev);
 #endif
+	mutex_destroy(&jenc->job_mutex);
+	mutex_destroy(&jenc->dev_mutex);
 	kfree(jenc);
 }
 
@@ -669,7 +671,8 @@ static const struct video_device jenc_v4l2_vdev_ops = {
 	.fops		= &jenc_v4l2_file_ops,
 	.ioctl_ops	= &jenc_v4l2_ioctl_ops,
 	.minor		= -1,
-	.release	= op_jenc_vdev_release,
+	/* Replaced by op_jenc_vdev_release() once fully registered */
+	.release	= video_device_release_empty,
 	.device_caps	= V4L2_CAP_STREAMING		|
 			  V4L2_CAP_VIDEO_M2M_MPLANE
 };
@@ -734,6 +737,12 @@ int jenc_v4l2_device_create(struct jpeg_encoder *jenc)
 #endif
 	video_set_drvdata(vfd, jenc);
 
+	/*
+	 * From now on, the last reference to the video device frees jenc.
+	 * Until here, the error paths clean up by themselves.
+	 */
+	vfd->release = op_jenc_vdev_release;
+
 	mutex_unlock(&jenc->dev_mutex);
 
 	dev_info(jenc->dev, "Device registered as /jenc/video%d\n", vfd->num);
@@ -753,19 +762,20 @@ err_v4l2_unregister:
 	v4l2_device_unregister(&jenc->v4l2_dev);
 err_mutex_unlock:
 	mutex_unlock(&jenc->dev_mutex);
-	mutex_destroy(&jenc->dev_mutex);
 
 	return rc;
 }
 
+/*
+ * The rest of the cleanup, and freeing jenc, is done by
+ * op_jenc_vdev_release() once the last user is gone. This might happen
+ * before this function returns: do not use jenc after calling it.
+ */
 void jenc_v4l2_device_destroy(struct jpeg_encoder *jenc)
 {
 #ifdef CONFIG_MEDIA_CONTROLLER
-	v4l2_m2m_unregister_media_controller(jenc->m2m_dev);
 	media_device_unregister(&jenc->mdev);
-	media_device_cleanup(&jenc->mdev);
+	v4l2_m2m_unregister_media_controller(jenc->m2m_dev);
 #endif
-	v4l2_m2m_release(jenc->m2m_dev);
 	video_unregister_device(&jenc->vfd);
-	v4l2_device_unregister(&jenc->v4l2_dev);
 }

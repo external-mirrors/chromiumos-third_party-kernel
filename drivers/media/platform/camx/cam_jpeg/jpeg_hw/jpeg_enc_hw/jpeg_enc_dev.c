@@ -82,13 +82,21 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
 	put_device(jpeg_enc_dev_intf->smmu);
 
 	jpeg_enc_dev = jpeg_enc_dev_intf->hw_priv;
+
+	/*
+	 * This frees jpeg_enc_dev_intf once the video device is not used
+	 * anymore, which can be right away: do not use it afterwards.
+	 * The HW data below is freed right away. That is only safe because
+	 * the driver is built-in and cannot be unbound from sysfs, so remove
+	 * never runs with open files.
+	 */
+	jenc_v4l2_device_destroy(jpeg_enc_dev_intf);
+	jpeg_enc_dev_intf = NULL;
+
 	if (!jpeg_enc_dev) {
 		CAM_ERR(CAM_JPEG, "error HW data is NULL");
-		rc = -ENODEV;
-		goto free_jpeg_hw_intf;
+		return -ENODEV;
 	}
-
-	jenc_v4l2_device_destroy(jpeg_enc_dev_intf);
 
 	core_info = (struct cam_jpeg_enc_device_core_info *)
 		jpeg_enc_dev->core_info;
@@ -101,8 +109,6 @@ static int cam_jpeg_enc_remove(struct platform_device *pdev)
 	if (rc)
 		CAM_ERR(CAM_JPEG, " unreg failed to reg cpas %d", rc);
 
-	mutex_destroy(&jpeg_enc_dev_intf->dev_mutex);
-	mutex_destroy(&jpeg_enc_dev_intf->job_mutex);
 	mutex_destroy(&core_info->core_mutex);
 	kfree(core_info);
 
@@ -114,8 +120,6 @@ deinit_soc:
 	mutex_destroy(&jpeg_enc_dev->hw_mutex);
 	kfree(jpeg_enc_dev);
 
-free_jpeg_hw_intf:
-	kfree(jpeg_enc_dev_intf);
 	return rc;
 }
 
@@ -220,7 +224,7 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 
 	rc = jenc_v4l2_device_create(jpeg_enc_dev_intf);
 	if (rc)
-		goto error_reg_cpas;
+		goto error_v4l2;
 
 	platform_set_drvdata(pdev, jpeg_enc_dev_intf);
 
@@ -228,6 +232,8 @@ static int cam_jpeg_enc_probe(struct platform_device *pdev)
 
 	return rc;
 
+error_v4l2:
+	cam_jpeg_enc_unregister_cpas(core_info);
 error_reg_cpas:
 	cam_soc_util_release_platform_resource(&jpeg_enc_dev->soc_info);
 error_init_soc:
@@ -239,6 +245,8 @@ error_alloc_core:
 	mutex_destroy(&jpeg_enc_dev->hw_mutex);
 	kfree(jpeg_enc_dev);
 error_alloc_dev:
+	mutex_destroy(&jpeg_enc_dev_intf->job_mutex);
+	mutex_destroy(&jpeg_enc_dev_intf->dev_mutex);
 	kfree(jpeg_enc_dev_intf);
 
 	return rc;
