@@ -146,7 +146,7 @@ int cam_mem_get_io_buf(int32_t buf_handle, int32_t mmu_handle,
 		return -EINVAL;
 
 	mutex_lock(&tbl->m_lock);
-	if (!tbl->bufq[idx].active) {
+	if (!tbl->bufq[idx].active || tbl->bufq[idx].is_released) {
 		rc = -EINVAL;
 		goto handle_mismatch;
 	}
@@ -461,22 +461,27 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 		}
 	}
 
-	mutex_lock(&tbl->bufq[idx].q_lock);
-	tbl->bufq[idx].fd = fd;
-	tbl->bufq[idx].i_ino = i_ino;
-	tbl->bufq[idx].dma_buf = NULL;
-	tbl->bufq[idx].flags = cmd->flags;
-	tbl->bufq[idx].buf_handle = GET_MEM_HANDLE(idx, fd);
-
 	if (cmd->flags & CAM_MEM_FLAG_KMD_ACCESS) {
 		rc = cam_mem_util_map_cpu_va(dmabuf, &kvaddr, &klen);
 		if (rc) {
 			CAM_ERR(CAM_MEM, "dmabuf: %pK mapping failed: %d",
 				dmabuf, rc);
-			goto map_kernel_fail;
+			goto map_hw_fail;
 		}
 	}
 
+	/*
+	 * The slot is already active, publish it under m_lock so the
+	 * lookup functions never see a partially initialized entry.
+	 */
+	mutex_lock(&tbl->m_lock);
+	mutex_lock(&tbl->bufq[idx].q_lock);
+	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_USER;
+	kref_init(&tbl->bufq[idx].krefcount);
+	tbl->bufq[idx].fd = fd;
+	tbl->bufq[idx].i_ino = i_ino;
+	tbl->bufq[idx].flags = cmd->flags;
+	tbl->bufq[idx].buf_handle = GET_MEM_HANDLE(idx, fd);
 	tbl->bufq[idx].kmdvaddr = kvaddr;
 	tbl->bufq[idx].vaddr = hw_vaddr;
 	tbl->bufq[idx].dma_buf = dmabuf;
@@ -486,23 +491,19 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 		sizeof(int32_t) * cmd->num_hdl);
 	tbl->bufq[idx].is_imported = false;
 	tbl->bufq[idx].is_released = false;
-	kref_init(&tbl->bufq[idx].krefcount);
-	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_USER;
-	mutex_unlock(&tbl->bufq[idx].q_lock);
-
 	cmd->out.buf_handle = tbl->bufq[idx].buf_handle;
 	cmd->out.fd = tbl->bufq[idx].fd;
 	cmd->out.vaddr = 0;
+	mutex_unlock(&tbl->bufq[idx].q_lock);
+	mutex_unlock(&tbl->m_lock);
 
 	CAM_DBG(CAM_MEM,
-		"fd=%d, flags=0x%x, num_hdl=%d, idx=%d, buf handle=%x, len=%zu, i_ino=%lu",
+		"fd=%d, flags=0x%x, num_hdl=%d, idx=%d, buf handle=%x, len=%llu, i_ino=%lu",
 		cmd->out.fd, cmd->flags, cmd->num_hdl, idx, cmd->out.buf_handle,
-		tbl->bufq[idx].len, tbl->bufq[idx].i_ino);
+		cmd->len, i_ino);
 
 	return rc;
 
-map_kernel_fail:
-	mutex_unlock(&tbl->bufq[idx].q_lock);
 map_hw_fail:
 	cam_mem_put_slot(tbl, idx);
 slot_fail:
@@ -571,10 +572,13 @@ int cam_mem_mgr_map(struct cam_mem_mgr_map_cmd *cmd)
 		goto map_fail;
 	}
 
+	/* Publish under m_lock, see cam_mem_mgr_alloc_and_map() */
+	mutex_lock(&tbl->m_lock);
 	mutex_lock(&tbl->bufq[idx].q_lock);
+	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_USER;
+	kref_init(&tbl->bufq[idx].krefcount);
 	tbl->bufq[idx].fd = cmd->fd;
 	tbl->bufq[idx].i_ino = i_ino;
-	tbl->bufq[idx].dma_buf = NULL;
 	tbl->bufq[idx].flags = cmd->flags;
 	tbl->bufq[idx].buf_handle = GET_MEM_HANDLE(idx, cmd->fd);
 	tbl->bufq[idx].kmdvaddr = 0;
@@ -591,17 +595,15 @@ int cam_mem_mgr_map(struct cam_mem_mgr_map_cmd *cmd)
 		sizeof(int32_t) * cmd->num_hdl);
 	tbl->bufq[idx].is_imported = true;
 	tbl->bufq[idx].is_released = false;
-	kref_init(&tbl->bufq[idx].krefcount);
-	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_USER;
-	mutex_unlock(&tbl->bufq[idx].q_lock);
-
 	cmd->out.buf_handle = tbl->bufq[idx].buf_handle;
 	cmd->out.vaddr = 0;
+	mutex_unlock(&tbl->bufq[idx].q_lock);
+	mutex_unlock(&tbl->m_lock);
 
 	CAM_DBG(CAM_MEM,
 		"fd=%d, flags=0x%x, num_hdl=%d, idx=%d, buf handle=%x, len=%zu, i_ino=%lu",
 		cmd->fd, cmd->flags, cmd->num_hdl, idx, cmd->out.buf_handle,
-		tbl->bufq[idx].len, tbl->bufq[idx].i_ino);
+		len, i_ino);
 
 	return rc;
 
@@ -967,7 +969,15 @@ int cam_mem_mgr_request_mem(struct cam_mem_mgr_request_desc *inp,
 		goto slot_fail;
 	}
 
+	/*
+	 * Publish under m_lock, and set the client before the handle, so
+	 * userspace cannot see this kernel buffer with the client of the
+	 * previous user of the slot.
+	 */
+	mutex_lock(&tbl->m_lock);
 	mutex_lock(&tbl->bufq[idx].q_lock);
+	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_KERNEL;
+	kref_init(&tbl->bufq[idx].krefcount);
 	mem_handle = GET_MEM_HANDLE(idx, fd);
 	tbl->bufq[idx].dma_buf = buf;
 	tbl->bufq[idx].fd = -1;
@@ -984,9 +994,8 @@ int cam_mem_mgr_request_mem(struct cam_mem_mgr_request_desc *inp,
 		sizeof(int32_t));
 	tbl->bufq[idx].is_imported = false;
 	tbl->bufq[idx].is_released = false;
-	kref_init(&tbl->bufq[idx].krefcount);
-	tbl->bufq[idx].smmu_mapping_client = CAM_SMMU_MAPPING_KERNEL;
 	mutex_unlock(&tbl->bufq[idx].q_lock);
+	mutex_unlock(&tbl->m_lock);
 
 	out->kva = kvaddr;
 	out->iova = (uint32_t)iova;
