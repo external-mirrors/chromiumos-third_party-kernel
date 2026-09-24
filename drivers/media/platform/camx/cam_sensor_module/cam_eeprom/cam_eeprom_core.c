@@ -265,6 +265,27 @@ static int cam_eeprom_match_id(struct cam_eeprom_ctrl_t *e_ctrl)
 	return 0;
 }
 
+static void cam_eeprom_free_cal_data(struct cam_eeprom_ctrl_t *e_ctrl)
+{
+	vfree(e_ctrl->cal_data.mapdata);
+	vfree(e_ctrl->cal_data.map);
+	e_ctrl->cal_data.mapdata = NULL;
+	e_ctrl->cal_data.map = NULL;
+	e_ctrl->cal_data.num_data = 0;
+	e_ctrl->cal_data.num_map = 0;
+}
+
+static void cam_eeprom_free_power_settings(
+	struct cam_sensor_power_ctrl_t *power_info)
+{
+	kfree(power_info->power_setting);
+	kfree(power_info->power_down_setting);
+	power_info->power_setting = NULL;
+	power_info->power_down_setting = NULL;
+	power_info->power_setting_size = 0;
+	power_info->power_down_setting_size = 0;
+}
+
 /**
  * cam_eeprom_parse_read_memory_map - Parse memory map
  * @of_node:    device node
@@ -322,10 +343,7 @@ int32_t cam_eeprom_parse_read_memory_map(struct device_node *of_node,
 power_down:
 	cam_eeprom_power_down(e_ctrl);
 data_mem_free:
-	vfree(e_ctrl->cal_data.mapdata);
-	vfree(e_ctrl->cal_data.map);
-	e_ctrl->cal_data.num_data = 0;
-	e_ctrl->cal_data.num_map = 0;
+	cam_eeprom_free_cal_data(e_ctrl);
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 	return rc;
 }
@@ -933,10 +951,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 				goto release_buf;
 			}
 			rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet_local);
-			vfree(e_ctrl->cal_data.mapdata);
-			vfree(e_ctrl->cal_data.map);
-			e_ctrl->cal_data.num_data = 0;
-			e_ctrl->cal_data.num_map = 0;
+			cam_eeprom_free_cal_data(e_ctrl);
 			CAM_DBG(CAM_EEPROM,
 				"Returning the data using kernel probe");
 			break;
@@ -945,7 +960,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		if (rc) {
 			CAM_ERR(CAM_EEPROM,
 				"Failed in parsing the pkt");
-			goto release_buf;
+			goto error;
 		}
 
 		e_ctrl->cal_data.mapdata =
@@ -960,7 +975,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 			&soc_private->power_info);
 		if (rc) {
 			CAM_ERR(CAM_EEPROM, "failed rc %d", rc);
-			goto memdata_free;
+			goto error;
 		}
 
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_CONFIG;
@@ -974,16 +989,8 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet_local);
 		rc = cam_eeprom_power_down(e_ctrl);
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
-		vfree(e_ctrl->cal_data.mapdata);
-		vfree(e_ctrl->cal_data.map);
-		kfree(power_info->power_setting);
-		kfree(power_info->power_down_setting);
-		power_info->power_setting = NULL;
-		power_info->power_down_setting = NULL;
-		power_info->power_setting_size = 0;
-		power_info->power_down_setting_size = 0;
-		e_ctrl->cal_data.num_data = 0;
-		e_ctrl->cal_data.num_map = 0;
+		cam_eeprom_free_cal_data(e_ctrl);
+		cam_eeprom_free_power_settings(power_info);
 		break;
 	default:
 		break;
@@ -996,16 +1003,9 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 
 power_down:
 	cam_eeprom_power_down(e_ctrl);
-memdata_free:
-	vfree(e_ctrl->cal_data.mapdata);
 error:
-	kfree(power_info->power_setting);
-	kfree(power_info->power_down_setting);
-	power_info->power_setting = NULL;
-	power_info->power_down_setting = NULL;
-	vfree(e_ctrl->cal_data.map);
-	e_ctrl->cal_data.num_data = 0;
-	e_ctrl->cal_data.num_map = 0;
+	cam_eeprom_free_cal_data(e_ctrl);
+	cam_eeprom_free_power_settings(power_info);
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 release_buf:
 	cam_mem_put_cpu_buf(dev_config.packet_handle);
@@ -1040,12 +1040,7 @@ void cam_eeprom_shutdown(struct cam_eeprom_ctrl_t *e_ctrl)
 		e_ctrl->bridge_intf.link_hdl = -1;
 		e_ctrl->bridge_intf.session_hdl = -1;
 
-		kfree(power_info->power_setting);
-		kfree(power_info->power_down_setting);
-		power_info->power_setting = NULL;
-		power_info->power_down_setting = NULL;
-		power_info->power_setting_size = 0;
-		power_info->power_down_setting_size = 0;
+		cam_eeprom_free_power_settings(power_info);
 	}
 
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_INIT;
