@@ -2395,17 +2395,19 @@ static int cam_req_mgr_cb_add_req(struct cam_req_mgr_add_request *add_req)
 	if (link->state < CAM_CRM_LINK_STATE_READY) {
 		CAM_WARN(CAM_CRM, "invalid link state:%d", link->state);
 		rc = -EPERM;
-		spin_unlock_bh(&link->link_state_spin_lock);
-		goto end;
+		goto unlock;
 	}
-	spin_unlock_bh(&link->link_state_spin_lock);
 
+	/*
+	 * Keep link_state_spin_lock until the task is queued, so unlink
+	 * cannot destroy the workq under us.
+	 */
 	task = cam_req_mgr_workq_get_task(link->workq);
 	if (!task) {
 		CAM_ERR_RATE_LIMIT(CAM_CRM, "no empty task dev %x req %lld",
 			add_req->dev_hdl, add_req->req_id);
 		rc = -EBUSY;
-		goto end;
+		goto unlock;
 	}
 
 	task_data = (struct crm_task_payload *)task->payload;
@@ -2420,7 +2422,8 @@ static int cam_req_mgr_cb_add_req(struct cam_req_mgr_add_request *add_req)
 	CAM_DBG(CAM_CRM, "X: dev %x dev req %lld",
 		add_req->dev_hdl, add_req->req_id);
 
-end:
+unlock:
+	spin_unlock_bh(&link->link_state_spin_lock);
 	return rc;
 }
 
@@ -2461,13 +2464,13 @@ static int cam_req_mgr_cb_notify_err(
 		goto end;
 	}
 	crm_timer_reset(link->watchdog);
-	spin_unlock_bh(&link->link_state_spin_lock);
 
+	/* Keep link_state_spin_lock until the task is queued */
 	task = cam_req_mgr_workq_get_task(link->workq);
 	if (!task) {
 		CAM_ERR(CAM_CRM, "no empty task req_id %lld", err_info->req_id);
 		rc = -EBUSY;
-		goto end;
+		goto unlock;
 	}
 
 	task_data = (struct crm_task_payload *)task->payload;
@@ -2480,6 +2483,8 @@ static int cam_req_mgr_cb_notify_err(
 	task->process_cb = &cam_req_mgr_process_error;
 	rc = cam_req_mgr_workq_enqueue_task(task, link, CRM_TASK_PRIORITY_0);
 
+unlock:
+	spin_unlock_bh(&link->link_state_spin_lock);
 end:
 	return rc;
 }
@@ -2543,14 +2548,14 @@ static int cam_req_mgr_cb_notify_trigger(
 		goto end;
 	}
 	crm_timer_reset(link->watchdog);
-	spin_unlock_bh(&link->link_state_spin_lock);
 
+	/* Keep link_state_spin_lock until the task is queued */
 	task = cam_req_mgr_workq_get_task(link->workq);
 	if (!task) {
 		CAM_ERR(CAM_CRM, "no empty task frame %lld",
 			trigger_data->frame_id);
 		rc = -EBUSY;
-		goto end;
+		goto unlock;
 	}
 	task_data = (struct crm_task_payload *)task->payload;
 	task_data->type = CRM_WORKQ_TASK_NOTIFY_SOF;
@@ -2564,6 +2569,8 @@ static int cam_req_mgr_cb_notify_trigger(
 	task->process_cb = &cam_req_mgr_process_trigger;
 	rc = cam_req_mgr_workq_enqueue_task(task, link, CRM_TASK_PRIORITY_0);
 
+unlock:
+	spin_unlock_bh(&link->link_state_spin_lock);
 end:
 	return rc;
 }
