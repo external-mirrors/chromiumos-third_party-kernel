@@ -442,7 +442,9 @@ static int32_t cam_eeprom_parse_memory_map(
 	else if (cmm_hdr->cmd_type == CAMERA_SENSOR_CMD_TYPE_I2C_CONT_RD)
 		validate_size = sizeof(struct cam_cmd_i2c_continuous_rd);
 	else if (cmm_hdr->cmd_type == CAMERA_SENSOR_CMD_TYPE_WAIT)
-		validate_size = sizeof(struct cam_cmd_unconditional_wait);
+		validate_size = (generic_op_code == CAMERA_SENSOR_WAIT_OP_COND) ?
+			sizeof(struct cam_cmd_conditional_wait) :
+			sizeof(struct cam_cmd_unconditional_wait);
 
 	if (remain_buf_len < validate_size ||
 	    *num_map >= (MSM_EEPROM_MAX_MEM_MAP_CNT *
@@ -544,6 +546,10 @@ static int32_t cam_eeprom_parse_memory_map(
 			map[*num_map].poll.data_type = i2c_poll->data_type;
 			map[*num_map].poll.delay = i2c_poll->timeout;
 			map[*num_map].poll.valid_size = 1;
+		} else {
+			CAM_ERR(CAM_EEPROM, "Invalid wait op code %u",
+				generic_op_code);
+			return -EINVAL;
 		}
 		cmd_buf += cmd_length_in_bytes / sizeof(int32_t);
 		processed_size +=
@@ -612,7 +618,7 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 			&generic_pkt_addr, &pkt_len);
 		if (rc) {
 			CAM_ERR(CAM_EEPROM, "Failed to get cpu buf");
-			return rc;
+			goto free_map;
 		}
 		cmd_buf = (uint32_t *)generic_pkt_addr;
 		if (!cmd_buf) {
@@ -638,20 +644,24 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 			goto rel_cmd_buf;
 		}
 
-		cmd_buf_local = (uint32_t *)cam_common_mem_kdup(cmd_buf, total_cmd_buf_in_bytes);
-
-		if (!cmd_buf_local) {
-			CAM_ERR(CAM_EEPROM, "Alloc and copy fail");
-			goto rel_cmd_buf;
-		}
-
-		cmd_buf_local_head = cmd_buf_local;
-
 		if (total_cmd_buf_in_bytes > remain_len) {
 			CAM_ERR(CAM_EEPROM, "Not enough buffer for command");
 			rc = -EINVAL;
 			goto rel_cmd_buf;
 		}
+
+		cmd_buf_local = (uint32_t *)cam_common_mem_kdup(cmd_buf, total_cmd_buf_in_bytes);
+
+		if (!cmd_buf_local) {
+			CAM_ERR(CAM_EEPROM, "Alloc and copy fail");
+			rc = -ENOMEM;
+			goto rel_cmd_buf;
+		}
+
+		cmd_buf_local_head = cmd_buf_local;
+		/* From now on, only parse the local copy */
+		remain_len = total_cmd_buf_in_bytes;
+
 		/* Loop through multiple cmd formats in one cmd buffer */
 		while (processed_cmd_buf_in_bytes < total_cmd_buf_in_bytes) {
 			if ((remain_len - processed_cmd_buf_in_bytes) <
@@ -670,10 +680,20 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 					rc = -EINVAL;
 					goto rel_cmd_buf;
 				}
+				if (num_map + 1 >= (MSM_EEPROM_MAX_MEM_MAP_CNT *
+					MSM_EEPROM_MEMORY_MAP_MAX_SIZE)) {
+					CAM_ERR(CAM_EEPROM, "num_map out of bounds");
+					rc = -EINVAL;
+					goto rel_cmd_buf;
+				}
 				/* Configure the following map slave address */
 				map[num_map + 1].saddr = i2c_info->slave_addr;
 				rc = cam_eeprom_update_slaveInfo(e_ctrl,
 					cmd_buf_local);
+				if (rc) {
+					CAM_ERR(CAM_EEPROM, "Failed to update slaveInfo");
+					goto rel_cmd_buf;
+				}
 				cmd_length_in_bytes =
 					sizeof(struct cam_cmd_i2c_info);
 				processed_cmd_buf_in_bytes +=
@@ -707,12 +727,19 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 					&cmd_length_in_bytes, &num_map,
 					(remain_len -
 					processed_cmd_buf_in_bytes));
+				if (rc) {
+					CAM_ERR(CAM_EEPROM, "Failed to parse memory map");
+					goto rel_cmd_buf;
+				}
 				processed_cmd_buf_in_bytes +=
 					cmd_length_in_bytes;
 				cmd_buf_local += cmd_length_in_bytes/sizeof(uint32_t);
 				break;
 			default:
-				break;
+				CAM_ERR(CAM_EEPROM, "Invalid cmd type %d",
+					cmm_hdr->cmd_type);
+				rc = -EINVAL;
+				goto rel_cmd_buf;
 			}
 		}
 		e_ctrl->cal_data.num_map = num_map + 1;
@@ -727,6 +754,10 @@ static int32_t cam_eeprom_init_pkt_parser(struct cam_eeprom_ctrl_t *e_ctrl,
 rel_cmd_buf:
 	cam_mem_put_cpu_buf(cmd_desc[i].mem_handle);
 	cam_common_mem_free(cmd_buf_local_head);
+free_map:
+	vfree(e_ctrl->cal_data.map);
+	e_ctrl->cal_data.map = NULL;
+	e_ctrl->cal_data.num_map = 0;
 	return rc;
 }
 
@@ -863,7 +894,8 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		(generic_pkt_addr + (uint32_t)dev_config.offset);
 	header_size = csl_packet->header.size;
 
-	if (header_size < sizeof(struct cam_packet)) {
+	if (header_size < sizeof(struct cam_packet) ||
+	    header_size > remain_len) {
 		CAM_ERR(CAM_EEPROM, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto release_buf;
@@ -873,6 +905,13 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 
 	if (!csl_packet_local) {
 		CAM_ERR(CAM_EEPROM, "Alloc and copy fail");
+		rc = -ENOMEM;
+		goto release_buf;
+	}
+
+	/* Userspace can change the shared packet after reading header_size */
+	if (csl_packet_local->header.size != header_size) {
+		CAM_ERR(CAM_EEPROM, "Header size mismatch, reject packet");
 		rc = -EINVAL;
 		goto release_buf;
 	}
