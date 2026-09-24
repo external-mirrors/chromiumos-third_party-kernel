@@ -363,6 +363,47 @@ free_cpu_buf:
 	return rc;
 }
 
+/*
+ * Drop the callbacks registered for the first @num in fences of @req, with
+ * the context reference taken for each of them. As not all the fences have
+ * a callback, none of them can complete req.
+ *
+ * Returns false if a callback has already been dispatched: it will still
+ * run with req and drop its own reference, so req must not be recycled.
+ */
+static bool cam_context_drop_in_fence_cbs(struct cam_context *ctx,
+					  struct cam_ctx_request *req,
+					  int32_t num)
+{
+	bool recycle = true;
+	int32_t sync_id;
+	int32_t j, k;
+
+	for (j = num - 1; j >= 0; j--) {
+		sync_id = req->in_map_entries[j].sync_id;
+
+		/* This drops the callbacks of all the duplicates of the fence */
+		if (!cam_sync_deregister_callback(cam_context_sync_callback,
+						  (void *)req, sync_id)) {
+			for (k = 0; k <= j; k++) {
+				if (req->in_map_entries[k].sync_id == sync_id)
+					cam_context_putref(ctx);
+			}
+			continue;
+		}
+
+		/* Already handled with a later duplicate? */
+		for (k = j + 1; k < num; k++) {
+			if (req->in_map_entries[k].sync_id == sync_id)
+				break;
+		}
+		if (k == num)
+			recycle = false;
+	}
+
+	return recycle;
+}
+
 int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	struct cam_config_dev_cmd *cmd)
 {
@@ -375,8 +416,11 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	size_t len = 0;
 	size_t remain_len = 0;
 	int32_t i = 0, j = 0;
+	int32_t sync_id;
+	uint32_t num_in;
 	uint32_t header_size;
 	bool packet_owned;
+	bool recycle = true;
 
 	if (!ctx || !cmd) {
 		CAM_ERR(CAM_CTXT, "Invalid input params %pK %pK", ctx, cmd);
@@ -510,55 +554,68 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 		}
 	}
 
-	if (req->num_in_map_entries > 0) {
-		spin_lock_bh(&ctx->lock);
-		list_add_tail(&req->list, &ctx->pending_req_list);
-		spin_unlock_bh(&ctx->lock);
+	/*
+	 * Only the in fence callbacks submit the request to the HW: without
+	 * in fences it would never leave the pending list.
+	 */
+	if (!req->num_in_map_entries) {
+		CAM_ERR(CAM_CTXT, "[%s][%d] Request %llu has no in fences",
+			ctx->dev_name, ctx->ctx_id, req->request_id);
+		rc = -EINVAL;
+		goto put_ref;
+	}
 
-		if (cam_debug_ctx_req_list & ctx->dev_id)
-			CAM_INFO(CAM_CTXT,
-				"[%s][%d] : Moving req[%llu] from free_list to pending_list",
-				ctx->dev_name, ctx->ctx_id, req->request_id);
-
-		for (j = 0; j < req->num_in_map_entries; j++) {
-			rc = cam_sync_check_valid(
+	/* Validate before publishing req, the error path recycles it */
+	for (j = 0; j < req->num_in_map_entries; j++) {
+		rc = cam_sync_check_valid(req->in_map_entries[j].sync_id);
+		if (rc) {
+			CAM_ERR(CAM_CTXT, "invalid in map sync object %d",
 				req->in_map_entries[j].sync_id);
-			if (rc) {
-				CAM_ERR(CAM_CTXT,
-					"invalid in map sync object %d",
-					req->in_map_entries[j].sync_id);
-				goto put_ref;
-			}
+			goto put_ref;
 		}
+	}
 
-		for (j = 0; j < req->num_in_map_entries; j++) {
-			cam_context_getref(ctx);
-			rc = cam_sync_register_callback(
-					cam_context_sync_callback,
-					(void *)req,
-					req->in_map_entries[j].sync_id);
-			if (rc) {
-				CAM_ERR(CAM_CTXT,
-					"[%s][%d] Failed register fence cb: %d ret = %d",
+	/* req can complete, and be reused, once the last callback is set */
+	num_in = req->num_in_map_entries;
+
+	spin_lock_bh(&ctx->lock);
+	list_add_tail(&req->list, &ctx->pending_req_list);
+	spin_unlock_bh(&ctx->lock);
+
+	if (cam_debug_ctx_req_list & ctx->dev_id)
+		CAM_INFO(CAM_CTXT,
+			"[%s][%d] : Moving req[%llu] from free_list to pending_list",
+			ctx->dev_name, ctx->ctx_id, req->request_id);
+
+	for (j = 0; j < num_in; j++) {
+		sync_id = req->in_map_entries[j].sync_id;
+		cam_context_getref(ctx);
+		rc = cam_sync_register_callback(
+				cam_context_sync_callback,
+				(void *)req, sync_id);
+		if (rc) {
+			CAM_ERR(CAM_CTXT,
+				"[%s][%d] Failed register fence cb: %d ret = %d",
+				ctx->dev_name, ctx->ctx_id, sync_id, rc);
+			cam_context_putref(ctx);
+
+			recycle = cam_context_drop_in_fence_cbs(ctx, req, j);
+
+			spin_lock_bh(&ctx->lock);
+			list_del_init(&req->list);
+			spin_unlock_bh(&ctx->lock);
+
+			if (recycle && (cam_debug_ctx_req_list & ctx->dev_id))
+				CAM_INFO(CAM_CTXT,
+					"[%s][%d] : Moving req[%llu] from pending_list to free_list",
 					ctx->dev_name, ctx->ctx_id,
-					req->in_map_entries[j].sync_id, rc);
-				spin_lock_bh(&ctx->lock);
-				list_del_init(&req->list);
-				spin_unlock_bh(&ctx->lock);
+					req->request_id);
 
-				if (cam_debug_ctx_req_list & ctx->dev_id)
-					CAM_INFO(CAM_CTXT,
-						"[%s][%d] : Moving req[%llu] from pending_list to free_list",
-						ctx->dev_name, ctx->ctx_id,
-						req->request_id);
+			goto put_ref;
 
-				cam_context_putref(ctx);
-				goto put_ref;
-
-			}
-			CAM_DBG(CAM_CTXT, "register in fence cb: %d ret = %d",
-				req->in_map_entries[j].sync_id, rc);
 		}
+		CAM_DBG(CAM_CTXT, "register in fence cb: %d ret = %d",
+			sync_id, rc);
 	}
 
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
@@ -578,6 +635,8 @@ free_cpu_buf:
 free_req:
 	cam_common_mem_free(packet_local);
 	req->pf_data.packet = NULL;
+	if (!recycle)
+		return rc;
 	spin_lock_bh(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
 	req->ctx = NULL;
