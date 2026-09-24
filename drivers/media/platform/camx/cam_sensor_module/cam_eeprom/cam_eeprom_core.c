@@ -805,7 +805,7 @@ static int32_t cam_eeprom_get_cal_data(struct cam_eeprom_ctrl_t *e_ctrl,
 	CAM_DBG(CAM_EEPROM, "number of IO configs: %d:",
 		csl_packet->num_io_configs);
 
-	for (i = 0; i < csl_packet->num_io_configs; i++) {
+	for (i = 0; i < csl_packet->num_io_configs; i++, io_cfg++) {
 		CAM_DBG(CAM_EEPROM, "Direction: %d:", io_cfg->direction);
 		if (io_cfg->direction == CAM_BUF_OUTPUT) {
 			rc = cam_mem_get_cpu_buf(io_cfg->mem_handle[0],
@@ -848,7 +848,7 @@ static int32_t cam_eeprom_get_cal_data(struct cam_eeprom_ctrl_t *e_ctrl,
 			cam_mem_put_cpu_buf(io_cfg->mem_handle[0]);
 		} else {
 			CAM_ERR(CAM_EEPROM, "Invalid direction");
-			rc = -EINVAL;
+			return -EINVAL;
 		}
 	}
 
