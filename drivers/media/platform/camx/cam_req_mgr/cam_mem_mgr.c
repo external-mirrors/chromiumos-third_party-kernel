@@ -843,6 +843,12 @@ static int __cam_mem_mgr_release(struct cam_mem_mgr_release_cmd *cmd)
 		return -EINVAL;
 	}
 
+	if (tbl->bufq[idx].smmu_mapping_client != CAM_SMMU_MAPPING_USER) {
+		CAM_ERR(CAM_MEM, "idx: %d Invalid client %d",
+			idx, tbl->bufq[idx].smmu_mapping_client);
+		return -EINVAL;
+	}
+
 	CAM_DBG(CAM_MEM, "Releasing hdl = %x, idx = %d", cmd->buf_handle, idx);
 	if (kref_put(&tbl->bufq[idx].krefcount, cam_mem_util_unmap)) {
 		CAM_DBG(CAM_MEM,
@@ -1029,6 +1035,13 @@ int cam_mem_mgr_release_mem(struct cam_mem_mgr_memory_desc *inp)
 		goto err_mutex_unlock;
 	}
 
+	if (tbl->bufq[idx].smmu_mapping_client != CAM_SMMU_MAPPING_KERNEL) {
+		CAM_ERR(CAM_MEM, "idx: %d Invalid client %d",
+			idx, tbl->bufq[idx].smmu_mapping_client);
+		rc = -EINVAL;
+		goto err_mutex_unlock;
+	}
+
 	CAM_DBG(CAM_MEM, "Releasing hdl = %X", inp->mem_handle);
 	if (kref_put(&tbl->bufq[idx].krefcount, cam_mem_util_unmap)) {
 		CAM_DBG(CAM_MEM,
@@ -1093,7 +1106,8 @@ void cam_mem_mgr_close(void)
 
 	for_each_set_bit_from(i, tbl->bitmap, tbl->bits) {
 		mutex_lock(&tbl->m_lock);
-		if (tbl->bufq[i].active) {
+		if (tbl->bufq[i].active &&
+		    tbl->bufq[i].smmu_mapping_client == CAM_SMMU_MAPPING_USER) {
                         CAM_DBG(CAM_MEM, "Active buffer idx=%d", i);
 			cmd.buf_handle = tbl->bufq[i].buf_handle;
 			mutex_lock(&tbl->bufq[i].q_lock);
