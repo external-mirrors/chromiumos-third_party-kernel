@@ -235,6 +235,12 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		goto rel_pkt_buf;
 	}
 
+	if (!csl_packet_local->num_cmd_buf) {
+		CAM_ERR(CAM_CSIPHY, "No command buffer");
+		rc = -EINVAL;
+		goto rel_pkt_buf;
+	}
+
 	cmd_desc = (struct cam_cmd_buf_desc *)
 		((uint32_t *)&csl_packet_local->payload +
 		csl_packet_local->cmd_buf_offset / 4);
@@ -247,12 +253,13 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		goto rel_pkt_buf;
 	}
 
-	if ((len < sizeof(struct cam_csiphy_info)) ||
-		(cmd_desc->offset > (len - sizeof(struct cam_csiphy_info)))) {
+	if (cmd_desc->length < sizeof(struct cam_csiphy_info) ||
+	    cmd_desc->offset >= len ||
+	    cmd_desc->length > len - cmd_desc->offset) {
 		CAM_ERR(CAM_CSIPHY,
 			"Not enough buffer provided for cam_cisphy_info");
 		rc = -EINVAL;
-		goto rel_pkt_buf;
+		goto rel_cmd_buf;
 	}
 
 	cmd_buf = (uint32_t *)generic_ptr;
@@ -262,8 +269,8 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 
 	if (!cmd_buf_local) {
 		CAM_ERR(CAM_CSIPHY, "Alloc and copy fail");
-		rc = -EINVAL;
-		goto rel_pkt_buf;
+		rc = -ENOMEM;
+		goto rel_cmd_buf;
 	}
 	cam_cmd_csiphy_info = (struct cam_csiphy_info *)cmd_buf_local;
 
@@ -290,17 +297,12 @@ static int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 		cam_csiphy_update_secure_info(csiphy_dev,
 			cam_cmd_csiphy_info, cfg_dev);
 
-	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
-	cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle);
-	cam_common_mem_free(csl_packet_local);
 	cam_common_mem_free(cmd_buf_local);
-	return rc;
-
+rel_cmd_buf:
+	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 rel_pkt_buf:
 	cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle);
-	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	cam_common_mem_free(csl_packet_local);
-	cam_common_mem_free(cmd_buf_local);
 	return rc;
 }
 
