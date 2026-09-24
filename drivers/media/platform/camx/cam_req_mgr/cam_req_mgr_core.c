@@ -3311,6 +3311,19 @@ int cam_req_mgr_sync_config(
 		goto done;
 	}
 
+	if (link1 == link2 ||
+	    link1->parent != cam_session || link2->parent != cam_session) {
+		CAM_ERR(CAM_CRM, "Invalid links or not in same session");
+		rc = -EINVAL;
+		goto done;
+	}
+
+	/* Drop any previous pairing, including the peer's back-pointer */
+	if (link1->sync_link && link1->sync_link->sync_link == link1)
+		link1->sync_link->sync_link = NULL;
+	if (link2->sync_link && link2->sync_link->sync_link == link2)
+		link2->sync_link->sync_link = NULL;
+
 	link1->sync_link_sof_skip = false;
 	link1->sync_link = NULL;
 
