@@ -987,7 +987,17 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 		}
 
 		rc = cam_eeprom_get_cal_data(e_ctrl, csl_packet_local);
+		if (rc) {
+			CAM_ERR(CAM_EEPROM,
+				"cam_eeprom_get_cal_data failed");
+			goto power_down;
+		}
 		rc = cam_eeprom_power_down(e_ctrl);
+		if (rc) {
+			CAM_ERR(CAM_EEPROM,
+				"cam_eeprom_power_down failed");
+			goto error;
+		}
 		e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 		cam_eeprom_free_cal_data(e_ctrl);
 		cam_eeprom_free_power_settings(power_info);
