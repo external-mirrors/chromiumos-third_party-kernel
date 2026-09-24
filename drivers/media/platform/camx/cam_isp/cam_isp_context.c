@@ -3378,7 +3378,8 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 
 	header_size = packet->header.size;
 
-	if (header_size < sizeof(struct cam_packet)) {
+	if (header_size < sizeof(struct cam_packet) ||
+	    header_size > remain_len) {
 		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -ENOMEM;
 		goto free_cpu_buf;
@@ -3391,7 +3392,8 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 		goto free_cpu_buf;
 	}
 
-	if (header_size != packet->header.size) {
+	/* Check the copy, userspace can still change the shared packet */
+	if (header_size != packet_local->header.size) {
 		CAM_ERR(CAM_CTXT, "Header size mismatch, reject packet");
 		rc = -EINVAL;
 		goto free_cpu_buf;

@@ -140,8 +140,8 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		(uint32_t)config.offset);
 	header_size = csl_packet->header.size;
 
-
-	if (header_size < sizeof(struct cam_packet)) {
+	if (header_size < sizeof(struct cam_packet) ||
+	    header_size > remain_len) {
 		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
@@ -151,6 +151,13 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 
 	if (!csl_packet_local) {
 		CAM_ERR(CAM_SENSOR, "Alloc and copy fail");
+		rc = -ENOMEM;
+		goto rel_pkt_buf;
+	}
+
+	/* Userspace can change the shared packet after reading header_size */
+	if (csl_packet_local->header.size != header_size) {
+		CAM_ERR(CAM_SENSOR, "Header size mismatch, reject packet");
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
@@ -485,7 +492,7 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 	}
 	header_size = pkt->header.size;
 
-	if (header_size < sizeof(struct cam_packet)) {
+	if (header_size < sizeof(struct cam_packet) || header_size > len) {
 		CAM_ERR(CAM_CTXT, "cam_packet size exceeds header_size (%u)", header_size);
 		rc = -EINVAL;
 		goto rel_pkt_buf;
@@ -495,13 +502,19 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 
 	if (!pkt_local) {
 		CAM_ERR(CAM_SENSOR, "Alloc and copy fail");
+		rc = -ENOMEM;
+		goto rel_pkt_buf;
+	}
+
+	/* Userspace can change the shared packet after reading header_size */
+	if (pkt_local->header.size != header_size) {
+		CAM_ERR(CAM_SENSOR, "Header size mismatch, reject packet");
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
 
-	if ((len < sizeof(struct cam_packet)) ||
-		(pkt_local->cmd_buf_offset >= (len - sizeof(struct cam_packet)))) {
-		CAM_ERR(CAM_SENSOR, "Not enough buf provided");
+	if (cam_packet_util_validate_packet(pkt_local, len)) {
+		CAM_ERR(CAM_SENSOR, "Invalid packet params");
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
