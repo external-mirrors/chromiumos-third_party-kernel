@@ -189,18 +189,6 @@ static const struct vb2_ops jenc_v4l2_vb2_ops = {
 	.wait_finish		= vb2_ops_wait_finish,
 };
 
-static void op_jenc_m2m_job_abort(void *priv)
-{
-	struct jenc_context *jctx = priv;
-
-	if (!jctx)
-		return;
-
-	jenc_hal_process_done(jctx, true);
-
-	v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
-}
-
 static void op_jenc_m2m_job_run(void *priv)
 {
 	struct jenc_context *jctx = priv;
@@ -213,8 +201,10 @@ static void op_jenc_m2m_job_run(void *priv)
 	src_vb = v4l2_m2m_next_src_buf(jctx->fh.m2m_ctx);
 	dst_vb = v4l2_m2m_next_dst_buf(jctx->fh.m2m_ctx);
 
-	if (!src_vb && !dst_vb)
+	if (!src_vb || !dst_vb) {
+		v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
 		return;
+	}
 
 	sdsc = jenc_hal_get_bufq(jctx, TYPE2ID(src_vb->vb2_buf.type));
 	ddsc = jenc_hal_get_bufq(jctx, TYPE2ID(dst_vb->vb2_buf.type));
@@ -223,13 +213,14 @@ static void op_jenc_m2m_job_run(void *priv)
 	dst_vb->sequence = ddsc->sequence++;
 	v4l2_m2m_buf_copy_metadata(src_vb, dst_vb, true);
 
-	if (jenc_hal_process_exec(jctx, src_vb, dst_vb))
-		op_jenc_m2m_job_abort(jctx);
+	if (jenc_hal_process_exec(jctx, src_vb, dst_vb)) {
+		jenc_hal_process_done(jctx, true);
+		v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
+	}
 }
 
 static const struct v4l2_m2m_ops jenc_v4l2_m2m_ops = {
 	.device_run	= op_jenc_m2m_job_run,
-	.job_abort	= op_jenc_m2m_job_abort,
 };
 
 static int op_jenc_querycap(struct file *file, void *priv,
@@ -588,15 +579,16 @@ static int op_jenc_file_release(struct file *file)
 	struct jpeg_encoder *jenc = video_drvdata(file);
 	struct jenc_context *jctx = jenc_file2ctx(file);
 
-	if (!atomic_dec_if_positive(&jenc->ref_count))
-		jenc_hal_release(jctx);
-
 	v4l2_fh_del(&jctx->fh);
 	v4l2_fh_exit(&jctx->fh);
 	v4l2_ctrl_handler_free(&jctx->ctrl_hdl);
 	mutex_lock(&jenc->dev_mutex);
 	v4l2_m2m_ctx_release(jctx->fh.m2m_ctx);
 	mutex_unlock(&jenc->dev_mutex);
+
+	/* Only power down once no job can be running on this context */
+	if (!atomic_dec_if_positive(&jenc->ref_count))
+		jenc_hal_release(jctx);
 
 	dev_dbg(jctx->dev, "Releasing instance %p\n", jctx);
 
