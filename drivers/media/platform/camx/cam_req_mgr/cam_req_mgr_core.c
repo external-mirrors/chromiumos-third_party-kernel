@@ -2806,11 +2806,37 @@ end:
  */
 static int __cam_req_mgr_unlink(struct cam_req_mgr_core_link *link)
 {
+	struct cam_req_mgr_core_session *session;
+	struct cam_req_mgr_core_link *sync_link;
 	int rc;
 
 	spin_lock_bh(&link->link_state_spin_lock);
 	link->state = CAM_CRM_LINK_STATE_IDLE;
 	spin_unlock_bh(&link->link_state_spin_lock);
+
+	session = (struct cam_req_mgr_core_session *)link->parent;
+	if (session) {
+		/*
+		 * Lock order must match cam_req_mgr_process_trigger(), which
+		 * takes link->lock and then session->lock. Hold both link
+		 * locks so that neither workqueue sees sync_link change while
+		 * processing, and session->lock for __cam_req_mgr_process_req().
+		 * Callers hold crm_lock, so link->sync_link cannot change
+		 * under us and two unlinks cannot run concurrently.
+		 */
+		mutex_lock(&link->lock);
+		sync_link = link->sync_link;
+		if (sync_link)
+			mutex_lock_nested(&sync_link->lock, SINGLE_DEPTH_NESTING);
+		mutex_lock(&session->lock);
+		if (sync_link && sync_link->sync_link == link)
+			sync_link->sync_link = NULL;
+		link->sync_link = NULL;
+		mutex_unlock(&session->lock);
+		if (sync_link)
+			mutex_unlock(&sync_link->lock);
+		mutex_unlock(&link->lock);
+	}
 
 	rc = __cam_req_mgr_disconnect_link(link);
 	if (rc)
