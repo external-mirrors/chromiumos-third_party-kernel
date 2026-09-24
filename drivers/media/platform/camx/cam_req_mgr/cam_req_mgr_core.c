@@ -1621,10 +1621,13 @@ static int __cam_req_mgr_create_subdevs(
  *
  */
 static void __cam_req_mgr_destroy_subdev(
-	struct cam_req_mgr_connected_device *l_device)
+	struct cam_req_mgr_connected_device **l_device)
 {
-	kfree(l_device);
-	l_device = NULL;
+	if (!l_device || !*l_device)
+		return;
+
+	kfree(*l_device);
+	*l_device = NULL;
 }
 
 /*
@@ -2861,7 +2864,7 @@ static int __cam_req_mgr_unlink(struct cam_req_mgr_core_link *link)
 	__cam_req_mgr_destroy_link_info(link);
 
 	/* Free memory holding data of linked devs */
-	__cam_req_mgr_destroy_subdev(link->l_dev);
+	__cam_req_mgr_destroy_subdev(&link->l_dev);
 
 	/* Destroy the link handle */
 	rc = cam_destroy_link_hdl(link->link_hdl);
@@ -3023,7 +3026,7 @@ int cam_req_mgr_link(struct cam_req_mgr_ver_info *link_info)
 	mutex_unlock(&g_crm_core_dev->crm_lock);
 	return rc;
 setup_failed:
-	__cam_req_mgr_destroy_subdev(link->l_dev);
+	__cam_req_mgr_destroy_subdev(&link->l_dev);
 create_subdev_failed:
 	cam_destroy_link_hdl(link->link_hdl);
 	link_info->u.link_info_v1.link_hdl = -1;
@@ -3132,7 +3135,7 @@ int cam_req_mgr_link_v2(struct cam_req_mgr_ver_info *link_info)
 	mutex_unlock(&g_crm_core_dev->crm_lock);
 	return rc;
 setup_failed:
-	__cam_req_mgr_destroy_subdev(link->l_dev);
+	__cam_req_mgr_destroy_subdev(&link->l_dev);
 create_subdev_failed:
 	cam_destroy_link_hdl(link->link_hdl);
 	link_info->u.link_info_v2.link_hdl = -1;
@@ -3170,6 +3173,13 @@ int cam_req_mgr_unlink(struct cam_req_mgr_unlink_info *unlink_info)
 	link = cam_get_link_priv(unlink_info->link_hdl);
 	if (!link) {
 		CAM_ERR(CAM_CRM, "NULL pointer");
+		rc = -EINVAL;
+		goto done;
+	}
+
+	if (link->parent != cam_session) {
+		CAM_ERR(CAM_CRM, "Link %x does not belong to session %x",
+			unlink_info->link_hdl, unlink_info->session_hdl);
 		rc = -EINVAL;
 		goto done;
 	}
@@ -3433,6 +3443,13 @@ int cam_req_mgr_flush_requests(
 		goto end;
 	}
 
+	if (link->parent != session) {
+		CAM_ERR(CAM_CRM, "Link %x does not belong to session %x",
+			flush_info->link_hdl, flush_info->session_hdl);
+		rc = -EINVAL;
+		goto end;
+	}
+
 	task = cam_req_mgr_workq_get_task(link->workq);
 	if (!task) {
 		rc = -ENOMEM;
@@ -3463,6 +3480,7 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control)
 	int                               rc = 0;
 	int                               i, j;
 	struct cam_req_mgr_core_link     *link = NULL;
+	struct cam_req_mgr_core_session  *session = NULL;
 
 	struct cam_req_mgr_connected_device *dev = NULL;
 	struct cam_req_mgr_link_evt_data     evt_data;
@@ -3485,11 +3503,26 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control)
 
 	mutex_lock(&g_crm_core_dev->crm_lock);
 
+	session = cam_get_session_priv(control->session_hdl);
+	if (!session) {
+		CAM_ERR(CAM_CRM, "Invalid session 0x%x", control->session_hdl);
+		rc = -EINVAL;
+		mutex_unlock(&g_crm_core_dev->crm_lock);
+		goto end;
+	}
+
 	for (i = 0; i < control->num_links; i++) {
 		link = cam_get_link_priv(control->link_hdls[i]);
 		if (!link) {
 			CAM_ERR(CAM_CRM, "Link(%d) is NULL on session 0x%x",
 				i, control->session_hdl);
+			rc = -EINVAL;
+			break;
+		}
+
+		if (link->parent != session) {
+			CAM_ERR(CAM_CRM, "Link %x does not belong to session 0x%x",
+				control->link_hdls[i], control->session_hdl);
 			rc = -EINVAL;
 			break;
 		}
@@ -3590,6 +3623,13 @@ int cam_req_mgr_dump_request(struct cam_dump_req_cmd *dump_req)
 	link = cam_get_link_priv(dump_req->link_hdl);
 	if (!link) {
 		CAM_DBG(CAM_CRM, "link ptr NULL %x", dump_req->link_hdl);
+		rc = -EINVAL;
+		goto end;
+	}
+
+	if (link->parent != session) {
+		CAM_ERR(CAM_CRM, "Link %x does not belong to session %x",
+			dump_req->link_hdl, dump_req->session_handle);
 		rc = -EINVAL;
 		goto end;
 	}
