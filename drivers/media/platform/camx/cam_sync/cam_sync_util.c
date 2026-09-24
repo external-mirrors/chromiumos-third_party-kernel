@@ -255,10 +255,16 @@ int cam_sync_deinit_object(struct sync_table_row *table, uint32_t idx)
 		kfree(upayload_info);
 	}
 
+	/*
+	 * Kernel users hold resources until their callback runs, e.g. a
+	 * request and a context reference. Do not drop the callbacks,
+	 * signal them with an error.
+	 */
 	list_for_each_entry_safe(sync_cb, temp_cb,
 			&row->callback_list, list) {
+		sync_cb->status = CAM_SYNC_STATE_SIGNALED_ERROR;
 		list_del_init(&sync_cb->list);
-		kfree(sync_cb);
+		queue_work(sync_dev->work_queue, &sync_cb->cb_dispatch_work);
 	}
 
 	memset(row, 0, sizeof(*row));
