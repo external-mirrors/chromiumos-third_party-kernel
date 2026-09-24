@@ -1337,7 +1337,7 @@ static void jenc_hal_job_work(struct work_struct *work)
 				 &irq_cd, sizeof(irq_cd));
 
 	status = jctx->job_status;
-	if (status != JENC_JOB_DONE) {
+	if (status == JENC_JOB_PENDING || status == JENC_JOB_ERROR) {
 		if (status == JENC_JOB_PENDING)
 			dev_err(jctx->dev, "Encoding timeout\n");
 
@@ -1351,7 +1351,14 @@ static void jenc_hal_job_work(struct work_struct *work)
 
 	mutex_unlock(&jenc->job_mutex);
 
-	jenc_hal_process_done(jctx, status != JENC_JOB_DONE);
+	if (status != JENC_JOB_EMPTY)
+		jenc_hal_process_done(jctx, status != JENC_JOB_DONE);
+
+	/*
+	 * This must be the last access to the m2m context: once the job is
+	 * finished, release can go on and only waits for this work to
+	 * return before freeing it.
+	 */
 	v4l2_m2m_job_finish(jenc->m2m_dev, jctx->fh.m2m_ctx);
 }
 
@@ -1365,6 +1372,20 @@ void jenc_hal_watchdog_init(struct jenc_context *jctx)
 void jenc_hal_watchdog_sync(struct jenc_context *jctx)
 {
 	cancel_delayed_work_sync(&jctx->timeout_work);
+}
+
+/*
+ * Finish a job that did not reach the HW. Called with job_mutex held. Jobs
+ * are always finished from the completion work, so release can wait for
+ * v4l2_m2m_job_finish() to return.
+ */
+void jenc_hal_fail_job(struct jenc_context *jctx, enum jenc_job_status status)
+{
+	lockdep_assert_held(&jctx->jenc->job_mutex);
+
+	jctx->job_status = status;
+	atomic_set(&jctx->job_running, 1);
+	mod_delayed_work(system_wq, &jctx->timeout_work, 0);
 }
 
 int jenc_hal_process_exec(struct jenc_context *jctx,
@@ -1422,8 +1443,8 @@ int jenc_hal_process_exec(struct jenc_context *jctx,
 		rc = cam_jpeg_enc_start_hw(jctx->jenc->hw_priv, NULL, 0);
 	if (rc) {
 		/*
-		 * The caller holds job_mutex, so the completion work cannot
-		 * run until the caller has finished the job itself.
+		 * The caller holds job_mutex and finishes the job with
+		 * jenc_hal_fail_job(), the completion work cannot run before.
 		 */
 		atomic_set(&jctx->job_running, 0);
 		irq_cd.b_set_cb = 0;

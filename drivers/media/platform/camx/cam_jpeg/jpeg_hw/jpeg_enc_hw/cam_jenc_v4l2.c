@@ -213,8 +213,14 @@ static void op_jenc_m2m_job_run(void *priv)
 	src_vb = v4l2_m2m_next_src_buf(jctx->fh.m2m_ctx);
 	dst_vb = v4l2_m2m_next_dst_buf(jctx->fh.m2m_ctx);
 
+	/*
+	 * Jobs are always finished from the completion work, never from
+	 * here, see op_jenc_file_release().
+	 */
 	if (!src_vb || !dst_vb) {
-		v4l2_m2m_job_finish(jctx->jenc->m2m_dev, jctx->fh.m2m_ctx);
+		mutex_lock(&jenc->job_mutex);
+		jenc_hal_fail_job(jctx, JENC_JOB_EMPTY);
+		mutex_unlock(&jenc->job_mutex);
 		return;
 	}
 
@@ -227,16 +233,13 @@ static void op_jenc_m2m_job_run(void *priv)
 
 	/*
 	 * The job can complete as soon as it is started, and the context can
-	 * then be released: only use jctx if exec failed.
+	 * then be released: do not use jctx after unlocking job_mutex.
 	 */
 	mutex_lock(&jenc->job_mutex);
 	rc = jenc_hal_process_exec(jctx, src_vb, dst_vb);
+	if (rc)
+		jenc_hal_fail_job(jctx, JENC_JOB_FAILED);
 	mutex_unlock(&jenc->job_mutex);
-
-	if (rc) {
-		jenc_hal_process_done(jctx, true);
-		v4l2_m2m_job_finish(jenc->m2m_dev, jctx->fh.m2m_ctx);
-	}
 }
 
 static const struct v4l2_m2m_ops jenc_v4l2_m2m_ops = {
@@ -604,11 +607,20 @@ static int op_jenc_file_release(struct file *file)
 	v4l2_fh_exit(&jctx->fh);
 	v4l2_ctrl_handler_free(&jctx->ctrl_hdl);
 	mutex_lock(&jenc->dev_mutex);
+	/*
+	 * v4l2_m2m_job_finish() wakes up the waiters of the job and then
+	 * still uses the m2m context, which v4l2_m2m_ctx_release() frees
+	 * right after waking up. Stream off first: that waits for the job to
+	 * finish and prevents new jobs. Jobs are only finished from the
+	 * completion work, so once it has returned the context is unused.
+	 */
+	v4l2_m2m_streamoff(file, jctx->fh.m2m_ctx,
+			   V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	v4l2_m2m_streamoff(file, jctx->fh.m2m_ctx,
+			   V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+	jenc_hal_watchdog_sync(jctx);
 	v4l2_m2m_ctx_release(jctx->fh.m2m_ctx);
 	mutex_unlock(&jenc->dev_mutex);
-
-	/* The watchdog may still be pending after the last job completed */
-	jenc_hal_watchdog_sync(jctx);
 
 	/* A new context could be allocated at the same address */
 	mutex_lock(&jenc->job_mutex);

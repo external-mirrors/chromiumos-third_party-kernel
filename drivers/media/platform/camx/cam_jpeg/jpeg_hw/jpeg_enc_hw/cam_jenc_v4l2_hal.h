@@ -42,6 +42,8 @@ enum jenc_job_status {
 	JENC_JOB_PENDING,	/* No IRQ yet, the job timed out if it ends now */
 	JENC_JOB_DONE,
 	JENC_JOB_ERROR,
+	JENC_JOB_FAILED,	/* The job could not be started */
+	JENC_JOB_EMPTY,		/* No buffers to run the job with */
 };
 
 struct jenc_bufq {
@@ -100,6 +102,8 @@ void jenc_hal_process_done(struct jenc_context *jctx, bool status);
 void jenc_hal_watchdog_init(struct jenc_context *jctx);
 
 void jenc_hal_watchdog_sync(struct jenc_context *jctx);
+
+void jenc_hal_fail_job(struct jenc_context *jctx, enum jenc_job_status status);
 
 int jenc_hal_prepare(struct jenc_context *jctx, bool hw_reset);
 
