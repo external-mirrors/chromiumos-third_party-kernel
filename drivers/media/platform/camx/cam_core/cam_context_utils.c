@@ -121,6 +121,8 @@ int cam_context_buf_done_from_hw(struct cam_context *ctx,
 	 * another thread may be adding/removing from free list,
 	 * so hold the lock
 	 */
+	cam_common_mem_free(req->pf_data.packet);
+	req->pf_data.packet = NULL;
 	spin_lock_bh(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
 	req->ctx = NULL;
@@ -374,6 +376,7 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	size_t remain_len = 0;
 	int32_t i = 0, j = 0;
 	uint32_t header_size;
+	bool packet_owned;
 
 	if (!ctx || !cmd) {
 		CAM_ERR(CAM_CTXT, "Invalid input params %pK %pK", ctx, cmd);
@@ -491,6 +494,12 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	req->request_id = packet_local->header.request_id;
 	req->status = 1;
 	req->req_priv = cfg.priv;
+	/*
+	 * If the HW manager kept a reference to the packet, the request now
+	 * owns it. Decide this before req is published, as it can complete
+	 * and be recycled concurrently once added to the pending list.
+	 */
+	packet_owned = req->pf_data.packet == packet_local;
 
 	for (i = 0; i < req->num_out_map_entries; i++) {
 		rc = cam_sync_get_obj_ref(req->out_map_entries[i].sync_id);
@@ -553,7 +562,8 @@ int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
 	}
 
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
-	cam_common_mem_free(packet_local);
+	if (!packet_owned)
+		cam_common_mem_free(packet_local);
 
 	return rc;
 
@@ -567,6 +577,7 @@ free_cpu_buf:
 	cam_mem_put_cpu_buf((int32_t) cmd->packet_handle);
 free_req:
 	cam_common_mem_free(packet_local);
+	req->pf_data.packet = NULL;
 	spin_lock_bh(&ctx->lock);
 	list_add_tail(&req->list, &ctx->free_req_list);
 	req->ctx = NULL;
@@ -926,6 +937,8 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 				}
 			}
 			if (flush_args.num_req_active || free_req) {
+				cam_common_mem_free(req->pf_data.packet);
+				req->pf_data.packet = NULL;
 				req->ctx = NULL;
 				spin_lock_bh(&ctx->lock);
 				list_add_tail(&req->list, &ctx->free_req_list);
