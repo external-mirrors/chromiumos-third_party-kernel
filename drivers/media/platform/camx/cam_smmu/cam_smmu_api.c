@@ -319,7 +319,8 @@ end:
 			"Closest map fd %d i_ino %lu 0x%lx 0x%lx-0x%lx buf=%pK mem %0x",
 			closest_mapping->dma_fd, closest_mapping->i_ino, current_addr,
 			(unsigned long)closest_mapping->paddr,
-			(unsigned long)closest_mapping->paddr + mapping->len,
+			(unsigned long)closest_mapping->paddr +
+			closest_mapping->len,
 			closest_mapping->buf,
 			buf_handle);
 	} else
