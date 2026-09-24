@@ -717,8 +717,10 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 		spin_unlock_bh(&ctx->lock);
 		req->flushed = 1;
 
-		flush_args.flush_req_pending[flush_args.num_req_pending++] =
-			req->req_priv;
+		if (flush_args.num_req_pending <
+		    ARRAY_SIZE(flush_args.flush_req_pending))
+			flush_args.flush_req_pending[flush_args.num_req_pending++] =
+				req->req_priv;
 
 		free_req = false;
 		for (i = 0; i < req->num_in_map_entries; i++) {
@@ -773,6 +775,9 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 		flush_args.num_req_active = 0;
 		spin_lock_bh(&ctx->lock);
 		list_for_each_entry(req, &ctx->active_req_list, list) {
+			if (flush_args.num_req_active >=
+			    ARRAY_SIZE(flush_args.flush_req_active))
+				break;
 			flush_args.flush_req_active[flush_args.num_req_active++]
 				= req->req_priv;
 		}
