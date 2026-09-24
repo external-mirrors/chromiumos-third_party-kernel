@@ -110,6 +110,7 @@ static int cam_isp_update_dual_config(
 	uint32_t                                    outport_id;
 	uint32_t                                    ports_plane_idx;
 	size_t                                      len = 0, remain_len = 0;
+	size_t                                      max_stripes;
 	uint32_t                                   *cpu_addr;
 	uint32_t                                   *cpu_addr_local = NULL;
 	uint32_t                                    i, j;
@@ -131,9 +132,10 @@ static int cam_isp_update_dual_config(
 	}
 	remain_len = len - cmd_desc->offset;
 	cpu_addr += (cmd_desc->offset / 4);
-	if (cmd_desc->length < sizeof(struct cam_isp_dual_config)) {
-		CAM_ERR(CAM_CTXT, "cam_isp_dual_config size exceeds cmd_desc->length (%u)",
-			cmd_desc->length);
+	if (cmd_desc->length < sizeof(struct cam_isp_dual_config) ||
+	    cmd_desc->length > remain_len) {
+		CAM_ERR(CAM_CTXT, "Invalid cmd_desc->length (%u) remain_len (%zu)",
+			cmd_desc->length, remain_len);
 		rc = -ENOMEM;
 		goto put_buf;
 	}
@@ -146,16 +148,21 @@ static int cam_isp_update_dual_config(
 	}
 	dual_config = (struct cam_isp_dual_config *)cpu_addr_local;
 
-	if ((dual_config->num_ports *
+	if (cmd_desc->length < offsetof(struct cam_isp_dual_config, stripes) ||
+	    (dual_config->num_ports *
 		sizeof(struct cam_isp_dual_stripe_config)) >
-		(remain_len - offsetof(struct cam_isp_dual_config, stripes))) {
+		(cmd_desc->length - offsetof(struct cam_isp_dual_config, stripes))) {
 		CAM_ERR(CAM_UTIL, "not enough buffer for all the dual configs");
 		rc = -EINVAL;
 		goto put_buf;
 	}
+	max_stripes = (cmd_desc->length -
+		       offsetof(struct cam_isp_dual_config, stripes)) /
+		      sizeof(struct cam_isp_dual_stripe_config);
+
 	for (i = 0; i < dual_config->num_ports; i++) {
 
-		if (i >= CAM_ISP_IFE_OUT_RES_MAX) {
+		if (i >= size_isp_out) {
 			CAM_ERR(CAM_UTIL,
 				"failed update for i:%d > size_isp_out:%d",
 				i, size_isp_out);
@@ -182,6 +189,16 @@ static int cam_isp_update_dual_config(
 			ports_plane_idx = (j * (dual_config->num_ports *
 				CAM_PACKET_MAX_PLANES)) +
 				(outport_id * CAM_PACKET_MAX_PLANES);
+
+			if (outport_id >= dual_config->num_ports ||
+			    (size_t)ports_plane_idx + CAM_PACKET_MAX_PLANES >
+			    max_stripes) {
+				CAM_ERR(CAM_UTIL,
+					"stripe out of bounds port:%u split:%u num_ports:%u",
+					outport_id, j, dual_config->num_ports);
+				rc = -EINVAL;
+				goto put_buf;
+			}
 
 			if (dual_config->stripes[ports_plane_idx].port_id == 0)
 				continue;
