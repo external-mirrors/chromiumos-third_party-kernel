@@ -2267,11 +2267,19 @@ static int cam_req_mgr_process_trigger(void *priv, void *data)
 	mutex_lock(&link->lock);
 
 	if (trigger_data->trigger == CAM_TRIGGER_POINT_SOF) {
-		if (link->sync_link &&
-			(link->is_master || link->sync_link->is_master)) {
+		struct cam_req_mgr_core_session *session = link->parent;
+		bool dual_link;
+
+		/* sync_link is protected by session->lock */
+		mutex_lock(&session->lock);
+		dual_link = link->sync_link &&
+			(link->is_master || link->sync_link->is_master);
+		if (dual_link)
 			cam_req_mgr_process_reset_for_dual_link(link,
 				trigger_data);
-		} else {
+		mutex_unlock(&session->lock);
+
+		if (!dual_link) {
 			idx = __cam_req_mgr_find_slot_for_req(in_q,
 				trigger_data->req_id);
 			if (idx >= 0) {
