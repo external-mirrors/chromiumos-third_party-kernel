@@ -85,7 +85,6 @@ struct cmdq_pkt {
 	void			*cl;
 	bool			loop;
 	void			*sec_data;
-	struct completion	done; /* embedded completion for this command */
 };
 
 struct cmdq_thread {
