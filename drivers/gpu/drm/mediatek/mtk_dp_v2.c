@@ -4305,8 +4305,11 @@ static void mtk_dp_disconnect_release_v2(struct mtk_dp *mtk_dp)
 	memset(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd, 0,
 	       sizeof(mtk_dp->mtk_con[DP_FIRST_CON]->dsc_dpcd));
 	mtk_dp->mtk_con[DP_FIRST_CON]->fec_cap = 0;
+
+	mutex_lock(&mtk_dp->mtk_con[DP_FIRST_CON]->edid_lock);
 	kfree(mtk_dp->mtk_con[DP_FIRST_CON]->edid);
 	mtk_dp->mtk_con[DP_FIRST_CON]->edid = NULL;
+	mutex_unlock(&mtk_dp->mtk_con[DP_FIRST_CON]->edid_lock);
 
 	mtk_dp_hdcp_disable(mtk_dp);
 
@@ -4828,6 +4831,9 @@ static void mtk_dp_con_destroy_v2(struct drm_connector *connector)
 
 	drm_connector_cleanup(connector);
 
+	kfree(mtk_con->edid);
+	mutex_destroy(&mtk_con->edid_lock);
+
 	kfree(mtk_con);
 	mtk_dp->mtk_con[id] = NULL;
 }
@@ -4906,6 +4912,13 @@ static int mtk_dp_con_get_modes_v2(struct drm_connector *connector)
 	mtk_con = container_of(connector, struct mtk_dp_con, connector);
 	mtk_dp = mtk_con->mtk_dp;
 
+	/*
+	 * Held across the read and every use of mtk_con->edid: the HPD event
+	 * thread and mtk_dp_suspend_v2() drop the same pointer without
+	 * mode_config.mutex, so the probe cannot rely on it alone.
+	 */
+	mutex_lock(&mtk_con->edid_lock);
+
 	if (!mtk_con->edid) {
 		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] get edid\n");
 		timeout = jiffies + msecs_to_jiffies(2000);
@@ -4939,6 +4952,7 @@ static int mtk_dp_con_get_modes_v2(struct drm_connector *connector)
 	num_modes = drm_add_edid_modes(&mtk_con->connector, mtk_con->edid);
 
 fail:
+	mutex_unlock(&mtk_con->edid_lock);
 	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] connector[%d] SST modes:%d\n", mtk_dp_con_id(mtk_dp, mtk_con), num_modes);
 	return num_modes;
 }
@@ -4974,6 +4988,7 @@ static struct mtk_dp_con *mtk_dp_create_connector_v2(struct mtk_dp *mtk_dp)
 		return NULL;
 
 	mtk_con->mtk_dp = mtk_dp;
+	mutex_init(&mtk_con->edid_lock);
 
 	ret = drm_connector_init(mtk_dp->drm_dev, &mtk_con->connector,
 				 &mtk_dp_con_funcs, DRM_MODE_CONNECTOR_DisplayPort);

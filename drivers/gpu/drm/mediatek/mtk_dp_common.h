@@ -378,6 +378,13 @@ struct mtk_dp_con {
 	u8 dsc_hblank_expansion_quirk:1;
 	u8 dsc_decompression_enabled:1;
 
+	/*
+	 * @edid is read by the connector probe and dropped by the HPD event
+	 * thread, the PM suspend callback and bridge detach. @edid_lock
+	 * serialises them; it nests inside mode_config.mutex, which the probe
+	 * already holds, and nothing taken under it is held by the droppers.
+	 */
+	struct mutex edid_lock;
 	struct edid *edid;
 	enum drm_dp_mst_mode dp_mode;
 	bool video_enable;

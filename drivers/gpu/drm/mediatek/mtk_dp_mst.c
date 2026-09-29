@@ -1271,6 +1271,8 @@ static void mtk_dp_mst_connector_destroy(struct drm_connector *connector)
 	if (mtk_con->port)
 		drm_dp_mst_put_port_malloc(mtk_con->port);
 
+	mutex_destroy(&mtk_con->edid_lock);
+
 	kfree(mtk_con);
 	mtk_dp->mtk_con[id] = NULL;
 }
@@ -1582,6 +1584,7 @@ static struct drm_connector *mtk_dp_add_connector(struct drm_dp_mst_topology_mgr
 	mtk_dp->mtk_con[con_id]->dp_mode = DRM_DP_MST;
 	mtk_con->mtk_dp = mtk_dp;
 	mtk_con->port = port;
+	mutex_init(&mtk_con->edid_lock);
 	drm_dp_mst_get_port_malloc(port);
 
 	mtk_con->dsc_aux = drm_dp_mst_dsc_aux_for_port(port);
