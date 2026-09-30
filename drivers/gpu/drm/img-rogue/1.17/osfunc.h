@@ -596,6 +596,20 @@ IMG_UINT64 OSGetCurrentProcessVASpaceSize(void);
 uintptr_t OSGetCurrentThreadID(void);
 
 /*************************************************************************/ /*!
+@Function       OSGetPIDFromPPIDResourceKM
+@Description    Returns ID of current client process (thread group) which
+                has made a bridge call into the server.
+                For some operating systems, this may simply be the current
+                process id. For others, it may be that a dedicated thread
+                is used to handle the processing of bridge calls and that
+                some additional processing is required to obtain the ID of
+                the client process making the bridge call.
+@Input          hPidResource    The opaque PID resource.
+@Return         ID of client process
+*****************************************************************************/
+IMG_PID OSGetPIDFromPPIDResourceKM(uintptr_t hPidResource);
+
+/*************************************************************************/ /*!
 @Function       OSGetCurrentClientProcessIDKM
 @Description    Returns ID of current client process (thread group) which
                 has made a bridge call into the server.
@@ -1601,10 +1615,10 @@ void OSUserModeAccessToPerfCountersEn(void);
                 This is necessary to support the Rogue debugger. If the Rogue
                 debugger is not used then this function may be implemented as
                 a stub.
-@Input          ui32PID    The PID for the signal.
+@Input          hPidResource    The opaque PID resource to signal.
 @Return         PVRSRV_OK on success, a failure code otherwise.
 */ /**************************************************************************/
-PVRSRV_ERROR OSDebugSignalPID(IMG_UINT32 ui32PID);
+PVRSRV_ERROR OSDebugSignalPID(uintptr_t hPidResource);
 
 #if defined(__linux__) && defined(__KERNEL__) && !defined(DOXYGEN)
 #define OSWarnOn(a) WARN_ON(a)

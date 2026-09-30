@@ -808,6 +808,18 @@ IMG_PID OSGetCurrentClientProcessIDKM(void)
 	return OSGetCurrentProcessID();
 }
 
+IMG_PID OSGetPIDFromPPIDResourceKM(uintptr_t hPidResource)
+{
+	struct pid *psPPIDResource = (struct pid*) hPidResource;
+
+	if (psPPIDResource != NULL)
+	{
+		return psPPIDResource->numbers[0].nr;
+	}
+	return 0;
+}
+
+
 IMG_CHAR *OSGetCurrentClientProcessNameKM(void)
 {
 	return OSGetCurrentProcessName();
@@ -1802,26 +1814,19 @@ eFailed:
 
 /*************************************************************************/ /*!
 @Function       OSDebugSignalPID
-@Description    Sends a SIGTRAP signal to a specific PID in user mode for
-                debugging purposes. The user mode process can register a handler
+@Description    Sends a SIGTRAP signal to a specific task for debugging
+                purposes. The user mode process can register a handler
                 against this signal.
                 This is necessary to support the Rogue debugger. If the Rogue
                 debugger is not used then this function may be implemented as
                 a stub.
-@Input          ui32PID    The PID for the signal.
+@Input          hPidResource    The opaque PID resource to signal.
 @Return         PVRSRV_OK on success, a failure code otherwise.
 */ /**************************************************************************/
-PVRSRV_ERROR OSDebugSignalPID(IMG_UINT32 ui32PID)
+PVRSRV_ERROR OSDebugSignalPID(uintptr_t hPidResource)
 {
+	struct pid *psPID = (struct pid*) hPidResource;
 	int err;
-	struct pid *psPID;
-
-	psPID = find_vpid(ui32PID);
-	if (psPID == NULL)
-	{
-		PVR_DPF((PVR_DBG_ERROR, "%s: Failed to get PID struct.", __func__));
-		return PVRSRV_ERROR_NOT_FOUND;
-	}
 
 	err = kill_pid(psPID, SIGTRAP, 0);
 	if (err != 0)

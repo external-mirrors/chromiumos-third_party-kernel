@@ -208,7 +208,7 @@ struct _DEVMEMXINT_RESERVATION_
 
 struct _DEVMEMINT_PF_NOTIFY_
 {
-	IMG_UINT32  ui32PID;
+	uintptr_t   hPidResource;
 	DLLIST_NODE sProcessNotifyListElem;
 };
 
@@ -322,6 +322,7 @@ static INLINE void DevmemIntCtxRelease(DEVMEMINT_CTX *psDevmemCtx)
 			DEVMEMINT_PF_NOTIFY *psNotifyNode =
 				IMG_CONTAINER_OF(psNode, DEVMEMINT_PF_NOTIFY, sProcessNotifyListElem);
 			dllist_remove_node(psNode);
+			OSReleasePPIDResourceRefKM(psNotifyNode->hPidResource);
 			OSFreeMem(psNotifyNode);
 		}
 
@@ -2518,6 +2519,11 @@ PVRSRV_ERROR DevmemIntRegisterPFNotifyKM(DEVMEMINT_CTX *psDevmemCtx,
 	DEVMEMINT_PF_NOTIFY *psNotifyNode;
 	IMG_BOOL            bPresent = IMG_FALSE;
 	PVRSRV_ERROR        eError;
+	uintptr_t           hPidResource;
+
+	/* The PID argument is redundant: the client always passes the current
+	 * process PID, so we ignore it here. */
+	PVR_UNREFERENCED_PARAMETER(ui32PID);
 
 	PVR_LOG_RETURN_IF_INVALID_PARAM(psDevmemCtx, "psDevmemCtx");
 
@@ -2546,13 +2552,16 @@ PVRSRV_ERROR DevmemIntRegisterPFNotifyKM(DEVMEMINT_CTX *psDevmemCtx,
 		}
 	}
 
+	/* Obtain current client opaque PID resource */
+	hPidResource = OSAcquireCurrentPPIDResourceRefKM();
+
 	/* Loop through the registered PIDs and check whether this one is
 	 * present */
 	dllist_foreach_node(&(psDevmemCtx->sProcessNotifyListHead), psNode, psNodeNext)
 	{
 		psNotifyNode = IMG_CONTAINER_OF(psNode, DEVMEMINT_PF_NOTIFY, sProcessNotifyListElem);
 
-		if (psNotifyNode->ui32PID == ui32PID)
+		if (psNotifyNode->hPidResource == hPidResource)
 		{
 			bPresent = IMG_TRUE;
 			break;
@@ -2563,6 +2572,7 @@ PVRSRV_ERROR DevmemIntRegisterPFNotifyKM(DEVMEMINT_CTX *psDevmemCtx,
 	{
 		if (bPresent)
 		{
+			OSReleasePPIDResourceRefKM(hPidResource);
 			PVR_DPF((PVR_DBG_ERROR,
 			         "%s: Trying to register a PID that is already registered",
 			         __func__));
@@ -2573,13 +2583,16 @@ PVRSRV_ERROR DevmemIntRegisterPFNotifyKM(DEVMEMINT_CTX *psDevmemCtx,
 		psNotifyNode = OSAllocMem(sizeof(*psNotifyNode));
 		if (psNotifyNode == NULL)
 		{
+			OSReleasePPIDResourceRefKM(hPidResource);
 			PVR_DPF((PVR_DBG_ERROR,
 			         "%s: Unable to allocate memory for the notify list",
 			          __func__));
 			eError = PVRSRV_ERROR_OUT_OF_MEMORY;
 			goto err_out_of_mem;
 		}
-		psNotifyNode->ui32PID = ui32PID;
+
+		psNotifyNode->hPidResource = hPidResource;
+
 		/* Write lock is already held */
 		dllist_add_to_tail(&(psDevmemCtx->sProcessNotifyListHead), &(psNotifyNode->sProcessNotifyListElem));
 	}
@@ -2596,6 +2609,7 @@ PVRSRV_ERROR DevmemIntRegisterPFNotifyKM(DEVMEMINT_CTX *psDevmemCtx,
 		/* Write lock is already held */
 		dllist_remove_node(psNode);
 		psNotifyNode = IMG_CONTAINER_OF(psNode, DEVMEMINT_PF_NOTIFY, sProcessNotifyListElem);
+		OSReleasePPIDResourceRefKM(psNotifyNode->hPidResource);
 		OSFreeMem(psNotifyNode);
 
 		/* If the last process in the list is being unregistered, then also
@@ -2688,13 +2702,13 @@ PVRSRV_ERROR DevmemIntPFNotify(PVRSRV_DEVICE_NODE *psDevNode,
 	{
 		psNotifyNode = IMG_CONTAINER_OF(psNode, DEVMEMINT_PF_NOTIFY, sProcessNotifyListElem);
 
-		eError = OSDebugSignalPID(psNotifyNode->ui32PID);
+		eError = OSDebugSignalPID(psNotifyNode->hPidResource);
 		if (eError != PVRSRV_OK)
 		{
 			PVR_DPF((PVR_DBG_ERROR,
 			         "%s: Unable to signal process for PID: %u",
 			         __func__,
-			         psNotifyNode->ui32PID));
+			         OSGetPIDFromPPIDResourceKM(psNotifyNode->hPidResource)));
 
 			PVR_ASSERT(!"Unable to signal process");
 
