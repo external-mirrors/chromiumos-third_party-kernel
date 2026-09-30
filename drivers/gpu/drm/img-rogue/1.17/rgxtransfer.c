@@ -1562,8 +1562,15 @@ PVRSRV_ERROR PVRSRVRGXSubmitTransferKM(RGX_SERVER_TQ_CONTEXT	*psTransferContext,
 */
 fail_cmdacquire:
 fail_prepare_loop:
-	/* Rollback current iteration */
-	SyncAddrListRollbackQBSs(&psTransferContext->asSyncAddrListUpdate[i]);
+	if (ui32PreparesDone < ui32PrepareCount)
+	{
+		/* Ensure the current iteration is within the bounds of the update
+		 * list before rolling back */
+		PVR_ASSERT(i < ARRAY_SIZE(psTransferContext->asSyncAddrListUpdate));
+		/* An error occurred during the prepare loop, rollback current iteration
+		 * before cleaning up the completed prepares. */
+		SyncAddrListRollbackQBSs(&psTransferContext->asSyncAddrListUpdate[i]);
+	}
 
 	PVR_ASSERT(eError != PVRSRV_OK);
 
