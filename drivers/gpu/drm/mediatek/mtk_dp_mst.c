@@ -271,27 +271,16 @@ static void mtk_dp_mst_hal_vcp_table_update(struct mtk_dp *mtk_dp)
 			VC_PAYLOAD_TABLE_TX_UPDATE_DP_MST_DPTX_FLDMASK);
 }
 
-static void mtk_dp_mst_hal_stream_enable(struct mtk_dp *mtk_dp, int encoder_id,
-				const u8 payload_mask, const u32 max_payloads)
+static void mtk_dp_mst_hal_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 {
-	u32 reg_offset_enc;
+	/* reg_dp_mst_en */
+	WRITE_BYTE_MASK(mtk_dp, (REG_3308_DP_ENCODER1_P0 + DP_REG_OFFSET(encoder_id)),
+			1 << DP_MST_EN_DP_ENCODER1_P0_FLDMASK_POS,
+			DP_MST_EN_DP_ENCODER1_P0_FLDMASK);
 
-	reg_offset_enc = DP_REG_OFFSET(encoder_id);
-
-	if ((payload_mask >> encoder_id) & 0x1) {
-		/*reg_dp_mst_en*/
-		WRITE_BYTE_MASK(mtk_dp, (REG_3308_DP_ENCODER1_P0 + reg_offset_enc),
-				1 << DP_MST_EN_DP_ENCODER1_P0_FLDMASK_POS,
-				DP_MST_EN_DP_ENCODER1_P0_FLDMASK);
-
-		WRITE_BYTE_MASK(mtk_dp, REG_3930_DP_MST_DPTX,
-				0x1 << encoder_id, BIT(encoder_id));
-	}
-
-	drm_dbg_kms(mtk_dp->drm_dev,
-		    "[DPTX] MST enable, payload_mask:0x%x, max_payloads:0x%x, REG(0x%x, 0x%x)\n",
-		    payload_mask, max_payloads,
-		    READ_BYTE(mtk_dp, REG_3308_DP_ENCODER1_P0 + reg_offset_enc),
+	WRITE_BYTE_MASK(mtk_dp, REG_3930_DP_MST_DPTX, BIT(encoder_id), BIT(encoder_id));
+	drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] MST enable, REG(0x%x, 0x%x)\n",
+		    READ_BYTE(mtk_dp, REG_3308_DP_ENCODER1_P0 + DP_REG_OFFSET(encoder_id)),
 		    READ_BYTE(mtk_dp, REG_3930_DP_MST_DPTX));
 }
 
@@ -379,7 +368,6 @@ static void mtk_dp_mst_drv_audio_mute_all(struct mtk_dp *mtk_dp)
 
 static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 {
-	struct drm_dp_mst_topology_state *mst_state;
 	int ch, fs, len;
 
 	if (encoder_id < 0 || encoder_id >= DP_ENCODER_NUM) {
@@ -391,14 +379,7 @@ static void mtk_dp_mst_drv_stream_enable(struct mtk_dp *mtk_dp, int encoder_id)
 	fs = mtk_dp->info[encoder_id].audio_cur_cfg.sample_rate;
 	len = mtk_dp->info[encoder_id].audio_cur_cfg.word_length_bits;
 
-	mst_state = to_drm_dp_mst_topology_state(mtk_dp->mgr.base.state);
-	if (IS_ERR(mst_state)) {
-		dev_err(mtk_dp->dev, "[DPTX] fail to get mst topology state!\n");
-		return;
-	}
-
-	mtk_dp_mst_hal_stream_enable(mtk_dp, encoder_id,
-				     mst_state->payload_mask, mtk_dp->mgr.max_payloads);
+	mtk_dp_mst_hal_stream_enable(mtk_dp, encoder_id);
 
 	mtk_dp_video_mute_v2(mtk_dp, encoder_id, true);
 	mtk_dp_video_enable_v2(mtk_dp, encoder_id);
@@ -434,7 +415,7 @@ static bool mtk_dp_mst_drv_first_stream_enable(struct mtk_dp *mtk_dp)
 
 static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_id)
 {
-	int con_id = 0;
+	int con_id;
 	u16 start_slot, end_slot;
 	struct drm_dp_mst_atomic_payload *payload;
 	struct drm_dp_mst_topology_state *mst_state;
@@ -448,11 +429,8 @@ static void mtk_dp_mst_drv_update_vcp_table(struct mtk_dp *mtk_dp, int encoder_i
 	if (mtk_dp_mst_drv_first_stream_enable(mtk_dp))
 		mtk_dp_mst_hal_reset_payload(mtk_dp);
 
-	if ((mst_state->payload_mask >> encoder_id) & 0x1) {
-		con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
-		if (con_id < 0)
-			return;
-
+	con_id = encoder_id_to_con_id(mtk_dp, encoder_id, DRM_DP_MST);
+	if (con_id >= 0) {
 		drm_dbg_kms(mtk_dp->drm_dev, "[DPTX] %d\n", con_id);
 
 		payload = drm_atomic_get_mst_payload_state(mst_state,
@@ -1022,7 +1000,6 @@ static void mtk_dp_mst_drv_read_port_dsc_caps(struct mtk_dp *mtk_dp, struct mtk_
 void mtk_dp_mst_drv_set_hdcp_setting(struct mtk_dp *mtk_dp)
 {
 	u8 i;
-	int encoder_id;
 	u16 start_slot, end_slot;
 	struct drm_dp_mst_atomic_payload *payload;
 	struct drm_dp_mst_topology_state *mst_state;
@@ -1039,26 +1016,20 @@ void mtk_dp_mst_drv_set_hdcp_setting(struct mtk_dp *mtk_dp)
 		if (!mst_con_with_encoder(mtk_dp->mtk_con[i]))
 			continue;
 
-		encoder_id = mtk_dp->mtk_con[i]->encoder_id;
-		if ((mst_state->payload_mask >> encoder_id) & 0x1) {
-			payload = drm_atomic_get_mst_payload_state(mst_state,
-								   mtk_dp->mtk_con[i]->port);
-			if (IS_ERR_OR_NULL(payload)) {
-				dev_err(mtk_dp->dev, "[DPTX] fail to get mst payload state!\n");
-				continue;
-			}
+		payload = drm_atomic_get_mst_payload_state(mst_state, mtk_dp->mtk_con[i]->port);
+		if (IS_ERR_OR_NULL(payload) || !payload->vcpi)
+			continue;
 
-			start_slot = payload->vc_start_slot;
-			end_slot = start_slot + payload->time_slots;
+		start_slot = payload->vc_start_slot;
+		end_slot = start_slot + payload->time_slots;
 
-			/* reg_vc_payload_timeslot */
-			if ((start_slot > 64) || (end_slot > 64))
-				dev_err(mtk_dp->dev,
-					"[DPTX] Invalid slot region, start_slot %d, end_slot %d\n",
-					start_slot, end_slot);
-			else
-				mtk_dp_mst_hal_hdcp_set_timeslot(mtk_dp, start_slot, end_slot);
-		}
+		/* reg_vc_payload_timeslot */
+		if ((start_slot > 64) || (end_slot > 64))
+			dev_err(mtk_dp->dev,
+				"[DPTX] Invalid slot region, start_slot %d, end_slot %d\n",
+				start_slot, end_slot);
+		else
+			mtk_dp_mst_hal_hdcp_set_timeslot(mtk_dp, start_slot, end_slot);
 	}
 
 	mtk_dp_mst_hal_hdcp_trigger_act(mtk_dp);
