@@ -82,7 +82,6 @@ struct mtk_crtc {
 	wait_queue_head_t		cmdq_done_wq;
 	struct task_struct		*cmdq_done_task;
 	atomic_t			cmdq_done;
-	struct completion		*cmdq_complete;
 
 	struct cmdq_client		sec_cmdq_client;
 	struct cmdq_pkt			*sec_cmdq_handle;
@@ -130,7 +129,6 @@ void mtk_crtc_async_update(struct drm_crtc *crtc, struct drm_plane *plane,
 struct device *mtk_crtc_dma_dev_get(struct drm_crtc *crtc);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-void mtk_crtc_atomic_commit_complete(struct drm_crtc *crtc);
 void mtk_crtc_destroy_crc_cmdq(struct mtk_crtc_crc *crc);
 void mtk_crtc_create_crc_cmdq(struct mtk_crtc_crc *crc, struct mtk_crtc *data);
 void mtk_crtc_stop_crc_cmdq(struct mtk_crtc_crc *crc);
