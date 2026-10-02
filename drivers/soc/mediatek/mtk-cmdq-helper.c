@@ -154,6 +154,8 @@ int cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *pkt, size_t siz
 	}
 
 	pkt->pa_base = dma_addr;
+	pkt->ref_dev = dev;
+	kref_init(&pkt->ref);
 
 	return 0;
 }
@@ -161,11 +163,43 @@ EXPORT_SYMBOL(cmdq_pkt_create);
 
 void cmdq_pkt_destroy(struct cmdq_client *client, struct cmdq_pkt *pkt)
 {
+	/* heap packets must use cmdq_pkt_put */
+	if (WARN_ON_ONCE(!pkt || pkt->managed))
+		return;
+
 	dma_unmap_single(client->chan->mbox->dev, pkt->pa_base, pkt->buf_size,
 			 DMA_TO_DEVICE);
 	kfree(pkt->va_base);
 }
 EXPORT_SYMBOL(cmdq_pkt_destroy);
+
+static void cmdq_pkt_do_release(struct kref *ref)
+{
+	struct cmdq_pkt *pkt = container_of(ref, struct cmdq_pkt, ref);
+
+	dma_unmap_single(pkt->ref_dev, pkt->pa_base, pkt->buf_size, DMA_TO_DEVICE);
+	kfree(pkt->va_base);
+	cmdq_sec_pkt_free_sec_data(pkt);
+	kfree(pkt);
+}
+
+void cmdq_pkt_get(struct cmdq_pkt *pkt)
+{
+	if (WARN_ON_ONCE(!pkt || !pkt->managed))
+		return;
+
+	kref_get(&pkt->ref);
+}
+EXPORT_SYMBOL(cmdq_pkt_get);
+
+void cmdq_pkt_put(struct cmdq_pkt *pkt)
+{
+	if (WARN_ON_ONCE(!pkt || !pkt->managed))
+		return;
+
+	kref_put(&pkt->ref, cmdq_pkt_do_release);
+}
+EXPORT_SYMBOL(cmdq_pkt_put);
 
 static int cmdq_pkt_append_command(struct cmdq_pkt *pkt,
 				   struct cmdq_instruction inst)

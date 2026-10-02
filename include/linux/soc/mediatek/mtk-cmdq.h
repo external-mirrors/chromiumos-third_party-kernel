@@ -115,6 +115,19 @@ int cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *pkt, size_t siz
 void cmdq_pkt_destroy(struct cmdq_client *client, struct cmdq_pkt *pkt);
 
 /**
+ * cmdq_pkt_get() - increment the lifetime reference of a managed packet
+ * @pkt:	the CMDQ packet (must have pkt->managed set)
+ */
+void cmdq_pkt_get(struct cmdq_pkt *pkt);
+
+/**
+ * cmdq_pkt_put() - decrement the lifetime reference of a managed packet;
+ *                  frees the packet when the count reaches zero.
+ * @pkt:	the CMDQ packet (must have pkt->managed set)
+ */
+void cmdq_pkt_put(struct cmdq_pkt *pkt);
+
+/**
  * cmdq_pkt_write() - append write command to the CMDQ packet
  * @pkt:	the CMDQ packet
  * @subsys:	the CMDQ sub system code
@@ -462,6 +475,10 @@ static inline int cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *p
 }
 
 static inline void cmdq_pkt_destroy(struct cmdq_client *client, struct cmdq_pkt *pkt) { }
+
+static inline void cmdq_pkt_get(struct cmdq_pkt *pkt) { }
+
+static inline void cmdq_pkt_put(struct cmdq_pkt *pkt) { }
 
 static inline int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset, u32 value)
 {

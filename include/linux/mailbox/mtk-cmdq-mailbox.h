@@ -8,6 +8,7 @@
 #define __MTK_CMDQ_MAILBOX_H__
 
 #include <linux/clk.h>
+#include <linux/kref.h>
 #include <linux/mailbox_controller.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -86,6 +87,9 @@ struct cmdq_pkt {
 	bool			loop;
 	void			*sec_data;
 	struct completion	done; /* embedded completion for this command */
+	bool			managed; /* true for heap-allocated kref-tracked packets */
+	struct kref		ref;     /* lifetime ref; initialized by cmdq_pkt_create */
+	struct device		*ref_dev; /* DMA device; set by cmdq_pkt_create */
 };
 
 struct cmdq_thread {
