@@ -4354,33 +4354,39 @@ static int cam_icp_mgr_flush_all(struct cam_icp_hw_ctx_data *ctx_data,
 static int cam_icp_mgr_flush_req(struct cam_icp_hw_ctx_data *ctx_data,
 	struct cam_hw_flush_args *flush_args)
 {
-	int64_t request_id;
 	struct hfi_frame_process_info *hfi_frame_process;
-	int idx;
-	bool clear_in_resource = false;
+	struct icp_frame_info *frame_info;
+	ptrdiff_t idx;
 
 	hfi_frame_process = &ctx_data->hfi_frame_process;
-	request_id = *(int64_t *)flush_args->flush_req_pending[0];
-	for (idx = 0; idx < CAM_FRAME_CMD_MAX; idx++) {
-		if (!hfi_frame_process->request_id[idx])
-			continue;
 
-		if (hfi_frame_process->request_id[idx] != request_id)
-			continue;
-
-		/* now release memory for hfi frame process command */
-		hfi_frame_process->request_id[idx] = 0;
-		if (ctx_data->hfi_frame_process.in_resource[idx] > 0) {
-			ctx_data->hfi_frame_process.in_free_resource[idx] =
-				ctx_data->hfi_frame_process.in_resource[idx];
-			ctx_data->hfi_frame_process.in_resource[idx] = 0;
-		}
-		clear_bit(idx, ctx_data->hfi_frame_process.bitmap);
-		clear_in_resource = true;
+	/*
+	 * The request private data is the frame_info of the slot that was
+	 * allocated for the request in cam_icp_mgr_prepare_hw_update().
+	 * Only release that slot: userspace can submit several requests with
+	 * the same request id, and the slots of the other ones may already
+	 * be in use by the firmware.
+	 */
+	frame_info = flush_args->flush_req_pending[0];
+	idx = frame_info - hfi_frame_process->frame_info;
+	if (idx < 0 || idx >= CAM_FRAME_CMD_MAX) {
+		CAM_ERR(CAM_ICP, "Invalid request private data");
+		return -EINVAL;
 	}
 
-	if (clear_in_resource)
-		cam_icp_mgr_delete_sync_obj(ctx_data);
+	if (!test_bit(idx, hfi_frame_process->bitmap) ||
+	    !hfi_frame_process->request_id[idx])
+		return 0;
+
+	/* now release memory for hfi frame process command */
+	hfi_frame_process->request_id[idx] = 0;
+	if (hfi_frame_process->in_resource[idx] > 0) {
+		hfi_frame_process->in_free_resource[idx] =
+			hfi_frame_process->in_resource[idx];
+		hfi_frame_process->in_resource[idx] = 0;
+	}
+	clear_bit(idx, hfi_frame_process->bitmap);
+	cam_icp_mgr_delete_sync_obj(ctx_data);
 
 	return 0;
 }
