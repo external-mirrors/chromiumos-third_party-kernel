@@ -569,8 +569,9 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 
 		ptr = (void *) cmd_buf_local;
 
+		/* Only parse the local copy */
 		rc = cam_handle_cmd_buffers_for_probe(ptr, s_ctrl,
-			i, cmd_desc[i].length, remain_len);
+			i, cmd_desc[i].length, cmd_desc[i].length);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR,
 				"Failed to parse the command Buffer Header");
