@@ -2184,7 +2184,13 @@ static int cam_req_mgr_process_error(void *priv, void *data)
 			__cam_req_mgr_tbl_set_all_skip_cnt(&link->req.l_tbl);
 			in_q->rd_idx = idx;
 			in_q->slot[idx].status = CRM_SLOT_STATUS_REQ_ADDED;
-			if (link->sync_link) {
+			/*
+			 * Lockless check: sync_link is protected by
+			 * session->lock and can be changed concurrently by
+			 * cam_req_mgr_sync_config() or the peer's unlink,
+			 * but it is not dereferenced.
+			 */
+			if (READ_ONCE(link->sync_link)) {
 				in_q->slot[idx].sync_mode = 0;
 				__cam_req_mgr_inc_idx(&idx, 1,
 					link->req.l_tbl->num_slots);
@@ -2834,7 +2840,6 @@ end:
 static int __cam_req_mgr_unlink(struct cam_req_mgr_core_link *link)
 {
 	struct cam_req_mgr_core_session *session;
-	struct cam_req_mgr_core_link *sync_link;
 	int rc;
 
 	spin_lock_bh(&link->link_state_spin_lock);
@@ -2844,25 +2849,18 @@ static int __cam_req_mgr_unlink(struct cam_req_mgr_core_link *link)
 	session = (struct cam_req_mgr_core_session *)link->parent;
 	if (session) {
 		/*
-		 * Lock order must match cam_req_mgr_process_trigger(), which
-		 * takes link->lock and then session->lock. Hold both link
-		 * locks so that neither workqueue sees sync_link change while
-		 * processing, and session->lock for __cam_req_mgr_process_req().
-		 * Callers hold crm_lock, so link->sync_link cannot change
-		 * under us and two unlinks cannot run concurrently.
+		 * Clear sync_link under session->lock so that the peer link's
+		 * workqueue (cam_req_mgr_process_trigger() and
+		 * __cam_req_mgr_process_req()) cannot dereference this link
+		 * while its resources are being destroyed.
+		 * cam_req_mgr_process_sched_req() is serialized against us by
+		 * crm_lock, which all callers hold.
 		 */
-		mutex_lock(&link->lock);
-		sync_link = link->sync_link;
-		if (sync_link)
-			mutex_lock_nested(&sync_link->lock, SINGLE_DEPTH_NESTING);
 		mutex_lock(&session->lock);
-		if (sync_link && sync_link->sync_link == link)
-			sync_link->sync_link = NULL;
+		if (link->sync_link && link->sync_link->sync_link == link)
+			link->sync_link->sync_link = NULL;
 		link->sync_link = NULL;
 		mutex_unlock(&session->lock);
-		if (sync_link)
-			mutex_unlock(&sync_link->lock);
-		mutex_unlock(&link->lock);
 	}
 
 	rc = __cam_req_mgr_disconnect_link(link);
