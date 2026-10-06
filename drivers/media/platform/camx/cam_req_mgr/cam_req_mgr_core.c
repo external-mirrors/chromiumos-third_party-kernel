@@ -1944,6 +1944,7 @@ static int cam_req_mgr_process_sched_req(void *priv, void *data)
 	struct cam_req_mgr_req_queue     *in_q = NULL;
 	struct cam_req_mgr_slot          *slot = NULL;
 	struct crm_task_payload          *task_data = NULL;
+	struct cam_req_mgr_core_session  *session;
 
 	if (!data || !priv) {
 		CAM_ERR(CAM_CRM, "input args NULL %pK %pK", data, priv);
@@ -1976,6 +1977,13 @@ static int cam_req_mgr_process_sched_req(void *priv, void *data)
 	link->open_req_cnt++;
 	__cam_req_mgr_inc_idx(&in_q->wr_idx, 1, in_q->num_slots);
 
+	/*
+	 * sync_link and initial_sync_req are protected by session->lock.
+	 * The peer link's workqueue accesses this link's initial_sync_req
+	 * through its own sync_link.
+	 */
+	session = link->parent;
+	mutex_lock(&session->lock);
 	if (slot->sync_mode == CAM_REQ_MGR_SYNC_MODE_SYNC) {
 		if (link->initial_sync_req == -1)
 			link->initial_sync_req = slot->req_id;
@@ -1984,6 +1992,7 @@ static int cam_req_mgr_process_sched_req(void *priv, void *data)
 		if (link->sync_link)
 			link->sync_link->initial_sync_req = -1;
 	}
+	mutex_unlock(&session->lock);
 
 	mutex_unlock(&link->lock);
 
