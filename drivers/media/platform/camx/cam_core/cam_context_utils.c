@@ -378,32 +378,39 @@ static bool cam_context_drop_in_fence_cbs(struct cam_context *ctx,
 					  int32_t num)
 {
 	bool recycle = true;
-	int32_t sync_id;
-	int32_t j, k;
+	int32_t j;
 
 	for (j = num - 1; j >= 0; j--) {
-		sync_id = req->in_map_entries[j].sync_id;
-
-		/* This drops the callbacks of all the duplicates of the fence */
 		if (!cam_sync_deregister_callback(cam_context_sync_callback,
-						  (void *)req, sync_id)) {
-			for (k = 0; k <= j; k++) {
-				if (req->in_map_entries[k].sync_id == sync_id)
-					cam_context_putref(ctx);
-			}
-			continue;
-		}
-
-		/* Already handled with a later duplicate? */
-		for (k = j + 1; k < num; k++) {
-			if (req->in_map_entries[k].sync_id == sync_id)
-				break;
-		}
-		if (k == num)
+						  (void *)req,
+						  req->in_map_entries[j].sync_id))
+			cam_context_putref(ctx);
+		else
 			recycle = false;
 	}
 
 	return recycle;
+}
+
+static bool cam_context_flush_in_fence_cbs(struct cam_context *ctx,
+					   struct cam_ctx_request *req)
+{
+	bool free_req = false;
+	uint32_t i;
+
+	for (i = 0; i < req->num_in_map_entries; i++) {
+		if (cam_sync_deregister_callback(cam_context_sync_callback,
+						 (void *)req,
+						 req->in_map_entries[i].sync_id))
+			continue;
+
+		cam_context_putref(ctx);
+		if (atomic_inc_return(&req->num_in_acked) ==
+		    req->num_in_map_entries)
+			free_req = true;
+	}
+
+	return free_req;
 }
 
 int32_t cam_context_prepare_dev_to_hw(struct cam_context *ctx,
@@ -785,19 +792,7 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 			flush_args.flush_req_pending[flush_args.num_req_pending++] =
 				req->req_priv;
 
-		free_req = false;
-		for (i = 0; i < req->num_in_map_entries; i++) {
-			rc = cam_sync_deregister_callback(
-				cam_context_sync_callback,
-				(void *)req,
-				req->in_map_entries[i].sync_id);
-			if (!rc) {
-				cam_context_putref(ctx);
-				if (atomic_inc_return(&req->num_in_acked) ==
-					req->num_in_map_entries)
-					free_req = true;
-			}
-		}
+		free_req = cam_context_flush_in_fence_cbs(ctx, req);
 
 		for (i = 0; i < req->num_out_map_entries; i++) {
 			if (req->out_map_entries[i].sync_id != -1) {
@@ -973,21 +968,8 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 	}
 
 	if (req) {
-		if (flush_args.num_req_pending) {
-			for (i = 0; i < req->num_in_map_entries; i++) {
-				rc = cam_sync_deregister_callback(
-					cam_context_sync_callback,
-					(void *)req,
-					req->in_map_entries[i].sync_id);
-				if (rc)
-					continue;
-
-				cam_context_putref(ctx);
-				if (atomic_inc_return(&req->num_in_acked) ==
-					req->num_in_map_entries)
-					free_req = true;
-			}
-		}
+		if (flush_args.num_req_pending)
+			free_req = cam_context_flush_in_fence_cbs(ctx, req);
 
 		if (flush_args.num_req_pending || flush_args.num_req_active) {
 			for (i = 0; i < req->num_out_map_entries; i++) {

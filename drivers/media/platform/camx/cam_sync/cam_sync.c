@@ -177,6 +177,7 @@ int cam_sync_deregister_callback(sync_callback cb_func,
 			list_del_init(&sync_cb->list);
 			kfree(sync_cb);
 			found = true;
+			break;
 		}
 	}
 
