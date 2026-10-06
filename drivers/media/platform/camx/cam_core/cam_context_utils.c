@@ -940,6 +940,15 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 		break;
 	}
 	spin_unlock_bh(&ctx->lock);
+
+	/*
+	 * Drop the in fence callbacks before flushing the request in the HW
+	 * manager, like cam_context_flush_ctx_to_hw() does: an in fence
+	 * signaled with an error after the flush would otherwise run the
+	 * callback on the flushed request, which flushes its id again.
+	 */
+	if (flush_args.num_req_pending)
+		free_req = cam_context_flush_in_fence_cbs(ctx, req);
 	mutex_unlock(&ctx->sync_mutex);
 
 	if (ctx->hw_mgr_intf->hw_flush) {
@@ -968,9 +977,6 @@ int32_t cam_context_flush_req_to_hw(struct cam_context *ctx,
 	}
 
 	if (req) {
-		if (flush_args.num_req_pending)
-			free_req = cam_context_flush_in_fence_cbs(ctx, req);
-
 		if (flush_args.num_req_pending || flush_args.num_req_active) {
 			for (i = 0; i < req->num_out_map_entries; i++) {
 				sync_id =
