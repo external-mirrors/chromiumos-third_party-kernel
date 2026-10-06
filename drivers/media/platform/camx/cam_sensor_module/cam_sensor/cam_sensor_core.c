@@ -485,8 +485,8 @@ static int32_t cam_handle_mem_ptr(uint64_t handle,
 	}
 
 	pkt = (struct cam_packet *)packet;
-	if (pkt == NULL) {
-		CAM_ERR(CAM_SENSOR, "packet pos is invalid");
+	if (pkt == NULL || len < sizeof(struct cam_packet)) {
+		CAM_ERR(CAM_SENSOR, "packet pos or length is invalid");
 		rc = -EINVAL;
 		goto rel_pkt_buf;
 	}
