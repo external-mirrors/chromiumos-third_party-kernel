@@ -1120,6 +1120,7 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 	}
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (mtk_crtc->sec_on) {
+		struct cmdq_sec_data *sec_data;
 		struct cmdq_pkt *old_sec_handle;
 
 		old_sec_handle = mtk_crtc->sec_cmdq_handle;
@@ -1149,6 +1150,8 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 			cmdq_pkt_put(cmdq_handle);
 			goto update_config_err;
 		}
+		sec_data = (struct cmdq_sec_data *)cmdq_handle->sec_data;
+		sec_data->needs_vblank = needs_vblank;
 
 		mtk_crtc->sec_cmdq_handle = cmdq_handle;
 		cmdq_client = mtk_crtc->sec_cmdq_client;
