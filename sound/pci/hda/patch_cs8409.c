@@ -51,6 +51,9 @@ static int cs8409_parse_auto_config(struct hda_codec *codec)
 }
 
 static void cs8409_disable_i2c_clock_worker(struct work_struct *work);
+static void cs8409_jack_detect_worker(struct work_struct *work);
+static void cs42l42_run_jack_detect(struct sub_codec *cs42l42);
+static int cs8409_i2c_read(struct sub_codec *scodec, unsigned int addr);
 
 static struct cs8409_spec *cs8409_alloc_spec(struct hda_codec *codec)
 {
@@ -64,6 +67,7 @@ static struct cs8409_spec *cs8409_alloc_spec(struct hda_codec *codec)
 	codec->power_save_node = 1;
 	mutex_init(&spec->i2c_mux);
 	INIT_DELAYED_WORK(&spec->i2c_clk_work, cs8409_disable_i2c_clock_worker);
+	INIT_DELAYED_WORK(&spec->jack_detect_work, cs8409_jack_detect_worker);
 	snd_hda_gen_spec_init(&spec->gen);
 
 	return spec;
@@ -109,6 +113,28 @@ static void cs8409_disable_i2c_clock_worker(struct work_struct *work)
 	struct cs8409_spec *spec = container_of(work, struct cs8409_spec, i2c_clk_work.work);
 
 	cs8409_disable_i2c_clock(spec->codec);
+}
+
+/*
+ * cs8409_jack_detect_worker - Perform initial jack detection once hardware is settled
+ *
+ * Defer initial jack detection. On ChromeOS and possibly other platforms this
+ * delay is required for jack detection to work as expected.
+ */
+static void cs8409_jack_detect_worker(struct work_struct *work)
+{
+	struct cs8409_spec *spec = container_of(work, struct cs8409_spec, jack_detect_work.work);
+	struct sub_codec *cs42l42 = spec->scodecs[CS8409_CODEC0];
+
+	if (spec->init_done && spec->build_ctrl_done && !cs42l42->hp_jack_in) {
+		int reg_ts_status = cs8409_i2c_read(cs42l42, CS42L42_TSRS_PLUG_STATUS);
+
+		/* error case */
+		if (reg_ts_status < 0)
+			return;
+
+		cs42l42_run_jack_detect(cs42l42);
+	}
 }
 
 /*
@@ -954,6 +980,8 @@ static void cs8409_free(struct hda_codec *codec)
 {
 	struct cs8409_spec *spec = codec->spec;
 
+	/* Disable jack detect work */
+	disable_delayed_work_sync(&spec->jack_detect_work);
 	/* Cancel i2c clock disable timer, and disable clock if left enabled */
 	cancel_delayed_work_sync(&spec->i2c_clk_work);
 	cs8409_disable_i2c_clock(codec);
@@ -1012,6 +1040,9 @@ static int cs8409_cs42l42_suspend(struct hda_codec *codec)
 	spec->init_done = 0;
 
 	cs8409_enable_ur(codec, 0);
+
+	/* Cancel jack detect work first as it accesses CS42L42 over I2C */
+	cancel_delayed_work_sync(&spec->jack_detect_work);
 
 	for (i = 0; i < spec->num_scodecs; i++)
 		cs42l42_suspend(spec->scodecs[i]);
@@ -1161,6 +1192,9 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 			spec->scodecs[CS8409_CODEC0]->full_scale_vol = CS42L42_FULL_SCALE_VOL_0DB;
 			spec->speaker_pdn_gpio = CS8409_CYBORG_SPEAKER_PDN;
 			break;
+		case CS8409_WARLOCK_MLK_DELAYED_JD:
+			spec->delay_jack_detect = 1;
+			fallthrough;
 		case CS8409_WARLOCK_MLK:
 		case CS8409_WARLOCK_MLK_DUAL_MIC:
 			spec->scodecs[CS8409_CODEC0]->full_scale_vol = CS42L42_FULL_SCALE_VOL_0DB;
@@ -1205,8 +1239,13 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 		cs8409_cs42l42_hw_init(codec);
 		spec->init_done = 1;
 		if (spec->init_done && spec->build_ctrl_done
-			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in)
-			cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in) {
+			if (spec->delay_jack_detect)
+				schedule_delayed_work(&spec->jack_detect_work,
+						msecs_to_jiffies(CS8409_JACK_DETECT_DELAY_MS));
+			else
+				cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+		}
 		break;
 	case HDA_FIXUP_ACT_BUILD:
 		spec->build_ctrl_done = 1;
@@ -1216,8 +1255,13 @@ void cs8409_cs42l42_fixups(struct hda_codec *codec, const struct hda_fixup *fix,
 		 * Run immediately after init.
 		 */
 		if (spec->init_done && spec->build_ctrl_done
-			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in)
-			cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+			&& !spec->scodecs[CS8409_CODEC0]->hp_jack_in) {
+			if (spec->delay_jack_detect)
+				schedule_delayed_work(&spec->jack_detect_work,
+						msecs_to_jiffies(CS8409_JACK_DETECT_DELAY_MS));
+			else
+				cs42l42_run_jack_detect(spec->scodecs[CS8409_CODEC0]);
+		}
 		break;
 	default:
 		break;
