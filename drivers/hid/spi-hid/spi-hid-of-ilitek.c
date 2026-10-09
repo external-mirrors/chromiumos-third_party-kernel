@@ -3354,6 +3354,35 @@ int ilitek_plat_gpio_register(void)
 	return 0;
 }
 
+static ssize_t firmware_version_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct spi_hid *shid = dev_get_drvdata(dev);
+	struct spi_hid_of_ilitek_config *conf;
+	struct ilitek_ts_hid_data *ts;
+
+	if (!shid || !shid->ops)
+		return -ENODEV;
+
+	conf = container_of(shid->ops, struct spi_hid_of_ilitek_config, ops);
+	ts = container_of(conf, struct ilitek_ts_hid_data, config);
+	if (!ts->chip)
+		return -ENODEV;
+
+	return sysfs_emit(buf, "%d.%d.%d.%d\n",
+			  (ts->chip->fw_ver >> 24) & 0xff,
+			  (ts->chip->fw_ver >> 16) & 0xff,
+			  (ts->chip->fw_ver >> 8) & 0xff,
+			  ts->chip->fw_ver & 0xff);
+}
+static DEVICE_ATTR_RO(firmware_version);
+
+static struct attribute *ilitek_attrs[] = {
+	&dev_attr_firmware_version.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(ilitek);
+
 int ilitek_plat_probe(void)
 {
 	ILI_INFO("platform probe\n");
@@ -3990,6 +4019,7 @@ static struct spi_driver ilitek_spi_hid_ts_driver = {
 		.pm	= &spi_hid_core_pm,
 		.of_match_table = of_match_ptr(ilitek_spi_hid_of_match),
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		.dev_groups = ilitek_groups,
 	},
 	.probe		= spi_hid_of_ilitek_probe,
 	.remove		= spi_hid_of_remove,
