@@ -244,7 +244,7 @@ static int chromeos_invalidate_kernel_bio(struct block_device *root_bdev)
 	memcpy(page_address(page), DMVERROR, strlen(DMVERROR));
 
 	/* The block dev was being changed on read. Let's reopen here. */
-	fput(bdev_file);
+	bdev_fput(bdev_file);
 	dev_mode = BLK_OPEN_WRITE | BLK_OPEN_EXCL;
 	bdev_file = bdev_file_open_by_dev(devt, dev_mode,
 				 chromeos_invalidate_kernel_bio, NULL);
@@ -288,7 +288,7 @@ failed_to_alloc_page:
 	bio_put(bio);
 failed_bio_alloc:
 	if (dev_mode)
-		fput(bdev_file);
+		bdev_fput(bdev_file);
 failed_to_read:
 	return ret;
 }
@@ -409,7 +409,7 @@ static int chromeos_handle_retries(struct bio *bio,
 	}
 
 	/* The block dev was being changed on read. Let's reopen here. */
-	fput(bdev_file);
+	bdev_fput(bdev_file);
 	dev_mode = FMODE_WRITE;
 	bdev_file = bdev_file_open_by_dev(devt, dev_mode,
 					  chromeos_handle_retries, NULL);
@@ -436,7 +436,7 @@ static int chromeos_handle_retries(struct bio *bio,
 
 failed:
 	if (dev_mode)
-		fput(bdev_file);
+		bdev_fput(bdev_file);
 
 	if (!ret)
 		DMERR("update_tries: updated %s GPT",
@@ -472,7 +472,11 @@ static int chromeos_update_tries(struct block_device *root_bdev)
 	 * is 1 based, so subtract 1.
 	 */
 	kernel_gpt_entry_id = bdev_partno(file_bdev(kernel_bdev_file)) - 1;
-	fput(kernel_bdev_file);
+	/*
+	 * Drop the claim right away: a plain fput() is deferred, and the
+	 * later open of this partition by another holder would get -EBUSY.
+	 */
+	bdev_fput(kernel_bdev_file);
 
 	bio = bio_alloc(root_bdev, 1, 0, GFP_NOIO);
 	if (!bio) {
