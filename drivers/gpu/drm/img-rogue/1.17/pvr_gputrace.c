@@ -634,7 +634,7 @@ static uint64_t CalculateEventTimestamp(
 {
 	RGXFWIF_GPU_UTIL_FWCB *psGpuUtilFWCB = psDevInfo->psRGXFWIfGpuUtilFWCb;
 	RGX_HWPERF_FTRACE_DATA *psFtraceData = psDevInfo->pvGpuFtraceData;
-	RGXFWIF_TIME_CORR *psTimeCorr = &psGpuUtilFWCB->sTimeCorr[ui32TimeCorrIndex];
+	RGXFWIF_TIME_CORR *psTimeCorr = &psGpuUtilFWCB->sTimeCorr[RGXFWIF_TIME_CORR_CURR_INDEX(ui32TimeCorrIndex)];
 	uint64_t ui64CRTimeStamp = psTimeCorr->ui64CRTimeStamp;
 	uint64_t ui64OSTimeStamp = psTimeCorr->ui64OSTimeStamp;
 	uint64_t ui64CRDeltaToOSDeltaKNs = psTimeCorr->ui64CRDeltaToOSDeltaKNs;
