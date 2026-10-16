@@ -604,8 +604,30 @@ static int cmdq_mbox_flush(struct mbox_chan *chan, unsigned long timeout)
 		goto out;
 
 	WARN_ON(cmdq_thread_suspend(cmdq, thread) < 0);
-	if (!cmdq_thread_is_in_wfe(thread))
-		goto wait;
+	while (!cmdq_thread_is_in_wfe(thread)) {
+		cmdq_thread_resume(thread);
+		spin_unlock_irqrestore(&thread->chan->lock, flags);
+		if (readl_poll_timeout_atomic(thread->base + CMDQ_THR_ENABLE_TASK,
+					      enable,
+					      enable == 0 || cmdq_thread_is_in_wfe(thread),
+					      1, timeout)) {
+			dev_err(cmdq->mbox.dev, "Fail to wait GCE thread 0x%x done\n",
+				(u32)(thread->base - cmdq->base));
+
+			return -EFAULT;
+		}
+		if (enable == 0) {
+			pm_runtime_mark_last_busy(cmdq->mbox.dev);
+
+			return 0;
+		}
+
+		spin_lock_irqsave(&thread->chan->lock, flags);
+		if (list_empty(&thread->task_busy_list))
+			goto out;
+
+		WARN_ON(cmdq_thread_suspend(cmdq, thread) < 0);
+	}
 
 	list_for_each_entry_safe(task, tmp, &thread->task_busy_list,
 				 list_entry) {
@@ -616,25 +638,10 @@ static int cmdq_mbox_flush(struct mbox_chan *chan, unsigned long timeout)
 		kfree(task);
 	}
 
-	cmdq_thread_resume(thread);
 	cmdq_thread_disable(cmdq, thread);
 
 out:
 	spin_unlock_irqrestore(&thread->chan->lock, flags);
-	pm_runtime_mark_last_busy(cmdq->mbox.dev);
-
-	return 0;
-
-wait:
-	cmdq_thread_resume(thread);
-	spin_unlock_irqrestore(&thread->chan->lock, flags);
-	if (readl_poll_timeout_atomic(thread->base + CMDQ_THR_ENABLE_TASK,
-				      enable, enable == 0, 1, timeout)) {
-		dev_err(cmdq->mbox.dev, "Fail to wait GCE thread 0x%x done\n",
-			(u32)(thread->base - cmdq->base));
-
-		return -EFAULT;
-	}
 	pm_runtime_mark_last_busy(cmdq->mbox.dev);
 
 	return 0;
