@@ -1345,16 +1345,66 @@ static void mtk_crtc_crc_work(struct kthread_work *base)
 	drm_vblank_work_schedule(&mtk_crtc->crc_work, vblank + 1, true);
 }
 
+/*
+ * The core calls ->set_crc_source() without a modeset lock, so it can race
+ * with a nonblocking commit that is enabling or disabling the CRTC. Hold
+ * crtc->mutex to block new commits, and wait for the last queued one to
+ * reach hw_done. Returns 0 with crtc->mutex held, or a negative error code.
+ *
+ * Closing waits uninterruptibly: the core ignores errors on close, so a
+ * pending signal must not skip the stop.
+ */
+static int mtk_crtc_crc_lock(struct drm_crtc *crtc, bool interruptible)
+{
+	struct drm_crtc_commit *commit;
+	long ret;
+
+	drm_modeset_lock(&crtc->mutex, NULL);
+
+	spin_lock(&crtc->commit_lock);
+	commit = list_first_entry_or_null(&crtc->commit_list,
+					  struct drm_crtc_commit, commit_entry);
+	if (commit)
+		drm_crtc_commit_get(commit);
+	spin_unlock(&crtc->commit_lock);
+
+	if (!commit)
+		return 0;
+
+	if (interruptible)
+		ret = wait_for_completion_interruptible_timeout(&commit->hw_done,
+								msecs_to_jiffies(500));
+	else
+		ret = wait_for_completion_timeout(&commit->hw_done,
+						  msecs_to_jiffies(500));
+	drm_crtc_commit_put(commit);
+	if (ret > 0)
+		return 0;
+
+	drm_modeset_unlock(&crtc->mutex);
+	return ret ? ret : -ETIMEDOUT;
+}
+
 static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *comp = mtk_crtc->crc_provider;
+	int ret;
 
 	/* The core passes NULL when userspace closes crc/data. */
 	if (src && strcmp(src, "auto") != 0) {
 		DRM_ERROR("%s(crtc-%d): undnown source '%s'\n",
 			  __func__, drm_crtc_index(crtc), src);
 		return -EINVAL;
+	}
+
+	ret = mtk_crtc_crc_lock(crtc, !!src);
+	if (ret) {
+		if (!src)
+			drm_warn(crtc->dev,
+				 "[CRTC:%d:%s] commit timed out, CRC not stopped\n",
+				 crtc->base.id, crtc->name);
+		return ret;
 	}
 
 	if (!src) {
@@ -1366,7 +1416,7 @@ static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 		 */
 		if (mtk_crtc->enabled && comp && comp->funcs && comp->funcs->bypass)
 			comp->funcs->bypass(comp->dev, false, NULL);
-		return 0;
+		goto unlock;
 	}
 
 	if (comp->funcs->bypass)
@@ -1378,6 +1428,8 @@ static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 	 */
 	drm_vblank_work_schedule(&mtk_crtc->crc_work,
 				 drm_crtc_vblank_count(crtc) + 2, false);
+unlock:
+	drm_modeset_unlock(&crtc->mutex);
 	return 0;
 }
 
