@@ -28,6 +28,8 @@
  * @cmdq_reg: address of the register that cmdq is going to access
  * @cmdq_client: handler to control cmdq (mbox channel, thread ... etc.)
  * @cmdq_handle: cmdq packet to store the commands
+ * @crtc: CRTC that owns this CRC state
+ * @started: whether the CRC looping GCE thread is currently running
  */
 struct mtk_crtc_crc {
 	const u32 *ofs;
@@ -41,6 +43,8 @@ struct mtk_crtc_crc {
 	struct cmdq_client_reg *cmdq_reg;
 	struct cmdq_client cmdq_client;
 	struct cmdq_pkt cmdq_handle;
+	struct drm_crtc *crtc;
+	bool started;
 #endif
 };
 
@@ -109,6 +113,7 @@ struct mtk_crtc {
 
 	/* support crc */
 	struct mtk_ddp_comp		*crc_provider;
+	struct mtk_crtc_crc		*crc;
 	struct drm_vblank_work		crc_work;
 
 	bool				sec_on;

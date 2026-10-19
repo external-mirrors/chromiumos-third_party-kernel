@@ -1409,6 +1409,9 @@ static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 
 	if (!src) {
 		drm_vblank_work_cancel_sync(&mtk_crtc->crc_work);
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+		mtk_crtc_stop_crc_cmdq(mtk_crtc->crc);
+#endif
 		/*
 		 * Undo the bypass that opening crc/data set. Guarded because
 		 * userspace can close crc/data after the CRTC went down, when
@@ -1422,12 +1425,18 @@ static int mtk_crtc_set_crc_source(struct drm_crtc *crtc, const char *src)
 	if (comp->funcs->bypass)
 		comp->funcs->bypass(comp->dev, crtc->crc.opened, NULL);
 
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	if (mtk_crtc->enabled)
+		mtk_crtc_start_crc_cmdq(mtk_crtc->crc);
+#endif
+
 	/*
-	 * skip the first crc because the first frame (vblank+1) is configured
-	 * by mtk_crtc_ddp_hw_init() when atomic enable
+	 * The restarted loop copies the CRC register before each frame's CRC is
+	 * latched, so its first two samples are stale. The first valid CRC lands
+	 * by vblank + 3.
 	 */
 	drm_vblank_work_schedule(&mtk_crtc->crc_work,
-				 drm_crtc_vblank_count(crtc) + 2, false);
+				 drm_crtc_vblank_count(crtc) + 3, false);
 unlock:
 	drm_modeset_unlock(&crtc->mutex);
 	return 0;
@@ -2296,6 +2305,8 @@ void mtk_crtc_destroy_crc_cmdq(struct mtk_crtc_crc *crc)
 		mbox_free_channel(crc->cmdq_client.chan);
 		crc->cmdq_client.chan = NULL;
 	}
+	crc->crtc = NULL;
+	crc->started = false;
 }
 
 /**
@@ -2393,6 +2404,8 @@ void mtk_crtc_create_crc_cmdq(struct mtk_crtc_crc *crc, struct mtk_crtc *mtk_crt
 	/* jump to head of the cmdq packet */
 	cmdq_pkt_jump_abs(&crc->cmdq_handle, crc->cmdq_handle.pa_base,
 			  cmdq_get_shift_pa(crc->cmdq_client.chan));
+	crc->crtc = &mtk_crtc->base;
+	mtk_crtc->crc = crc;
 
 	return;
 
@@ -2406,7 +2419,10 @@ cleanup:
  */
 void mtk_crtc_start_crc_cmdq(struct mtk_crtc_crc *crc)
 {
-	if (!crc->cmdq_client.chan)
+	if (!crc || !crc->cmdq_client.chan || crc->started)
+		return;
+
+	if (!crc->crtc || !crc->crtc->crc.opened)
 		return;
 
 	dma_sync_single_for_device(crc->cmdq_client.chan->mbox->dev,
@@ -2415,6 +2431,7 @@ void mtk_crtc_start_crc_cmdq(struct mtk_crtc_crc *crc)
 				   DMA_TO_DEVICE);
 	mbox_send_message(crc->cmdq_client.chan, &crc->cmdq_handle);
 	mbox_client_txdone(crc->cmdq_client.chan, 0);
+	crc->started = true;
 }
 
 /**
@@ -2423,11 +2440,12 @@ void mtk_crtc_start_crc_cmdq(struct mtk_crtc_crc *crc)
  */
 void mtk_crtc_stop_crc_cmdq(struct mtk_crtc_crc *crc)
 {
-	if (!crc->cmdq_client.chan)
+	if (!crc || !crc->cmdq_client.chan || !crc->started)
 		return;
 
 	/* remove all the commands from the cmdq packet */
 	mbox_flush(crc->cmdq_client.chan, 2000);
+	crc->started = false;
 }
 
 void mtk_crtc_read_crc(struct mtk_crtc_crc *crc)
