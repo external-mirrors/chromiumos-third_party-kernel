@@ -1592,6 +1592,8 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 	if (!mtk_crtc->enabled)
 		return;
 
+	drm_vblank_work_cancel_sync(&mtk_crtc->crc_work);
+
 	mtk_crtc_disable_secure_state(crtc);
 
 	for (i = 0; i < MAX_MMSYS; i++)
