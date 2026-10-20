@@ -95,7 +95,6 @@ struct mdw_mem {
 	struct list_head maps;
 	struct mdw_fpriv *mpriv;
 	struct mdw_mem_pool *pool;
-	struct list_head u_item; //to mpriv
 	struct list_head d_node; //to mdev
 	struct list_head p_chunk; //to mem pool
 	struct mutex mtx;
@@ -228,7 +227,6 @@ struct mdw_device {
 struct mdw_fpriv {
 	struct mdw_device *mdev;
 
-	struct list_head mems;
 	struct list_head invokes;
 	struct mutex mtx;
 	struct mdw_mem_pool cmd_buf_pool;
@@ -341,8 +339,6 @@ int mdw_util_ioctl(struct mdw_fpriv *mpriv, void *data);
 void mdw_cmd_delete(struct mdw_cmd *c);
 void mdw_cmd_mpriv_release(struct mdw_fpriv *mpriv);
 void mdw_mem_mpriv_release(struct mdw_fpriv *mpriv);
-
-void mdw_mem_all_print(struct mdw_fpriv *mpriv);
 
 void mdw_mem_put(struct mdw_fpriv *mpriv, struct mdw_mem *m);
 struct mdw_mem *mdw_mem_get(struct mdw_fpriv *mpriv, int handle);
