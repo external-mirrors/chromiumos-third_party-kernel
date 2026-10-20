@@ -290,6 +290,7 @@ struct mdw_fpriv {
 	struct mdw_device *mdev;
 
 	struct list_head invokes;
+	struct mutex invokes_mtx;
 	struct mutex mtx;
 	struct mdw_mem_pool cmd_buf_pool;
 	struct idr cmds;
