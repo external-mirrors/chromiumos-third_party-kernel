@@ -82,21 +82,6 @@ static struct mdw_mem *mdw_mem_get_by_dbuf(struct mdw_fpriv *mpriv, struct dma_b
 	return NULL;
 }
 
-void mdw_mem_all_print(struct mdw_fpriv *mpriv)
-{
-	struct list_head *tmp = NULL, *list_ptr = NULL;
-	struct mdw_mem *m = NULL;
-
-	mdw_mem_debug("---list--\n");
-	mutex_lock(&mpriv->mtx);
-	list_for_each_safe(list_ptr, tmp, &mpriv->mems) {
-		m = list_entry(list_ptr, struct mdw_mem, u_item);
-		mdw_mem_show(m);
-	}
-	mutex_unlock(&mpriv->mtx);
-	mdw_mem_debug("---list--\n");
-}
-
 static void mdw_mem_release(struct mdw_mem *m, bool put_mpriv)
 {
 	struct mdw_device *mdev = m->mpriv->mdev;
@@ -107,9 +92,6 @@ static void mdw_mem_release(struct mdw_mem *m, bool put_mpriv)
 	mutex_lock(&mdev->m_mtx);
 	list_del_init(&m->d_node);
 	mutex_unlock(&mdev->m_mtx);
-
-	if (m->belong_apu)
-		list_del_init(&m->u_item);
 
 	kfree(m);
 
@@ -139,7 +121,6 @@ static struct mdw_mem *mdw_mem_create(struct mdw_fpriv *mpriv)
 		m->handle = -1;
 		m->pool = NULL;
 		INIT_LIST_HEAD(&m->d_node);
-		INIT_LIST_HEAD(&m->u_item);
 		INIT_LIST_HEAD(&m->p_chunk);
 		mutex_init(&m->mtx);
 		INIT_LIST_HEAD(&m->maps);
@@ -257,10 +238,8 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 	}
 	/* insert to list */
 	mutex_lock(&mdev->m_mtx);
-	if (list_empty(&m->d_node)) {
+	if (list_empty(&m->d_node))
 		list_add_tail(&m->d_node, &mdev->m_list);
-		list_add_tail(&m->u_item, &mpriv->mems);
-	}
 	mutex_unlock(&mdev->m_mtx);
 
 	mdw_mem_show(m);
