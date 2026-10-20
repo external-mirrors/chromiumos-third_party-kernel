@@ -402,6 +402,8 @@ static void mdw_mem_invoke_release(struct kref *ref)
 	struct mdw_mem *m = m_invoke->m;
 	struct dma_buf *dbuf = m_invoke->m->dbuf;
 
+	lockdep_assert_held(&m_invoke->invoker->invokes_mtx);
+
 	mdw_mem_show(m_invoke->m);
 	if (m->unbind)
 		m->unbind(m_invoke->invoker, m_invoke->m);
@@ -415,6 +417,8 @@ static struct mdw_mem_invoke *mdw_mem_invoke_find(struct mdw_fpriv *mpriv,
 	struct mdw_mem *m)
 {
 	struct mdw_mem_invoke *m_invoke = NULL;
+
+	lockdep_assert_held(&mpriv->invokes_mtx);
 
 	list_for_each_entry(m_invoke, &mpriv->invokes, u_node) {
 		if (m_invoke->m == m) {
@@ -449,6 +453,8 @@ static int mdw_mem_invoke_create(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 	struct mdw_mem_invoke *m_invoke = NULL;
 	struct mdw_mem_map *map = m->map;
 	int ret = 0;
+
+	lockdep_assert_held(&mpriv->invokes_mtx);
 
 	m_invoke = kzalloc(sizeof(*m_invoke), GFP_KERNEL);
 	if (!m_invoke)
@@ -505,7 +511,9 @@ int mdw_mem_map(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 			goto out;
 		} else {
 			/* map create ok, create invoke for map */
+			mutex_lock(&mpriv->invokes_mtx);
 			ret = mdw_mem_invoke_create(mpriv, m);
+			mutex_unlock(&mpriv->invokes_mtx);
 			if (ret)
 				dev_err(mpriv->mdev->dev, "[error] m(0x%llx) create invoke fail(%d)\n",
 						(uint64_t)m, ret);
@@ -516,6 +524,7 @@ int mdw_mem_map(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 	}
 
 	/* handle invoke */
+	mutex_lock(&mpriv->invokes_mtx);
 	m_invoke = mdw_mem_invoke_find(mpriv, m);
 	mdw_flw_debug("0x%llx\n", (uint64_t)m_invoke);
 	if (m_invoke) {
@@ -526,6 +535,7 @@ int mdw_mem_map(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 			dev_err(mpriv->mdev->dev, "[error] m(0x%llx) invoke fail(%d)\n",
 					(uint64_t)m, ret);
 	}
+	mutex_unlock(&mpriv->invokes_mtx);
 
 	goto out;
 
@@ -541,6 +551,7 @@ int mdw_mem_unmap(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 	int ret = 0;
 
 	mdw_mem_show(m);
+	mutex_lock(&mpriv->invokes_mtx);
 	m_invoke = mdw_mem_invoke_find(mpriv, m);
 	if (m_invoke == NULL) {
 		dev_info(mpriv->mdev->dev, "[warn] s(0x%llx) no invoke m(0x%llx)\n",
@@ -552,6 +563,7 @@ int mdw_mem_unmap(struct mdw_fpriv *mpriv, struct mdw_mem *m)
 	m_invoke->put(m_invoke);
 
 out:
+	mutex_unlock(&mpriv->invokes_mtx);
 	return ret;
 }
 
@@ -597,12 +609,14 @@ void mdw_mem_mpriv_release(struct mdw_fpriv *mpriv)
 {
 	struct mdw_mem_invoke *m_invoke = NULL, *tmp = NULL;
 
+	mutex_lock(&mpriv->invokes_mtx);
 	list_for_each_entry_safe(m_invoke, tmp, &mpriv->invokes, u_node) {
 		if (m_invoke->m->handle >= 0) {
 			mdw_mem_show(m_invoke->m);
 			mdw_mem_invoke_release(&m_invoke->ref);
 		}
 	}
+	mutex_unlock(&mpriv->invokes_mtx);
 }
 
 static int mdw_mem_ioctl_alloc(struct mdw_fpriv *mpriv,
