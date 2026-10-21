@@ -1553,7 +1553,7 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[0];
-	int i, ret;
+	int i;
 	int mmsys_cnt = 0;
 
 	DRM_DEBUG_DRIVER("%s %d\n", __func__, crtc->base.id);
@@ -1590,25 +1590,16 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 #if IS_REACHABLE(CONFIG_MTK_DPC)
 	if (mtk_crtc->dpc_dev) {
 		dpc_disable(mtk_crtc->dpc_dev, DPC_SUBSYS_DISP);
-		ret = pm_runtime_put(mtk_crtc->dpc_dev);
-		if (ret < 0)
-			DRM_DEV_ERROR(mtk_crtc->dpc_dev,
-				      "Failed to disable power domain: %d\n", ret);
+		pm_runtime_put(mtk_crtc->dpc_dev);
 	}
 #endif
 
 	if (mmsys_cnt == 1) {
-		ret = pm_runtime_put(comp->dev);
-		if (ret < 0)
-			DRM_DEV_ERROR(comp->dev, "Failed to disable power domain: %d\n", ret);
+		pm_runtime_put(comp->dev);
 	} else {
 		for (i = 0; i < MAX_MMSYS; i++) {
-			if (mtk_crtc->exist[i]) {
-				ret = pm_runtime_put(mtk_crtc->mmsys_dev[i]);
-				if (ret < 0)
-					DRM_DEV_ERROR(mtk_crtc->mmsys_dev[i],
-						      "Failed to disable power domain: %d\n", ret);
-			}
+			if (mtk_crtc->exist[i])
+				pm_runtime_put(mtk_crtc->mmsys_dev[i]);
 		}
 	}
 
