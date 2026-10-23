@@ -475,6 +475,26 @@ static int mtk_pcie_phy_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int mtk_pcie_phy_suspend_noirq(struct device *dev)
+{
+	/*
+	 * If the target system sleep state is suspend-to-idle, the bridge is supposed to stay in
+	 * D0, and the framework will not help to restore its configuration space, so keep its
+	 * power and clocks during suspend.
+	 *
+	 * It's recommended to enable L1ss support, so the link can be changed to L1.2 state during
+	 * suspend.
+	 */
+	if (pm_suspend_default_s2idle())
+		device_set_wakeup_path(dev);
+
+	return 0;
+}
+
+static const struct dev_pm_ops mtk_pcie_phy_pm_ops = {
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(mtk_pcie_phy_suspend_noirq, NULL)
+};
+
 static int mtk_pcie_sphy3_calibrate(struct phy *phy)
 {
 	struct mtk_pcie_phy *pcie_phy = phy_get_drvdata(phy);
@@ -730,6 +750,7 @@ static struct platform_driver mtk_pcie_phy_driver = {
 	.driver	= {
 		.name = "mtk-pcie-phy",
 		.of_match_table = mtk_pcie_phy_of_match,
+		.pm = &mtk_pcie_phy_pm_ops,
 	},
 };
 module_platform_driver(mtk_pcie_phy_driver);
