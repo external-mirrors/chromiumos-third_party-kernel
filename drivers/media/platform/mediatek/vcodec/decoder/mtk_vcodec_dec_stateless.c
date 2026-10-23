@@ -346,12 +346,17 @@ static void mtk_vdec_worker(struct work_struct *work)
 	mtk_v4l2_vdec_dbg(3, ctx, "[%d] (%d) id=%d, vb=%p", ctx->id,
 			  vb2_src->vb2_queue->type, vb2_src->index, vb2_src);
 
+	src_buf_req = vb2_src->req_obj.req;
+
 	if (!ctx->is_secure_playback) {
 		bs_src->va = vb2_plane_vaddr(vb2_src, 0);
 		if (!bs_src->va) {
-			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 			mtk_v4l2_vdec_err(ctx, "[%d] id=%d source buffer is NULL", ctx->id,
 					  vb2_src->index);
+			if (src_buf_req)
+				v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
+			v4l2_m2m_buf_done(vb2_v4l2_src, VB2_BUF_STATE_ERROR);
+			v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 			return;
 		}
 	}
@@ -361,7 +366,6 @@ static void mtk_vdec_worker(struct work_struct *work)
 	mtk_v4l2_vdec_dbg(3, ctx, "[%d] Bitstream VA=%p DMA=%pad Size=%zx vb=%p",
 			  ctx->id, bs_src->va, &bs_src->dma_addr, bs_src->size, vb2_src);
 	/* Apply request controls. */
-	src_buf_req = vb2_src->req_obj.req;
 	if (src_buf_req) {
 		v4l2_ctrl_request_setup(src_buf_req, &ctx->ctrl_hdl);
 	} else {
