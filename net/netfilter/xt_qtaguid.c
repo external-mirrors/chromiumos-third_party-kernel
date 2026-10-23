@@ -3284,21 +3284,25 @@ static void __net_exit qtaguid_net_exit(struct net *net)
 	struct qtaguid_net *qtaguid_net = qtaguid_pernet(net);
 	struct iface_stat *iface_entry, *tmp;
 
-	list_for_each_entry_safe(iface_entry, tmp,
-				 &qtaguid_net->iface_stat_list, list) {
+	remove_proc_entry("iface_stat_fmt", qtaguid_net->procdir);
+	remove_proc_entry("iface_stat_all", qtaguid_net->procdir);
+	remove_proc_entry("stats", qtaguid_net->procdir);
+	remove_proc_entry("ctrl", qtaguid_net->procdir);
+
+	list_for_each_entry(iface_entry, &qtaguid_net->iface_stat_list, list) {
 		cancel_work_sync(&iface_entry->iface_work);
 		iface_delete_proc(iface_entry);
+	}
+
+	remove_proc_entry("iface_stat", qtaguid_net->procdir);
+	remove_proc_entry("xt_qtaguid", net->proc_net);
+
+	list_for_each_entry_safe(iface_entry, tmp,
+				 &qtaguid_net->iface_stat_list, list) {
 		tag_stat_tree_erase(&iface_entry->tag_stat_tree);
 		kfree(iface_entry->ifname);
 		kfree(iface_entry);
 	}
-
-	remove_proc_entry("iface_stat_fmt", qtaguid_net->procdir);
-	remove_proc_entry("iface_stat_all", qtaguid_net->procdir);
-	remove_proc_entry("iface_stat", qtaguid_net->procdir);
-	remove_proc_entry("stats", qtaguid_net->procdir);
-	remove_proc_entry("ctrl", qtaguid_net->procdir);
-	remove_proc_entry("xt_qtaguid", net->proc_net);
 
 	sock_tag_tree_erase(&qtaguid_net->sock_tag_tree);
 	tag_counter_set_tree_erase(&qtaguid_net->tag_counter_set_tree);
