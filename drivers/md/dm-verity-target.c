@@ -825,7 +825,8 @@ static void verity_finish_io(struct dm_verity_io *io, blk_status_t status,
 	struct dm_verity *v = io->v;
 	struct bio *bio = dm_bio_from_per_bio_data(io, v->ti->per_io_data_size);
 
-	if (status && !verity_fec_is_enabled(io->v))
+	if (status && !verity_fec_is_enabled(io->v) &&
+	    !(bio->bi_opf & REQ_RAHEAD))
 		verity_error(v, io, status, system_shutting_down);
 	bio->bi_end_io = io->orig_bi_end_io;
 	bio->bi_status = status;
