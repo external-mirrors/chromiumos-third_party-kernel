@@ -3452,6 +3452,14 @@ static int nvme_resume(struct device *dev)
 	if (ctrl->hmpre && nvme_setup_host_mem(ndev))
 		goto reset;
 
+	/*
+	 * The PCI core restores config space on resume (clearing
+	 * pdev->state_saved), and the fast resume path above skips
+	 * nvme_pci_enable(). Re-save the PCI config state so that any
+	 * subsequent link recovery in nvme_pci_recover_link() can restore
+	 * BAR0 and PCI_COMMAND via pci_restore_state().
+	 */
+	pci_save_state(to_pci_dev(dev));
 	return 0;
 reset:
 	return nvme_try_sched_reset(ctrl);
