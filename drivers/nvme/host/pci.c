@@ -10,6 +10,7 @@
 #include <linux/blk-mq.h>
 #include <linux/blk-mq-pci.h>
 #include <linux/blk-integrity.h>
+#include <linux/delay.h>
 #include <linux/dmi.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -2610,6 +2611,115 @@ static bool nvme_pci_update_nr_queues(struct nvme_dev *dev)
 	return true;
 }
 
+static u16 nvme_pci_reset_bridge_and_wait(struct pci_dev *bridge,
+					  struct pci_dev *pdev)
+{
+	u16 rp_lnksta = 0;
+	int i;
+
+	pcie_capability_clear_word(bridge, PCI_EXP_LNKCTL, PCI_EXP_LNKCTL_LD);
+	pci_bridge_secondary_bus_reset(bridge);
+	msleep(250);
+	pcie_capability_clear_and_set_word(bridge, PCI_EXP_LNKCTL,
+					   PCI_EXP_LNKCTL_LD,
+					   PCI_EXP_LNKCTL_RL);
+	for (i = 0; i < 25; i++) {
+		msleep(20);
+		pcie_capability_read_word(bridge, PCI_EXP_LNKSTA, &rp_lnksta);
+		if ((rp_lnksta & PCI_EXP_LNKSTA_DLLLA) &&
+		    pci_device_is_present(pdev))
+			break;
+	}
+	return rp_lnksta;
+}
+
+static int nvme_pci_restore_and_check(struct nvme_dev *dev, u32 *csts)
+{
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+
+	if (!pci_device_is_present(pdev))
+		return -ENODEV;
+
+	pci_restore_state(pdev);
+	pci_disable_device(pdev);
+	if (pci_enable_device_mem(pdev))
+		return -ENODEV;
+	pci_set_master(pdev);
+	pci_save_state(pdev);
+
+	*csts = readl(dev->bar + NVME_REG_CSTS);
+	if (PCI_POSSIBLE_ERROR(*csts))
+		return -ENODEV;
+
+	return 0;
+}
+
+static int nvme_pci_recover_link(struct nvme_dev *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev->dev);
+	struct pci_dev *bridge = pci_upstream_bridge(pdev);
+	u16 ep_lnksta = 0, rp_lnksta = 0;
+	u32 csts = ~0U;
+
+	pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &ep_lnksta);
+	if (bridge)
+		pcie_capability_read_word(bridge, PCI_EXP_LNKSTA, &rp_lnksta);
+
+	dev_warn_ratelimited(dev->ctrl.device,
+			     "NVMe link/MMIO down (CSTS=0xffffffff, EP_LNKSTA=0x%04x, RP_LNKSTA=0x%04x); attempting endpoint recovery\n",
+			     ep_lnksta, rp_lnksta);
+
+	/*
+	 * First try power-cycling and restoring only the NVMe endpoint.
+	 * This avoids resetting the upstream bridge if the link already
+	 * retrained or if only the endpoint state needs recovery, and serves
+	 * as a guardrail before performing a more invasive bus reset.
+	 */
+	pci_platform_power_transition(pdev, PCI_D3cold);
+	msleep(100);
+	pci_platform_power_transition(pdev, PCI_D0);
+	if (!nvme_pci_restore_and_check(dev, &csts)) {
+		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &ep_lnksta);
+		dev_info(dev->ctrl.device,
+			 "NVMe endpoint recovery restored MMIO (CSTS=0x%x, EP_LNKSTA=0x%04x, RP_LNKSTA=0x%04x)\n",
+			 csts, ep_lnksta, rp_lnksta);
+		return 0;
+	}
+
+	if (!bridge)
+		return -ENODEV;
+
+	dev_warn_ratelimited(dev->ctrl.device,
+			     "NVMe endpoint still unreachable; resetting upstream bridge\n");
+	rp_lnksta = nvme_pci_reset_bridge_and_wait(bridge, pdev);
+
+	if (!(rp_lnksta & PCI_EXP_LNKSTA_DLLLA) ||
+	    !pci_device_is_present(pdev)) {
+		dev_warn_ratelimited(dev->ctrl.device,
+				     "NVMe link still down (RP_LNKSTA=0x%04x); cycling bridge D3cold->D0\n",
+				     rp_lnksta);
+		pci_platform_power_transition(bridge, PCI_D3cold);
+		pci_platform_power_transition(pdev, PCI_D3cold);
+		msleep(100);
+		pci_platform_power_transition(bridge, PCI_D0);
+		pci_platform_power_transition(pdev, PCI_D0);
+		rp_lnksta = nvme_pci_reset_bridge_and_wait(bridge, pdev);
+	}
+
+	if (nvme_pci_restore_and_check(dev, &csts)) {
+		dev_warn_ratelimited(dev->ctrl.device,
+				     "NVMe link recovery failed (CSTS=0x%x, RP_LNKSTA=0x%04x)\n",
+				     csts, rp_lnksta);
+		return -ENODEV;
+	}
+
+	pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &ep_lnksta);
+	dev_info(dev->ctrl.device,
+		 "NVMe bridge reset recovered MMIO (CSTS=0x%x, EP_LNKSTA=0x%04x, RP_LNKSTA=0x%04x)\n",
+		 csts, ep_lnksta, rp_lnksta);
+	return 0;
+}
+
 static int nvme_pci_enable(struct nvme_dev *dev)
 {
 	int result = -ENOMEM;
@@ -2621,9 +2731,10 @@ static int nvme_pci_enable(struct nvme_dev *dev)
 
 	pci_set_master(pdev);
 
-	if (readl(dev->bar + NVME_REG_CSTS) == -1) {
-		result = -ENODEV;
-		goto disable;
+	if (PCI_POSSIBLE_ERROR(readl(dev->bar + NVME_REG_CSTS))) {
+		result = nvme_pci_recover_link(dev);
+		if (result)
+			goto disable;
 	}
 
 	/*
