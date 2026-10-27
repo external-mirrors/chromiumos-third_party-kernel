@@ -253,7 +253,7 @@ TRACE_EVENT_CONDITION(cros_chmod_common_enter,
 		if (path->dentry->d_sb && path->dentry->d_sb->s_root) {
 			struct qstr *root_name = &(path->dentry->d_sb->s_root->d_name);
 
-			name_len = min(dname->len, max_root_size);
+			name_len = min(root_name->len, max_root_size);
 			memmove(__entry->root, root_name->name, name_len);
 			__entry->root[name_len] = '\0';
 			name_len = min(max_id_size, sizeof(path->dentry->d_sb->s_id));
@@ -292,7 +292,7 @@ TRACE_EVENT_CONDITION(cros_chmod_common_exit,
 		if (path->dentry->d_sb && path->dentry->d_sb->s_root) {
 			struct qstr *root_name = &(path->dentry->d_sb->s_root->d_name);
 
-			name_len = min(dname->len, max_root_size);
+			name_len = min(root_name->len, max_root_size);
 			memmove(__entry->root, root_name->name, name_len);
 			__entry->root[name_len] = '\0';
 			name_len = min(max_id_size, sizeof(path->dentry->d_sb->s_id));
@@ -333,7 +333,7 @@ TRACE_EVENT_CONDITION(cros_chown_common_enter,
 		if (path->dentry->d_sb && path->dentry->d_sb->s_root) {
 			struct qstr *root_name = &(path->dentry->d_sb->s_root->d_name);
 
-			name_len = min(dname->len, max_root_size);
+			name_len = min(root_name->len, max_root_size);
 			memmove(__entry->root, root_name->name, name_len);
 			__entry->root[name_len] = '\0';
 			name_len = min(max_id_size, sizeof(path->dentry->d_sb->s_id));
@@ -375,7 +375,7 @@ TRACE_EVENT_CONDITION(cros_chown_common_exit,
 		if (path->dentry->d_sb && path->dentry->d_sb->s_root) {
 			struct qstr *root_name = &(path->dentry->d_sb->s_root->d_name);
 
-			name_len = min(dname->len, max_root_size);
+			name_len = min(root_name->len, max_root_size);
 			memmove(__entry->root, root_name->name, name_len);
 			__entry->root[name_len] = '\0';
 			name_len = min(max_id_size, sizeof(path->dentry->d_sb->s_id));
@@ -422,7 +422,7 @@ TRACE_EVENT_CONDITION(cros_vfs_utimes_enter,
 		if (path->dentry->d_sb && path->dentry->d_sb->s_root) {
 			struct qstr *root_name = &(path->dentry->d_sb->s_root->d_name);
 
-			name_len = min(dname->len, max_root_size);
+			name_len = min(root_name->len, max_root_size);
 			memmove(__entry->root, root_name->name, name_len);
 			__entry->root[name_len] = '\0';
 			name_len = min(max_id_size, sizeof(path->dentry->d_sb->s_id));
@@ -469,7 +469,7 @@ TRACE_EVENT_CONDITION(cros_vfs_utimes_exit,
 		if (path->dentry->d_sb && path->dentry->d_sb->s_root) {
 			struct qstr *root_name = &(path->dentry->d_sb->s_root->d_name);
 
-			name_len = min(dname->len, max_root_size);
+			name_len = min(root_name->len, max_root_size);
 			memmove(__entry->root, root_name->name, name_len);
 			__entry->root[name_len] = '\0';
 			name_len = min(max_id_size, sizeof(path->dentry->d_sb->s_id));
