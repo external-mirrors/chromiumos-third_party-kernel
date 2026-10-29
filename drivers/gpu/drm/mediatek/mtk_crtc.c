@@ -56,11 +56,9 @@ struct mtk_crtc {
 	struct cmdq_pkt			cmdq_handle;
 	u32				cmdq_event;
 	u32				cmdq_vblank_cnt;
-	wait_queue_head_t		cb_blocking_queue;
 
 	struct cmdq_client		sec_cmdq_client;
-	bool				sec_cmdq_working;
-	wait_queue_head_t		sec_cb_blocking_queue;
+	struct cmdq_pkt			*sec_cmdq_handle;
 #endif
 
 	struct device			*mmsys_dev;
@@ -175,6 +173,7 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	struct mtk_ddp_comp *ddp_first_comp;
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct cmdq_pkt *cmdq_handle;
+	unsigned long ret;
 
 	mutex_lock(&mtk_crtc->hw_lock);
 
@@ -189,7 +188,7 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	}
 
 	cmdq_handle = kzalloc(sizeof(*cmdq_handle), GFP_KERNEL);
-	if (!cmdq_handle){
+	if (!cmdq_handle) {
 		DRM_ERROR("mtk_crtc %d failed to kzalloc secure cmdq packet\n",
 			  drm_crtc_index(&mtk_crtc->base));
 		return;
@@ -197,11 +196,16 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	if (mtk_drm_cmdq_pkt_create(&mtk_crtc->sec_cmdq_client, cmdq_handle, PAGE_SIZE) < 0) {
 		DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet\n",
 			  drm_crtc_index(&mtk_crtc->base));
+		kfree(cmdq_handle);
 		return;
 	}
+	init_completion(&cmdq_handle->done);
+
 	if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
 		DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet data\n",
 			  drm_crtc_index(&mtk_crtc->base));
+		mtk_drm_cmdq_pkt_destroy(cmdq_handle);
+		kfree(cmdq_handle);
 		return;
 	}
 
@@ -232,14 +236,24 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 				   cmdq_handle->cmd_buf_size,
 				   DMA_TO_DEVICE);
 
-	mtk_crtc->sec_cmdq_working = true;
 	mbox_send_message(mtk_crtc->sec_cmdq_client.chan, cmdq_handle);
 	mbox_client_txdone(mtk_crtc->sec_cmdq_client.chan, 0);
 
-	// Wait for sec state to be disabled by cmdq
-	wait_event_timeout(mtk_crtc->sec_cb_blocking_queue,
-			   !mtk_crtc->sec_cmdq_working,
-			   msecs_to_jiffies(500));
+	/* Wait for sec state to be disabled by cmdq */
+	ret = wait_for_completion_timeout(&cmdq_handle->done, msecs_to_jiffies(500));
+	if (ret == 0) {
+		DRM_WARN("CRTC %d: secure CMDQ completion timeout after 500ms\n",
+			 drm_crtc_index(crtc));
+		/*
+		 * If timeout, flush to abort the pending command and ensure
+		 * callback won't be called after we free cmdq_handle.
+		 */
+		mbox_flush(mtk_crtc->sec_cmdq_client.chan, 2000);
+	}
+
+	/* Free secure cmdq packet after completion */
+	mtk_drm_cmdq_pkt_destroy(cmdq_handle);
+	kfree(cmdq_handle);
 
 	mtk_crtc->sec_on = false;
 	pr_debug("crtc-%d disable secure plane!\n", drm_crtc_index(crtc));
@@ -473,13 +487,8 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 	unsigned long flags;
 	bool is_secure = (data->pkt && data->pkt->sec_data);
 
-	if (data->sta < 0) {
-		if (is_secure) {
-			mtk_drm_cmdq_pkt_destroy(data->pkt);
-			kfree(data->pkt);
-		}
+	if (data->sta < 0)
 		return;
-	}
 
 	if (!is_secure)
 		mtk_crtc = container_of(cmdq_cl, struct mtk_crtc, cmdq_client);
@@ -520,22 +529,16 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 		mtk_crtc->pending_async_planes = false;
 	}
 
-	if (mtk_crtc->sec_cmdq_working) {
-		mtk_crtc->sec_cmdq_working = false;
-		wake_up(&mtk_crtc->sec_cb_blocking_queue);
-	}
-
-	if (is_secure) {
-		mtk_drm_cmdq_pkt_destroy(data->pkt);
-		kfree(data->pkt);
-	}
-
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
 ddp_cmdq_cb_out:
-
 	mtk_crtc->cmdq_vblank_cnt = 0;
-	wake_up(&mtk_crtc->cb_blocking_queue);
+
+	/*
+	 * Signal completion. For secure packets, the packet will be freed
+	 * after wait_for_completion_timeout() returns in the caller.
+	 */
+	complete(&data->pkt->done);
 }
 #endif
 
@@ -807,30 +810,37 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		if (!cmdq_handle) {
 			DRM_ERROR("mtk_crtc %d failed to kzalloc secure cmdq packet\n",
 				  drm_crtc_index(&mtk_crtc->base));
-			return;
+			goto update_config_err;
 		}
 		if (mtk_drm_cmdq_pkt_create(&mtk_crtc->sec_cmdq_client,
 					    cmdq_handle, PAGE_SIZE) < 0) {
 			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet\n",
 				  drm_crtc_index(&mtk_crtc->base));
-			return;
+			goto update_config_err;
 		}
+		init_completion(&cmdq_handle->done);
+
 		if (cmdq_sec_pkt_alloc_sec_data(cmdq_handle) < 0) {
 			DRM_ERROR("mtk_crtc %d failed to create secure cmdq packet data\n",
 				  drm_crtc_index(&mtk_crtc->base));
-			return;
+			goto update_config_err;
 		}
 
+		mtk_crtc->sec_cmdq_handle = cmdq_handle;
 		cmdq_client = mtk_crtc->sec_cmdq_client;
 	} else if (mtk_crtc->cmdq_client.chan) {
 		mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
 		mtk_crtc->cmdq_handle.cmd_buf_size = 0;
+		reinit_completion(&mtk_crtc->cmdq_handle.done);
 
-		cmdq_client =  mtk_crtc->cmdq_client;
+		cmdq_client = mtk_crtc->cmdq_client;
 		cmdq_handle = &mtk_crtc->cmdq_handle;
+	} else {
+		cmdq_client.chan = NULL;
+		cmdq_handle = NULL;
 	}
 
-	if (cmdq_client.chan) {
+	if (cmdq_client.chan && cmdq_handle) {
 		cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
 		cmdq_pkt_wfe(cmdq_handle, mtk_crtc->cmdq_event, false);
 		mtk_crtc_ddp_config(crtc, cmdq_handle);
@@ -850,13 +860,25 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		 */
 		mtk_crtc->cmdq_vblank_cnt = 3;
 
+		spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+		mtk_crtc->config_updating = false;
+		spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
+
 		mbox_send_message(cmdq_client.chan, cmdq_handle);
 		mbox_client_txdone(cmdq_client.chan, 0);
+		goto update_config_out;
 	}
+
+update_config_err:
 #endif
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 	mtk_crtc->config_updating = false;
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+update_config_out:
+	cmdq_handle = NULL;
+#endif
 
 	mutex_unlock(&mtk_crtc->hw_lock);
 }
@@ -1085,9 +1107,10 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	/* Wait for planes to be disabled by cmdq */
 	if (mtk_crtc->cmdq_client.chan)
-		wait_event_timeout(mtk_crtc->cb_blocking_queue,
-				   mtk_crtc->cmdq_vblank_cnt == 0,
-				   msecs_to_jiffies(500));
+		if (!wait_for_completion_timeout(&mtk_crtc->cmdq_handle.done,
+						 msecs_to_jiffies(500)))
+			DRM_WARN("CRTC %d: disable CMDQ timeout\n",
+				 drm_crtc_index(crtc));
 #endif
 	/* Wait for planes to be disabled */
 	drm_crtc_wait_one_vblank(crtc);
@@ -1442,10 +1465,8 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 					drm_crtc_index(&mtk_crtc->base));
 				goto cmdq_err;
 			}
+			init_completion(&mtk_crtc->cmdq_handle.done);
 		}
-
-		/* for sending blocking cmd in crtc disable */
-		init_waitqueue_head(&mtk_crtc->cb_blocking_queue);
 	}
 
 	if (priv->data->has_secure) {
@@ -1459,11 +1480,6 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 			dev_err(dev, "mtk_crtc %d failed to create sec mailbox client\n",
 				drm_crtc_index(&mtk_crtc->base));
 			mtk_crtc->sec_cmdq_client.chan = NULL;
-		}
-
-		if (mtk_crtc->sec_cmdq_client.chan) {
-			/* for sending blocking cmd in crtc disable */
-			init_waitqueue_head(&mtk_crtc->sec_cb_blocking_queue);
 		}
 	}
 

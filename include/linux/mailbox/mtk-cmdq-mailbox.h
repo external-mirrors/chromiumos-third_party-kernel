@@ -8,6 +8,7 @@
 #define __MTK_CMDQ_MAILBOX_H__
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/mailbox_controller.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -85,6 +86,7 @@ struct cmdq_pkt {
 	void			*cl;
 	bool			loop;
 	void			*sec_data;
+	struct completion	done; /* embedded completion for this command */
 };
 
 struct cmdq_thread {
