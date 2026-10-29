@@ -800,9 +800,9 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 	mutex_lock(&mtk_crtc->hw_lock);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	if (!mtk_crtc->sec_on && mtk_crtc->cmdq_client.chan) {
+	if (mtk_crtc->cmdq_client.chan) {
 		if (!mbox_flush(mtk_crtc->cmdq_client.chan, 2000))
-			pkt_aborted = mtk_crtc->cmdq_vblank_cnt > 0;
+			pkt_aborted = !mtk_crtc->sec_on && mtk_crtc->cmdq_vblank_cnt > 0;
 		mtk_crtc->cmdq_vblank_cnt = 0;
 	}
 #endif
