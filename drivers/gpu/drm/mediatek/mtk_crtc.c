@@ -1059,6 +1059,39 @@ int mtk_crtc_plane_check(struct drm_crtc *crtc, struct drm_plane *plane,
 	return 0;
 }
 
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+/*
+ * Wait for the last packet sent by mtk_crtc_update_config(). In secure mode
+ * it goes through sec_cmdq_client, so cmdq_handle.done is never signaled for
+ * it. Waiting on a newer packet queued by a racing async update is fine since
+ * CMDQ executes packets in order.
+ */
+static void mtk_crtc_wait_cmdq_done(struct mtk_crtc *mtk_crtc)
+{
+	struct cmdq_pkt *pkt = NULL;
+
+	mutex_lock(&mtk_crtc->hw_lock);
+	if (mtk_crtc->sec_on) {
+		pkt = mtk_crtc->sec_cmdq_handle;
+		if (pkt)
+			cmdq_pkt_get(pkt);
+	} else if (mtk_crtc->cmdq_client.chan) {
+		pkt = &mtk_crtc->cmdq_handle;
+	}
+	mutex_unlock(&mtk_crtc->hw_lock);
+
+	if (!pkt)
+		return;
+
+	if (!wait_for_completion_timeout(&pkt->done, msecs_to_jiffies(500)))
+		DRM_WARN("CRTC %d: disable CMDQ timeout\n",
+			 drm_crtc_index(&mtk_crtc->base));
+
+	if (pkt->managed)
+		cmdq_pkt_put(pkt);
+}
+#endif
+
 void mtk_crtc_async_update(struct drm_crtc *crtc, struct drm_plane *plane,
 			   struct drm_atomic_state *state)
 {
@@ -1125,12 +1158,7 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 
 	mtk_crtc_update_config(mtk_crtc, false);
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
-	/* Wait for planes to be disabled by cmdq */
-	if (mtk_crtc->cmdq_client.chan)
-		if (!wait_for_completion_timeout(&mtk_crtc->cmdq_handle.done,
-						 msecs_to_jiffies(500)))
-			DRM_WARN("CRTC %d: disable CMDQ timeout\n",
-				 drm_crtc_index(crtc));
+	mtk_crtc_wait_cmdq_done(mtk_crtc);
 #endif
 	/* Wait for planes to be disabled */
 	drm_crtc_wait_one_vblank(crtc);
