@@ -48,6 +48,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * with macros. This allows us to use the kernel lockdep feature for lock
  * debugging. */
 #include "lock_types.h"
+#include "pvr_debug.h"
 
 #if defined(__linux__) && defined(__KERNEL__)
 
@@ -433,4 +434,92 @@ typedef unsigned long OS_SPINLOCK_FLAGS;
 #endif /* defined(__linux__) */
 #endif /* defined(__linux__) && defined(__KERNEL__) */
 
-#endif	/* LOCK_H */
+static inline PVRSRV_ERROR OSAtomicAddUnlessOverflow(ATOMIC_T *pCounter, IMG_INT iAdd, IMG_INT iMax, IMG_INT *piNewCounterVal)
+{
+	IMG_INT iCurrent;
+	IMG_INT iOld, iNew;
+	PVRSRV_ERROR eError = PVRSRV_OK;
+
+	/* Should be using subtract function */
+	if (iAdd <= 0)
+	{
+		PVR_ASSERT(!"Attempt to add negative number, rejecting.");
+		return PVRSRV_ERROR_INVALID_PARAMS;
+	}
+
+	iCurrent = OSAtomicRead(pCounter);
+
+	do
+	{
+		iOld = iCurrent;
+#if defined(__GNUC__) || defined(__clang__)
+		if (iAdd > (iMax - iCurrent) || __builtin_sadd_overflow(iCurrent, iAdd, &iNew))
+		{
+			/* We would overflow so return error and do nothing */
+			return PVRSRV_ERROR_ATOMIC_OVERFLOW;
+		}
+#else
+		if (iAdd > (iMax - iCurrent) || iAdd > (IMG_INT_MAX - iCurrent))
+		{
+			/* We would overflow so return error and do nothing */
+			return PVRSRV_ERROR_ATOMIC_OVERFLOW;
+		}
+		iNew = iCurrent + iAdd;
+#endif
+		iCurrent = OSAtomicCompareExchange(pCounter, iOld, iNew);
+	}
+	while (iOld != iCurrent);
+
+	if (piNewCounterVal != NULL)
+	{
+		*piNewCounterVal = iNew;
+	}
+
+	return eError;
+}
+
+static inline PVRSRV_ERROR OSAtomicSubtractUnlessUnderflow(ATOMIC_T *pCounter, IMG_INT iSub, IMG_INT iMin, IMG_INT *piNewCounterVal)
+{
+	IMG_INT iCurrent;
+	IMG_INT iOld, iNew;
+	PVRSRV_ERROR eError = PVRSRV_OK;
+
+	/* Should be using add function */
+	if (iSub <= 0)
+	{
+		PVR_ASSERT(!"Attempt to subtract negative number, rejecting.");
+		return PVRSRV_ERROR_INVALID_PARAMS;
+	}
+
+	iCurrent = OSAtomicRead(pCounter);
+
+	do
+	{
+		iOld = iCurrent;
+#if defined(__GNUC__) || defined(__clang__)
+		if (iCurrent < (iMin + iSub) || __builtin_ssub_overflow(iCurrent, iSub, &iNew))
+		{
+			/* We would underflow so return error and do nothing */
+			return PVRSRV_ERROR_ATOMIC_UNDERFLOW;
+		}
+#else
+		if (iCurrent < (iMin + iSub) || iCurrent < (IMG_INT_MIN + iSub))
+		{
+			/* We would underflow so return error and do nothing */
+			return PVRSRV_ERROR_ATOMIC_UNDERFLOW;
+		}
+		iNew = iCurrent - iSub;
+#endif
+		iCurrent = OSAtomicCompareExchange(pCounter, iOld, iNew);
+	}
+	while (iOld != iCurrent);
+
+	if (piNewCounterVal != NULL)
+	{
+		*piNewCounterVal = iNew;
+	}
+
+	return eError;
+}
+
+#endif /* LOCK_H */

@@ -1706,8 +1706,8 @@ PVRSRV_ERROR RGXCreateHWRTDataSet2(
 	psHWRTDataCommonCookie = OSAllocZMem(sizeof(*psHWRTDataCommonCookie));
 	if (psHWRTDataCommonCookie == NULL)
 	{
-	    eError = PVRSRV_ERROR_OUT_OF_MEMORY;
-	    goto err_HWRTDataCommonCookieAlloc;
+		eError = PVRSRV_ERROR_OUT_OF_MEMORY;
+		goto err_HWRTDataCommonCookieAlloc;
 	}
 
 	/*
@@ -1724,8 +1724,8 @@ PVRSRV_ERROR RGXCreateHWRTDataSet2(
 
 	if (eError != PVRSRV_OK)
 	{
-	    PVR_DPF((PVR_DBG_ERROR, "%s: DevmemAllocate for FwHWRTDataCommon failed", __func__));
-	    goto err_HWRTDataCommonAlloc;
+		PVR_DPF((PVR_DBG_ERROR, "%s: DevmemAllocate for FwHWRTDataCommon failed", __func__));
+		goto err_HWRTDataCommonAlloc;
 	}
 	eError = RGXSetFirmwareAddress(&sHWRTDataCommonFwAddr, psHWRTDataCommonFwMemDesc, 0, RFW_FWADDR_FLAG_NONE);
 	PVR_LOG_GOTO_IF_ERROR(eError, "RGXSetFirmwareAddress", err_HWRTDataCommonFwAddr);
@@ -1787,26 +1787,19 @@ PVRSRV_ERROR RGXCreateHWRTDataSet2(
 		    psHWRTDataCommonCookie,
 		    &pasKMHWRTDataSet[ui32RTDataID]);
 
-		if (eError != PVRSRV_OK)
-		{
-			PVR_DPF((PVR_DBG_ERROR,
-			        "%s: Failed to create HWRTData [slot %u] (%s)",
-			        __func__,
-			        ui32RTDataID,
-			        PVRSRVGetErrorString(eError)));
-			goto err_HWRTDataAlloc;
-		}
+		PVR_LOG_GOTO_IF_ERROR_VA(eError, err_HWRTDataAlloc,
+		    "%s: Failed to create HWRTData [slot %u] (%s)",
+		    __func__, ui32RTDataID, PVRSRVGetErrorString(eError));
+
 		psHWRTDataCommonCookie->ui32RefCount += 1;
 	}
 
 	return PVRSRV_OK;
 
 err_HWRTDataAlloc:
-	PVR_DPF((PVR_DBG_WARNING, "%s: err_HWRTDataAlloc %u",
-			 __func__, psHWRTDataCommonCookie->ui32RefCount));
 	if (pasKMHWRTDataSet)
 	{
-		for (ui32RTDataID = psHWRTDataCommonCookie->ui32RefCount; ui32RTDataID > 0; ui32RTDataID--)
+		for (; ui32RTDataID > 0; ui32RTDataID--)
 		{
 			if (pasKMHWRTDataSet[ui32RTDataID-1] != NULL)
 			{
@@ -1833,6 +1826,7 @@ err_ValidationDevPtr:
 */
 PVRSRV_ERROR RGXDestroyHWRTDataSet(RGX_KM_HW_RT_DATASET *psKMHWRTDataSet)
 {
+	PVRSRV_RGXDEV_INFO *psDevInfo;
 	PVRSRV_DEVICE_NODE *psDevNode;
 	PVRSRV_ERROR eError;
 	PRGXFWIF_HWRTDATA psHWRTData;
@@ -1847,30 +1841,21 @@ PVRSRV_ERROR RGXDestroyHWRTDataSet(RGX_KM_HW_RT_DATASET *psKMHWRTDataSet)
 	                               RFW_FWADDR_NOREF_FLAG);
 	PVR_RETURN_IF_ERROR(eError);
 
+	/* Start Critical Region */
+	psDevInfo = psDevNode->pvDevice;
+	OSLockAcquire(psDevInfo->hDeviceHWRTLock);
+
 	/* Cleanup HWRTData */
 	eError = RGXFWRequestHWRTDataCleanUp(psDevNode, psHWRTData);
 	if (eError != PVRSRV_OK)
 	{
-		return eError;
+		goto EndCriticalRegion;
 	}
 
 	psCommonCookie = psKMHWRTDataSet->psHWRTDataCommonCookie;
 
 	RGXDestroyHWRTData_aux(psKMHWRTDataSet);
 
-	/* We've got past potential PVRSRV_ERROR_RETRY events, so we are sure
-	   that the HWRTDATA instance will be destroyed during this call.
-	   Consequently, we decrease the ref count for HWRTDataCommonCookie.
-
-	   NOTE: This ref count does not require locks or atomics.
-	   -------------------------------------------------------
-	     HWRTDatas bound into one pair are always destroyed sequentially,
-	     within a single loop on the Client side.
-	     The Common/Cookie objects always belong to only one pair of
-	     HWRTDatas, and ref count is used to ensure that the Common/Cookie
-	     objects will be destroyed after destruction of all HWRTDatas
-	     within a single pair.
-	*/
 	psCommonCookie->ui32RefCount--;
 
 	/* When ref count for HWRTDataCommonCookie hits ZERO
@@ -1890,7 +1875,11 @@ PVRSRV_ERROR RGXDestroyHWRTDataSet(RGX_KM_HW_RT_DATASET *psKMHWRTDataSet)
 		OSFreeMem(psCommonCookie);
 	}
 
-	return PVRSRV_OK;
+	/* End of Critical Region */
+EndCriticalRegion:
+	OSLockRelease(psDevInfo->hDeviceHWRTLock);
+
+	return eError;
 }
 
 PVRSRV_ERROR RGXCreateFreeList(CONNECTION_DATA      *psConnection,

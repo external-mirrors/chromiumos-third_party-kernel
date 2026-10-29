@@ -797,8 +797,8 @@ typedef struct _PVRSRV_RGXDEV_INFO_
 													  created and mapped at driver init. It's used for
 													  various purposes. See rgx_fwif_km.h for all use cases. */
 #endif
+	POS_LOCK				hDeviceHWRTLock;	/*!< Lock to protect HWRTDataSet destruction */
 } PVRSRV_RGXDEV_INFO;
-
 
 
 typedef struct _RGX_TIMING_INFORMATION_

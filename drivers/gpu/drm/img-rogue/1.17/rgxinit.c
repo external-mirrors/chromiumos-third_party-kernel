@@ -3804,6 +3804,7 @@ PVRSRV_ERROR DevDeInitRGX(PVRSRV_DEVICE_NODE *psDeviceNode)
 	OSLockDestroy(psDevInfo->sRegCongfig.hLock);
 	OSLockDestroy(psDevInfo->hBPLock);
 	OSLockDestroy(psDevInfo->hRGXFWIfBufInitLock);
+	OSLockDestroy(psDevInfo->hDeviceHWRTLock);
 	OSWRLockDestroy(psDevInfo->hRenderCtxListLock);
 	OSWRLockDestroy(psDevInfo->hComputeCtxListLock);
 	OSWRLockDestroy(psDevInfo->hTransferCtxListLock);
@@ -4597,6 +4598,16 @@ PVRSRV_ERROR RGXRegisterDevice(PVRSRV_DEVICE_NODE *psDeviceNode)
 		goto e0;
 	}
 
+	/* Create lock to control access to HWRT destruction. This provides a critical region when
+	 * destroying RGX_HWRTDataSet instances.
+	 */
+	eError = OSLockCreate(&psDevInfo->hDeviceHWRTLock);
+	if (eError != PVRSRV_OK)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: Failed to create HWRT dataset lock", __func__));
+		goto errHWRTLock;
+	}
+
 	eError = OSWRLockCreate(&(psDevInfo->hComputeCtxListLock));
 	if (eError != PVRSRV_OK)
 	{
@@ -4872,6 +4883,8 @@ e3:
 e2:
 	OSWRLockDestroy(psDevInfo->hComputeCtxListLock);
 e1:
+	OSLockDestroy(psDevInfo->hDeviceHWRTLock);
+errHWRTLock:
 	OSWRLockDestroy(psDevInfo->hRenderCtxListLock);
 e0:
 	OSFreeMem(psDevInfo);
