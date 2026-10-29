@@ -1390,27 +1390,6 @@ enum drm_mode_status mtk_dp_mst_encoder_mode_valid_mt8196(u8 encoder_id,
 	return MODE_OK;
 }
 
-/*
- * MT8196 encoder assignment:
- * Encoder 0 (DP_INTF0) has dual-DSC → supports up to 5K
- * Encoder 1 (DP_INTF1) has single-DSC → supports up to 4K
- *
- * Strategy: 5K connectors must use encoder 0; 4K connectors prefer
- * encoder 1 to keep encoder 0 free for a later 5K connector.
- */
-int mtk_dp_mst_best_encoder_mt8196(struct mtk_dp *mtk_dp, struct drm_connector *connector)
-{
-	struct drm_display_mode *mode;
-
-	/* If any mode exceeds 4K, this connector needs dual-DSC (encoder 0) */
-	list_for_each_entry(mode, &connector->modes, head) {
-		if (mode->hdisplay > 3840)
-			return DP_ENCODER_ID_0;
-	}
-
-	return DP_ENCODER_ID_1;
-}
-
 static struct drm_encoder *mtk_dp_mst_connector_atomic_best_encoder(struct drm_connector *connector,
 								    struct drm_atomic_state *state)
 {
@@ -1424,23 +1403,6 @@ static struct drm_encoder *mtk_dp_mst_connector_atomic_best_encoder(struct drm_c
 
 	if (mtk_con->encoder)
 		return mtk_con->encoder;
-
-	/* Platform-specific encoder preference, fall through if unavailable */
-	if (mtk_dp->data->mst_best_encoder) {
-		int preferred = mtk_dp->data->mst_best_encoder(mtk_dp, connector);
-
-		if (preferred >= 0 && preferred < DP_ENCODER_NUM) {
-			enc = mtk_dp_mst_get_bridge_encoder(mtk_dp, preferred);
-			if (enc && mtk_dp_mst_encoder_available(mtk_dp, preferred)) {
-				mtk_con->encoder = enc;
-				mtk_con->encoder_id = preferred;
-				drm_dbg_kms(mtk_dp->drm_dev,
-					    "[DPTX] connector[%d] hook assigned encoder %d\n",
-					    mtk_dp_con_id(mtk_dp, mtk_con), preferred);
-				return enc;
-			}
-		}
-	}
 
 	/* Fallback: use any available encoder */
 	for (i = 0; i < DP_ENCODER_NUM; i++) {
