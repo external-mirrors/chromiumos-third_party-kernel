@@ -1686,6 +1686,14 @@ ap_i2c_tchpad: &i2c7 {
 /delete-node/ &mt6319_8_vbuck2;
 /delete-node/ &mt6319_8_vbuck4;
 
+&mt6319_7_vbuck1 {
+	regulator-ramp-delay = <4500>;
+};
+
+&mt6319_8_vbuck1 {
+	regulator-ramp-delay = <4500>;
+};
+
 &pmic {
 	interrupts-extended = <&pio 194 IRQ_TYPE_LEVEL_HIGH>;
 };
