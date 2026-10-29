@@ -430,22 +430,8 @@ _CleanupThread_FreeMMUMapping(void* pvData)
 	/* In NOHW the syncs will never be updated so just free the tables */
 	bFreeNow = IMG_TRUE;
 #endif
-	/* If the Invalidate operation is not completed, check if the operation timed out */
-	if (!bFreeNow)
-	{
-		IMG_UINT32 uiTimeStart = psCleanup->sCleanupThreadFn.ui32TimeStart;
-		IMG_UINT32 uiTimeEnd = psCleanup->sCleanupThreadFn.ui32TimeEnd;
 
-		/* If the time left for the completion of invalidate operation is
-		 * within 500ms of time-out, consider the operation as timed out */
-		if ((uiTimeEnd - uiTimeStart - 500) <= (OSClockms() - uiTimeStart))
-		{
-			/* Consider the operation is timed out */
-			bFreeNow = IMG_TRUE;
-		}
-	}
-
-	/* Free if the invalidate operation completed or the operation itself timed out */
+	/* Free if the invalidate operation completed, otherwise retry */
 	if (bFreeNow)
 	{
 		_FreeMMUMapping(psDevNode, &psCleanup->sMMUMappingHead);
