@@ -4,6 +4,7 @@
  */
 
 #include <linux/dma-mapping.h>
+#include <linux/file.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/of_device.h>
@@ -133,24 +134,6 @@ static struct mdw_mem *mdw_mem_create(struct mdw_fpriv *mpriv)
 	return m;
 }
 
-static int mdw_mem_gen_handle(struct mdw_mem *m)
-{
-	int ret = 0;
-
-	if (IS_ERR_OR_NULL(m->dbuf) || m->handle >= 0)
-		return -EINVAL;
-
-	/* create fd from dma-buf */
-	m->handle =  dma_buf_fd(m->dbuf,
-		(O_RDWR | O_CLOEXEC) & ~O_ACCMODE);
-	if (m->handle < 0) {
-		mdw_drv_err("create handle for dmabuf(%d) fail\n", m->type);
-		ret = -EINVAL;
-	}
-
-	return ret;
-}
-
 static int mdw_mem_alloc_internal(struct mdw_mem *m)
 {
 	int ret = 0;
@@ -194,7 +177,7 @@ long mdw_mem_set_name(struct mdw_mem *m, const char *buf)
 }
 
 struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
-	uint64_t size, uint64_t align, uint64_t flags, bool need_handle)
+	uint64_t size, uint64_t align, uint64_t flags, int handle)
 {
 	struct mdw_mem *m = NULL;
 	struct mdw_device *mdev = mpriv->mdev;
@@ -214,7 +197,8 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 	m->flags = flags;
 	m->type = type;
 	m->belong_apu = true;
-	m->need_handle = need_handle;
+	m->handle = handle;
+	m->need_handle = handle >= 0;
 
 	/* alloc mem */
 	ret = mdw_mem_alloc_internal(m);
@@ -224,20 +208,6 @@ struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
 		goto delete_mem;
 	}
 
-	/* generate handle */
-	if (need_handle) {
-		ret = mdw_mem_gen_handle(m);
-		if (ret) {
-			mdw_drv_err("generate mem handle fail\n");
-			dma_buf_put(m->dbuf);
-			m = NULL;
-			/*
-			 * memory freed and mpriv reference put
-			 * when DMABUF is released.
-			 */
-			goto out;
-		}
-	}
 	/* insert to list */
 	mutex_lock(&mdev->m_mtx);
 	if (list_empty(&m->d_node))
@@ -730,26 +700,34 @@ static int mdw_mem_ioctl_alloc(struct mdw_fpriv *mpriv,
 {
 	struct mdw_mem_in *in = (struct mdw_mem_in *)args;
 	struct mdw_mem *m = NULL;
-	int ret = 0;
+	int fd, ret = 0;
 
 	if (!in->alloc.size) {
 		mdw_drv_err("invalid size(%llu)\n", in->alloc.size);
 		return -EINVAL;
 	}
 
+	fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0) {
+		mdw_drv_err("get unused fd fail(%d)\n", fd);
+		return fd;
+	}
+
 	mutex_lock(&mpriv->mtx);
 
 	m = mdw_mem_alloc(mpriv, in->alloc.type, in->alloc.size,
-		in->alloc.align, in->alloc.flags, true);
+		in->alloc.align, in->alloc.flags, fd);
 	memset(args, 0, sizeof(*args));
 	if (!m) {
 		mdw_drv_err("mdw_mem_alloc fail\n");
+		put_unused_fd(fd);
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	args->out.alloc.handle = m->handle;
+	args->out.alloc.handle = fd;
 	mdw_mem_show(m);
+	fd_install(fd, m->dbuf->file);
 
 out:
 	mutex_unlock(&mpriv->mtx);

@@ -33,7 +33,7 @@ static int mdw_mem_pool_chunk_add(struct mdw_mem_pool *pool, uint32_t size)
 	mdw_trace_begin("apumdw:pool_chunk_add|size:%u", size);
 
 	m = mdw_mem_alloc(pool->mpriv, pool->type, size, pool->align,
-		pool->flags, false);
+		pool->flags, -1);
 	if (!m) {
 		mdw_drv_err("mem_pool(0x%llx) create allocate fail, size: %d\n",
 			(uint64_t) pool->mpriv, size);
