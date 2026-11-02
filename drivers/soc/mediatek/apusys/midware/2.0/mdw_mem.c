@@ -45,6 +45,8 @@ struct mdw_mem *mdw_mem_get(struct mdw_fpriv *mpriv, int handle)
 	mutex_lock(&mdev->m_mtx);
 	list_for_each_entry_safe(m, tmp, &mdev->m_list, d_node) {
 		if (m->dbuf == dbuf) {
+			if (!m->belong_apu)
+				continue;
 			mutex_unlock(&mdev->m_mtx);
 			return m;
 		}
