@@ -8,6 +8,7 @@
 
 #include <linux/completion.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_flip_work.h>
 #include <drm/drm_vblank_work.h>
 #include "mtk_ddp_comp.h"
 #include "mtk_drm_drv.h"
@@ -73,6 +74,13 @@ struct mtk_crtc {
 	bool				pending_needs_vblank;
 	struct drm_pending_vblank_event	*event;
 
+	/*
+	 * Framebuffers replaced by legacy cursor updates. They are released
+	 * with the flip event.
+	 */
+	struct drm_flip_work		fb_put_work;
+	bool				pending_fb_put;
+
 	struct drm_plane		*planes;
 	unsigned int			layer_nr;
 	bool				pending_planes;
@@ -135,7 +143,7 @@ int mtk_crtc_plane_check(struct drm_crtc *crtc, struct drm_plane *plane,
 			 struct mtk_plane_state *state);
 void mtk_crtc_plane_disable(struct drm_crtc *crtc, struct drm_plane *plane);
 void mtk_crtc_async_update(struct drm_crtc *crtc, struct drm_plane *plane,
-			   struct drm_atomic_state *plane_state);
+			   struct drm_framebuffer *old_fb);
 struct device *mtk_crtc_dma_dev_get(struct drm_crtc *crtc);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
