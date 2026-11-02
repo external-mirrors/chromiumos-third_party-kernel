@@ -1722,6 +1722,7 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 			if (mtk_crtc->cmdq_client.chan) {
 				cmdq_handle = &mtk_crtc->cmdq_handle;
+				mutex_lock(&mtk_crtc->hw_lock);
 				mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
 				cmdq_handle->cmd_buf_size = 0;
 				reinit_completion(&cmdq_handle->done);
@@ -1740,7 +1741,9 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 							   cmdq_handle->pa_base,
 							   cmdq_handle->cmd_buf_size,
 							   DMA_TO_DEVICE);
-				mbox_send_message(mtk_crtc->cmdq_client.chan, cmdq_handle);
+				if (mbox_send_message(mtk_crtc->cmdq_client.chan,
+						      cmdq_handle) < 0)
+					complete(&cmdq_handle->done);
 				mbox_client_txdone(mtk_crtc->cmdq_client.chan, 0);
 				ret = wait_for_completion_timeout(&cmdq_handle->done,
 								  msecs_to_jiffies(50));
@@ -1748,6 +1751,7 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 					dev_warn(crtc->dev->dev,
 						 "crtc%d switch mode timeout\n",
 						 drm_crtc_index(crtc));
+				mutex_unlock(&mtk_crtc->hw_lock);
 			}
 #endif
 		}
