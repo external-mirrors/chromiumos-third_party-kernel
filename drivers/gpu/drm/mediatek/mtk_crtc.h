@@ -89,6 +89,11 @@ struct mtk_crtc {
 
 	struct cmdq_client		sec_cmdq_client;
 	struct cmdq_pkt			*sec_cmdq_handle;
+	/*
+	 * Last packet sent by mtk_crtc_update_config(). Only its callback
+	 * completes the pending updates. Protected by config_lock.
+	 */
+	struct cmdq_pkt			*last_pkt;
 #endif
 
 	struct device			*mmsys_dev[MAX_MMSYS];

@@ -156,6 +156,7 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	struct cmdq_pkt *cmdq_handle;
 	struct cmdq_pkt *old_sec_handle;
 	struct cmdq_sec_data *sec_data;
+	unsigned long flags;
 
 	if (!mtk_crtc->sec_cmdq_client.chan) {
 		dev_err(crtc->dev->dev,
@@ -251,6 +252,14 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc)
 	old_sec_handle = mtk_crtc->sec_cmdq_handle;
 	mtk_crtc->sec_cmdq_handle = NULL;
 	mtk_crtc->sec_on = false;
+	/*
+	 * old_sec_handle may be freed below and its address reused. Clear
+	 * last_pkt so that no later callback matches it.
+	 */
+	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+	mtk_crtc->last_pkt = NULL;
+	mtk_crtc->cmdq_vblank_cnt = 0;
+	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 	dev_dbg(crtc->dev->dev, "crtc-%d disable secure plane!\n", drm_crtc_index(crtc));
 
 	if (old_sec_handle)
@@ -726,7 +735,7 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 		if (data->sta != -ECONNABORTED)
 			mtk_crtc->cmdq_vblank_cnt = 0;
 		/* Unblock waiter immediately; don't stall for 500ms timeout. */
-		complete(&data->pkt->done);
+		complete_all(&data->pkt->done);
 		if (data->pkt->managed)
 			cmdq_pkt_put(data->pkt);
 		return;
@@ -735,6 +744,17 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 	state = to_mtk_crtc_state(mtk_crtc->base.state);
 
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+	/*
+	 * Only the last sent packet carries all pending updates. Ignore older
+	 * packets, or the flip event goes out before the newer update is
+	 * applied.
+	 */
+	if (data->pkt != mtk_crtc->last_pkt)
+		goto ddp_cmdq_cb_out;
+
+	/* The last sent packet has run, so stop its timeout. */
+	mtk_crtc->cmdq_vblank_cnt = 0;
+
 	if (mtk_crtc->config_updating)
 		goto ddp_cmdq_cb_out;
 
@@ -784,11 +804,30 @@ ddp_cmdq_cb_out:
 		wake_up(&mtk_crtc->cmdq_done_wq);
 	}
 
-	mtk_crtc->cmdq_vblank_cnt = 0;
-
-	complete(&data->pkt->done);
+	/* Keep done set until the next send, for mtk_crtc_flush_cmdq(). */
+	complete_all(&data->pkt->done);
 	if (data->pkt->managed)
 		cmdq_pkt_put(data->pkt);
+}
+
+/*
+ * Flush the normal channel before reusing cmdq_handle. mbox_flush() can
+ * return before the last callback runs. Wait for that callback too, because
+ * ddp_cmdq_cb() cannot tell it from the callback of the next packet.
+ */
+static int mtk_crtc_flush_cmdq(struct mtk_crtc *mtk_crtc)
+{
+	int ret;
+
+	lockdep_assert_held(&mtk_crtc->hw_lock);
+
+	ret = mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
+	if (!wait_for_completion_timeout(&mtk_crtc->cmdq_handle.done,
+					 msecs_to_jiffies(500)))
+		DRM_WARN("CRTC %d: CMDQ callback timeout\n",
+			 drm_crtc_index(&mtk_crtc->base));
+
+	return ret;
 }
 #endif
 
@@ -1100,7 +1139,7 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (mtk_crtc->cmdq_client.chan) {
-		if (!mbox_flush(mtk_crtc->cmdq_client.chan, 2000))
+		if (!mtk_crtc_flush_cmdq(mtk_crtc))
 			pkt_aborted = !mtk_crtc->sec_on && mtk_crtc->cmdq_vblank_cnt > 0;
 		mtk_crtc->cmdq_vblank_cnt = 0;
 	}
@@ -1222,17 +1261,23 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 
 		spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 		mtk_crtc->config_updating = false;
+		mtk_crtc->last_pkt = cmdq_handle;
 		spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
 		if (cmdq_handle->managed)
 			cmdq_pkt_get(cmdq_handle);
 
 		if (mbox_send_message(cmdq_client.chan, cmdq_handle) < 0) {
+			spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+			mtk_crtc->last_pkt = NULL;
+			spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 			mtk_crtc->cmdq_vblank_cnt = 0;
 			if (cmdq_handle->managed) {
 				mtk_crtc->sec_cmdq_handle = NULL;
 				cmdq_pkt_put(cmdq_handle); /* callback ref */
 				cmdq_pkt_put(cmdq_handle); /* owner ref */
+			} else {
+				complete_all(&cmdq_handle->done);
 			}
 			goto update_config_out;
 		}
@@ -1244,6 +1289,10 @@ update_config_err:
 #endif
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 	mtk_crtc->config_updating = false;
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	/* No packet carries this update, so no earlier one may complete it. */
+	mtk_crtc->last_pkt = NULL;
+#endif
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
@@ -1736,7 +1785,15 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 			if (mtk_crtc->cmdq_client.chan) {
 				cmdq_handle = &mtk_crtc->cmdq_handle;
 				mutex_lock(&mtk_crtc->hw_lock);
-				mbox_flush(mtk_crtc->cmdq_client.chan, 2000);
+				mtk_crtc_flush_cmdq(mtk_crtc);
+				/*
+				 * This packet carries no plane update, so its
+				 * callback must not complete the pending ones.
+				 */
+				spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+				mtk_crtc->last_pkt = NULL;
+				mtk_crtc->cmdq_vblank_cnt = 0;
+				spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 				cmdq_handle->cmd_buf_size = 0;
 				reinit_completion(&cmdq_handle->done);
 				cmdq_pkt_clear_event(cmdq_handle, mtk_crtc->cmdq_event);
@@ -1756,7 +1813,7 @@ static void mtk_crtc_atomic_begin(struct drm_crtc *crtc,
 							   DMA_TO_DEVICE);
 				if (mbox_send_message(mtk_crtc->cmdq_client.chan,
 						      cmdq_handle) < 0)
-					complete(&cmdq_handle->done);
+					complete_all(&cmdq_handle->done);
 				mbox_client_txdone(mtk_crtc->cmdq_client.chan, 0);
 				ret = wait_for_completion_timeout(&cmdq_handle->done,
 								  msecs_to_jiffies(50));
@@ -2222,7 +2279,9 @@ int mtk_crtc_create(struct drm_device *drm_dev, enum mtk_crtc_path path_sel)
 					drm_crtc_index(&mtk_crtc->base));
 				goto cmdq_err;
 			}
+			/* done is set while no packet is in flight. */
 			init_completion(&mtk_crtc->cmdq_handle.done);
+			complete_all(&mtk_crtc->cmdq_handle.done);
 		}
 
 		/* for callback to kthread communication */
