@@ -734,25 +734,34 @@ static int mdw_mem_ioctl_unmap(struct mdw_fpriv *mpriv,
 	union mdw_mem_args *args)
 {
 	struct mdw_mem_in *in = (struct mdw_mem_in *)args;
-	struct mdw_mem *m = NULL;
-	int ret = -ENOMEM, handle = in->unmap.handle;
+	struct mdw_mem_invoke *m_invoke = NULL;
+	struct dma_buf *dbuf = NULL;
+	int ret = -EINVAL, handle = in->unmap.handle;
 
 	memset(args, 0, sizeof(*args));
 
+	dbuf = dma_buf_get(handle);
+	if (IS_ERR_OR_NULL(dbuf)) {
+		dev_err(mpriv->mdev->dev, "[error] handle(%d) not dmabuf\n", handle);
+		return -EINVAL;
+	}
+
 	mutex_lock(&mpriv->mtx);
 	mutex_lock(&mpriv->mdev->mctl_mtx);
-	m = mdw_mem_get(mpriv, handle);
-	if (!m)
-		goto out;
-	else
-		mdw_mem_put(mpriv, m);
-
-	mdw_mem_show(m);
-	ret = mdw_mem_unmap(mpriv, m);
-
-out:
+	mutex_lock(&mpriv->invokes_mtx);
+	list_for_each_entry(m_invoke, &mpriv->invokes, u_node) {
+		if (m_invoke->m->dbuf == dbuf) {
+			mdw_mem_show(m_invoke->m);
+			m_invoke->put(m_invoke);
+			ret = 0;
+			break;
+		}
+	}
+	mutex_unlock(&mpriv->invokes_mtx);
 	mutex_unlock(&mpriv->mdev->mctl_mtx);
 	mutex_unlock(&mpriv->mtx);
+
+	dma_buf_put(dbuf);
 	if (ret)
 		dev_err(mpriv->mdev->dev, "[error] handle(%d) ret(%d)\n", handle, ret);
 
