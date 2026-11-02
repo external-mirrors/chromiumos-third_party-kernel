@@ -344,7 +344,7 @@ void mdw_mem_mpriv_release(struct mdw_fpriv *mpriv);
 void mdw_mem_put(struct mdw_fpriv *mpriv, struct mdw_mem *m);
 struct mdw_mem *mdw_mem_get(struct mdw_fpriv *mpriv, int handle);
 struct mdw_mem *mdw_mem_alloc(struct mdw_fpriv *mpriv, enum mdw_mem_type type,
-	uint32_t size, uint32_t align, uint64_t flags, bool need_handle);
+	uint32_t size, uint32_t align, uint64_t flags, int handle);
 void mdw_mem_free(struct mdw_fpriv *mpriv, struct mdw_mem *m);
 long mdw_mem_set_name(struct mdw_mem *m, const char *buf);
 int mdw_mem_map(struct mdw_fpriv *mpriv, struct mdw_mem *m);
