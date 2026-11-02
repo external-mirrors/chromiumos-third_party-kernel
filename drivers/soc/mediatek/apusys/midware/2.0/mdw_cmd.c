@@ -135,6 +135,7 @@ static int mdw_cmd_get_cmdbufs(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 				ksubcmd->cmdbufs[j].size != m->size) {
 				dev_err(mpriv->mdev->dev, "[error] sc(0x%llx-%u) cb#%u invalid range(%p/%u/%u)\n",
 						c->kid, i, j, m->vaddr, ksubcmd->cmdbufs[j].size, m->size);
+				mdw_mem_put(mpriv, m);
 				ret = -EINVAL;
 				goto free_cmdbufs;
 			}
