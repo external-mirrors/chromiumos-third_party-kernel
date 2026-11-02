@@ -253,11 +253,13 @@ void mtk_disp_exdma_layer_config(struct device *dev, struct mtk_plane_state *sta
 	mtk_ddp_write(cmdq_pkt, pending->y << 16 | pending->x, &priv->cmdq_reg, priv->regs,
 		      DISP_REG_OVL_EXDMA_L0_OFFSET);
 	if (pending->is_secure)
-		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr, 0,
-				  &priv->cmdq_reg, DISP_REG_OVL_EXDMA_ADDR);
+		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr,
+				  pending->offset, &priv->cmdq_reg,
+				  DISP_REG_OVL_EXDMA_ADDR);
 	else
-		mtk_ddp_write(cmdq_pkt, pending->addr, &priv->cmdq_reg,
-			      priv->regs, DISP_REG_OVL_EXDMA_ADDR);
+		mtk_ddp_write(cmdq_pkt, pending->addr + pending->offset,
+			      &priv->cmdq_reg, priv->regs,
+			      DISP_REG_OVL_EXDMA_ADDR);
 
 	/* alpha blend setting */
 	if (state->base.fb && state->base.fb->format->has_alpha)

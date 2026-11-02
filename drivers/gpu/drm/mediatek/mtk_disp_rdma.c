@@ -307,7 +307,7 @@ void mtk_rdma_layer_config(struct device *dev, unsigned int idx,
 {
 	struct mtk_disp_rdma *rdma = dev_get_drvdata(dev);
 	struct mtk_plane_pending_state *pending = &state->pending;
-	unsigned int addr = pending->addr;
+	unsigned int addr = pending->addr + pending->offset;
 	unsigned int pitch = pending->pitch & 0xffff;
 	unsigned int fmt = pending->format;
 	unsigned int con;

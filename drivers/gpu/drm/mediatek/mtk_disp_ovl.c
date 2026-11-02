@@ -483,7 +483,7 @@ static void mtk_ovl_afbc_layer_config(struct mtk_disp_ovl *ovl,
 {
 	unsigned int pitch_msb = pending->pitch >> 16;
 	unsigned int hdr_pitch = pending->hdr_pitch;
-	unsigned int hdr_addr = pending->hdr_addr;
+	unsigned int hdr_addr = pending->addr + pending->hdr_offset;
 
 	if (pending->modifier != DRM_FORMAT_MOD_LINEAR) {
 		mtk_ddp_write_relaxed(cmdq_pkt, hdr_addr, &ovl->cmdq_reg, ovl->regs,
@@ -505,7 +505,7 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 {
 	struct mtk_disp_ovl *ovl = dev_get_drvdata(dev);
 	struct mtk_plane_pending_state *pending = &state->pending;
-	unsigned int addr = pending->addr;
+	unsigned int addr_offset = pending->offset;
 	unsigned int pitch_lsb = pending->pitch & GENMASK(15, 0);
 	unsigned int fmt = pending->format;
 	unsigned int offset = (pending->y << 16) | pending->x;
@@ -552,12 +552,12 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 
 	if (rotation & DRM_MODE_REFLECT_Y) {
 		con |= OVL_CON_VIRT_FLIP;
-		addr += (pending->height - 1) * pending->pitch;
+		addr_offset += (pending->height - 1) * pending->pitch;
 	}
 
 	if (rotation & DRM_MODE_REFLECT_X) {
 		con |= OVL_CON_HORZ_FLIP;
-		addr += pending->pitch - 1;
+		addr_offset += pending->pitch - 1;
 	}
 
 	if (ovl->data->supports_afbc)
@@ -574,10 +574,12 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 			      DISP_REG_OVL_OFFSET(idx));
 
 	if (pending->is_secure)
-		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr, 0,
-				  &ovl->cmdq_reg, DISP_REG_OVL_ADDR(ovl, idx));
+		mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr,
+				  addr_offset, &ovl->cmdq_reg,
+				  DISP_REG_OVL_ADDR(ovl, idx));
 	else
-		mtk_ddp_write_relaxed(cmdq_pkt, addr, &ovl->cmdq_reg, ovl->regs,
+		mtk_ddp_write_relaxed(cmdq_pkt, pending->addr + addr_offset,
+				      &ovl->cmdq_reg, ovl->regs,
 				      DISP_REG_OVL_ADDR(ovl, idx));
 
 	if (ovl->data->supports_afbc)
