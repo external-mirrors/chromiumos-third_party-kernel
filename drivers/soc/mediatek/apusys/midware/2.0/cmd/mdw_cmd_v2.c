@@ -269,7 +269,8 @@ static int mdw_cmd_ioctl_run_v2(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 	}
 
 	/* init fence */
-	if (mdw_fence_init(c, fd)) {
+	ret = mdw_fence_init(c, fd);
+	if (ret) {
 		mdw_drv_err("cmd init fence fail\n");
 		goto put_file;
 	}

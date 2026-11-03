@@ -332,6 +332,7 @@ static int mdw_cmd_ioctl_run_v3(struct mdw_fpriv *mpriv, union mdw_cmd_args *arg
 	c->id = idr_alloc(&mpriv->cmds, c, MDW_CMD_IDR_MIN, MDW_CMD_IDR_MAX, GFP_KERNEL);
 	if (c->id < MDW_CMD_IDR_MIN) {
 		mdw_drv_err("alloc idr fail(%d)\n", c->id);
+		ret = c->id;
 		goto delete_cmd;
 	}
 
@@ -345,7 +346,8 @@ exec:
 		ret = -EINVAL;
 		goto delete_idr;
 	}
-	if (mdw_fence_init(c, fd)) {
+	ret = mdw_fence_init(c, fd);
+	if (ret) {
 		mdw_drv_err("cmd init fence fail\n");
 		goto put_fd;
 	}
