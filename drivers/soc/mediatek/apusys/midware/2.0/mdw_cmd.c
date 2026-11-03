@@ -193,8 +193,7 @@ out:
 	return ret;
 }
 
-static unsigned int mdw_cmd_create_infos(struct mdw_fpriv *mpriv,
-	struct mdw_cmd *c)
+static int mdw_cmd_create_infos(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 {
 	unsigned int i = 0, j = 0, total_size = 0, tmp_size = 0;
 	struct mdw_subcmd_exec_info *sc_einfo = NULL;
@@ -248,6 +247,7 @@ static unsigned int mdw_cmd_create_infos(struct mdw_fpriv *mpriv,
 			(void __user *)c->subcmds[i].cmdbufs,
 			c->subcmds[i].num_cmdbufs *
 			sizeof(*c->ksubcmds[i].cmdbufs))) {
+			ret = -EFAULT;
 			goto free_cmdbufs;
 		}
 
@@ -266,6 +266,7 @@ static unsigned int mdw_cmd_create_infos(struct mdw_fpriv *mpriv,
 			if (tmp_size < total_size) {
 				dev_err(mpriv->mdev->dev, "[error] cmdbuf(%u,%u) size align overflow(%u/%u/%u)\n",
 						i, j, total_size, c->ksubcmds[i].cmdbufs[j].align, tmp_size);
+				ret = -EINVAL;
 				goto free_cmdbufs;
 			}
 			total_size = tmp_size;
@@ -275,6 +276,7 @@ static unsigned int mdw_cmd_create_infos(struct mdw_fpriv *mpriv,
 			if (tmp_size < total_size) {
 				dev_err(mpriv->mdev->dev, "[error] cmdbuf(%u,%u) size overflow(%u/%u/%u)\n",
 						i, j, total_size, c->ksubcmds[i].cmdbufs[j].size, tmp_size);
+				ret = -EINVAL;
 				goto free_cmdbufs;
 			}
 			total_size = tmp_size;
