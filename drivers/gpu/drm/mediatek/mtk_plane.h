@@ -19,7 +19,8 @@ struct mtk_plane_pending_state {
 	bool				config;
 	bool				enable;
 	dma_addr_t			addr;
-	dma_addr_t			hdr_addr;
+	unsigned int			offset;
+	unsigned int			hdr_offset;
 	unsigned int			pitch;
 	unsigned int			hdr_pitch;
 	unsigned int			format;

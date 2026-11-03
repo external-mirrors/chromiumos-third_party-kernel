@@ -125,7 +125,7 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 	unsigned int pitch, format;
 	u64 modifier;
 	dma_addr_t addr;
-	dma_addr_t hdr_addr = 0;
+	unsigned int hdr_offset = 0;
 	unsigned int hdr_pitch = 0;
 	int offset;
 
@@ -137,15 +137,8 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 	modifier = fb->modifier;
 
 	if (modifier == DRM_FORMAT_MOD_LINEAR) {
-		/*
-		 * Using dma_addr_t variable to calculate with multiplier of different types,
-		 * for example: addr += (new_state->src.x1 >> 16) * fb->format->cpp[0];
-		 * may cause coverity issue with unintentional overflow.
-		 */
-		offset = (new_state->src.x1 >> 16) * fb->format->cpp[0];
-		addr += offset;
-		offset = (new_state->src.y1 >> 16) * pitch;
-		addr += offset;
+		offset = (new_state->src.x1 >> 16) * fb->format->cpp[0] +
+			 (new_state->src.y1 >> 16) * pitch;
 	} else {
 		int width_in_blocks = ALIGN(fb->width, AFBC_DATA_BLOCK_WIDTH)
 				      / AFBC_DATA_BLOCK_WIDTH;
@@ -153,7 +146,7 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 				       / AFBC_DATA_BLOCK_HEIGHT;
 		int x_offset_in_blocks = (new_state->src.x1 >> 16) / AFBC_DATA_BLOCK_WIDTH;
 		int y_offset_in_blocks = (new_state->src.y1 >> 16) / AFBC_DATA_BLOCK_HEIGHT;
-		int hdr_size, hdr_offset;
+		int hdr_size;
 
 		hdr_pitch = width_in_blocks * AFBC_HEADER_BLOCK_SIZE;
 		pitch = width_in_blocks * AFBC_DATA_BLOCK_WIDTH *
@@ -163,24 +156,13 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 		hdr_offset = hdr_pitch * y_offset_in_blocks +
 			AFBC_HEADER_BLOCK_SIZE * x_offset_in_blocks;
 
-		/*
-		 * Using dma_addr_t variable to calculate with multiplier of different types,
-		 * for example: addr += hdr_pitch * y_offset_in_blocks;
-		 * may cause coverity issue with unintentional overflow.
-		 */
-		hdr_addr = addr + hdr_offset;
-
 		/* The data plane is offset by 1 additional block. */
 		offset = pitch * y_offset_in_blocks +
 			 AFBC_DATA_BLOCK_WIDTH * AFBC_DATA_BLOCK_HEIGHT *
 			 fb->format->cpp[0] * (x_offset_in_blocks + 1);
 
-		/*
-		 * Using dma_addr_t variable to calculate with multiplier of different types,
-		 * for example: addr += pitch * y_offset_in_blocks;
-		 * may cause coverity issue with unintentional overflow.
-		 */
-		addr = addr + hdr_size + offset;
+		/* The data plane starts after the header. */
+		offset += hdr_size;
 	}
 
 	mtk_plane_state->pending.enable = true;
@@ -189,7 +171,8 @@ static void mtk_plane_update_new_state(struct drm_plane_state *new_state,
 	mtk_plane_state->pending.format = format;
 	mtk_plane_state->pending.modifier = modifier;
 	mtk_plane_state->pending.addr = addr;
-	mtk_plane_state->pending.hdr_addr = hdr_addr;
+	mtk_plane_state->pending.offset = offset;
+	mtk_plane_state->pending.hdr_offset = hdr_offset;
 	mtk_plane_state->pending.x = new_state->dst.x1;
 	mtk_plane_state->pending.y = new_state->dst.y1;
 	mtk_plane_state->pending.width = drm_rect_width(&new_state->dst);

@@ -9,6 +9,7 @@
 struct mtk_mdp_rdma_cfg {
 	unsigned int	pitch;
 	unsigned int	addr0;
+	unsigned int	offset0;
 	unsigned int	width;
 	unsigned int	height;
 	unsigned int	x_left;
