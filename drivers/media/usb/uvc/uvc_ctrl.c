@@ -2633,7 +2633,8 @@ struct uvc_roi *uvc_ctrl_roi(struct uvc_video_chain *chain, u8 query)
 
 	ctrl = uvc_find_control(chain, V4L2_CID_REGION_OF_INTEREST_AUTO,
 				&mapping);
-	if (!ctrl)
+	if (!ctrl || ctrl->info.size != sizeof(struct uvc_roi) ||
+	    mapping->v4l2_type != V4L2_CTRL_TYPE_BITMASK)
 		return NULL;
 
 	return (struct uvc_roi *)uvc_ctrl_data(ctrl, id);
