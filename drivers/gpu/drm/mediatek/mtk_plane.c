@@ -95,6 +95,14 @@ static int mtk_plane_atomic_async_check(struct drm_plane *plane,
 	if (!plane->state->fb)
 		return -EINVAL;
 
+	/*
+	 * Async updates skip mtk_crtc_atomic_begin(), which switches the secure
+	 * state.
+	 */
+	if (mtk_plane_fb_is_secure(plane->state->fb) ||
+	    mtk_plane_fb_is_secure(new_plane_state->fb))
+		return -EINVAL;
+
 	ret = mtk_crtc_plane_check(new_plane_state->crtc, plane,
 				   to_mtk_plane_state(new_plane_state));
 	if (ret)
@@ -213,7 +221,9 @@ static void mtk_plane_atomic_async_update(struct drm_plane *plane,
 	swap(plane->state->fb, new_state->fb);
 	wmb(); /* Make sure the above parameters are set before update */
 	new_plane_state->pending.async_dirty = true;
-	mtk_crtc_async_update(new_state->crtc, plane, state);
+	/* After the swap, new_state->fb holds the replaced framebuffer. */
+	mtk_crtc_async_update(new_state->crtc, plane,
+			      new_state->fb != plane->state->fb ? new_state->fb : NULL);
 }
 
 static const struct drm_plane_funcs mtk_plane_funcs = {

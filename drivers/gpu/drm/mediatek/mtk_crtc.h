@@ -51,7 +51,7 @@ void mtk_crtc_disable_secure_state(struct drm_crtc *crtc);
 int mtk_crtc_plane_check(struct drm_crtc *crtc, struct drm_plane *plane,
 			 struct mtk_plane_state *state);
 void mtk_crtc_async_update(struct drm_crtc *crtc, struct drm_plane *plane,
-			   struct drm_atomic_state *plane_state);
+			   struct drm_framebuffer *old_fb);
 struct device *mtk_crtc_dma_dev_get(struct drm_crtc *crtc);
 
 void mtk_crtc_init_crc(struct mtk_crtc_crc *crc, const u32 *crc_offset_table,

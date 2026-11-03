@@ -16,6 +16,8 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_flip_work.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 #include <drm/drm_vblank_work.h>
@@ -45,6 +47,13 @@ struct mtk_crtc {
 
 	bool				pending_needs_vblank;
 	struct drm_pending_vblank_event	*event;
+
+	/*
+	 * Framebuffers replaced by legacy cursor updates. They are released
+	 * once the packet that carries the update completes.
+	 */
+	struct drm_flip_work		fb_put_work;
+	bool				pending_fb_put;
 
 	struct drm_plane		*planes;
 	unsigned int			layer_nr;
@@ -116,6 +125,27 @@ static void mtk_crtc_finish_page_flip(struct mtk_crtc *mtk_crtc)
 		mtk_crtc->event = NULL;
 		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 	}
+}
+
+static void mtk_crtc_fb_put_worker(struct drm_flip_work *work, void *val)
+{
+	drm_framebuffer_put(val);
+}
+
+/*
+ * Release framebuffers replaced by legacy cursor updates. Call this on the
+ * callback of the last sent packet, because the new update has been applied
+ * by then.
+ */
+static void mtk_crtc_commit_fb_put_locked(struct mtk_crtc *mtk_crtc)
+{
+	lockdep_assert_held(&mtk_crtc->config_lock);
+
+	if (!mtk_crtc->pending_fb_put)
+		return;
+
+	drm_flip_work_commit(&mtk_crtc->fb_put_work, system_unbound_wq);
+	mtk_crtc->pending_fb_put = false;
 }
 
 static void mtk_drm_finish_page_flip(struct mtk_crtc *mtk_crtc)
@@ -374,6 +404,8 @@ static void mtk_crtc_destroy(struct drm_crtc *crtc)
 		mtk_ddp_comp_unregister_vblank_cb(comp);
 	}
 
+	flush_work(&mtk_crtc->fb_put_work.worker);
+	drm_flip_work_cleanup(&mtk_crtc->fb_put_work);
 	drm_crtc_cleanup(crtc);
 }
 
@@ -538,7 +570,7 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
 	/*
 	 * Only the last sent packet carries all pending updates. Ignore older
-	 * packets, or the pending state is cleared before the newer update is
+	 * packets, or old framebuffers are released before the newer update is
 	 * applied.
 	 */
 	if (data->pkt != mtk_crtc->last_pkt) {
@@ -579,6 +611,8 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 		}
 		mtk_crtc->pending_async_planes = false;
 	}
+
+	mtk_crtc_commit_fb_put_locked(mtk_crtc);
 
 	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
 
@@ -830,7 +864,12 @@ static void mtk_crtc_ddp_config(struct drm_crtc *crtc,
 	}
 }
 
-static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
+/*
+ * @old_fb: framebuffer replaced by a legacy cursor update, or NULL. Keep it
+ * until OVL applies this update.
+ */
+static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank,
+				   struct drm_framebuffer *old_fb)
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	struct cmdq_client cmdq_client;
@@ -859,6 +898,19 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 
 	if (needs_vblank)
 		mtk_crtc->pending_needs_vblank = true;
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	/*
+	 * Queue old_fb while config_updating is set. ddp_cmdq_cb() releases it
+	 * on the callback of the packet that carries this update.
+	 */
+	if (old_fb && mtk_crtc->cmdq_client.chan) {
+		drm_framebuffer_get(old_fb);
+		drm_flip_work_queue(&mtk_crtc->fb_put_work, old_fb);
+		mtk_crtc->pending_fb_put = true;
+		old_fb = NULL;
+	}
+#endif
 
 	for (i = 0; i < mtk_crtc->layer_nr; i++) {
 		struct drm_plane *plane = &mtk_crtc->planes[i];
@@ -987,6 +1039,10 @@ update_config_out:
 #endif
 
 	mutex_unlock(&mtk_crtc->hw_lock);
+
+	/* Without a CMDQ channel, the update is applied at the next vblank. */
+	if (old_fb)
+		drm_crtc_wait_one_vblank(crtc);
 }
 
 static void mtk_crtc_ddp_irq(void *data)
@@ -1182,14 +1238,14 @@ static void mtk_crtc_wait_cmdq_done(struct mtk_crtc *mtk_crtc)
 #endif
 
 void mtk_crtc_async_update(struct drm_crtc *crtc, struct drm_plane *plane,
-			   struct drm_atomic_state *state)
+			   struct drm_framebuffer *old_fb)
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 
 	if (!mtk_crtc->enabled)
 		return;
 
-	mtk_crtc_update_config(mtk_crtc, false);
+	mtk_crtc_update_config(mtk_crtc, false, old_fb);
 }
 
 static void mtk_crtc_atomic_enable(struct drm_crtc *crtc,
@@ -1226,6 +1282,7 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[0];
+	unsigned long flags;
 	int i;
 
 	DRM_DEBUG_DRIVER("%s %d\n", __func__, crtc->base.id);
@@ -1244,12 +1301,22 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 		plane_state->pending.dirty = true;
 	}
 
-	mtk_crtc_update_config(mtk_crtc, false);
+	mtk_crtc_update_config(mtk_crtc, false, NULL);
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	mtk_crtc_wait_cmdq_done(mtk_crtc);
 #endif
 	/* Wait for planes to be disabled */
 	drm_crtc_wait_one_vblank(crtc);
+
+	/*
+	 * The planes are off, so release the queued framebuffers now. The locks
+	 * keep out mtk_crtc_update_config() and ddp_cmdq_cb().
+	 */
+	mutex_lock(&mtk_crtc->hw_lock);
+	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
+	mtk_crtc_commit_fb_put_locked(mtk_crtc);
+	spin_unlock_irqrestore(&mtk_crtc->config_lock, flags);
+	mutex_unlock(&mtk_crtc->hw_lock);
 
 	drm_crtc_vblank_off(crtc);
 	mtk_crtc_ddp_hw_fini(mtk_crtc);
@@ -1288,6 +1355,7 @@ static void mtk_crtc_atomic_flush(struct drm_crtc *crtc,
 				  struct drm_atomic_state *state)
 {
 	struct mtk_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct drm_framebuffer *old_fb = NULL;
 	int i;
 
 	if (crtc->state->color_mgmt_changed)
@@ -1295,7 +1363,22 @@ static void mtk_crtc_atomic_flush(struct drm_crtc *crtc,
 			mtk_ddp_gamma_set(mtk_crtc->ddp_comp[i], crtc->state);
 			mtk_ddp_ctm_set(mtk_crtc->ddp_comp[i], crtc->state);
 		}
-	mtk_crtc_update_config(mtk_crtc, !!mtk_crtc->event);
+
+	/*
+	 * Legacy cursor commits do not wait for the vblank, so the old
+	 * framebuffer is released early. Keep it until OVL applies the update.
+	 */
+	if (state->legacy_cursor_update && crtc->cursor) {
+		struct drm_plane_state *old_plane_state =
+			drm_atomic_get_old_plane_state(state, crtc->cursor);
+		struct drm_plane_state *new_plane_state =
+			drm_atomic_get_new_plane_state(state, crtc->cursor);
+
+		if (old_plane_state && old_plane_state->fb != new_plane_state->fb)
+			old_fb = old_plane_state->fb;
+	}
+
+	mtk_crtc_update_config(mtk_crtc, !!mtk_crtc->event, old_fb);
 }
 
 int mtk_crtc_atomic_check(struct drm_crtc *crtc, struct drm_atomic_state *state)
@@ -1572,6 +1655,8 @@ int mtk_crtc_create(struct drm_device *drm_dev, const unsigned int *path,
 	drm_crtc_enable_color_mgmt(&mtk_crtc->base, 0, has_ctm, gamma_lut_size);
 	mutex_init(&mtk_crtc->hw_lock);
 	spin_lock_init(&mtk_crtc->config_lock);
+	drm_flip_work_init(&mtk_crtc->fb_put_work, "fb_put",
+			   mtk_crtc_fb_put_worker);
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	i = priv->mbox_index++;
