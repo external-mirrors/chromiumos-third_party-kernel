@@ -302,6 +302,7 @@ int mdw_cmd_create_infos(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 			(void __user *)c->subcmds[i].cmdbufs,
 			c->subcmds[i].num_cmdbufs *
 			sizeof(*c->ksubcmds[i].cmdbufs))) {
+			ret = -EFAULT;
 			goto free_cmdbufs;
 		}
 
@@ -321,6 +322,7 @@ int mdw_cmd_create_infos(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 				mdw_drv_err("cmdbuf(%u,%u) size align overflow(%u/%u/%u)\n",
 					i, j, total_size,
 					c->ksubcmds[i].cmdbufs[j].align, tmp_size);
+				ret = -EINVAL;
 				goto free_cmdbufs;
 			}
 			total_size = tmp_size;
@@ -331,6 +333,7 @@ int mdw_cmd_create_infos(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 				mdw_drv_err("cmdbuf(%u,%u) size overflow(%u/%u/%u)\n",
 					i, j, total_size,
 					c->ksubcmds[i].cmdbufs[j].size, tmp_size);
+				ret = -EINVAL;
 				goto free_cmdbufs;
 			}
 			total_size = tmp_size;
@@ -341,6 +344,7 @@ int mdw_cmd_create_infos(struct mdw_fpriv *mpriv, struct mdw_cmd *c)
 	if (tmp_size < total_size) {
 		mdw_drv_err("cmdbuf end size align overflow(%u/%u)\n",
 			total_size, tmp_size);
+		ret = -EINVAL;
 		goto free_cmdbufs;
 	}
 	total_size = tmp_size;
