@@ -682,8 +682,13 @@ void mtk_ovl_layer_config(struct device *dev, unsigned int idx,
 				      DISP_REG_OVL_ADDR(ovl, idx));
 
 	if (is_afbc) {
-		mtk_ddp_write_relaxed(cmdq_pkt, hdr_addr, &ovl->cmdq_reg, ovl->regs,
-				      DISP_REG_OVL_HDR_ADDR(ovl, idx));
+		if (pending->is_secure)
+			mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr,
+					  pending->hdr_offset, &ovl->cmdq_reg,
+					  DISP_REG_OVL_HDR_ADDR(ovl, idx));
+		else
+			mtk_ddp_write_relaxed(cmdq_pkt, hdr_addr, &ovl->cmdq_reg, ovl->regs,
+					      DISP_REG_OVL_HDR_ADDR(ovl, idx));
 		mtk_ddp_write_relaxed(cmdq_pkt,
 				      OVL_PITCH_MSB_2ND_SUBBUF | overlay_pitch.split_pitch.msb,
 				      &ovl->cmdq_reg, ovl->regs, DISP_REG_OVL_PITCH_MSB(idx));
