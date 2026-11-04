@@ -459,17 +459,18 @@ static void cros_ec_light_clean_callback(void *arg)
 	struct platform_device *pdev = (struct platform_device *)arg;
 	struct cros_ec_sensorhub *sensor_hub =
 		dev_get_drvdata(pdev->dev.parent);
-	struct iio_dev *indio_dev = platform_get_drvdata(pdev);
-	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
-	u8 sensor_num = st->param.info.sensor_num;
+	struct cros_ec_sensor_platform *sensor_platform =
+		dev_get_platdata(&pdev->dev);
 
-	cros_ec_sensorhub_unregister_push_data(sensor_hub, sensor_num + 1);
+	cros_ec_sensorhub_unregister_push_data(sensor_hub,
+					       sensor_platform->sensor_num + 1);
 }
 
 static int cros_ec_light_prox_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct cros_ec_sensorhub *sensor_hub = dev_get_drvdata(dev->parent);
+	struct cros_ec_sensor_platform *sensor_platform = dev_get_platdata(dev);
 	struct iio_dev *indio_dev;
 	struct cros_ec_light_prox_state *state;
 	struct iio_chan_spec *channel;
@@ -560,7 +561,7 @@ static int cros_ec_light_prox_probe(struct platform_device *pdev)
 		// Register the RGB callback if sensor FIFO is supported.
 		// Register a callback to cleanup when the sensor/driver is removed.
 		if (cros_ec_check_features(sensor_hub->ec, EC_FEATURE_MOTION_SENSE_FIFO)) {
-			u8 sensor_num = state->core.param.info.sensor_num;
+			u8 sensor_num = sensor_platform->sensor_num;
 
 			ret = cros_ec_sensorhub_register_push_data(
 					sensor_hub, sensor_num + 1,
