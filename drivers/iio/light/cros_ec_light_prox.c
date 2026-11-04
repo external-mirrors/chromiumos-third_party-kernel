@@ -342,12 +342,19 @@ static int cros_ec_light_push_data(
 	struct cros_ec_sensors_core_state *st = iio_priv(indio_dev);
 	s16 *out = (s16 *)st->samples;
 
-	if (!st || !indio_dev->active_scan_mask)
+	/*
+	 * Ignore samples if the buffer is not enabled. Holding the buffer mode
+	 * also prevents a concurrent buffer disable from freeing
+	 * active_scan_mask while it is in use.
+	 */
+	if (iio_device_claim_buffer_mode(indio_dev) < 0)
 		return 0;
 
 	/* Save clear channel, will be used when RGB data arrives. */
 	if (test_bit(0, indio_dev->active_scan_mask))
 		*out = data[0];
+
+	iio_device_release_buffer_mode(indio_dev);
 
 	/* Wait for RGB callback to send samples upstream. */
 	return 0;
@@ -363,7 +370,8 @@ static int cros_ec_light_push_data_rgb(
 	s64 delta;
 	unsigned int i = 1;
 
-	if (!st || !indio_dev->active_scan_mask)
+	/* See cros_ec_light_push_data(). */
+	if (iio_device_claim_buffer_mode(indio_dev) < 0)
 		return 0;
 
 	/*
@@ -387,6 +395,8 @@ static int cros_ec_light_push_data_rgb(
 
 	iio_push_to_buffers_with_timestamp(indio_dev, st->samples,
 					   timestamp + delta);
+
+	iio_device_release_buffer_mode(indio_dev);
 	return 0;
 }
 
