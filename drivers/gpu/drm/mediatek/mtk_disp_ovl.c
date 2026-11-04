@@ -486,8 +486,13 @@ static void mtk_ovl_afbc_layer_config(struct mtk_disp_ovl *ovl,
 	unsigned int hdr_addr = pending->addr + pending->hdr_offset;
 
 	if (pending->modifier != DRM_FORMAT_MOD_LINEAR) {
-		mtk_ddp_write_relaxed(cmdq_pkt, hdr_addr, &ovl->cmdq_reg, ovl->regs,
-				      DISP_REG_OVL_HDR_ADDR(ovl, idx));
+		if (pending->is_secure)
+			mtk_ddp_sec_write(cmdq_pkt, CMDQ_IWC_H_2_MVA, pending->addr,
+					  pending->hdr_offset, &ovl->cmdq_reg,
+					  DISP_REG_OVL_HDR_ADDR(ovl, idx));
+		else
+			mtk_ddp_write_relaxed(cmdq_pkt, hdr_addr, &ovl->cmdq_reg, ovl->regs,
+					      DISP_REG_OVL_HDR_ADDR(ovl, idx));
 		mtk_ddp_write_relaxed(cmdq_pkt,
 				      OVL_PITCH_MSB_2ND_SUBBUF | pitch_msb,
 				      &ovl->cmdq_reg, ovl->regs, DISP_REG_OVL_PITCH_MSB(idx));
