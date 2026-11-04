@@ -486,6 +486,22 @@ static int mtk_rtc_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void mtk_rtc_shutdown(struct platform_device *pdev)
+{
+	struct mt6685_rtc *rtc = platform_get_drvdata(pdev);
+
+	guard(mutex)(&rtc->lock);
+
+	/* Don't let a pending or latched alarm power the system back on */
+	power_on_mclk(rtc);
+	if (rtc_update_bits(rtc, rtc->addr_base + RTC_IRQ_EN,
+			    RTC_IRQ_EN_ONESHOT_AL, 0) == 0)
+		mtk_rtc_write_trigger(rtc);
+	power_down_mclk(rtc);
+
+	mtk_rtc_reset_bbpu_alarm_status(rtc);
+}
+
 #ifdef CONFIG_PM_SLEEP
 static int mt6685_rtc_suspend(struct device *dev)
 {
@@ -530,6 +546,7 @@ static struct platform_driver mtk_rtc_driver = {
 #endif
 	},
 	.probe	= mtk_rtc_probe,
+	.shutdown = mtk_rtc_shutdown,
 };
 
 module_platform_driver(mtk_rtc_driver);
