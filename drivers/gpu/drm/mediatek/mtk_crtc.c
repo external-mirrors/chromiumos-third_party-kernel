@@ -1944,10 +1944,14 @@ int mtk_crtc_atomic_check(struct drm_crtc *crtc, struct drm_atomic_state *state)
 
 	if (gamma_lut) {
 		for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
-			int lut_size = mtk_ddp_gamma_get_lut_size(mtk_crtc->ddp_comp[i]);
+			struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[i];
+			int lut_size;
 
-			if (lut_size &&
-			    gamma_lut->length != (lut_size * sizeof(struct drm_color_lut)))
+			if (!comp)
+				continue;
+
+			lut_size = mtk_ddp_gamma_get_lut_size(comp);
+			if (lut_size && drm_color_lut_size(gamma_lut) != lut_size)
 				return -EINVAL;
 		}
 	}
