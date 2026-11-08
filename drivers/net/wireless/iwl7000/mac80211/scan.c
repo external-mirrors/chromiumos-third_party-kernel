@@ -229,21 +229,14 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 						      &bss_meta,
 						      mgmt, len, GFP_ATOMIC);
 	if (cbss) {
-		struct cfg80211_bss *non_tx_cbss;
 		rcu_read_lock();
 		ieee80211_inform_bss(local->hw.wiphy, cbss,
 				     rcu_dereference(cbss->ies),
 				     (void *)&update_data);
-
-#if LINUX_VERSION_IS_GEQ(5,1,0)
-		list_for_each_entry (non_tx_cbss, &cbss->nontrans_list,
-				     nontrans_list)
-			ieee80211_inform_bss(local->hw.wiphy, non_tx_cbss,
-					     rcu_dereference(non_tx_cbss->ies),
-					     (void *)&update_data);
-#endif
-
 		rcu_read_unlock();
+
+		iwl7000_inform_nontx_bss(local->hw.wiphy, cbss,
+					 (void *)&update_data);
 	}
 	if (!cbss)
 		return NULL;

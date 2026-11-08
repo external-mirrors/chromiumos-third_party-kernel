@@ -147,6 +147,45 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 EXPORT_SYMBOL(/* don't auto-generate a rename */
 	ieee80211_data_to_8023_exthdr);
 
+struct iwl7000_inform_nontx_iter_data {
+	struct cfg80211_bss *tx_cbss;
+	void *data;
+};
+
+static void iwl7000_inform_nontx_bss_iter(struct wiphy *wiphy,
+					  struct cfg80211_bss *bss,
+					  void *_iter_data)
+{
+	struct iwl7000_inform_nontx_iter_data *iter_data = _iter_data;
+	struct cfg80211_bss *non_tx_cbss;
+
+	if (bss != iter_data->tx_cbss)
+		return;
+
+	/* cfg80211_bss_iter() holds the bss_lock protecting nontrans_list */
+	rcu_read_lock();
+	list_for_each_entry(non_tx_cbss, &bss->nontrans_list, nontrans_list)
+		ieee80211_inform_bss(wiphy, non_tx_cbss,
+				     rcu_dereference(non_tx_cbss->ies),
+				     iter_data->data);
+	rcu_read_unlock();
+}
+
+void iwl7000_inform_nontx_bss(struct wiphy *wiphy, struct cfg80211_bss *cbss,
+			      void *data)
+{
+	struct iwl7000_inform_nontx_iter_data iter_data = {
+		.tx_cbss = cbss,
+		.data = data,
+	};
+
+	if (list_empty(&cbss->nontrans_list))
+		return;
+
+	cfg80211_bss_iter(wiphy, NULL, iwl7000_inform_nontx_bss_iter,
+			  &iter_data);
+}
+
 static void cfg80211_wiphy_work(struct work_struct *work)
 {
 	struct ieee80211_local *local;

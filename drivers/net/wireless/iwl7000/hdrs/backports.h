@@ -582,6 +582,9 @@ iwl7000_ieee80211_mandatory_rates(struct ieee80211_supported_band *sband)
 }
 #define ieee80211_mandatory_rates iwl7000_ieee80211_mandatory_rates
 
+void iwl7000_inform_nontx_bss(struct wiphy *wiphy, struct cfg80211_bss *cbss,
+			      void *data);
+
 void ieee80211_fragment_element(struct sk_buff *skb, u8 *len_pos, u8 frag_id);
 
 static inline void
