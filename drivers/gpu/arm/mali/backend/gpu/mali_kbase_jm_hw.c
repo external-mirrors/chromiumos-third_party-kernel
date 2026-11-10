@@ -102,7 +102,19 @@ static inline bool kbasep_jm_wait_js_free(struct kbase_device *kbdev, unsigned i
 					  struct kbase_context *kctx)
 {
 	u32 val;
-	const u32 timeout_us = kbdev->js_data.js_free_wait_time_ms * USEC_PER_MSEC;
+	/*
+	 * js_free_wait_time_ms scales JM_DEFAULT_JS_FREE_TIMEOUT_CYCLES
+	 * (100,000 cycles) by lowest_gpu_freq_khz using integer division,
+	 * which truncates to 0 ms on any GPU whose minimum OPP exceeds
+	 * 100 MHz. Passing timeout_us == 0 to kbase_reg_poll32_timeout()
+	 * disables timeout checking in mali_read_poll_timeout_atomic(),
+	 * spinning forever with hwaccess_lock held and IRQs disabled if
+	 * COMMAND_NEXT fails to clear. Clamp to at least 1 ms (matching
+	 * pre-r54p1 behavior).
+	 */
+	const u64 timeout_us =
+		(u64)max_t(u32, kbdev->js_data.js_free_wait_time_ms, 1) *
+		USEC_PER_MSEC;
 	/* wait for the JS_COMMAND_NEXT register to reach the given status value */
 	const int err = kbase_reg_poll32_timeout(kbdev, JOB_SLOT_OFFSET(js, COMMAND_NEXT), val,
 						 !val, 0, timeout_us, false);
