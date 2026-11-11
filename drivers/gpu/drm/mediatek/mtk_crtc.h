@@ -73,10 +73,12 @@ struct mtk_crtc {
 
 	bool				pending_needs_vblank;
 	struct drm_pending_vblank_event	*event;
+	/* Vblank count when update_config() took the flip event. */
+	u64				event_vblank_seq;
 
 	/*
 	 * Framebuffers replaced by legacy cursor updates. They are released
-	 * with the flip event.
+	 * when the packet carrying the update completes.
 	 */
 	struct drm_flip_work		fb_put_work;
 	bool				pending_fb_put;

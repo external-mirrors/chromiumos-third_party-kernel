@@ -89,8 +89,8 @@ static void mtk_crtc_fb_put_worker(struct drm_flip_work *work, void *val)
 }
 
 /*
- * Release framebuffers replaced by legacy cursor updates. Call this where the
- * flip event is sent, because the new update has been applied by then.
+ * Release framebuffers replaced by legacy cursor updates. Call this when the
+ * packet carrying the update completes, because the update is applied by then.
  */
 static void mtk_crtc_commit_fb_put_locked(struct mtk_crtc *mtk_crtc)
 {
@@ -807,10 +807,26 @@ static void ddp_cmdq_cb(struct mbox_client *cl, void *mssg)
 		mtk_crtc->pending_async_planes = false;
 	}
 
-	if (mtk_crtc->pending_needs_vblank) {
-		mtk_crtc_finish_page_flip(mtk_crtc);
-		mtk_crtc->pending_needs_vblank = false;
+	if (mtk_crtc->pending_needs_vblank && mtk_crtc->event) {
+		struct drm_crtc *crtc = &mtk_crtc->base;
+
+		/*
+		 * The packet can run before the vblank IRQ bumps the count. If
+		 * the count has not changed since update_config(), let the DRM
+		 * core send the event at the next vblank, so it never reports
+		 * the old count.
+		 */
+		spin_lock(&crtc->dev->event_lock);
+		if (drm_crtc_vblank_count(crtc) > mtk_crtc->event_vblank_seq) {
+			drm_crtc_send_vblank_event(crtc, mtk_crtc->event);
+			drm_crtc_vblank_put(crtc);
+		} else {
+			drm_crtc_arm_vblank_event(crtc, mtk_crtc->event);
+		}
+		mtk_crtc->event = NULL;
+		spin_unlock(&crtc->dev->event_lock);
 	}
+	mtk_crtc->pending_needs_vblank = false;
 
 	mtk_crtc_commit_fb_put_locked(mtk_crtc);
 
@@ -1181,8 +1197,10 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank,
 
 	mtk_crtc_pre_update_hrt_state(crtc);
 	mtk_crtc_update_srt_state(crtc);
-	if (needs_vblank)
+	if (needs_vblank) {
 		mtk_crtc->pending_needs_vblank = true;
+		mtk_crtc->event_vblank_seq = drm_crtc_vblank_count(crtc);
+	}
 
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	/*

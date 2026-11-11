@@ -46,7 +46,8 @@
  *
  * Like drm_atomic_helper_commit_tail_rpm(), but waits for flip_done instead of
  * vblanks. With CMDQ, flip_done is signaled from ddp_cmdq_cb() after GCE
- * execution completes. Waiting on it ensures:
+ * execution completes, or by the DRM core at the next vblank if the vblank
+ * count has not changed yet. Waiting on it ensures:
  * 1. Old framebuffers are retained until GCE finishes applying the new config.
  * 2. Blocking commits do not return early, preventing subsequent nonblocking
  *    commits from hitting -EBUSY in stall_checks().
