@@ -1570,7 +1570,7 @@ static int __maybe_unused mtk_imgsys_pm_suspend(struct device *dev)
 
 	ret = wait_event_timeout
 		(imgsys_dev->flushing_waitq,
-		 !(num = atomic_read(&imgsys_dev->num_composing)),
+		 !(num = atomic_read_acquire(&imgsys_dev->num_composing)),
 		 msecs_to_jiffies(1000 / 30 * IMGSYS_WORKING_BUF_NUM * 3));
 	if (!ret && num) {
 		dev_info(dev, "%s: flushing SCP job timeout, num(%d)\n",

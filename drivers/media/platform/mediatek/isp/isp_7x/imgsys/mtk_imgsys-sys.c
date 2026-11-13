@@ -135,14 +135,19 @@ mtk_imgsys_hw_working_buf_alloc(struct mtk_imgsys_dev *imgsys_dev)
 	return working_buf;
 }
 
-static void mtk_imgsys_notify(struct mtk_imgsys_request *req, uint64_t frm_owner)
+static void mtk_imgsys_notify(struct mtk_imgsys_request *req, uint64_t frm_owner,
+			      int handle)
 {
 	struct mtk_imgsys_dev *imgsys_dev = req->imgsys_pipe->imgsys_dev;
 	struct mtk_imgsys_pipe *pipe = req->imgsys_pipe;
 	struct req_frameparam *iparam = &req->img_fparam.frameparam;
 	enum vb2_buffer_state vbf_state;
 
-	if (!mtk_imgsys_pipe_get_running_job(pipe, req->id))
+	/*
+	 * The lookup pops under running_job_lock; release the flush
+	 * barrier only after the completion tail.
+	 */
+	if (!mtk_imgsys_pipe_get_running_job(pipe, req, handle))
 		goto out;
 
 	if (iparam->state != FRAME_STATE_HW_TIMEOUT)
@@ -150,15 +155,13 @@ static void mtk_imgsys_notify(struct mtk_imgsys_request *req, uint64_t frm_owner
 	else
 		vbf_state = VB2_BUF_STATE_ERROR;
 
-	atomic_dec(&imgsys_dev->num_composing);
-
 	mtk_imgsys_hw_working_buf_free(imgsys_dev, req->working_buf);
 	req->working_buf = NULL;
-	mtk_imgsys_pipe_remove_job(req);
 	if (vbf_state == VB2_BUF_STATE_DONE)
 		mtk_imgsys_pipe_job_finish(req, vbf_state);
 
-	wake_up(&imgsys_dev->flushing_waitq);
+	if (!atomic_dec_return_release(&imgsys_dev->num_composing))
+		wake_up(&imgsys_dev->flushing_waitq);
 	dev_dbg(imgsys_dev->dev,
 		"%s:%s:(reqfd-%d) job id(%d), frame_no(%d) finished\n",
 		__func__, pipe->desc->name, req->request_fd, iparam->index,
@@ -228,7 +231,7 @@ static void imgsys_mdp_cb_func(struct imgsys_cb_data data,
 	if (swfrminfo_cb->hw_hang >= 0)
 		req->img_fparam.frameparam.state = FRAME_STATE_HW_TIMEOUT;
 
-	mtk_imgsys_notify(req, swfrminfo_cb->frm_owner);
+	mtk_imgsys_notify(req, swfrminfo_cb->frm_owner, swfrminfo_cb->handle);
 
 	if (swfrminfo_cb->hw_hang < 0) {
 		gwork = kzalloc(sizeof(*gwork), GFP_KERNEL);
@@ -385,7 +388,7 @@ static int mtk_imgsys_hw_flush_pipe_jobs(struct mtk_imgsys_pipe *pipe)
 
 	ret = wait_event_timeout
 		(pipe->imgsys_dev->flushing_waitq,
-		 !(num = atomic_read(&pipe->imgsys_dev->num_composing)),
+		 !(num = atomic_read_acquire(&pipe->imgsys_dev->num_composing)),
 		 msecs_to_jiffies(1000 / 30 * IMGSYS_WORKING_BUF_NUM * 3));
 	if (!ret && num) {
 		dev_info(pipe->imgsys_dev->dev,

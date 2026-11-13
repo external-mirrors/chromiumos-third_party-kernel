@@ -276,7 +276,8 @@ int mtk_imgsys_pipe_init(struct mtk_imgsys_dev *imgsys_dev,
 int mtk_imgsys_pipe_release(struct mtk_imgsys_pipe *pipe);
 
 struct mtk_imgsys_request *
-mtk_imgsys_pipe_get_running_job(struct mtk_imgsys_pipe *pipe, int id);
+mtk_imgsys_pipe_get_running_job(struct mtk_imgsys_pipe *pipe,
+				struct mtk_imgsys_request *target, int id);
 
 void mtk_imgsys_pipe_remove_job(struct mtk_imgsys_request *req);
 

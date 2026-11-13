@@ -101,15 +101,19 @@ int mtk_imgsys_pipe_next_job_id(struct mtk_imgsys_pipe *pipe)
 }
 
 struct mtk_imgsys_request *
-mtk_imgsys_pipe_get_running_job(struct mtk_imgsys_pipe *pipe, int id)
+mtk_imgsys_pipe_get_running_job(struct mtk_imgsys_pipe *pipe,
+				struct mtk_imgsys_request *target, int id)
 {
 	struct mtk_imgsys_request *req;
 	unsigned long flag;
 
+	/* pop under the lock: match target and id; the job must have exactly one completer */
 	spin_lock_irqsave(&pipe->running_job_lock, flag);
 	list_for_each_entry(req,
 			    &pipe->pipe_job_running_list, list) {
-		if (req->id == id) {
+		if (req == target && req->id == id) {
+			list_del_init(&req->list);
+			pipe->num_jobs--;
 			spin_unlock_irqrestore(&pipe->running_job_lock, flag);
 			return req;
 		}
