@@ -713,11 +713,9 @@ STOP_SCAN:
 				need_clean_req = true;
 		}
 
-		/* if being the last one, check other pipes in the ctx */
-		other_pipes = 0;
+		/* check other pipes in the request */
 		done_status = req->done_status;
-		if (need_clean_req)
-			other_pipes = ctx->streaming_pipe & ~(1 << pipe_id);
+		other_pipes = req->pipe_used & ~(1 << pipe_id);
 		spin_unlock(&req->done_status_lock);
 
 		/**
@@ -737,7 +735,7 @@ STOP_SCAN:
 				 * if done_status is marked, it means the work
 				 * is running or complete
 				 */
-				if (flush_work(&s_data->frame_done_work.work))
+				if (flush_work(&s_data_pipe->frame_done_work.work))
 					dev_info(cam->dev,
 						 "%s:%s:pipe(%d):seq(%d): flush pipe(%d) frame_done_work\n",
 						 __func__, req->req.debug_str,
@@ -1728,13 +1726,29 @@ void mtk_cam_dev_req_try_queue(struct mtk_cam_device *cam)
 	}
 }
 
+static void isp_tx_frame_worker(struct work_struct *work);
+
 static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 {
 	struct mtk_cam_request *cam_req;
+	struct mtk_cam_request_stream_data *s_data;
+	int i, j;
 
 	cam_req = vzalloc(sizeof(*cam_req));
+	if (!cam_req)
+		return NULL;
+
 	spin_lock_init(&cam_req->done_status_lock);
 	mutex_init(&cam_req->fs.op_lock);
+	for (i = 0; i < ARRAY_SIZE(cam_req->p_data); i++)
+		for (j = 0; j < ARRAY_SIZE(cam_req->p_data[i].s_data); j++) {
+			s_data = &cam_req->p_data[i].s_data[j];
+			INIT_WORK(&s_data->frame_done_work.work,
+				  mtk_cam_frame_done_work);
+			INIT_WORK(&s_data->meta1_done_work.work,
+				  mtk_cam_meta1_done_work);
+			INIT_WORK(&s_data->frame_work.work, isp_tx_frame_worker);
+		}
 
 	return &cam_req->req;
 }
@@ -2687,12 +2701,8 @@ void mtk_cam_dev_req_enqueue(struct mtk_cam_device *cam,
 			for (j = 0 ; j < MTKCAM_SUBDEV_MAX ; j++) {
 				if ((1 << j & ctx->streaming_pipe) && (1 << j & req->pipe_used)) {
 					pipe_stream_data = mtk_cam_req_get_s_data(req, j, 0);
-					done_work = &pipe_stream_data->frame_done_work;
-					INIT_WORK(&done_work->work, mtk_cam_frame_done_work);
-
 					done_work = &pipe_stream_data->meta1_done_work;
 					atomic_set(&done_work->is_queued, 0);
-					INIT_WORK(&done_work->work, mtk_cam_meta1_done_work);
 				}
 			}
 
@@ -2715,7 +2725,6 @@ void mtk_cam_dev_req_enqueue(struct mtk_cam_device *cam,
 
 			/* Prepare CQ compose work */
 			mtk_cam_req_dump_work_init(req_stream_data);
-			INIT_WORK(&frame_work->work, isp_tx_frame_worker);
 			queue_work(ctx->composer_wq, &frame_work->work);
 
 			dev_dbg(cam->dev, "%s:ctx:%d:req:%d(%s) enqueue ctx_used:0x%x,streaming_ctx:0x%x,job cnt:%d, running(%d)\n",
