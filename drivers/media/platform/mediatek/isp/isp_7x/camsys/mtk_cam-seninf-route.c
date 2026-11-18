@@ -268,8 +268,10 @@ int mtk_cam_seninf_set_pixelmode(struct v4l2_subdev *sd,
 	struct seninf_ctx *ctx = container_of(sd, struct seninf_ctx, subdev);
 	struct seninf_vc *vc;
 
+	mutex_lock(&ctx->vcinfo_lock);
 	vc = mtk_cam_seninf_get_vc_by_pad(ctx, pad_id);
 	if (!vc) {
+		mutex_unlock(&ctx->vcinfo_lock);
 		pr_info("%s: invalid pad=%d\n", __func__, pad_id);
 		return -1;
 	}
@@ -279,6 +281,7 @@ int mtk_cam_seninf_set_pixelmode(struct v4l2_subdev *sd,
 		update_isp_clk(ctx);
 		mtk_cam_seninf_update_mux_pixel_mode(ctx, vc->mux, pixel_mode);
 	}
+	mutex_unlock(&ctx->vcinfo_lock);
 
 	return 0;
 }
@@ -293,9 +296,12 @@ static int _mtk_cam_seninf_set_camtg(struct v4l2_subdev *sd,
 	if (pad_id < PAD_SRC_RAW0 || pad_id >= PAD_MAXCNT)
 		return -EINVAL;
 
+	mutex_lock(&ctx->vcinfo_lock);
 	vc = mtk_cam_seninf_get_vc_by_pad(ctx, pad_id);
-	if (!vc)
+	if (!vc) {
+		mutex_unlock(&ctx->vcinfo_lock);
 		return -EINVAL;
+	}
 
 	ctx->pad2cam[pad_id] = camtg;
 
@@ -347,6 +353,7 @@ static int _mtk_cam_seninf_set_camtg(struct v4l2_subdev *sd,
 		dev_info(ctx->dev, "%s: pad_id %d, camtg %d, ctx->streaming %d, vc->cam %d\n",
 			 __func__, pad_id, camtg, ctx->streaming, vc->cam);
 	}
+	mutex_unlock(&ctx->vcinfo_lock);
 
 	return 0;
 }

@@ -597,12 +597,19 @@ static int mtk_cam_seninf_set_fmt(struct v4l2_subdev *sd,
 		if (fmt->pad == PAD_SINK)
 			sink_format_changed = 1;
 
+		mutex_lock(&ctx->vcinfo_lock);
+		if (ctx->streaming || media_entity_is_streaming(&sd->entity)) {
+			mutex_unlock(&ctx->vcinfo_lock);
+			return -EBUSY;
+		}
+
 		format->code = fmt->format.code;
 		format->width = fmt->format.width;
 		format->height = fmt->format.height;
 
 		if (sink_format_changed && !ctx->is_test_model)
 			mtk_cam_seninf_get_vcinfo(ctx);
+		mutex_unlock(&ctx->vcinfo_lock);
 
 		dev_info(ctx->dev,
 			 "s_fmt pad %d code/res 0x%x/%dx%d which %d=> 0x%x/%dx%d\n",
@@ -1008,6 +1015,12 @@ static int seninf_s_stream(struct v4l2_subdev *sd, int enable)
 	if (ctx->streaming == enable)
 		return 0;
 
+	if (enable) {
+		/* drain vcinfo writers that passed their check before stream-on */
+		mutex_lock(&ctx->vcinfo_lock);
+		mutex_unlock(&ctx->vcinfo_lock);
+	}
+
 	if (ctx->is_test_model)
 		return set_test_model(ctx, enable);
 
@@ -1115,10 +1128,13 @@ static int seninf_link_setup(struct media_entity *entity,
 	} else {
 		/* NOTE: update vcinfo once the link becomes enabled */
 		if (flags & MEDIA_LNK_FL_ENABLED) {
+			mutex_lock(&ctx->vcinfo_lock);
 			ctx->sensor_sd =
 				media_entity_to_v4l2_subdev(remote->entity);
 			ctx->sensor_pad_idx = remote->index;
-			mtk_cam_seninf_get_vcinfo(ctx);
+			if (!ctx->is_test_model)
+				mtk_cam_seninf_get_vcinfo(ctx);
+			mutex_unlock(&ctx->vcinfo_lock);
 		}
 	}
 
@@ -1186,10 +1202,13 @@ static const struct v4l2_async_notifier_operations seninf_async_ops = {
 /* NOTE: update vcinfo once test_model switches */
 static int seninf_test_pattern(struct seninf_ctx *ctx, u32 pattern)
 {
+	mutex_lock(&ctx->vcinfo_lock);
+	if (ctx->streaming || media_entity_is_streaming(&ctx->subdev.entity)) {
+		mutex_unlock(&ctx->vcinfo_lock);
+		return -EBUSY;
+	}
 	switch (pattern) {
 	case 0:
-		if (ctx->streaming)
-			return -EBUSY;
 		ctx->is_test_model = 0;
 		mtk_cam_seninf_get_vcinfo(ctx);
 		dev_info(ctx->dev, "test pattern off\n");
@@ -1197,8 +1216,6 @@ static int seninf_test_pattern(struct seninf_ctx *ctx, u32 pattern)
 	case 1: // RAW only
 	case 2: // Stagger: 3 expo
 	case 3: // 1 RAW + 1 PD
-		if (ctx->streaming)
-			return -EBUSY;
 		ctx->is_test_model = pattern;
 		mtk_cam_seninf_get_vcinfo_test(ctx);
 		dev_info(ctx->dev, "test pattern on\n");
@@ -1206,6 +1223,7 @@ static int seninf_test_pattern(struct seninf_ctx *ctx, u32 pattern)
 	default:
 		break;
 	}
+	mutex_unlock(&ctx->vcinfo_lock);
 
 	return 0;
 }
@@ -1465,6 +1483,7 @@ static int seninf_probe(struct platform_device *pdev)
 
 	ctx->open_refcnt = 0;
 	mutex_init(&ctx->mutex);
+	mutex_init(&ctx->vcinfo_lock);
 
 	ret = get_csi_port(dev, &port);
 	if (ret) {
@@ -1609,6 +1628,7 @@ static int seninf_remove(struct platform_device *pdev)
 	v4l2_ctrl_handler_free(&ctx->ctrl_handler);
 
 	mutex_destroy(&ctx->mutex);
+	mutex_destroy(&ctx->vcinfo_lock);
 
 	dev_dbg(dev, "camsys | start %s\n", __func__);
 

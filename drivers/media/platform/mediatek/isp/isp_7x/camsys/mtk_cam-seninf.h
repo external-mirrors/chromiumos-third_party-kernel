@@ -113,6 +113,8 @@ struct seninf_ctx {
 
 	/* provided by sensor */
 	struct seninf_vcinfo vcinfo;
+	/* serializes vcinfo/is_test_model writers */
+	struct mutex vcinfo_lock;
 	int fps_n;
 	int fps_d;
 
