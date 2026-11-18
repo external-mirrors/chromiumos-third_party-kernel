@@ -1445,6 +1445,10 @@ static int mtk_cam_req_update(struct mtk_cam_device *cam,
 		if (ctx->used_raw_num && ctx->pipe->res_config.raw_num_used == 1)
 			req_stream_data->flags |= MTK_CAM_REQ_S_DATA_FLAG_META1_INDEPENDENT;
 
+		/* a queue that has not started streaming has no buffer to program */
+		if (mtk_cam_s_data_get_vbuf(req_stream_data, node->desc.id) != buf)
+			continue;
+
 		/* update buffer format */
 		switch (node->desc.dma_port) {
 		case MTKCAM_IPI_RAW_RAWI_2:
@@ -3585,9 +3589,6 @@ int mtk_cam_ctx_stream_on(struct mtk_cam_ctx *ctx, struct mtk_cam_video_device *
 	if (ret)
 		goto fail_streaming_off;
 
-	mutex_lock(&cam->queue_lock);
-	mtk_cam_dev_req_try_queue(cam);  /* request moved into working list */
-	mutex_unlock(&cam->queue_lock);
 	if (watchdog_scenario(ctx))
 		mtk_ctx_watchdog_start(ctx, 4);
 

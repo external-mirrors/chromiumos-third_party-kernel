@@ -58,23 +58,131 @@ unsigned int mtk_cam_dmao_xsize(int w, unsigned int ipi_fmt, int pixel_mode_shif
 	return ALIGN(bytes, bus_size);
 }
 
-static void mtk_cam_release_all_buffer(struct mtk_cam_device *cam)
+/* return only this queue's buffers on the DMA lists; other streams stay live */
+static void mtk_cam_return_dma_buffers(struct vb2_queue *vq,
+				       struct mtk_cam_device *cam,
+				       enum vb2_buffer_state state)
 {
 	struct mtk_cam_buffer *buf, *tmp;
 
 	spin_lock(&cam->dma_pending_lock);
 	list_for_each_entry_safe(buf, tmp, &cam->dma_pending, list) {
+		if (buf->vbb.vb2_buf.vb2_queue != vq)
+			continue;
 		list_del(&buf->list);
-		vb2_buffer_done(&buf->vbb.vb2_buf, VB2_BUF_STATE_ERROR);
+		vb2_buffer_done(&buf->vbb.vb2_buf, state);
 	}
 	spin_unlock(&cam->dma_pending_lock);
 
 	spin_lock(&cam->dma_processing_lock);
 	list_for_each_entry_safe(buf, tmp, &cam->dma_processing, list) {
+		if (buf->vbb.vb2_buf.vb2_queue != vq)
+			continue;
 		list_del(&buf->list);
-		vb2_buffer_done(&buf->vbb.vb2_buf, VB2_BUF_STATE_ERROR);
+		cam->dma_processing_count--;
+		vb2_buffer_done(&buf->vbb.vb2_buf, state);
 	}
 	spin_unlock(&cam->dma_processing_lock);
+}
+
+/* publish a request buffer to the stream data the composer sends to FW */
+static void mtk_cam_vb2_attach_req_buf(struct vb2_buffer *vb)
+{
+	struct mtk_cam_device *cam = vb2_get_drv_priv(vb->vb2_queue);
+	struct mtk_cam_buffer *buf = mtk_cam_vb2_buf_to_dev_buf(vb);
+	struct mtk_cam_request *req = to_mtk_cam_req(vb->request);
+	struct mtk_cam_video_device *node = mtk_cam_vbq_to_vdev(vb->vb2_queue);
+	struct mtk_cam_request_stream_data *req_stream_data;
+	struct mtkcam_ipi_frame_param *frame_param;
+	struct mtkcam_ipi_meta_input *meta_in;
+	struct mtkcam_ipi_meta_output *meta_out;
+	struct mtk_raw_pde_config *pde_cfg;
+	unsigned int pipe_id = node->uid.pipe_id;
+	unsigned int dma_port = node->desc.dma_port;
+	unsigned int desc_id;
+
+	req_stream_data = mtk_cam_req_get_s_data(req, pipe_id, 0);
+	frame_param = &req_stream_data->frame_params;
+	mtk_cam_s_data_set_vbuf(req_stream_data, buf, node->desc.id);
+
+	/* update buffer internal address */
+	switch (dma_port) {
+	case MTKCAM_IPI_RAW_META_STATS_CFG:
+		desc_id = node->desc.id - MTK_RAW_SINK_NUM;
+		meta_in = &frame_param->meta_inputs[desc_id];
+		meta_in->buf.size = node->active_fmt.fmt.meta.buffersize;
+		meta_in->buf.iova = buf->daddr;
+		meta_in->buf.scp_addr = buf->scp_addr;
+		meta_in->uid.id = dma_port;
+		break;
+	case MTKCAM_IPI_RAW_META_STATS_0:
+	case MTKCAM_IPI_RAW_META_STATS_1:
+	case MTKCAM_IPI_RAW_META_STATS_2:
+		pde_cfg = &cam->raw.pipelines[node->uid.pipe_id].pde_config;
+		desc_id = node->desc.id - MTK_RAW_META_OUT_BEGIN;
+		meta_out = &frame_param->meta_outputs[desc_id];
+		meta_out->buf.size = node->active_fmt.fmt.meta.buffersize;
+		meta_out->buf.iova = buf->daddr;
+		meta_out->buf.scp_addr = buf->scp_addr;
+		meta_out->uid.id = dma_port;
+		camsys_set_meta_stats_info(dma_port, vb, pde_cfg);
+		break;
+	default:
+		dev_dbg(cam->dev, "%s:pipe(%d):buffer with invalid port(%d)\n",
+			__func__, pipe_id, dma_port);
+		break;
+	}
+}
+
+/* caller holds queue_lock, which every dispatcher takes */
+static void mtk_cam_vb2_attach_queued_bufs_locked(struct vb2_queue *vq,
+						  struct mtk_cam_device *cam)
+{
+	struct mtk_cam_video_device *node = mtk_cam_vbq_to_vdev(vq);
+	struct mtk_cam_request *req;
+	struct vb2_buffer *vb;
+	unsigned int i;
+	bool pending;
+
+	if (!vq->uses_requests)
+		return;
+
+	lockdep_assert_held(&cam->queue_lock);
+	for (i = 0; i < vq->max_num_buffers; i++) {
+		vb = vb2_get_buffer(vq, i);
+		if (!vb || vb->state != VB2_BUF_STATE_ACTIVE || !vb->request)
+			continue;
+
+		req = to_mtk_cam_req(vb->request);
+		spin_lock(&cam->pending_job_lock);
+		pending = atomic_read(&req->state) == MTK_CAM_REQ_STATE_PENDING &&
+			  (req->pipe_used & (1 << node->uid.pipe_id));
+		spin_unlock(&cam->pending_job_lock);
+
+		if (pending)
+			mtk_cam_vb2_attach_req_buf(vb);
+		else
+			vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
+	}
+}
+
+static void mtk_cam_return_failed_queue_buffer(struct vb2_queue *vq,
+					       struct mtk_cam_device *cam)
+{
+	struct vb2_buffer *vb;
+	unsigned int i;
+
+	if (!vq->uses_requests) {
+		mtk_cam_return_dma_buffers(vq, cam, VB2_BUF_STATE_QUEUED);
+		return;
+	}
+
+	/* request buffers not attached yet are owned only by this queue */
+	for (i = 0; i < vq->max_num_buffers; i++) {
+		vb = vb2_get_buffer(vq, i);
+		if (vb && vb->state == VB2_BUF_STATE_ACTIVE)
+			vb2_buffer_done(vb, VB2_BUF_STATE_QUEUED);
+	}
 }
 
 static int mtk_cam_vb2_queue_setup(struct vb2_queue *vq,
@@ -236,8 +344,6 @@ static int mtk_cam_vb2_start_streaming(struct vb2_queue *vq,
 		}
 	}
 
-	cam->streaming_pipe |= (1 << node->uid.pipe_id);
-	ctx->streaming_pipe |= (1 << node->uid.pipe_id);
 	ctx->streaming_node_cnt++;
 
 	if (ctx->streaming_node_cnt == 1)
@@ -256,23 +362,34 @@ static int mtk_cam_vb2_start_streaming(struct vb2_queue *vq,
 
 	ret = mtk_cam_ctx_stream_on(ctx, node);
 	if (ret)
-		goto fail_destroy_session;
+		goto fail_stop_ctx;
+
+	/* nothing can fail from here, so a failed STREAMON never attached a buffer */
+	mutex_lock(&cam->queue_lock);
+	mtk_cam_vb2_attach_queued_bufs_locked(vq, cam);
+	ctx->streaming_pipe |= (1 << node->uid.pipe_id);
+	cam->streaming_pipe |= (1 << node->uid.pipe_id);
+	mtk_cam_dev_req_try_queue(cam);
+	mutex_unlock(&cam->queue_lock);
 
 	mtk_cam_buf_try_queue(ctx);
 
 	return 0;
 
-fail_destroy_session:
-	if (ctx->session_created)
-		isp_composer_destroy_session(ctx);
 fail_stop_ctx:
 	ctx->streaming_node_cnt--;
+	/* siblings share the pipe ID; keep pipe state until the last node */
+	if (ctx->streaming_node_cnt)
+		goto fail_return_buffer;
+
 	ctx->streaming_pipe &= ~(1 << node->uid.pipe_id);
 	cam->streaming_pipe &= ~(1 << node->uid.pipe_id);
+	if (ctx->session_created)
+		isp_composer_destroy_session(ctx);
 	mtk_cam_dev_req_cleanup(ctx, node->uid.pipe_id, VB2_BUF_STATE_QUEUED);
 	mtk_cam_stop_ctx(ctx, node);
 fail_return_buffer:
-	mtk_cam_release_all_buffer(cam);
+	mtk_cam_return_failed_queue_buffer(vq, cam);
 	/* relese bufs by request */
 	return ret;
 }
@@ -305,8 +422,8 @@ static void mtk_cam_vb2_stop_streaming(struct vb2_queue *vq)
 		mtk_cam_dev_req_cleanup(ctx, node->uid.pipe_id, VB2_BUF_STATE_ERROR);
 	}
 
-	/* all bufs of node should be return by per requests */
-	mtk_cam_release_all_buffer(ctx->cam);
+	/* request bufs were returned per request; return this queue's own */
+	mtk_cam_return_dma_buffers(vq, cam, VB2_BUF_STATE_ERROR);
 
 	/* NOTE: take multi-pipelines case into consideration */
 	cam->streaming_pipe &= ~(1 << node->uid.pipe_id);
@@ -566,18 +683,8 @@ static void mtk_cam_vb2_buf_queue(struct vb2_buffer *vb)
 {
 	struct mtk_cam_device *cam = vb2_get_drv_priv(vb->vb2_queue);
 	struct mtk_cam_buffer *buf = mtk_cam_vb2_buf_to_dev_buf(vb);
-	struct mtk_cam_request *req = to_mtk_cam_req(vb->request);
-	struct mtk_cam_request_stream_data *req_stream_data;
 	struct mtk_cam_video_device *node = mtk_cam_vbq_to_vdev(vb->vb2_queue);
-	struct mtk_raw_pde_config *pde_cfg;
-	struct device *dev = cam->dev;
-	struct mtkcam_ipi_frame_param *frame_param;
-	struct mtkcam_ipi_meta_input *meta_in;
-	struct mtkcam_ipi_meta_output *meta_out;
 	struct mtk_cam_ctx *ctx;
-	unsigned int pipe_id;
-	unsigned int desc_id;
-	unsigned int dma_port = node->desc.dma_port;
 
 	if (!vb->vb2_queue->uses_requests) {
 		spin_lock(&cam->dma_pending_lock);
@@ -591,39 +698,11 @@ static void mtk_cam_vb2_buf_queue(struct vb2_buffer *vb)
 		return;
 	}
 
-	dma_port = node->desc.dma_port;
-	pipe_id = node->uid.pipe_id;
-	req_stream_data = mtk_cam_req_get_s_data(req, pipe_id, 0);
-	frame_param = &req_stream_data->frame_params;
-	mtk_cam_s_data_set_vbuf(req_stream_data, buf, node->desc.id);
+	/* pre-queued buffers are attached once start_streaming gets that far */
+	if (!vb->vb2_queue->start_streaming_called)
+		return;
 
-	/* update buffer internal address */
-	switch (dma_port) {
-	case MTKCAM_IPI_RAW_META_STATS_CFG:
-		desc_id = node->desc.id - MTK_RAW_SINK_NUM;
-		meta_in = &frame_param->meta_inputs[desc_id];
-		meta_in->buf.size = node->active_fmt.fmt.meta.buffersize;
-		meta_in->buf.iova = buf->daddr;
-		meta_in->buf.scp_addr = buf->scp_addr;
-		meta_in->uid.id = dma_port;
-		break;
-	case MTKCAM_IPI_RAW_META_STATS_0:
-	case MTKCAM_IPI_RAW_META_STATS_1:
-	case MTKCAM_IPI_RAW_META_STATS_2:
-		pde_cfg = &cam->raw.pipelines[node->uid.pipe_id].pde_config;
-		desc_id = node->desc.id - MTK_RAW_META_OUT_BEGIN;
-		meta_out = &frame_param->meta_outputs[desc_id];
-		meta_out->buf.size = node->active_fmt.fmt.meta.buffersize;
-		meta_out->buf.iova = buf->daddr;
-		meta_out->buf.scp_addr = buf->scp_addr;
-		meta_out->uid.id = dma_port;
-		camsys_set_meta_stats_info(dma_port, vb, pde_cfg);
-		break;
-	default:
-		dev_dbg(dev, "%s:pipe(%d):buffer with invalid port(%d)\n",
-			__func__, pipe_id, dma_port);
-		break;
-	}
+	mtk_cam_vb2_attach_req_buf(vb);
 }
 
 static void mtk_cam_vb2_buf_cleanup(struct vb2_buffer *vb)
