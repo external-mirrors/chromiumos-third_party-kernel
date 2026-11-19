@@ -220,11 +220,33 @@ void mtk_cam_set_sensor_full(struct mtk_cam_request_stream_data *s_data,
 	struct mtk_cam_device *cam;
 	struct mtk_cam_ctx *ctx;
 	struct mtk_cam_request *req;
+	struct mtk_camsys_ctrl_state *pos;
 	struct mtk_raw_device *raw_dev = NULL;
 	unsigned int time_after_sof = 0;
 
 	/* EnQ this request's state element to state_list (STATE:READY) */
 	spin_lock(&sensor_ctrl->camsys_state_lock);
+	if (s_data->state.estate != E_STATE_READY) {
+		spin_unlock(&sensor_ctrl->camsys_state_lock);
+		dev_info(sensor_ctrl->ctx->cam->dev,
+			 "%s:seq(%d) state(%d) already handled, skip\n",
+			 __func__, s_data->frame_seq_no, s_data->state.estate);
+		return;
+	}
+	/*
+	 * link each state_element once: match by pointer,
+	 * list_empty() is unreliable (never INIT'd)
+	 */
+	list_for_each_entry(pos, &sensor_ctrl->camsys_state_list,
+			    state_element) {
+		if (pos == &s_data->state) {
+			spin_unlock(&sensor_ctrl->camsys_state_lock);
+			dev_info(sensor_ctrl->ctx->cam->dev,
+				 "%s:seq(%d) state_element already linked, skip\n",
+				 __func__, s_data->frame_seq_no);
+			return;
+		}
+	}
 	list_add_tail(&s_data->state.state_element,
 		      &sensor_ctrl->camsys_state_list);
 	atomic_set(&sensor_ctrl->sensor_request_seq_no, s_data->frame_seq_no);

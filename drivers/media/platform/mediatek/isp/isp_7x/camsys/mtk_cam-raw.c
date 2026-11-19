@@ -317,6 +317,9 @@ static int mtk_cam_raw_res_store(struct mtk_raw_pipeline *pipeline,
 	     !res_user->sensor_res.vblank ||
 	     !res_user->sensor_res.interval.denominator ||
 	     !res_user->sensor_res.interval.numerator)) {
+		/* feature_active is frozen at stream-on (same gate as the FEATURE ctrl below) */
+		if (media_entity_is_streaming(&pipeline->subdev.entity))
+			return -EBUSY;
 		dev_info(dev,
 			 "%s:pipe(%d): sensor info MUST be provided (TEST_PATTERN case)\n",
 			 __func__, pipeline->id);
@@ -482,6 +485,8 @@ static int mtk_cam_raw_set_res_ctrl(struct v4l2_ctrl *ctrl)
 	res_user = (struct mtk_cam_resource *)ctrl->p_new.p;
 
 	ret = mtk_cam_raw_res_store(pipeline, res_user);
+	if (ret)
+		return ret;
 	pipeline->user_res = *res_user;
 	if (media_entity_is_streaming(&pipeline->subdev.entity)) {
 		/* If the pipeline is streaming, pending the change */
@@ -665,6 +670,17 @@ static int mtk_cam_raw_set_ctrl(struct v4l2_ctrl *ctrl)
 			 pipeline->sensor_mode_update);
 		break;
 	case V4L2_CID_MTK_CAM_FEATURE:
+		/*
+		 * feature_active is frozen at stream-on: a mid-stream change
+		 * double-links one state_element
+		 */
+		if (media_entity_is_streaming(&pipeline->subdev.entity)) {
+			dev_info(dev,
+				 "%s:pipe(%d):reject feature change while streaming\n",
+				 __func__, pipeline->id);
+			ret = -EBUSY;
+			break;
+		}
 		pipeline->feature_pending = *ctrl->p_new.p_s64;
 
 		dev_dbg(dev,
@@ -2373,11 +2389,13 @@ static int mtk_raw_sd_s_stream(struct v4l2_subdev *sd, int enable)
 		return -EINVAL;
 
 	if (enable) {
+		/* serialize with S_EXT_CTRLS so feature_pending cannot change after the latch */
+		mutex_lock(pipe->ctrl_handler.lock);
 		pipe->feature_active = pipe->user_res.raw_res.feature;
+		mutex_unlock(pipe->ctrl_handler.lock);
 		pipe->enabled_dmas = 0;
 		ctx->pipe = pipe;
 		ctx->used_raw_num++;
-		pipe->feature_active = pipe->user_res.raw_res.feature;
 		for (i = 0; i < ARRAY_SIZE(pipe->vdev_nodes); i++) {
 			if (!pipe->vdev_nodes[i].enabled)
 				continue;
