@@ -724,8 +724,29 @@ static void mtk_cam_vb2_buf_cleanup(struct vb2_buffer *vb)
 static void mtk_cam_vb2_request_complete(struct vb2_buffer *vb)
 {
 	struct mtk_cam_device *cam = vb2_get_drv_priv(vb->vb2_queue);
+	struct mtk_cam_request *cam_req = to_mtk_cam_req(vb->req_obj.req);
+	struct mtk_cam_request *pos, *tmp;
+	bool unlinked = false;
 
 	dev_dbg(vb->vb2_queue->dev, "camsys | request %s\n", __func__);
+
+	/*
+	 * a canceled request can still sit on pending_job_list while
+	 * request_fd keeps it alive; drop it there
+	 */
+	spin_lock(&cam->pending_job_lock);
+	list_for_each_entry_safe(pos, tmp, &cam->pending_job_list, list) {
+		if (pos == cam_req) {
+			if (!(cam_req->pipe_used & cam->streaming_pipe)) {
+				list_del_init(&pos->list);
+				unlinked = true;
+			}
+			break;
+		}
+	}
+	spin_unlock(&cam->pending_job_lock);
+	if (unlinked)
+		media_request_put(&cam_req->req);
 
 	v4l2_ctrl_request_complete(vb->req_obj.req,
 				   cam->v4l2_dev.ctrl_handler);

@@ -279,6 +279,7 @@ static void mtk_cam_del_req_from_running(struct mtk_cam_ctx *ctx,
 	list_del(&req->list);
 	ctx->cam->running_job_count--;
 	spin_unlock(&ctx->cam->running_job_lock);
+	/* the caller drops the queue reference after its last use of req */
 }
 
 static void mtk_cam_req_works_clean(struct mtk_cam_request_stream_data *s_data)
@@ -354,6 +355,8 @@ int mtk_cam_dequeue_req_frame(struct mtk_cam_ctx *ctx,
 	struct mtk_cam_request *req, *req_prev;
 	struct mtk_cam_request_stream_data *s_data, *s_data_pipe;
 	struct mtk_cam_request_stream_data *deq_s_data[RUNNING_JOB_DEPTH];
+	struct mtk_cam_request *puts[RUNNING_JOB_DEPTH];
+	u32 put_cnt = 0, i;
 	struct mtk_raw_pipeline *pipe = ctx->pipe;
 	struct mtk_camsys_sensor_ctrl *sensor_ctrl = &ctx->sensor_ctrl;
 	struct mtk_ae_debug_data ae_data;
@@ -478,6 +481,7 @@ STOP_SCAN:
 
 		if (del_req) {
 			mtk_cam_del_req_from_running(ctx, req, pipe_id);
+			puts[put_cnt++] = req;
 			dequeue_cnt++;
 		}
 
@@ -527,6 +531,9 @@ STOP_SCAN:
 		}
 	}
 
+	for (i = 0; i < put_cnt; i++)
+		media_request_put(&puts[i]->req);
+
 	return dequeue_cnt;
 }
 
@@ -536,11 +543,12 @@ void mtk_cam_dev_req_clean_pending(struct mtk_cam_device *cam, int pipe_id,
 	struct mtk_cam_request *req, *req_prev;
 	struct mtk_cam_request_stream_data *s_data_pipe;
 	struct list_head *pending = &cam->pending_job_list;
-	struct list_head req_clean_list;
+	struct list_head req_clean_list, orphan_list;
 
 	/* Consider pipe bufs and pipe_used only */
 
 	INIT_LIST_HEAD(&req_clean_list);
+	INIT_LIST_HEAD(&orphan_list);
 
 	spin_lock(&cam->pending_job_lock);
 	list_for_each_entry_safe(req, req_prev, pending, list) {
@@ -548,8 +556,12 @@ void mtk_cam_dev_req_clean_pending(struct mtk_cam_device *cam, int pipe_id,
 		req->pipe_used &= ~(1 << pipe_id);
 		list_add_tail(&req->cleanup_list, &req_clean_list);
 		if (!(req->pipe_used & cam->streaming_pipe)) {
-			/* the last pipe */
+			/*
+			 * the last pipe: unlink now, drop the membership
+			 * reference only after this function is done with req
+			 */
 			list_del(&req->list);
+			list_add_tail(&req->list, &orphan_list);
 			dev_info(cam->dev,
 				 "%s:%s:pipe(%d) remove req from pending list\n",
 				 __func__, req->req.debug_str, pipe_id);
@@ -577,6 +589,12 @@ void mtk_cam_dev_req_clean_pending(struct mtk_cam_device *cam, int pipe_id,
 			/* DO NOT touch req after here */
 		}
 	}
+
+	/* all uses of the unlinked requests are done; drop the references */
+	list_for_each_entry_safe(req, req_prev, &orphan_list, list) {
+		list_del(&req->list);
+		media_request_put(&req->req);
+	}
 }
 
 void mtk_cam_dev_req_cleanup(struct mtk_cam_ctx *ctx, int pipe_id, int buf_state)
@@ -585,11 +603,13 @@ void mtk_cam_dev_req_cleanup(struct mtk_cam_ctx *ctx, int pipe_id, int buf_state
 	struct mtk_cam_request *req, *req_prev;
 	struct mtk_cam_request_stream_data *s_data, *s_data_pipe;
 	struct mtk_cam_request_stream_data *clean_s_data[RUNNING_JOB_DEPTH];
+	struct mtk_cam_request *puts[RUNNING_JOB_DEPTH];
 	struct list_head *running = &cam->running_job_list;
 	unsigned int other_pipes, done_status;
 	int i;
 	u32 num_s_data, s_data_cnt, handled_cnt;
 	bool need_clean_req;
+	int put_cnt = 0;
 
 	mtk_cam_dev_req_clean_pending(cam, pipe_id, buf_state);
 
@@ -763,6 +783,9 @@ STOP_SCAN:
 			list_del(&req->list);
 			cam->running_job_count--;
 			spin_unlock(&cam->running_job_lock);
+			/* drop the membership reference below, after the last use */
+			if (put_cnt < RUNNING_JOB_DEPTH)
+				puts[put_cnt++] = req;
 		} else {
 			dev_info(cam->dev,
 				 "%s:%s:pipe(%d):seq(%d): skip remove req from running list\n",
@@ -786,6 +809,10 @@ STOP_SCAN:
 	}
 
 	/* all bufs in this node should be returned by req */
+
+	/* every use of the unlinked requests is done; drop the references */
+	for (i = 0; i < put_cnt; i++)
+		media_request_put(&puts[i]->req);
 
 	dev_dbg(cam->dev,
 		"%s: cleanup all stream off req, streaming ctx:0x%x, streaming pipe:0x%x)\n",
@@ -1717,6 +1744,11 @@ void mtk_cam_dev_req_try_queue(struct mtk_cam_device *cam)
 				 "%s:req(%s): invalid req settings which can't be recovered\n",
 				 __func__, req->req.debug_str);
 			WARN_ON(1);
+			list_del_init(&req->list);
+			media_request_put(&req->req);
+			spin_lock(&cam->pending_job_lock);
+			list_splice_init(&equeue_list, &cam->pending_job_list);
+			spin_unlock(&cam->pending_job_lock);
 			return;
 		}
 
@@ -1742,6 +1774,8 @@ static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 	if (!cam_req)
 		return NULL;
 
+	INIT_LIST_HEAD(&cam_req->list);
+	INIT_LIST_HEAD(&cam_req->cleanup_list);
 	spin_lock_init(&cam_req->done_status_lock);
 	mutex_init(&cam_req->fs.op_lock);
 	for (i = 0; i < ARRAY_SIZE(cam_req->p_data); i++)
@@ -1759,7 +1793,41 @@ static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 
 static void mtk_cam_req_free(struct media_request *req)
 {
+	struct mtk_cam_device *cam;
 	struct mtk_cam_request *cam_req = to_mtk_cam_req(req);
+	struct mtk_cam_request *pos, *tmp;
+
+	/* media_request_alloc() frees on error before setting req->mdev */
+	cam = (req->mdev && req->mdev->dev) ?
+		dev_get_drvdata(req->mdev->dev) : NULL;
+	if (cam) {
+		/*
+		 * defensive unlink by pointer: the list head must not be
+		 * dereferenced directly (INIT_LIST_HEAD'd at alloc, but
+		 * list_del poisons a de-queued node). With the queue-time
+		 * media_request_get() a linked request cannot reach its
+		 * release op, so no reference is dropped here.
+		 */
+		spin_lock(&cam->pending_job_lock);
+		list_for_each_entry_safe(pos, tmp, &cam->pending_job_list, list) {
+			if (pos == cam_req) {
+				list_del_init(&pos->list);
+				break;
+			}
+		}
+		spin_unlock(&cam->pending_job_lock);
+
+		spin_lock(&cam->running_job_lock);
+		list_for_each_entry_safe(pos, tmp, &cam->running_job_list, list) {
+			if (pos == cam_req) {
+				list_del_init(&pos->list);
+				/* keep the throttle counter consistent with the list */
+				cam->running_job_count--;
+				break;
+			}
+		}
+		spin_unlock(&cam->running_job_lock);
+	}
 
 	vfree(cam_req);
 }
@@ -1879,6 +1947,7 @@ static void mtk_cam_req_queue(struct media_request *req)
 	 * pending_job_list.
 	 */
 	atomic_set(&cam_req->state, MTK_CAM_REQ_STATE_PENDING);
+	media_request_get(&cam_req->req);
 	list_add_tail(&cam_req->list, &cam->pending_job_list);
 	spin_unlock(&cam->pending_job_lock);
 	mutex_lock(&cam->queue_lock);
