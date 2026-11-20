@@ -845,15 +845,16 @@ static void mtk_cam_debug_dump_work(struct work_struct *work)
 	ret = mtk_cam_debug_init_dump_param(ctx, &dump_param, s_data,
 					    dbg_work->desc);
 	if (ret < 0) {
-		atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
+		media_request_put(&mtk_cam_s_data_get_req(s_data)->req);
 		return;
 	}
 
 	ctx->cam->debug_fs->ops->dump(ctx->cam->debug_fs, &dump_param);
-	atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
 
 	event.u.frame_sync.frame_sequence = dump_param.sequence;
 	v4l2_event_queue(ctx->pipe->subdev.devnode, &event);
+	/* matches the media_request_get() in mtk_cam_req_dump() */
+	media_request_put(&mtk_cam_s_data_get_req(s_data)->req);
 }
 
 static void mtk_cam_exception_work(struct work_struct *work)
@@ -874,6 +875,7 @@ static void mtk_cam_exception_work(struct work_struct *work)
 		dev_info(ctx->cam->dev,
 			 "%s:ctx(%d):used_raw(0x%x):exception dump canceled\n",
 			 __func__, ctx->stream_id, ctx->used_raw_dev);
+		media_request_put(&req->req);
 		return;
 	}
 
@@ -881,7 +883,7 @@ static void mtk_cam_exception_work(struct work_struct *work)
 					    dbg_work->desc);
 
 	if (ret < 0) {
-		atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
+		media_request_put(&req->req);
 		return;
 	}
 
@@ -895,7 +897,8 @@ static void mtk_cam_exception_work(struct work_struct *work)
 
 	WARN_ON(1);
 
-	atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
+	/* matches the media_request_get() in mtk_cam_req_dump() */
+	media_request_put(&req->req);
 }
 
 static bool
@@ -942,7 +945,6 @@ static void mtk_cam_exceptoin_detect_work(struct work_struct *work)
 				 "%s:ctx(%d):%s:req(%d):skip dump since job done\n",
 				 __func__, ctx->stream_id, req->req.debug_str,
 				 s_data->frame_seq_no);
-			atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
 		} else {
 			/**
 			 * Workaround for abnormal request release after
@@ -953,6 +955,7 @@ static void mtk_cam_exceptoin_detect_work(struct work_struct *work)
 				 "%s: skip dump work for stream off ctx:%d\n",
 				 __func__, ctx->stream_id);
 		}
+		media_request_put(&req->req);
 		return;
 	}
 
@@ -960,6 +963,7 @@ static void mtk_cam_exceptoin_detect_work(struct work_struct *work)
 		dev_info(ctx->cam->dev,
 			 "%s:ctx(%d):used_raw(0x%x):exception dump canceled\n",
 			 __func__, ctx->stream_id, ctx->used_raw_dev);
+		media_request_put(&req->req);
 		return;
 	}
 
@@ -973,6 +977,7 @@ static void mtk_cam_exceptoin_detect_work(struct work_struct *work)
 			 __func__);
 	}
 
+	/* the arm-time reference is dropped by mtk_cam_exception_work() on every path */
 	mtk_cam_exception_work(work);
 }
 
@@ -980,6 +985,7 @@ int mtk_cam_req_dump(struct mtk_cam_request_stream_data *s_data,
 		     unsigned int dump_flag, char *desc, bool smi_dump)
 {
 	struct mtk_cam_ctx *ctx = mtk_cam_s_data_get_ctx(s_data);
+	struct mtk_cam_request *req = mtk_cam_s_data_get_req(s_data);
 	struct mtk_cam_req_dbg_work *dbg_work;
 	void (*work_func)(struct work_struct *work);
 	struct workqueue_struct *wq;
@@ -1015,21 +1021,34 @@ int mtk_cam_req_dump(struct mtk_cam_request_stream_data *s_data,
 		return false;
 	}
 
-	if (atomic_read(&dbg_work->state) != MTK_CAM_REQ_DBGWORK_S_INIT)
+	/*
+	 * Arm under dbg_work->lock: cleanup can neither miss a
+	 * half-armed work nor cancel between the recheck and queue.
+	 */
+	spin_lock(&dbg_work->lock);
+	if (atomic_read(&dbg_work->state) != MTK_CAM_REQ_DBGWORK_S_INIT) {
+		spin_unlock(&dbg_work->lock);
 		return false;
+	}
 
 	INIT_WORK(&dbg_work->work, work_func);
 	dbg_work->s_data = s_data;
 	dbg_work->dump_flags = dump_flag;
 	dbg_work->smi_dump = smi_dump;
-	atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_PREPARED);
 	snprintf(dbg_work->desc, MTK_CAM_DEBUG_DUMP_DESC_SIZE - 1, desc);
+	/* publish before queueing: lockless readers treat S_INIT as done */
+	atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_PREPARED);
+	media_request_get(&req->req);
 	if (!queue_work(wq, &dbg_work->work)) {
+		atomic_set(&dbg_work->state, MTK_CAM_REQ_DBGWORK_S_INIT);
+		spin_unlock(&dbg_work->lock);
+		media_request_put(&req->req);
 		dev_dbg(ctx->cam->dev,
 			"%s: seq(%d) failed, debug work is already in queue\n",
 			__func__, s_data->frame_seq_no);
 		return false;
 	}
+	spin_unlock(&dbg_work->lock);
 
 	return true;
 }
@@ -1205,45 +1224,72 @@ void mtk_cam_req_dbg_works_clean(struct mtk_cam_request_stream_data *s_data)
 {
 	struct mtk_cam_ctx *ctx = mtk_cam_s_data_get_ctx(s_data);
 	char *dbg_str = mtk_cam_s_data_get_dbg_str(s_data);
-	int state;
 	u64 start, cost;
+	int state;
 
 	/* clean seninf dump work */
 	atomic_set(&s_data->seninf_dump_state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
 
 	/* clean execption dump work */
+	spin_lock(&s_data->dbg_exception_work.lock);
 	state = atomic_read(&s_data->dbg_exception_work.state);
-	if (state != MTK_CAM_REQ_DBGWORK_S_INIT &&
-	    state != MTK_CAM_REQ_DBGWORK_S_FINISHED) {
-		atomic_set(&s_data->dbg_exception_work.state, MTK_CAM_REQ_DBGWORK_S_CANCEL);
+	/* S_FINISHED may never have been armed: no work to cancel */
+	if (state == MTK_CAM_REQ_DBGWORK_S_INIT ||
+	    state == MTK_CAM_REQ_DBGWORK_S_FINISHED) {
+		atomic_set(&s_data->dbg_exception_work.state,
+			   MTK_CAM_REQ_DBGWORK_S_FINISHED);
+		spin_unlock(&s_data->dbg_exception_work.lock);
+		mtk_cam_debug_wakeup(&ctx->cam->debug_exception_waitq);
+	} else {
+		atomic_set(&s_data->dbg_exception_work.state,
+			   MTK_CAM_REQ_DBGWORK_S_CANCEL);
+		spin_unlock(&s_data->dbg_exception_work.lock);
+
 		mtk_cam_debug_wakeup(&ctx->cam->debug_exception_waitq);
 		start = ktime_get_boottime_ns();
-		cancel_work_sync(&s_data->dbg_exception_work.work);
+		if (cancel_work_sync(&s_data->dbg_exception_work.work))
+			media_request_put(&mtk_cam_s_data_get_req(s_data)->req);
 		cost = ktime_get_boottime_ns() - start;
-
 		dev_info(ctx->cam->dev,
-			 "%s:ctx(%d):%s:seq(%d): cancel dbg_exception_work(%d), wait: %llu ns\n",
+			 "%s:ctx(%d):%s:seq(%d): cancel dbg_exception_work, wait: %llu ns\n",
 			 __func__, ctx->stream_id, dbg_str,
-			 s_data->frame_seq_no, state, cost);
-		atomic_set(&s_data->dbg_exception_work.state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
-	} else {
-		mtk_cam_debug_wakeup(&ctx->cam->debug_exception_waitq);
-		atomic_set(&s_data->dbg_exception_work.state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
+			 s_data->frame_seq_no, cost);
+		spin_lock(&s_data->dbg_exception_work.lock);
+		/* defensive: finish only our own cancel */
+		atomic_cmpxchg(&s_data->dbg_exception_work.state,
+			       MTK_CAM_REQ_DBGWORK_S_CANCEL,
+			       MTK_CAM_REQ_DBGWORK_S_FINISHED);
+		spin_unlock(&s_data->dbg_exception_work.lock);
 	}
 
 	/* clean debug dump work */
+	spin_lock(&s_data->dbg_work.lock);
 	state = atomic_read(&s_data->dbg_work.state);
-	if (state != MTK_CAM_REQ_DBGWORK_S_INIT &&
-	    state != MTK_CAM_REQ_DBGWORK_S_FINISHED) {
-		start = ktime_get_boottime_ns();
-		cancel_work_sync(&s_data->dbg_work.work);
-		cost = ktime_get_boottime_ns() - start;
-		dev_info(ctx->cam->dev,
-			 "%s:ctx(%d):%s:seq(%d): cancel dbg_work(%d), wait: %llu ns\n",
-			  __func__, ctx->stream_id, dbg_str,
-			 s_data->frame_seq_no, state, cost);
-		atomic_set(&s_data->dbg_work.state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
+	/* S_FINISHED may never have been armed: no work to cancel */
+	if (state == MTK_CAM_REQ_DBGWORK_S_INIT ||
+	    state == MTK_CAM_REQ_DBGWORK_S_FINISHED) {
+		atomic_set(&s_data->dbg_work.state,
+			   MTK_CAM_REQ_DBGWORK_S_FINISHED);
+		spin_unlock(&s_data->dbg_work.lock);
+		return;
 	}
+	atomic_set(&s_data->dbg_work.state, MTK_CAM_REQ_DBGWORK_S_CANCEL);
+	spin_unlock(&s_data->dbg_work.lock);
+
+	start = ktime_get_boottime_ns();
+	if (cancel_work_sync(&s_data->dbg_work.work))
+		media_request_put(&mtk_cam_s_data_get_req(s_data)->req);
+	cost = ktime_get_boottime_ns() - start;
+	dev_info(ctx->cam->dev,
+		 "%s:ctx(%d):%s:seq(%d): cancel dbg_work, wait: %llu ns\n",
+		 __func__, ctx->stream_id, dbg_str,
+		 s_data->frame_seq_no, cost);
+	spin_lock(&s_data->dbg_work.lock);
+	/* defensive: finish only our own cancel */
+	atomic_cmpxchg(&s_data->dbg_work.state,
+		       MTK_CAM_REQ_DBGWORK_S_CANCEL,
+		       MTK_CAM_REQ_DBGWORK_S_FINISHED);
+	spin_unlock(&s_data->dbg_work.lock);
 }
 
 static struct mtk_cam_debug_ops debug_ops = {

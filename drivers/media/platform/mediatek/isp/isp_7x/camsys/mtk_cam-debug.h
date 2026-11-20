@@ -96,6 +96,7 @@ struct mtk_cam_req_dbg_work {
 	struct work_struct work;
 	struct mtk_cam_request_stream_data *s_data;
 	atomic_t state;
+	spinlock_t lock;
 	unsigned int dump_flags;
 	int buffer_state;
 	char desc[MTK_CAM_DEBUG_DUMP_DESC_SIZE];

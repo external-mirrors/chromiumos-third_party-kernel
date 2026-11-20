@@ -606,7 +606,7 @@ void mtk_cam_dev_req_cleanup(struct mtk_cam_ctx *ctx, int pipe_id, int buf_state
 	struct mtk_cam_request *puts[RUNNING_JOB_DEPTH];
 	struct list_head *running = &cam->running_job_list;
 	unsigned int other_pipes, done_status;
-	int i;
+	int i, state;
 	u32 num_s_data, s_data_cnt, handled_cnt;
 	bool need_clean_req;
 	int put_cnt = 0;
@@ -693,27 +693,59 @@ STOP_SCAN:
 		}
 		atomic_set(&s_data->frame_done_work.is_queued, 1);
 
-		if (atomic_read(&s_data->dbg_exception_work.state) ==
-			MTK_CAM_REQ_DBGWORK_S_PREPARED) {
-			atomic_set(&s_data->dbg_exception_work.state, MTK_CAM_REQ_DBGWORK_S_CANCEL);
+		/* dbg works must not outlive this cleanup */
+		spin_lock(&s_data->dbg_exception_work.lock);
+		state = atomic_read(&s_data->dbg_exception_work.state);
+		/* S_FINISHED may never have been armed: no work to cancel */
+		if (state == MTK_CAM_REQ_DBGWORK_S_INIT ||
+		    state == MTK_CAM_REQ_DBGWORK_S_FINISHED) {
+			atomic_set(&s_data->dbg_exception_work.state,
+				   MTK_CAM_REQ_DBGWORK_S_FINISHED);
+			spin_unlock(&s_data->dbg_exception_work.lock);
+		} else {
+			atomic_set(&s_data->dbg_exception_work.state,
+				   MTK_CAM_REQ_DBGWORK_S_CANCEL);
+			spin_unlock(&s_data->dbg_exception_work.lock);
 			mtk_cam_debug_wakeup(&ctx->cam->debug_exception_waitq);
-			cancel_work_sync(&s_data->dbg_exception_work.work);
+			if (cancel_work_sync(&s_data->dbg_exception_work.work))
+				media_request_put(&req->req);
+			spin_lock(&s_data->dbg_exception_work.lock);
+			/* defensive: finish only our own cancel */
+			atomic_cmpxchg(&s_data->dbg_exception_work.state,
+				       MTK_CAM_REQ_DBGWORK_S_CANCEL,
+				       MTK_CAM_REQ_DBGWORK_S_FINISHED);
+			spin_unlock(&s_data->dbg_exception_work.lock);
 			dev_info(cam->dev,
 				 "%s:%s:pipe(%d):seq(%d): cancel dbg_exception_work\n",
 				 __func__, req->req.debug_str, pipe_id,
 				 s_data->frame_seq_no);
 		}
-		atomic_set(&s_data->dbg_exception_work.state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
 
-		if (atomic_read(&s_data->dbg_work.state) ==
-			MTK_CAM_REQ_DBGWORK_S_PREPARED) {
-			cancel_work_sync(&s_data->dbg_work.work);
+		spin_lock(&s_data->dbg_work.lock);
+		state = atomic_read(&s_data->dbg_work.state);
+		/* S_FINISHED may never have been armed: no work to cancel */
+		if (state == MTK_CAM_REQ_DBGWORK_S_INIT ||
+		    state == MTK_CAM_REQ_DBGWORK_S_FINISHED) {
+			atomic_set(&s_data->dbg_work.state,
+				   MTK_CAM_REQ_DBGWORK_S_FINISHED);
+			spin_unlock(&s_data->dbg_work.lock);
+		} else {
+			atomic_set(&s_data->dbg_work.state,
+				   MTK_CAM_REQ_DBGWORK_S_CANCEL);
+			spin_unlock(&s_data->dbg_work.lock);
+			if (cancel_work_sync(&s_data->dbg_work.work))
+				media_request_put(&req->req);
+			spin_lock(&s_data->dbg_work.lock);
+			/* defensive: finish only our own cancel */
+			atomic_cmpxchg(&s_data->dbg_work.state,
+				       MTK_CAM_REQ_DBGWORK_S_CANCEL,
+				       MTK_CAM_REQ_DBGWORK_S_FINISHED);
+			spin_unlock(&s_data->dbg_work.lock);
 			dev_info(cam->dev,
 				 "%s:%s:pipe(%d):seq(%d): cancel dbg_work\n",
 				 __func__, req->req.debug_str, pipe_id,
 				 s_data->frame_seq_no);
 		}
-		atomic_set(&s_data->dbg_work.state, MTK_CAM_REQ_DBGWORK_S_FINISHED);
 
 		spin_lock(&req->done_status_lock);
 		dev_dbg(cam->dev,
@@ -1777,6 +1809,11 @@ static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 	INIT_LIST_HEAD(&cam_req->list);
 	INIT_LIST_HEAD(&cam_req->cleanup_list);
 	spin_lock_init(&cam_req->done_status_lock);
+	for (i = 0; i < MTKCAM_SUBDEV_MAX; i++)
+		for (j = 0; j < MTK_CAM_REQ_MAX_S_DATA; j++) {
+			spin_lock_init(&cam_req->p_data[i].s_data[j].dbg_work.lock);
+			spin_lock_init(&cam_req->p_data[i].s_data[j].dbg_exception_work.lock);
+		}
 	mutex_init(&cam_req->fs.op_lock);
 	for (i = 0; i < ARRAY_SIZE(cam_req->p_data); i++)
 		for (j = 0; j < ARRAY_SIZE(cam_req->p_data[i].s_data); j++) {
