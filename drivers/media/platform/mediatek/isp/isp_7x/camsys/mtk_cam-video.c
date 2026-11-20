@@ -1047,8 +1047,8 @@ static void mtk_cam_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 				aligned_width = ALIGN(width, 64);
 				stride = aligned_width * info->bit_r_num / info->bit_r_den;
 
-				if (stride > plane->bytesperline)
-					plane->bytesperline = stride;
+				/* sizeimage ignores bytesperline, but FW uses it as stride */
+				plane->bytesperline = stride;
 				plane->sizeimage = stride * height;
 				plane->sizeimage += stride * height / 2;
 				plane->sizeimage += ALIGN((aligned_width / 64), 8) * height;
@@ -1059,8 +1059,8 @@ static void mtk_cam_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 				aligned_width = ALIGN(width, 64);
 				stride = aligned_width * info->bit_r_num / info->bit_r_den;
 
-				if (stride > plane->bytesperline)
-					plane->bytesperline = stride;
+				/* sizeimage ignores bytesperline, but FW uses it as stride */
+				plane->bytesperline = stride;
 				plane->sizeimage = stride * height;
 				plane->sizeimage += ALIGN((aligned_width / 64), 8) * height;
 				plane->sizeimage += sizeof(struct ufbc_buffer_header);
@@ -1110,8 +1110,8 @@ static void mtk_cam_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 		if (info->mem_planes == 1) {
 			aligned_width = ALIGN(width, bus_size);
 			stride = aligned_width * info->bpp[0];
-			if (stride > plane->bytesperline)
-				plane->bytesperline = stride;
+			/* Always adopt driver stride so sizeimage matches DMA geometry. */
+			plane->bytesperline = stride;
 
 			for (i = 0; i < info->comp_planes; i++) {
 				unsigned int hdiv = (i == 0) ? 1 : info->hdiv;
