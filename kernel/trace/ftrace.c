@@ -7175,13 +7175,11 @@ ftrace_filter_pid_sched_switch_probe(void *data, bool preempt,
 	struct trace_array *tr = data;
 	struct trace_pid_list *pid_list;
 	struct trace_pid_list *no_pid_list;
-	struct pid_namespace *filtered_ns;
 
 	pid_list = rcu_dereference_sched(tr->function_pids);
 	no_pid_list = rcu_dereference_sched(tr->function_no_pids);
-	filtered_ns = rcu_dereference_sched(tr->filtered_ns);
 
-	if (trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, next))
+	if (trace_ignore_this_task(pid_list, no_pid_list, next))
 		this_cpu_write(tr->array_buffer.data->ftrace_ignore_pid,
 			       FTRACE_PID_IGNORE);
 	else
@@ -7439,7 +7437,6 @@ static void ignore_task_cpu(void *data)
 	struct trace_array *tr = data;
 	struct trace_pid_list *pid_list;
 	struct trace_pid_list *no_pid_list;
-	struct pid_namespace *filtered_ns;
 
 	/*
 	 * This function is called by on_each_cpu() while the
@@ -7449,10 +7446,8 @@ static void ignore_task_cpu(void *data)
 					     mutex_is_locked(&ftrace_lock));
 	no_pid_list = rcu_dereference_protected(tr->function_no_pids,
 						mutex_is_locked(&ftrace_lock));
-	filtered_ns = rcu_dereference_protected(tr->filtered_ns,
-						mutex_is_locked(&ftrace_lock));
 
-	if (trace_ignore_this_task(pid_list, no_pid_list, filtered_ns, current))
+	if (trace_ignore_this_task(pid_list, no_pid_list, current))
 		this_cpu_write(tr->array_buffer.data->ftrace_ignore_pid,
 			       FTRACE_PID_IGNORE);
 	else

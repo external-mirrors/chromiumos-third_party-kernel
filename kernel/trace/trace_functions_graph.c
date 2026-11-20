@@ -104,9 +104,7 @@ int __trace_graph_entry(struct trace_array *tr,
 	struct ftrace_graph_ent_entry *entry;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_GRAPH_ENT,
-					  sizeof(*entry),
-					  tr->trace_flags,
-					  trace_ctx);
+					  sizeof(*entry), trace_ctx);
 	if (!event)
 		return 0;
 	entry	= ring_buffer_event_data(event);
@@ -225,9 +223,7 @@ void __trace_graph_return(struct trace_array *tr,
 	struct ftrace_graph_ret_entry *entry;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_GRAPH_RET,
-					  sizeof(*entry),
-					  tr->trace_flags,
-					  trace_ctx);
+					  sizeof(*entry), trace_ctx);
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);

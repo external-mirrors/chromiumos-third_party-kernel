@@ -9,7 +9,6 @@
 #include <linux/hardirq.h>
 #include <linux/perf_event.h>
 #include <linux/tracepoint.h>
-#include <linux/trace.h>
 
 struct trace_array;
 struct array_buffer;
@@ -153,15 +152,9 @@ enum print_line_t {
 
 enum print_line_t trace_handle_return(struct trace_seq *s);
 
-void tracing_ns_entry_update(struct trace_entry *entry,
-									unsigned short type,
-									unsigned long trace_flags,
-									unsigned int trace_ctx);
-
 static inline void tracing_generic_entry_update(struct trace_entry *entry,
-									unsigned short type,
-									unsigned long trace_flags,
-									unsigned int trace_ctx)
+						unsigned short type,
+						unsigned int trace_ctx)
 {
 	struct task_struct *tsk = current;
 
@@ -169,11 +162,6 @@ static inline void tracing_generic_entry_update(struct trace_entry *entry,
 	entry->pid			= (tsk) ? tsk->pid : 0;
 	entry->type			= type;
 	entry->flags =			trace_ctx >> 16;
-
-	// Directly use 1ll << 24, as the TRACE_ITER_PID_IN_NS enum is not available
-	// in this scope.
-	if (trace_flags & 1ll << 24)
-		tracing_ns_entry_update(entry, type, trace_flags, trace_ctx);
 }
 
 unsigned int tracing_gen_ctx_irq_test(unsigned int irqs_status);

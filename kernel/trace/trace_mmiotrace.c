@@ -304,9 +304,7 @@ static void __trace_mmiotrace_rw(struct trace_array *tr,
 
 	trace_ctx = tracing_gen_ctx_flags(0);
 	event = trace_buffer_lock_reserve(buffer, TRACE_MMIO_RW,
-					  sizeof(*entry),
-					  tr->trace_flags,
-					  trace_ctx);
+					  sizeof(*entry), trace_ctx);
 	if (!event) {
 		atomic_inc(&dropped_count);
 		return;
@@ -337,9 +335,7 @@ static void __trace_mmiotrace_map(struct trace_array *tr,
 
 	trace_ctx = tracing_gen_ctx_flags(0);
 	event = trace_buffer_lock_reserve(buffer, TRACE_MMIO_MAP,
-					  sizeof(*entry),
-					  tr->trace_flags,
-					  trace_ctx);
+					  sizeof(*entry), trace_ctx);
 	if (!event) {
 		atomic_inc(&dropped_count);
 		return;

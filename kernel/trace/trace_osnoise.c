@@ -302,7 +302,7 @@ static void trace_osnoise_sample(struct osnoise_sample *sample)
 	struct osnoise_entry *entry;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_OSNOISE, sizeof(*entry),
-					  tr->trace_flags, tracing_gen_ctx());
+					  tracing_gen_ctx());
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);
@@ -349,7 +349,7 @@ static void trace_timerlat_sample(struct timerlat_sample *sample)
 	struct timerlat_entry *entry;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_TIMERLAT, sizeof(*entry),
-					  tr->trace_flags, tracing_gen_ctx());
+					  tracing_gen_ctx());
 	if (!event)
 		return;
 	entry	= ring_buffer_event_data(event);
@@ -420,7 +420,7 @@ static void timerlat_dump_stack(void)
 	size = fstack->stack_size;
 
 	event = trace_buffer_lock_reserve(buffer, TRACE_STACK, sizeof(*entry) + size,
-					  tr->trace_flags, tracing_gen_ctx());
+					  tracing_gen_ctx());
 	if (!event)
 		goto out;
 
