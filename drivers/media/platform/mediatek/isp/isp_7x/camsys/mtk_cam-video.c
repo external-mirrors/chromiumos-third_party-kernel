@@ -1115,6 +1115,36 @@ unsigned int mtk_cam_get_img_fmt(unsigned int fourcc)
 	}
 }
 
+static u64 mtk_cam_mtk_fmt_sizeimage(const struct mtk_format_info *info,
+				     u32 pixelformat, u32 bytesperline,
+				     u32 stride, u32 aligned_width, u32 height)
+{
+	u64 size = 0;
+	u64 pitch, rows;
+	unsigned int i;
+
+	for (i = 0; i < info->comp_planes; i++) {
+		unsigned int hdiv = (i == 0) ? 1 : info->hdiv;
+		unsigned int vdiv = (i == 0) ? 1 : info->vdiv;
+
+		rows = DIV_ROUND_UP(height, vdiv);
+		if (bytesperline > stride && is_fullg_rb(pixelformat))
+			pitch = DIV_ROUND_UP_ULL(bytesperline, hdiv);
+		else if (bytesperline > stride && i)
+			/* cover the chroma pitch mtk_cam_fill_img_buf() programs */
+			pitch = max_t(u64, bytesperline, info->bpp[i] *
+				      DIV_ROUND_UP_ULL(bytesperline /
+						       info->bpp[0], hdiv));
+		else if (bytesperline > stride)
+			pitch = bytesperline;
+		else
+			pitch = (u64)info->bpp[i] * DIV_ROUND_UP(aligned_width, hdiv);
+		size += pitch * rows;
+	}
+
+	return size;
+}
+
 static void mtk_cam_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 				   u32 pixelformat, u32 width, u32 height)
 {
@@ -1123,6 +1153,7 @@ static void mtk_cam_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 	u8 pixel_bits = mtk_cam_get_pixel_bits(ipi_fmt);
 	u32 stride;
 	u32 aligned_width;
+	u64 size;
 	u8 bus_size;
 	u8 i;
 
@@ -1173,25 +1204,19 @@ static void mtk_cam_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt,
 				if (stride > plane->bytesperline)
 					plane->bytesperline = stride;
 
-				for (i = 0; i < info->comp_planes; i++) {
-					unsigned int hdiv = (i == 0) ? 1 : info->hdiv;
-					unsigned int vdiv = (i == 0) ? 1 : info->vdiv;
-
-					if (plane->bytesperline > stride &&
-					    is_fullg_rb(pixelformat)) {
-						plane->sizeimage +=
-							DIV_ROUND_UP(plane->bytesperline, hdiv)
-							* DIV_ROUND_UP(height, vdiv);
-					} else if (plane->bytesperline > stride &&
-						   !is_fullg_rb(pixelformat)) {
-						plane->sizeimage += plane->bytesperline
-							* DIV_ROUND_UP(height, vdiv);
-					} else {
-						plane->sizeimage += info->bpp[i]
-							* DIV_ROUND_UP(aligned_width, hdiv)
-							* DIV_ROUND_UP(height, vdiv);
-					}
+				size = mtk_cam_mtk_fmt_sizeimage(info, pixelformat,
+								 plane->bytesperline,
+								 stride, aligned_width,
+								 height);
+				if (size > U32_MAX) {
+					/* a user stride this large would wrap sizeimage */
+					plane->bytesperline = stride;
+					size = mtk_cam_mtk_fmt_sizeimage(info, pixelformat,
+									 stride, stride,
+									 aligned_width,
+									 height);
 				}
+				plane->sizeimage = size;
 			}
 			pr_debug("%s stride %d sizeimage %d\n", __func__,
 				 plane->bytesperline, plane->sizeimage);
@@ -1469,6 +1494,9 @@ static void cal_image_pix_mp(unsigned int node_id,
 		stride = mtk_cam_dmao_xsize(width, ipi_fmt, pixel_mode);
 		for (i = 0; i < mp->num_planes; i++) {
 			if (stride > mp->plane_fmt[i].bytesperline)
+				mp->plane_fmt[i].bytesperline = stride;
+			/* a user stride this large would wrap sizeimage */
+			if ((u64)mp->plane_fmt[i].bytesperline * height > U32_MAX)
 				mp->plane_fmt[i].bytesperline = stride;
 			mp->plane_fmt[i].sizeimage = mp->plane_fmt[i].bytesperline * height;
 		}
